@@ -1,0 +1,161 @@
+/* print.css — paper / PDF export (media="print"), proposal #13.
+   Two export surfaces, each built into the DOM as a hidden `.print-sheet`
+   container by its view (js/view-mistakes.js, js/view-formulas.js) and shown
+   only here:
+     • Mistake book  (#/mistakes)  — a clean paper mistake book: every entry's
+       question, your wrong pick(s), the correct answer, and the full solution.
+     • Formula sheet (#/formulas)  — every card grouped by topic, front + back,
+       in a compact two-column layout.
+   Both render ALL relevant entries (not just the on-screen page/queue) because
+   the sheet is generated from the full data at print time. Paper is forced to a
+   light ground with black ink regardless of the active screen theme — KaTeX
+   inherits `color`, so math prints black too. */
+
+@media print {
+
+  @page { margin: 15mm 13mm; }
+
+  /* ——— Neutralise the app shell + interactive DOM ——— */
+  #sidebar,
+  #sidebar-footer,
+  #toasts { display: none !important; }
+
+  html, body {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+  body { display: block !important; }
+  #main, #view {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  /* When a print sheet is present, drop the interactive view entirely. The
+     body-class path is set by the "Print / PDF" buttons; the :has() path keeps
+     headless Page.printToPDF correct even without the class. */
+  body.pgre-printing #view > :not(.print-sheet) { display: none !important; }
+  #view:has(.print-sheet) > :not(.print-sheet) { display: none !important; }
+
+  .print-sheet {
+    display: block !important;
+    color: #111111;
+    font-size: 11pt;
+    line-height: 1.45;
+  }
+  .print-sheet a { color: #111111 !important; text-decoration: none; }
+  .print-sheet img, .print-sheet .q-fig { max-width: 100%; height: auto; }
+  .print-sheet .katex { color: inherit; }
+
+  /* ——— Sheet masthead ——— */
+  .ps-head {
+    border-bottom: 1.5pt solid #111111;
+    padding-bottom: 6pt;
+    margin-bottom: 14pt;
+  }
+  .ps-head h1 { font-size: 19pt; margin: 0 0 2pt; letter-spacing: -0.01em; }
+  .ps-sub { font-size: 9.5pt; color: #555555; margin: 0; }
+
+  /* ——— Small monogram + meta chips (neutral on paper) ——— */
+  .ps-mono {
+    display: inline-block;
+    font-family: var(--sans);
+    font-size: 8.5pt;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: #111111;
+    border: 0.75pt solid #999999;
+    border-radius: 4pt;
+    padding: 1pt 5pt;
+  }
+  .ps-meta { font-size: 9pt; color: #666666; }
+
+  /* ——— Mistake-book entries ——— */
+  .ps-miss {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border: 0.75pt solid #cccccc;
+    border-radius: 6pt;
+    padding: 10pt 12pt;
+    margin-bottom: 11pt;
+  }
+  .ps-miss-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8pt;
+    flex-wrap: wrap;
+    margin-bottom: 6pt;
+  }
+  .ps-q { font-size: 11pt; line-height: 1.5; margin-bottom: 8pt; }
+  .ps-picks { margin: 6pt 0; }
+  .ps-pick {
+    display: block;
+    font-size: 10pt;
+    line-height: 1.4;
+    padding: 3pt 0 3pt 16pt;
+    text-indent: -14pt;
+    margin-bottom: 2pt;
+  }
+  .ps-pick .ps-ic { font-weight: 700; margin-right: 4pt; }
+  .ps-wrong { color: #333333; }
+  .ps-wrong .ps-ic { color: #b04a3d; }
+  .ps-right .ps-ic { color: #2f6b43; }
+  .ps-pick strong { font-weight: 700; }
+  .ps-sol {
+    border-left: 2pt solid #999999;
+    padding: 4pt 0 4pt 10pt;
+    margin-top: 8pt;
+    font-size: 10pt;
+    line-height: 1.5;
+  }
+  .ps-sol-label {
+    display: block;
+    font-size: 7.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #777777;
+    margin-bottom: 3pt;
+  }
+
+  /* ——— Formula sheet ——— */
+  .ps-topic { margin-bottom: 12pt; break-inside: auto; }
+  .ps-topic-head {
+    font-size: 12.5pt;
+    border-bottom: 0.75pt solid #bbbbbb;
+    padding-bottom: 3pt;
+    margin-bottom: 8pt;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .ps-cards {
+    column-count: 2;
+    column-gap: 16pt;
+  }
+  .ps-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    border: 0.75pt solid #d5d5d5;
+    border-radius: 5pt;
+    padding: 7pt 9pt;
+    margin-bottom: 8pt;
+  }
+  .ps-card-tag {
+    font-size: 7.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #8a6a5c;
+    margin-bottom: 3pt;
+  }
+  .ps-card-front { font-size: 9.5pt; line-height: 1.4; margin-bottom: 4pt; }
+  .ps-card-back {
+    font-size: 10pt;
+    line-height: 1.5;
+    border-top: 0.5pt dashed #cccccc;
+    padding-top: 4pt;
+  }
+  .ps-empty { font-size: 11pt; color: #555555; }
+}

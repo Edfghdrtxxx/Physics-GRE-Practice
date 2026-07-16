@@ -28,15 +28,59 @@ PGRE.views.mistakes = (function () {
     return '<span class="due-chip">due in ' + PGRE.srs.ivlLabel(d) + '</span>';
   }
 
+  /* Lucky-guess entries (correct-but-guessed) carry a mk.lucky flag. */
+  function luckyChip(mk) {
+    return mk.lucky ? '<span class="due-chip lucky-chip">⚑ lucky guess</span>' : '';
+  }
+
+  /* PROPOSAL #12 — "Why the other choices tempt": an expandable list of the
+     non-correct choices with their mined per-choice explanation (q.choiceSols[idx]).
+     The field is optional (a pipeline fills it into the bank over time), so an
+     absent or all-null array yields '' and no empty block shows. Choice text and
+     explanation are trusted bank HTML/LaTeX, rendered like q.sol / q.choices and
+     typeset by the caller's PGRE.typesetMath pass. */
+  function distractorBlock(q) {
+    var sols = q && q.choiceSols;
+    if (!sols || !sols.length) return '';
+    var items = '';
+    for (var idx = 0; idx < q.choices.length; idx++) {
+      if (idx === q.answer) continue;                 // only the tempting wrong choices
+      var why = sols[idx];
+      if (why == null || String(why).replace(/\s+/g, '') === '') continue;  // skip absent
+      items += '<div class="distractor-item">' +
+        '<div class="miss-pick is-bad"><span class="fb-icon">✗</span>' +
+          '<strong>' + LETTERS[idx] + '</strong> — ' +
+          '<span class="miss-pick-body">' + q.choices[idx] + '</span></div>' +
+        '<div class="solution"><div class="solution-label">Why it tempts</div>' + why + '</div>' +
+      '</div>';
+    }
+    if (!items) return '';
+    return '<details class="miss distractors"><summary>Why the other choices tempt</summary>' +
+      '<div class="distractor-list">' + items + '</div></details>';
+  }
+
+  /* Most recent recorded confidence for a question, if any. */
+  function lastConfidence(qid) {
+    var arr = PGRE.store.state.attempts;
+    for (var i = arr.length - 1; i >= 0; i--) {
+      if (arr[i].qid === qid && arr[i].confidence) return arr[i].confidence;
+    }
+    return null;
+  }
+
   /* ——— The book ——— */
   function missCard(e) {
     var ui = PGRE.ui, q = e.q, mk = e.mk, t = PGRE.topicById(q.topic);
     var wrong = mk.lastPick != null ? mk.lastPick : mk.wrongPicks[mk.wrongPicks.length - 1];
+    var metaBits = [];
+    if (mk.misses > 0) metaBits.push('missed ×' + mk.misses);
+    if (mk.solves) metaBits.push('re-solved ×' + mk.solves);
+    if (mk.lucky && !(mk.misses > 0)) metaBits.push('correct but guessed');
+    var lastTs = mk.lastMissedAt || mk.lastSolvedAt || mk.lastLuckyAt;
+    if (lastTs) metaBits.push('last ' + ui.timeAgo(lastTs));
     var html = '<div class="card miss-card' + (mk.archivedAt ? ' is-archived' : '') + '">' +
-      '<div class="miss-head">' + ui.monogram(t) + dueChip(mk) +
-        '<span class="muted">missed ×' + mk.misses +
-          (mk.solves ? ' · re-solved ×' + mk.solves : '') +
-          ' · last ' + ui.timeAgo(mk.lastMissedAt) + '</span>' +
+      '<div class="miss-head">' + ui.monogram(t) + dueChip(mk) + luckyChip(mk) +
+        '<span class="muted">' + metaBits.join(' · ') + '</span>' +
         '<span class="miss-actions">' +
           (mk.archivedAt
             ? '<button class="btn btn-ghost btn-sm" data-restore="' + q.id + '">Restore</button>'
@@ -53,8 +97,14 @@ PGRE.views.mistakes = (function () {
           LETTERS[q.answer] + '</strong> — <span class="miss-pick-body">' + q.choices[q.answer] + '</span></div>' +
       '</div>';
     }
+    var conf = lastConfidence(q.id);
+    if (conf) {
+      html += '<div class="conf-note muted">Your last confidence on this question: ' +
+        '<strong>' + (conf === 'guess' ? 'Guessed' : 'Knew it') + '</strong></div>';
+    }
     html += '<details class="miss"><summary>Solution</summary>' +
       '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div></details>' +
+    distractorBlock(q) +
     '</div>';
     return html;
   }
@@ -79,6 +129,7 @@ PGRE.views.mistakes = (function () {
           'Drill due (' + due.length + ')</button>' +
         '<button class="btn btn-ghost" id="drill-all"' + (open.length ? '' : ' disabled') + '>' +
           'Drill all (' + open.length + ')</button>' +
+        (open.length ? '<button class="btn btn-ghost" id="print-mistakes">Print / PDF</button>' : '') +
       '</div></div>';
 
     if (!open.length && !archived.length) {
@@ -135,7 +186,84 @@ PGRE.views.mistakes = (function () {
         renderBook();
       });
     });
+
+    buildPrintSheet();
+    var pb = document.getElementById('print-mistakes');
+    if (pb) pb.addEventListener('click', printBook);
   }
+
+  /* ——— Print / PDF (proposal #13) ———
+     Builds a self-contained paper mistake book — every open entry's question,
+     wrong pick(s), correct answer and full solution — into a hidden
+     `.print-sheet` beside the interactive DOM; css/print.css lays it out and
+     hides everything else at print time. Rebuilt on every renderBook so it is
+     always current, and auto-discarded when the router repaints #view. */
+  function printDate() {
+    return new Date().toLocaleDateString('en-US',
+      { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+
+  function missPrintEntry(e) {
+    var ui = PGRE.ui, q = e.q, mk = e.mk, t = PGRE.topicById(q.topic);
+    var meta = [];
+    if (mk.misses > 0) meta.push('missed ×' + mk.misses);
+    if (mk.solves) meta.push('re-solved ×' + mk.solves);
+    if (mk.lucky && !(mk.misses > 0)) meta.push('correct but guessed');
+    var metaLine = (t ? t.name : '') + (meta.length ? ' · ' + meta.join(' · ') : '');
+    var h = '<article class="ps-miss">' +
+      '<div class="ps-miss-head">' +
+        '<span class="ps-mono">' + ui.esc(t ? t.short : '?') + '</span>' +
+        '<span class="ps-meta">' + ui.esc(metaLine) + '</span>' +
+      '</div>' +
+      '<div class="ps-q">' + q.q + '</div>' +
+      '<div class="ps-picks">';
+    var picks = (mk.wrongPicks && mk.wrongPicks.length)
+      ? mk.wrongPicks
+      : (mk.lastPick != null ? [mk.lastPick] : []);
+    picks.forEach(function (w) {
+      if (w == null || w === q.answer || !q.choices[w]) return;
+      h += '<div class="ps-pick ps-wrong"><span class="ps-ic">✗</span>' +
+        '<strong>You picked ' + LETTERS[w] + '</strong> — ' + q.choices[w] + '</div>';
+    });
+    h += '<div class="ps-pick ps-right"><span class="ps-ic">✓</span>' +
+        '<strong>Correct: ' + LETTERS[q.answer] + '</strong> — ' + q.choices[q.answer] + '</div>' +
+      '</div>' +
+      '<div class="ps-sol"><span class="ps-sol-label">Solution</span>' + q.sol + '</div>' +
+    '</article>';
+    return h;
+  }
+
+  function buildPrintSheet() {
+    var view = document.getElementById('view');
+    if (!view) return;
+    var old = document.getElementById('mistakes-print');
+    if (old) old.parentNode.removeChild(old);
+    var open = PGRE.srs.openMistakes();
+    if (!open.length) return;
+    open.sort(function (a, b) {
+      return (a.mk.srs ? a.mk.srs.due : '9999') < (b.mk.srs ? b.mk.srs.due : '9999') ? -1 : 1;
+    });
+    var html = '<header class="ps-head"><h1>Physics GRE — Mistake Book</h1>' +
+      '<p class="ps-sub">' + open.length + ' entr' + (open.length === 1 ? 'y' : 'ies') +
+      ' · printed ' + printDate() + '</p></header>';
+    open.forEach(function (e) { html += missPrintEntry(e); });
+    var sheet = document.createElement('section');
+    sheet.className = 'print-sheet';
+    sheet.id = 'mistakes-print';
+    sheet.innerHTML = html;
+    view.appendChild(sheet);
+    PGRE.typesetMath(sheet);
+  }
+
+  function printBook() {
+    buildPrintSheet();
+    document.body.classList.add('pgre-printing');
+    window.print();
+  }
+
+  window.addEventListener('afterprint', function () {
+    document.body.classList.remove('pgre-printing');
+  });
 
   /* ——— Re-drill: same answering pipeline as practice (mode: mistakes) ——— */
   function startDrill(qs) {
@@ -179,7 +307,7 @@ PGRE.views.mistakes = (function () {
     var xp = PGRE.gamify.recordAnswer(q, isCorrect, Date.now() - drill.qStart,
                                       { picked: idx, sid: drill.sid, mode: 'mistakes' });
     drill.xp += xp;
-    if (isCorrect) drill.correct++;
+    if (isCorrect) { drill.correct++; PGRE.srs.clearLucky(q.id); } // a correct re-drill retires the lucky flag
 
     root().querySelectorAll('.choice').forEach(function (b) {
       var i = parseInt(b.getAttribute('data-idx'), 10);

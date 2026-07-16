@@ -25,21 +25,55 @@ PGRE.store = {
       streak: { current: 0, best: 0, lastDay: null },
       // today's counters (reset when the date changes)
       today: { date: null, answered: 0, correct: 0, run: 0, bestRun: 0,
-               topics: [], planTasks: 0, notesVisited: false, claimed: [] },
+               topics: [], planTasks: 0, notesVisited: false, claimed: [],
+               qotd: null }, // question of the day: null | { qid, correct }
       // one-shot event flags for achievements
       flags: {},
       // per-attempt log, append-only, newest last:
-      // { ts, qid, topic, picked, answer, correct, ms, sid, mode }
+      // { ts, qid, topic, picked, answer, correct, ms, sid, mode,
+      //   confidence: 'sure'|'guess'|null }
       attempts: [],
       // practice/drill sessions, newest last:
       // { id, mode, topicId, startedAt, endedAt, planned, answered, correct, xp }
       sessions: [],
       // mistake book: qid -> { firstMissedAt, lastMissedAt, lastPick, wrongPicks[],
-      //   misses, solves, srs: { step, due }, archivedAt } — permanent until archived
+      //   misses, solves, srs: { step, due }, archivedAt } — permanent until
+      //   archived; a correct-but-guessed answer may add lucky: true
       mistakes: {},
+      // mock-exam sessions (engine: js/exam-engine.js), newest last:
+      // { id, startedAt, submittedAt, format: '70x120'|'100x170',
+      //   source: 'weighted'|'x1'|'x2'|'x3', seed, order: [qid],
+      //   answers: {qid: idx}, flags: [qid], durationSec, raw, total,
+      //   scaledEst, perTopic: {topic: {right, total}} }
+      exams: [],
+      // per-question margin notes: qid -> { text, updatedAt } (js/notes.js)
+      notes: {},
+      // bookmarked questions: qid -> ISO timestamp of bookmarking
+      bookmarks: {},
+      // user preferences; theme is applied at boot (PGRE.setTheme persists it)
+      settings: { theme: 'light', paceTrainer: true, paceTargetSec: 103,
+                  keyboard: true, qotdTopicRotate: true, formulaDailyTarget: 10,
+                  // exam date (F3) — drives the interval cap + final pass; literal
+                  // mirrors PGRE.EXAM_DATE (js/data-topics.js)
+                  examDate: '2026-10-28',
+                  // F5 — formula Study direction: false = Prompt → Formula (recall
+                  // the equation); true = Formula → Prompt (name/state it)
+                  formulaReverse: false },
+      // today's progressive formula batch (js/srs.js): rebuilt when the date
+      // rolls over — { date, reviewIds: [], newIds: [] }
+      formulaDay: null,
+      // passive active-study seconds per day: 'YYYY-MM-DD' -> seconds
+      // (js/study-time.js heartbeat engine)
+      studyLog: {},
       // formula-card SRS state: cardId ->
       //   { reps, lapses, interval, ease, due, reviews, lastGrade, lastReviewedAt }
       cards: {},
+      // F10 — capped append-only formula review log (srs.gradeCard), newest last:
+      //   { d: 'YYYY-MM-DD', id, g: grade, ivl: pre-review interval,
+      //     m: was-mature (ivl>=21), n: had-prior-state } — feeds Memory stats
+      cardReviews: [],
+      // F2 — per-card mnemonic notes: cardId -> { text, updatedAt }
+      cardNotes: {},
       // recent activity feed, newest first
       log: [],
       // content files metadata mirror (text itself is in IndexedDB)
@@ -55,11 +89,20 @@ PGRE.store = {
       console.warn('State unreadable, starting fresh.', e);
       this.state = this.defaults();
     }
-    // migrate missing keys if schema grew
-    var d = this.defaults();
-    for (var k in d) if (!(k in this.state)) this.state[k] = d[k];
+    this.migrate();
     this.rollDay();
     return this.state;
+  },
+
+  /* Fill in keys the schema has grown since this state was saved. Top-level
+     keys are added shallowly; `settings` and `today` get a nested pass too,
+     so new sub-keys appear on old states. */
+  migrate: function () {
+    var d = this.defaults(), st = this.state;
+    for (var k in d) if (!(k in st)) st[k] = d[k];
+    ['settings', 'today'].forEach(function (k) {
+      for (var kk in d[k]) if (!(kk in st[k])) st[k][kk] = d[k][kk];
+    });
   },
 
   save: function () {
@@ -95,7 +138,8 @@ PGRE.store = {
     var t = this.today();
     if (this.state.today.date !== t) {
       this.state.today = { date: t, answered: 0, correct: 0, run: 0, bestRun: 0,
-                           topics: [], planTasks: 0, notesVisited: false, claimed: [] };
+                           topics: [], planTasks: 0, notesVisited: false, claimed: [],
+                           qotd: null };
       this.save();
     }
   },
@@ -136,8 +180,7 @@ PGRE.store = {
     var obj = JSON.parse(text); // throws if invalid
     if (typeof obj.xp !== 'number' || !obj.today) throw new Error('Not a Physics GRE backup file.');
     this.state = obj;
-    var d = this.defaults();
-    for (var k in d) if (!(k in this.state)) this.state[k] = d[k];
+    this.migrate();
     this.save();
   }
 };
@@ -234,6 +277,25 @@ PGRE.contentDB = {
       tx.onerror = function () { resolve(); };
     });
   }
+};
+
+/* The formula deck, merged from its three sources (first occurrence of an id
+   wins): book-derived cards in content/bank/cpg-formulas.js
+   (PGRE.BOOK_FORMULAS — gitignored, may be absent), hand-appended literals in
+   PGRE.FORMULAS (js/data-formulas.js), and the { id: 'formula-deck',
+   cards: [...] } record in the IndexedDB content store. Async because of the
+   last one. */
+PGRE.formulaDeck = function () {
+  return PGRE.contentDB.get('formula-deck').then(function (rec) {
+    var seen = {};
+    return (PGRE.BOOK_FORMULAS || [])
+      .concat(PGRE.FORMULAS, (rec && rec.cards) || [])
+      .filter(function (c) {
+        if (!c || !c.id || seen[c.id]) return false;
+        seen[c.id] = true;
+        return true;
+      });
+  });
 };
 
 /* Naive chapter splitter for the raw book markdown (placeholder until the

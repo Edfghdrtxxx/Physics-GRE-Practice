@@ -1,4 +1,4 @@
-/* Achievement definitions — 36 achievements in 6 categories × 4 tiers.
+/* Achievement definitions — 40 achievements in 7 categories × 4 tiers.
    Two kinds:
      metric-based: { metric, goal }  — progress computed from state (see gamify.js metrics)
      flag-based:   { flag }          — set once by a specific event
@@ -14,6 +14,7 @@ PGRE.ACH_CATEGORIES = [
   { id: 'dedication', name: 'Dedication' },
   { id: 'mastery',    name: 'Mastery'    },
   { id: 'plan',       name: 'Study Plan' },
+  { id: 'exam',       name: 'Mock Exams' },
   { id: 'secret',     name: 'Secret'     }
 ];
 
@@ -58,6 +59,12 @@ PGRE.ACHIEVEMENTS = [
   { id: 'plan-week',    cat: 'plan', tier: 'silver',   name: 'Clean Sweep',           desc: 'Complete every task in one week.',         metric: 'planWeeksDone', goal: 1 },
   { id: 'plan-phase',   cat: 'plan', tier: 'gold',     name: 'Phase Transition',      desc: 'Complete an entire phase of the plan.',    metric: 'planPhasesDone', goal: 1 },
   { id: 'plan-all',     cat: 'plan', tier: 'platinum', name: 'The Long March',        desc: 'Complete the entire review plan.',         metric: 'planPhasesDone', goal: 3 },
+
+  // ——— Mock exams (simulator; metrics read submitted state.exams only) ———
+  { id: 'exam-first',    cat: 'exam', tier: 'bronze', name: 'First Full Sim',    desc: 'Complete a full timed mock exam.',                     metric: 'examsDone', goal: 1 },
+  { id: 'exam-marathon', cat: 'exam', tier: 'silver', name: 'Marathoner',        desc: 'Complete 3 full timed mock exams.',                    metric: 'examsDone', goal: 3 },
+  { id: 'exam-peak',     cat: 'exam', tier: 'gold',   name: 'Peak Performer',    desc: 'Score 85% or better raw on a mock exam.',              metric: 'examBestPct', goal: 85 },
+  { id: 'exam-victory',  cat: 'exam', tier: 'gold',   name: 'Simulated Victory', desc: 'Beat your previous sim score twice.',                  metric: 'examImprovements', goal: 2 },
 
   // ——— Secret (hidden until unlocked) ———
   { id: 'night-owl',    cat: 'secret', tier: 'bronze', name: 'Night Owl',             desc: 'Answer a question correctly between midnight and 4 a.m.', flag: 'nightOwl',   secret: true },

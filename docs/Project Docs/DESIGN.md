@@ -53,7 +53,21 @@ Defined in `js/data-achievements.js`; metric- or flag-based, checked centrally i
 Per-topic mastery = share of that topic's question bank solved correctly at least once.
 It will become more meaningful as the bank grows past the 20 preview questions.
 
-## 3. Content pipeline — *status: placeholder, awaiting the real file*
+## 3. Content pipeline — *status: SHIPPED (July 15, 2026 — parser v2 ran as an offline extraction pipeline)*
+
+> **What shipped:** the book markdown was parsed offline (multi-agent extraction with
+> adversarial verification, one agent per problem section / exam chunk / index chapter)
+> into three **gitignored** generated files under `content/bank/`:
+> `cpg-questions.js` (146 end-of-chapter problems, `PGRE.BOOK_QUESTIONS`, ids `cpg-<sec>-<n>`),
+> `cpg-exams.js` (Sample Exams 1–3, 100 questions each, `PGRE.BOOK_EXAMS`, ids `cpg-x<n>-<q>`),
+> `cpg-formulas.js` (334 formula cards, **strictly 1:1 with the book's numbered equations**
+> per the EQUATION INDEX — user rule: only labeled equations are memorization-worthy;
+> ids `cpgf-<eq>`). Referenced figures are copied to `content/book-assets/` (gitignored).
+> ~96% of questions also carry `choiceSols` — per-choice distractor explanations mined
+> from the worked solutions (see §8). `js/bank.js` merges preview + book + exam sources
+> (`PGRE.allQuestions`, `questionById`, `questionsForTopic`); mastery denominators use the
+> default pool (preview + chapter problems; exam questions are opt-in via the quiz builder
+> to keep sims fresh). The pipeline is re-runnable; regenerated files simply overwrite.
 
 The site is frame-first: **20 preview questions** (hand-written, GRE-style, 5 choices)
 spread across all 9 topics stand in until the *Conquering the Physics GRE* markdown arrives.
@@ -80,10 +94,14 @@ Anything added to the question bank, including parser-v2 output, must follow the
    the 20 preview questions as a `preview` source that can be filtered out.
 4. Recompute mastery denominators; unlock the mock-exam simulator (below).
 
-## 4. Timed mock-exam simulator — *status: designed, deliberately deferred*
+## 4. Timed mock-exam simulator — *status: SHIPPED (July 15, 2026)*
 
-Deferred because a full-length simulation is meaningless with a 20-question bank.
-The UI slot exists (`#/exam`, sidebar entry "Mock exam · soon"). Design:
+Implemented as designed below (`js/exam-engine.js` + `js/view-exam.js`). The 100 × 170
+legacy mode replays Sample Exams 1–3 verbatim; the 70 × 120 mode draws by official
+weights (largest-remainder apportionment, prefer-unseen). In-progress sittings persist
+and resume across reloads; the countdown is wall-clock-based (background-tab throttling
+can't buy time). Blanks and misses feed the mistake book; every question logs an
+attempt row `mode:'exam'` for analytics. Original design:
 
 ### Formats
 - **Current (default):** 70 questions · 120 minutes — the revised test (since Sept 2023).
@@ -146,12 +164,120 @@ wrong pick, miss/solve counts, and a review schedule. Rules (user-chosen):
 Vocabulary-app flip cards: prompt → flip → self-grade **Again / Hard / Good / Easy**.
 SM-2-style scheduling per card in `state.cards` (`ease` 1.3–3.0 starting 2.5;
 Again resets reps and repeats within the session; Hard ×1.2; Good ×ease; Easy
-×ease×1.3 — button labels preview the exact next interval). New + due cards form
-the daily queue, surfaced on the dashboard *Review queue* card and as sidebar badges.
+×ease×1.3 — button labels preview the exact next interval). `gradeCard` also stamps
+`lastReviewedDay` (LOCAL date) — the `studiedToday` source of truth (never compare a
+UTC ISO prefix to a local date string).
+
+**Progressive daily batch** (replaces the old "every never-studied card is due"
+cram queue). `settings.formulaDailyTarget` is a **total** daily cap of reviews + new
+combined (clamp **1–100**, default **10**; every read routes the raw value through
+`srs.clampTarget`, so an imported/corrupt value can't poison the queue). `state.formulaDay`
+= `{ date, reviewIds: [], newIds: [] }` holds today's batch, rebuilt at the day roll and
+reconciled on every access (`srs.formulaDay(deck)`, persisted only when it changed; an
+empty deck returns a transient batch WITHOUT persisting, guarding the nav-badge path that
+runs before IndexedDB resolves):
+- **Build:** reviews = cards with state and `due ≤ today`, **oldest-due first**, first
+  `min(T, all)`; new = random sample of never-studied cards filling `max(0, T − reviews)` slots.
+- **Reconcile (same day):** drop ids no longer in the deck; keep every `studiedToday`
+  member unconditionally; if over target trim only non-studied items (new picks from the
+  end, then unstudied reviews newest-due first — oldest-due kept); if under target top up
+  with due reviews (oldest first) then random never-studied cards.
+- **Remaining** = batch cards where **(no state) OR (`due ≤ today`)** — an Again-graded
+  card (due today) stays remaining across reloads; a Good/Hard/Easy card (future due) is done.
+- **Overflow:** due reviews held back from today's batch are **postponed** to tomorrow
+  (counted on the composition line).
+- **New-card slots** are filled by the **picker** (topic-grouped checklist; `studiedToday`
+  picks are locked and preserved verbatim, counting toward the slot tally) or **random
+  auto-fill** / re-roll. Slots `S = max(0, T − reviews)`; when `S = 0` the new-card controls
+  are hidden.
+
+Remaining count drives the dashboard *Review queue* card and the sidebar badge.
+**Browse** the deck via **Learned** (cards with state: last-grade + due chips) / **Upcoming**
+(no state: "new" chip) sub-tabs; batch members carry a "today" chip; a row click toggles a
+view-only peek (front/back/note, no schedule mutation). **In-session back-stepping:** every
+grade is pushed to `study.history`; a "Back" control (or ←) opens a view-only peek of graded
+cards (older/newer/Resume).
+
+**Session mechanics (Study mode only; Match/Type/Quiz commit `gradeCard` directly — no steps).**
+- **Exam-date cap (F3):** `settings.examDate` (default `2026-10-28`, editable via the Today card's
+  date input). `srs.examCap()` = `max(1, min(days−1, ceil(0.2·days)))`, null when the date is
+  invalid/past (capping silently off). `nextIntervals` clamps hard/good/easy to the cap (Again
+  stays 0), so grade-button previews match reality. **Final pass** (`srs.finalPassActive()`, active
+  `0 < days ≤ 7`): every card with state becomes review-eligible (overdue first, then future-due
+  learned cards, oldest-due first); `formulaDayRemaining` extends its rule to *(no state) OR
+  (due ≤ today) OR (final-pass AND not studied today)*; home shows a "Final pass — N learned
+  formulas, D days left (aim for ⌈N/D⌉/day)" banner.
+- **Learning steps (F7):** stateless cards graduate on Easy (commit) or on a 2nd Hard/Good; a 1st
+  Hard/Good bumps to step 1 (chip "learning 1/2", +2 XP, reinsert 3–5 back, no commit); Again
+  resets to step 0 (reinsert, no lapse). `study.done` counts only commits; every press is +2 XP.
+- **Undo (F1a):** `study.undo` (max 10, session-scoped) snapshots the whole session + card state
+  before each press; a ghost "Undo" (or ⌘/Ctrl+Z) restores it and pops the matching trailing
+  `cardReviews` entry. Overlays block undo.
+- **Overlay state machine (F8):** single `study.overlay` (`null|'peek'|'scaffold'|'checkpoint'`)
+  routes the keyboard — peek ←/→/Esc, scaffold/checkpoint space·Enter = continue, null = flip/grade/
+  ←-peek/undo. "Rebuild hints" (pre-flip) and a post-Again interstitial show 5 reconstruction
+  prompts. When a round-closing press is an Again, scaffold precedes checkpoint.
+- **Rounds (F11):** every `ROUND_SIZE = 10` presses, a checkpoint overlay offers Keep going / Finish.
+- **Interleaving (F9):** `interleaveByTopic` (view) round-robins the session queue across topics;
+  `srs._sampleSpread` stratifies new-card auto-fill / re-roll across topics (`_sample` kept for others).
+
+**Insight & browse (bundle 2).**
+- **Review log:** `srs.gradeCard` appends `state.cardReviews` (capped 8000) `{ d, id, g, ivl, m: was-mature
+  (ivl≥21), n: had-prior-state }` — captured *before* mutation. All modes flow through `gradeCard`, so the
+  log is complete; F1a undo pops the matching trailing entry.
+- **Leeches (F2):** `srs.isLeech(st)` = `st.lapses ≥ 8`. Learned browse rows carry a warning "leech" chip;
+  home shows "N formulas keep slipping" + a **Drill N struggling** button → a normal-grading session over the
+  leech cards, independent of the daily batch.
+- **Mnemonic notes (F2):** `state.cardNotes` (id → `{ text, updatedAt }`, plain text). Browse peek (both tabs)
+  has an Add/Edit-mnemonic textarea; Study reveal renders the mnemonic under the card note.
+- **Reverse direction (F5):** `settings.formulaReverse` (Today-card toggle). When true, Study shows `back`
+  as the question ("What is this? When does it apply?") and reveals name + `front` + note + mnemonic. Same
+  SM-2 state/grading; games, print, browse unaffected.
+- **Memory stats (F10):** collapsible home card. Maturity mix (mature `interval≥21`; young `reps>0 &&
+  interval<21`; learning/new = rest). 30-day retention from `cardReviews` (n=1 only): pass rate of `g≠again`
+  among `m=1` (mature) / `m=0` (young); <20 qualifying entries → "collecting data". 14-day due forecast
+  (day 0 includes overdue) as div bars + a 30-day total line.
+
+Game pools (Match/Type/Quiz/Cloze) are restricted to the **remaining batch + already-studied
+cards** — games never introduce never-studied cards outside the daily cap/picker.
+
+**Games sharpening (F4/F6/F1b — `js/flashmodes.js`).** Games commit `gradeCard` directly
+(no learning steps — those are Study-only). *Type (F4):* the auto-check is a verdict line
+("Auto-check: matched / no match"); the user grades on the full **Again/Hard/Good/Easy**
+scale (keys 1–4), with the auto-check result preselected (matched→Good, miss→Again) and
+**Enter** confirming the highlight. `acceptSet` also matches the legend-stripped back and an
+optional `c.alts` array. *Quiz (F6):* `stripLegend(back)` keeps only the leading `$$…$$`/`$…$`
+block (drops the symbol legend) for **display** — grading stays index-based. `perturbLatex(back)`
+builds near-miss distractors from the legend-stripped formula (brace-depth aware): flip a
+top-level ±, `^2`↔`^3`, add/remove a `\frac{1}{2}` factor, `2\pi`↔`\pi`, swap a top-level
+fraction, `\sin`↔`\cos`; each variant must `normText`-differ from the correct string and every
+other, and must render (`katexOK`, KaTeX `throwOnError`) or it is discarded. Options = correct +
+up to 3 variants, then same-topic then any-topic legend-stripped backs. *Undo (F1b):* Type and
+Quiz keep a **one-level** undo of the last committed grade `{ id, prevState, counter snapshots }`
+— a ghost **Undo** link restores `state.cards[id]`, pops the matching trailing `cardReviews`
+entry, rolls back the mode's score/XP counters, and hides itself; the undone question is not
+replayed and the stack clears at round end.
+
+**Cloze mode (bundle 4 — `startCloze`).** One top-level term of the (legend-stripped) formula is
+blanked to `\boxed{?}` and the player picks the missing token from four KaTeX chips. Generation is
+conservative — `clozeCandidates` tokenizes the side after the first top-level `=` (else the whole
+expression), brace-depth aware, and blanks one of: an integer/decimal **coefficient**, a small
+numeric `\frac{p}{q}`, an **exponent** (`^2`/`^{3/2}` — re-wrapped as `^{\boxed{?}}`, chips are the
+content), `\pi`/`n\pi`, or a trig/`exp`/`ln`/`log` **function name** (a top-level ± is a candidate too
+but can't form four distinct chips, so it self-skips). Distractors are token-scale perturbations
+(`clozeDistractors`), falling back to same-category tokens **harvested from the whole deck**
+(`clozeHarvest`); each chip and the boxed formula must render (`katexOK`) or the candidate/card is
+dropped. Right → `gradeCard` Good (+2 XP), wrong → Again with the correct chip highlighted and a brief
+auto-advance pause. Pool = `pickQueue` policy filtered to cloze-able cards, cap 12 (`clozePool`); the
+intro tile shows the round size, or "No cloze-able cards in today's pool yet." when it's empty.
+
+Card ids are **equation-numbered and assumed stable** across re-imports; a re-import that
+renumbers ids resets card progress (known limitation).
+
 **The deck ships empty by design** — cards come only from the book import
 (parser v2 appends to `PGRE.FORMULAS` or stores
 `{ id: 'formula-deck', kind: 'formula-deck', cards: [...] }` in IndexedDB;
-`PGRE.formulaDeck()` merges both). Keyboard: space flips, 1–4 grade.
+`PGRE.formulaDeck()` merges both). Keyboard: space flips, 1–4 grade, ← steps back.
 
 ## 5. Review plan (data: `js/data-plan.js`)
 
@@ -180,5 +306,32 @@ Weeks render as collapsible cards; the current week auto-opens; checking tasks g
 ## 7. Deliberately out of scope (for now)
 
 - Accounts, sync, server anything — the point is local.
-- Dark mode (the ivory Anthropic look is the design; can be added as a `data-theme` layer).
 - Question shuffle of choices (kept in authored order, GRE-style).
+- ~~Dark mode~~ — shipped July 15, 2026 as the planned `data-theme` layer (see §8).
+
+## 8. Feature waves — *shipped July 15, 2026 (all 15 PROPOSAL items)*
+
+Everything in `PROPOSAL.md` was built in three orchestrated waves (infra → features →
+theme/polish), each implementation reviewed adversarially and the whole site verified
+end-to-end via headless Chrome (per `.claude/skills/verify/SKILL.md`):
+
+- **Infra:** state schema v2 (`exams`, `notes`, `bookmarks`, `settings`, `studyLog`,
+  attempt `confidence`), `js/bank.js` source merge, `js/study-time.js` passive active-time
+  tracker, `js/notes.js` API, routes/nav for `#/analytics` `#/build` `#/search` `#/notes`,
+  4 mock-exam achievements.
+- **#1 Mock-exam simulator** (§4) · **#2 Analytics** (`#/analytics`: weekly accuracy trend,
+  points-lost-per-topic ranking, time histogram vs pace budget, volume heatmap, sims table)
+  · **#3 Custom quiz builder** (`#/build`: topics × difficulty × unseen/missed/slowest/
+  bookmarked, exam-source opt-in, deep link `#/build/topic-<id>`) · **#4 Pace trainer**
+  (settings-driven, 103 s default) · **#5 Flashcard modes** (Match / Type-to-recall /
+  Auto-quiz in `js/flashmodes.js`, SRS-integrated) · **#6 Confidence tagging** (knew-it/
+  guessed; lucky guesses enter the mistake book, cleared on a confident re-solve) ·
+  **#7 Question of the day** (dashboard, date-seeded) · **#8 Notes & bookmarks**
+  (`#/notes`) · **#9 Search** (`#/search`, all sources incl. book sections & notes) ·
+  **#10 Readiness estimate** (dashboard, labeled estimate, blends sims) · **#11 Study-time
+  tracking** (dashboard card vs 15–17 h target) · **#12 Distractor explanations**
+  (`choiceSols` mined from the book's worked solutions; shown in practice feedback, exam
+  review, mistake book) · **#13 Print/PDF** (`css/print.css`: paper mistake book +
+  per-topic formula sheets) · **#14 Keyboard-first practice** (A–E/1–5, Enter, G;
+  gated on `settings.keyboard`) · **#15 Dark mode** (tokenized palette,
+  `[data-theme="dark"]`, sidebar toggle, per-theme heatmap/amber tokens).

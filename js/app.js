@@ -87,17 +87,24 @@ PGRE.toast = function (html, kind) {
   }, 4200);
 };
 
-/* ——— Router ——— */
+/* ——— Router ———
+   Every view receives the generic sub-path params sub/sub2
+   (#/exam/run → sub 'run'; #/exam/review/<id> → sub 'review', sub2 <id>);
+   topic and practice additionally keep their id param. */
 PGRE.route = function () {
   var hash = location.hash.replace(/^#\/?/, '');
   var parts = hash.split('/').filter(Boolean);
-  var view, params = {};
+  var view, params = { sub: parts[1] || null, sub2: parts[2] || null };
 
   if (parts.length === 0) { view = 'dashboard'; }
   else if (parts[0] === 'topic' && parts[1]) { view = 'topic'; params.id = parts[1]; }
   else if (parts[0] === 'practice') { view = 'practice'; params.id = parts[1] || 'all'; }
   else if (parts[0] === 'plan') { view = 'plan'; }
   else if (parts[0] === 'history') { view = 'history'; }
+  else if (parts[0] === 'analytics') { view = 'analytics'; }
+  else if (parts[0] === 'build') { view = 'build'; }
+  else if (parts[0] === 'search') { view = 'search'; }
+  else if (parts[0] === 'notes') { view = 'notes'; }
   else if (parts[0] === 'mistakes') { view = 'mistakes'; }
   else if (parts[0] === 'formulas') { view = 'formulas'; }
   else if (parts[0] === 'achievements') { view = 'achievements'; }
@@ -125,7 +132,7 @@ PGRE.refreshNavBadges = function () {
   var el = document.getElementById('nav-mist-due');
   if (el) { el.textContent = m + ' due'; el.hidden = m === 0; }
   PGRE.formulaDeck().then(function (deck) {
-    var n = PGRE.srs.dueDeck(deck).length;
+    var n = PGRE.srs.formulaDayRemaining(deck).length;
     var el2 = document.getElementById('nav-form-due');
     if (el2) { el2.textContent = n + ' due'; el2.hidden = n === 0; }
   });
@@ -147,13 +154,17 @@ PGRE.buildNav = function () {
     '<a href="#/" data-nav="dashboard">Dashboard</a>' +
     '<a href="#/plan" data-nav="plan">Study plan</a>' +
     '<a href="#/history" data-nav="history">History</a>' +
+    '<a href="#/analytics" data-nav="analytics">Analytics</a>' +
+    '<a href="#/build" data-nav="build">Custom quiz</a>' +
+    '<a href="#/search" data-nav="search">Search</a>' +
+    '<a href="#/notes" data-nav="notes">Notes &amp; bookmarks</a>' +
     '<a href="#/mistakes" data-nav="mistakes">Mistake book' +
       '<span class="nav-badge nav-badge-due" id="nav-mist-due" hidden></span></a>' +
     '<a href="#/formulas" data-nav="formulas">Formula recall' +
       '<span class="nav-badge nav-badge-due" id="nav-form-due" hidden></span></a>' +
     '<a href="#/achievements" data-nav="achievements">Achievements</a>' +
     '<a href="#/library" data-nav="library">Library</a>' +
-    '<a href="#/exam" data-nav="exam">Mock exam <span class="nav-badge">soon</span></a>' +
+    '<a href="#/exam" data-nav="exam">Mock exam</a>' +
     '<div class="nav-heading">Knowledge portals</div>';
   PGRE.TOPICS.forEach(function (t) {
     html += '<a href="#/topic/' + t.id + '" data-nav="topic-' + t.id + '">' +
@@ -163,10 +174,31 @@ PGRE.buildNav = function () {
   el.innerHTML = html;
 };
 
+/* ——— Theme: 'light' (default) or 'dark', a data-theme layer on <html> ——— */
+PGRE.applyTheme = function (t) {
+  t = t || 'light';
+  document.documentElement.dataset.theme = t;
+  var btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = t === 'dark' ? 'Light mode' : 'Dark mode';
+};
+
+/* Persist + apply — the sidebar toggle and any settings UI call this. */
+PGRE.setTheme = function (t) {
+  PGRE.store.state.settings.theme = t;
+  PGRE.store.save();
+  PGRE.applyTheme(t);
+};
+
 /* ——— Boot ——— */
 PGRE.boot = function () {
   PGRE.store.load();
+  PGRE.applyTheme(PGRE.store.state.settings.theme);
   PGRE.buildNav();
+  PGRE.studyTime.start();       // passive active-minutes heartbeat
+  var toggle = document.getElementById('theme-toggle');
+  if (toggle) toggle.addEventListener('click', function () {
+    PGRE.setTheme(PGRE.store.state.settings.theme === 'dark' ? 'light' : 'dark');
+  });
   window.addEventListener('hashchange', PGRE.route);
   PGRE.route();                 // first paint never waits on IndexedDB
   PGRE.contentDB.open();        // warm the connection in the background

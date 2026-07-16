@@ -8,21 +8,13 @@
        back: '$T^2 \\propto r^3$',
        note: 'optional one-line context' }
 
-   Parser v2 has two ways to supply cards:
+   The pipeline has three ways to supply cards:
+   - write PGRE.BOOK_FORMULAS in content/bank/cpg-formulas.js (gitignored —
+     the canonical route for book-derived cards),
    - append literals to PGRE.FORMULAS below, or
    - store { id: 'formula-deck', kind: 'formula-deck', cards: [...] } in the
-     IndexedDB content store; PGRE.formulaDeck() merges both (id-deduped). */
+     IndexedDB content store.
+   PGRE.formulaDeck() (js/store.js) merges all three, id-deduped. */
 window.PGRE = window.PGRE || {};
 
 PGRE.FORMULAS = [];
-
-PGRE.formulaDeck = function () {
-  return PGRE.contentDB.get('formula-deck').then(function (rec) {
-    var seen = {};
-    return PGRE.FORMULAS.concat((rec && rec.cards) || []).filter(function (c) {
-      if (!c || !c.id || seen[c.id]) return false;
-      seen[c.id] = true;
-      return true;
-    });
-  });
-};

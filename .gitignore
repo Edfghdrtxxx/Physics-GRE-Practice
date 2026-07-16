@@ -2,3 +2,6 @@
 
 # Copyrighted book content — stays local, never pushed to the public repo
 docs/Conquering the Physics GRE (Yoni Kahn)/
+# Book-derived question bank, formula deck, and figures — same rule
+content/bank/
+content/book-assets/

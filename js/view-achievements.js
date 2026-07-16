@@ -1,4 +1,4 @@
-/* Achievements — 36 achievements in 6 categories × 4 tiers, with progress. */
+/* Achievements — every badge (see js/data-achievements.js), with progress. */
 window.PGRE = window.PGRE || {};
 PGRE.views = PGRE.views || {};
 

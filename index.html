@@ -6,6 +6,7 @@
   <title>Physics GRE · Prep Studio</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#936;</text></svg>">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/print.css" media="print">
   <link rel="stylesheet" href="vendor/katex/katex.min.css">
 </head>
 <body>
@@ -15,6 +16,9 @@
       <div class="brand-sub">Prep Studio · exam Oct 28, 2026</div>
     </div>
     <nav id="sidebar-nav"></nav>
+    <div id="sidebar-footer">
+      <button id="theme-toggle" class="btn btn-ghost btn-sm" type="button">Dark mode</button>
+    </div>
   </aside>
 
   <main id="main">
@@ -35,9 +39,18 @@
   <script src="js/data-achievements.js"></script>
   <script src="js/data-plan.js"></script>
 
+  <!-- book-derived bank (gitignored; generated placeholders until the
+       extraction pipeline fills them) -->
+  <script src="content/bank/cpg-questions.js"></script>
+  <script src="content/bank/cpg-exams.js"></script>
+  <script src="content/bank/cpg-formulas.js"></script>
+
   <!-- engine -->
   <script src="js/store.js"></script>
   <script src="js/srs.js"></script>
+  <script src="js/bank.js"></script>
+  <script src="js/study-time.js"></script>
+  <script src="js/notes.js"></script>
   <script src="js/gamify.js"></script>
 
   <!-- views -->
@@ -45,11 +58,16 @@
   <script src="js/view-topic.js"></script>
   <script src="js/view-practice.js"></script>
   <script src="js/view-history.js"></script>
+  <script src="js/view-analytics.js"></script>
+  <script src="js/view-build.js"></script>
+  <script src="js/view-search.js"></script>
+  <script src="js/view-notes.js"></script>
   <script src="js/view-mistakes.js"></script>
   <script src="js/view-formulas.js"></script>
   <script src="js/view-achievements.js"></script>
   <script src="js/view-plan.js"></script>
   <script src="js/view-content.js"></script>
+  <script src="js/exam-engine.js"></script>
   <script src="js/view-exam.js"></script>
 
   <!-- shell -->

@@ -55,7 +55,8 @@ PGRE.gamify = {
       picked: typeof ctx.picked === 'number' ? ctx.picked : null,
       answer: q.answer, correct: isCorrect,
       ms: elapsedMs == null ? null : elapsedMs,
-      sid: ctx.sid || null, mode: ctx.mode || 'practice'
+      sid: ctx.sid || null, mode: ctx.mode || 'practice',
+      confidence: ctx.confidence || null // 'sure' | 'guess' | null
     });
 
     // mistake book: a miss creates/resets the entry (and reopens an archived
@@ -128,6 +129,61 @@ PGRE.gamify = {
     this.checkAchievements();
     PGRE.store.save();
     return xp;
+  },
+
+  /* ——— Exam-mode answer entry point (js/exam-engine.js) ———
+     Commits ONE exam question the way recordAnswer does — durable attempt row
+     (mode: 'exam'), per-question record (so mastery sees a first-time solve),
+     per-topic tally, and the same mistake-book / SRS upkeep — but deliberately
+     WITHOUT the per-answer XP, daily-challenge and achievement churn: the
+     simulator awards a flat completion bonus and runs checkAchievements() once
+     on submit. `picked` may be null (a blank), which scores as a miss. */
+  recordExamAnswer: function (q, isCorrect, elapsedMs, ctx) {
+    var s = PGRE.store.state;
+    var now = new Date().toISOString();
+    ctx = ctx || {};
+
+    s.attempts.push({
+      ts: now, qid: q.id, topic: q.topic,
+      picked: typeof ctx.picked === 'number' ? ctx.picked : null,
+      answer: q.answer, correct: isCorrect,
+      ms: elapsedMs == null ? null : elapsedMs,
+      sid: ctx.sid || null, mode: 'exam',
+      confidence: ctx.confidence || null
+    });
+
+    // mistake book — identical SRS pathway to recordAnswer
+    var mk = s.mistakes[q.id];
+    if (!isCorrect) {
+      if (!mk) {
+        mk = s.mistakes[q.id] = { firstMissedAt: now, misses: 0, solves: 0,
+                                  wrongPicks: [], archivedAt: null, srs: null };
+      }
+      mk.misses += 1;
+      mk.lastMissedAt = now;
+      if (typeof ctx.picked === 'number') {
+        mk.lastPick = ctx.picked;
+        if (mk.wrongPicks.indexOf(ctx.picked) === -1) mk.wrongPicks.push(ctx.picked);
+      }
+      if (mk.archivedAt) mk.archivedAt = null;
+      PGRE.srs.mistakeMissed(mk);
+    } else if (mk) {
+      mk.solves += 1;
+      mk.lastSolvedAt = now;
+      if (!mk.archivedAt) PGRE.srs.mistakeSolved(mk);
+    }
+
+    var rec = s.questions[q.id] || { attempts: 0, correct: 0, firstCorrect: false };
+    rec.attempts += 1;
+    if (isCorrect) rec.correct += 1;
+    if (isCorrect && !rec.firstCorrect) rec.firstCorrect = true;
+    s.questions[q.id] = rec;
+
+    var t = s.topics[q.topic] || { attempted: 0, correct: 0, xp: 0 };
+    t.attempted += 1;
+    if (isCorrect) t.correct += 1;
+    s.topics[q.topic] = t;
+    // NB: no addXP / checkChallenges / checkAchievements here — see doc above.
   },
 
   /* ——— Sessions: one record per practice run / mistake drill ——— */
@@ -239,6 +295,20 @@ PGRE.gamify = {
       if (phaseDone) phasesDone++;
     });
 
+    // mock exams: submitted sims only, in submission order
+    var exams = s.exams.filter(function (x) { return x.submittedAt; });
+    exams.sort(function (a, b) { return a.submittedAt < b.submittedAt ? -1 : 1; });
+    var examBestPct = 0, examImprovements = 0, prevPct = null;
+    exams.forEach(function (x) {
+      var pct = x.total ? Math.round(100 * x.raw / x.total) : 0;
+      if (pct > examBestPct) examBestPct = pct;
+      // Compare as a percentage, not raw count, so a 55/100 legacy sim doesn't
+      // read as "beating" a 50/70 current sim (71% > 55%). A strictly higher
+      // percentage than the sim just before it counts as one improvement.
+      if (prevPct != null && pct > prevPct) examImprovements++;
+      prevPct = pct;
+    });
+
     return {
       answered: answered,
       xp: s.xp,
@@ -249,7 +319,10 @@ PGRE.gamify = {
       topics80: topics80,
       planTasks: planTasks,
       planWeeksDone: weeksDone,
-      planPhasesDone: phasesDone
+      planPhasesDone: phasesDone,
+      examsDone: exams.length,
+      examBestPct: examBestPct,
+      examImprovements: examImprovements
     };
   },
 

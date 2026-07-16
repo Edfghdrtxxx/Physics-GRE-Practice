@@ -13,6 +13,25 @@ PGRE.views.topic = {
     var mastery = g.mastery(t.id);
     var bank = PGRE.questionsForTopic(t.id);
 
+    // Break the topic bank down by source so the copy reflects what is actually
+    // loaded: 'cpg' rows come from the imported book, everything else is preview.
+    var bookCount = 0;
+    bank.forEach(function (q) { if (q && q.src === 'cpg') bookCount++; });
+    var previewCount = bank.length - bookCount;
+    var bankSub, practiceCopy;
+    if (bookCount > 0) {
+      bankSub = previewCount > 0
+        ? bookCount + ' book · ' + previewCount + ' preview'
+        : 'from the book';
+      practiceCopy = 'The bank holds ' + bank.length + ' question' + (bank.length === 1 ? '' : 's') +
+        ' for this topic, drawn from Conquering the Physics GRE' +
+        (previewCount > 0 ? ' plus the preview set.' : '.');
+    } else {
+      bankSub = 'preview set';
+      practiceCopy = 'The bank holds ' + bank.length + ' preview question' + (bank.length === 1 ? '' : 's') +
+        ' for this topic — it grows when the book content is imported.';
+    }
+
     var html = '<div class="card portal-head">' +
       '<div class="portal-title">' + ui.monogram(t) +
         '<div><h1>' + t.name + '</h1>' +
@@ -27,12 +46,11 @@ PGRE.views.topic = {
       ui.statTile('Attempted', ui.fmt(rec.attempted)) +
       ui.statTile('Accuracy', acc) +
       ui.statTile('Topic XP', ui.fmt(rec.xp || 0)) +
-      ui.statTile('In bank', bank.length + ' <span class="stat-unit">questions</span>', 'preview set') +
+      ui.statTile('In bank', bank.length + ' <span class="stat-unit">questions</span>', bankSub) +
     '</div>';
 
     html += '<div class="card"><h2>Practice</h2>' +
-      '<p class="muted">The bank holds ' + bank.length + ' preview question' + (bank.length === 1 ? '' : 's') +
-      ' for this topic — it grows when the book content is imported.</p>' +
+      '<p class="muted">' + practiceCopy + '</p>' +
       '<div class="btn-row">' +
         '<a class="btn btn-primary" href="#/practice/' + t.id + '">Practice this topic</a>' +
         '<a class="btn btn-ghost" href="#/practice/all">Mixed practice (all topics)</a>' +
