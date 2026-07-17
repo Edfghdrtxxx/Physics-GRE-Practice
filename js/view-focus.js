@@ -65,40 +65,59 @@ PGRE.views.focus = (function () {
   }
 
   /* ——— reward mark (static SVG; paint only toggles classes + one ring offset) ———
-     A radiating spark in the Anthropic mold: a dotted minute track with the
-     progress arc riding it, a slow-drifting wheel of 12 rounded spokes that
-     light up in interleaved thirds as the session advances (fa-g1..3 map onto
-     the existing orbits-1..3 rungs), and a soft breathing core. */
+     The mark is a COLLIDER EVENT DISPLAY: the transverse cross-section of a
+     cylindrical detector (beam pipe → tracker → calorimeters → solenoid →
+     muon yoke) drawn as a hairline instrument figure, with the dotted timing
+     ring around it. Its centre is the INTERACTION POINT: js/focus-fx.js
+     streams bunch pairs in along the horizontal beamline and collides them
+     at the centre, spraying curved tracks out through the layers (the canvas
+     measures the ring's live position/radius from this element every frame).
+     The detector lights up from the inside out on the existing orbits-1..3
+     rungs — tracker first, then calorimeters, then solenoid + muon system —
+     so the longer focus holds, the deeper the event penetrates. */
   var RING_C = 553;              // 2*pi*88, rounded — matches r="88" in the markup
-  function atomSVG() {
-    var spokes = '';
-    for (var i = 0; i < 12; i++) {
-      var grp = (i % 3) + 1;                          // interleaved thirds — each
-      var a = (i * 30 - 90) * Math.PI / 180;          // rung lights 4 spokes evenly
-      var r1 = 34, r2 = (i % 2 === 0) ? 57 : 50;      // alternating lengths, organic
-      spokes += '<line class="fa-spoke fa-g' + grp + '"' +
-        ' x1="' + (100 + r1 * Math.cos(a)).toFixed(1) + '" y1="' + (100 + r1 * Math.sin(a)).toFixed(1) + '"' +
-        ' x2="' + (100 + r2 * Math.cos(a)).toFixed(1) + '" y2="' + (100 + r2 * Math.sin(a)).toFixed(1) + '"/>';
-    }
+  function detectorSVG() {
     return '' +
-      '<svg class="focus-atom" id="focus-atom" viewBox="0 0 200 200" role="img" aria-label="Focus progress">' +
+      '<svg class="focus-atom" id="focus-atom" viewBox="0 0 200 200" role="img"' +
+           ' aria-label="Focus progress — collider detector cross-section inside the timing ring">' +
         // gradient for the progress arc — both stops are tokens, so dark theme re-derives
         '<defs><linearGradient id="fa-grad" x1="0" y1="0" x2="1" y2="1">' +
           '<stop offset="0" stop-color="var(--accent)"/>' +
           '<stop offset="1" stop-color="var(--accent-deep)"/>' +
         '</linearGradient></defs>' +
+        // the beamline: two dashed halves aimed at the IP; while running the
+        // css streams their dashes toward the centre from both sides
+        '<line class="det-beam det-beam-l" x1="10" y1="100" x2="96" y2="100"/>' +
+        '<line class="det-beam det-beam-r" x1="190" y1="100" x2="104" y2="100"/>' +
         '<circle class="fa-track" cx="100" cy="100" r="88"/>' +
         '<circle class="fa-ring"  cx="100" cy="100" r="88" id="fa-ring"/>' +
-        '<circle class="fa-mid"   cx="100" cy="100" r="70"/>' +
-        '<g class="fa-spokes">' + spokes + '</g>' +
-        '<circle class="fa-halo" cx="100" cy="100" r="26"/>' +
-        '<circle class="fa-core" cx="100" cy="100" r="12"/>' +
+        // ——— the detector, outside in (segment wedges are css dasharrays) ———
+        // muon return yoke: two staggered rings of chamber segments + the solenoid coil
+        '<g class="det-mu">' +
+          '<circle class="det-yoke1" cx="100" cy="100" r="76"/>' +
+          '<circle class="det-yoke2" cx="100" cy="100" r="66"/>' +
+          '<circle class="det-sol"   cx="100" cy="100" r="57"/>' +
+        '</g>' +
+        // calorimeters: coarse HCAL wedges around a finely segmented ECAL crystal ring
+        '<g class="det-cal">' +
+          '<circle class="det-hcal" cx="100" cy="100" r="48"/>' +
+          '<circle class="det-ecal" cx="100" cy="100" r="38"/>' +
+        '</g>' +
+        // inner tracker: dotted silicon barrels around the beam pipe
+        '<g class="det-trk">' +
+          '<circle class="det-t" cx="100" cy="100" r="16"/>' +
+          '<circle class="det-t" cx="100" cy="100" r="24"/>' +
+          '<circle class="det-t" cx="100" cy="100" r="32"/>' +
+        '</g>' +
+        '<circle class="det-pipe" cx="100" cy="100" r="5"/>' +
+        '<circle class="det-core" cx="100" cy="100" r="2.6"/>' +
+        '<text class="det-label" x="100" y="121">IP</text>' +
         // comet head riding the arc tip: the wrapper rotates by --fa-tip (paintAtom)
-        // around the atom centre; the dot itself sits at 12 o'clock (progress 0)
+        // around the mark centre; the dot itself sits at 12 o'clock (progress 0)
         '<g class="fa-tipwrap"><circle class="fa-tip" cx="100" cy="12" r="4.5"/></g>' +
       '</svg>';
   }
-  // progress in [0,1]; orbitCount 0..3 (how many spoke-thirds are lit); complete adds a pulse.
+  // progress in [0,1]; orbitCount 0..3 (how many detector layers are lit); complete adds a pulse.
   function paintAtom(progress, orbitCount, complete) {
     var atom = document.getElementById('focus-atom');
     var ring = document.getElementById('fa-ring');
@@ -170,13 +189,53 @@ PGRE.views.focus = (function () {
       '<ul class="focus-sess-list">' + rows + '</ul></div>';
   }
 
+  /* ——— HUD corner telemetry (instrument voice; painted by paintHud) ——— */
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+  function dayStamp() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  function hudHTML() {
+    return '<div class="focus-hud" aria-hidden="true">' +
+      '<div class="fhud fhud-tl"><span id="fhud-run">Run ' + dayStamp() + '</span><br>' +
+        '<span id="fhud-state">Standby</span></div>' +
+      '<div class="fhud fhud-tr"><span id="fhud-clock">--:--:--</span></div>' +
+      '<div class="fhud fhud-bl"><span id="fhud-evt">Evt 000000</span></div>' +
+      '<div class="fhud fhud-br"><span id="fhud-today">Today 0:00</span></div>' +
+    '</div>';
+  }
+  // Every second (and on transitions): run state, wall clock, fx event
+  // counter, today's credited time. All four corners are aria-hidden
+  // flavour — the real readouts live in the stage and stat tiles.
+  function paintHud(on, paused) {
+    var run = document.getElementById('fhud-run');
+    if (run) run.textContent = 'Run ' + dayStamp();   // stays honest across midnight
+    var stEl = document.getElementById('fhud-state');
+    if (stEl) stEl.textContent = paused ? 'Held' : (on ? 'Beam on' : 'Standby');
+    var ck = document.getElementById('fhud-clock');
+    if (ck) {
+      var d = new Date();
+      ck.textContent = pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+    }
+    var ev = document.getElementById('fhud-evt');
+    if (ev && PGRE.focusFx && PGRE.focusFx.events) {
+      var n = String(PGRE.focusFx.events());
+      while (n.length < 6) n = '0' + n;
+      ev.textContent = 'Evt ' + n;
+    }
+    var td = document.getElementById('fhud-today');
+    if (td) td.textContent = 'Today ' + fmtClock(PGRE.studyTime.todaySec());
+  }
+
   /* ——— render: static skeleton the mount() drives ——— */
   function render() {
     return '' +
     '<div class="focus-page" id="focus-page">' +
       '<div class="focus-ambient" aria-hidden="true"></div>' +
+      hudHTML() +
       '<div class="focus-stage">' +
-        '<div class="focus-reward">' + atomSVG() + '</div>' +
+        '<div class="focus-sec-tag">&sect; F5 / Focus run</div>' +
+        '<div class="focus-reward">' + detectorSVG() + '</div>' +
         '<div class="focus-clock" id="focus-clock">0:00</div>' +
         '<div class="focus-sub"  id="focus-sub">Choose a length, then start.</div>' +
         goalChipsHTML() +
@@ -216,6 +275,9 @@ PGRE.views.focus = (function () {
       // is-running drives the live dressing: warmer ambient glow, breathing
       // clock (css). Dropped while paused so the page visibly "holds".
       page.classList.toggle('is-running', on && !paused);
+      // ambient canvas fx (floating glyphs + cursor trail) run with the session;
+      // frozen on pause, faded out by css when is-running drops
+      if (PGRE.focusFx) PGRE.focusFx.sync(on && !paused, page);
     }
     // The oversized clock doubles as a pause/resume control while a session is
     // live (mount() wires the click/keydown); reflect that in its affordances.
@@ -281,6 +343,9 @@ PGRE.views.focus = (function () {
     // move, so skip the per-second teardown/rebuild. paintAll() handles the one-shot
     // refresh at the stop transition when on has just flipped false.
     if (on) paintStats();
+
+    // corner telemetry ticks every paint (its wall clock moves even when idle)
+    paintHud(on, paused);
   }
 
   // Rebuild the four stat tiles in place (outerHTML keeps the #id).
@@ -331,6 +396,10 @@ PGRE.views.focus = (function () {
     reward.classList.remove('ignite');
     void reward.offsetWidth;
     reward.classList.add('ignite');
+    // spark shower from the mark on start — sync first so the fx canvas exists
+    // even when ignite runs ahead of the next paintLive()
+    var page = document.getElementById('focus-page');
+    if (PGRE.focusFx && page) { PGRE.focusFx.sync(true, page); PGRE.focusFx.burst(); }
   }
 
   // prevLen: the focusSessions.length from just BEFORE this stop. finalizeAndStop()
@@ -477,6 +546,22 @@ PGRE.views.focus = (function () {
     // zen: pointer activity briefly surfaces the faded controls (no-op outside zen)
     page.addEventListener('mousemove', zenPeek);
     page.addEventListener('touchstart', zenPeek, { passive: true });
+
+    // parallax (Antigravity-style): while running, the cursor position feeds
+    // --fxx/--fxy in [-1,1]; css tilts the reward mark toward the pointer.
+    // Reduced-motion users are covered twice: the css transform is disabled
+    // there, and the vars are inert without it.
+    page.addEventListener('mousemove', function (e) {
+      if (!page.classList.contains('is-running')) return;
+      var r = page.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      page.style.setProperty('--fxx', (((e.clientX - r.left) / r.width) * 2 - 1).toFixed(3));
+      page.style.setProperty('--fxy', (((e.clientY - r.top) / r.height) * 2 - 1).toFixed(3));
+    });
+    page.addEventListener('mouseleave', function () {
+      page.style.setProperty('--fxx', '0');
+      page.style.setProperty('--fxy', '0');
+    });
 
     // hero (primary): idle -> Start (with the selected goal); running -> Stop;
     // paused -> Resume. finalizeAndStop only fires on the Stop branch.
