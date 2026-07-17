@@ -9,8 +9,10 @@
 window.PGRE = window.PGRE || {};
 PGRE.views = PGRE.views || {};
 
-/* The engine is a separate file that index.html (infra-owned) doesn't list, so
-   pull it in on demand and let callers wait on it. */
+/* Fallback loader only: index.html lists js/exam-engine.js right before this
+   file, so the guard below always finds PGRE.examEngine already present and
+   the injector never runs. Kept as a defensive no-op should that <script>
+   tag ever disappear. */
 (function () {
   if (PGRE.examEngine) return;
   PGRE._examReadyQ = PGRE._examReadyQ || [];
@@ -58,6 +60,7 @@ PGRE.views.exam = (function () {
     if (host && host.firstChild) return; // pause / submit modal open
     var exam = PGRE.examEngine && PGRE.examEngine.active();
     if (!exam || exam.paused) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return; // ⌘C / ⌘F etc. must never answer or flag
     var k = e.key;
     if (/^[a-eA-E]$/.test(k)) {
       var idx = k.toUpperCase().charCodeAt(0) - 65;
@@ -96,6 +99,7 @@ PGRE.views.exam = (function () {
   /* ——————————————————————————— Setup ——————————————————————————— */
   function renderSetup() {
     leaveRoom();
+    if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: setup is the base exam screen
     var eng = PGRE.examEngine, ui = PGRE.ui;
     var act = eng.active();
     var pool = PGRE.allQuestions({ includeExam: true }).length;
@@ -196,7 +200,7 @@ PGRE.views.exam = (function () {
       html += '<div class="exam-hist-rows">';
       hist.forEach(function (x) {
         var pct = x.total ? Math.round(100 * x.raw / x.total) : 0;
-        html += '<a class="exam-hist-row" href="#/exam/review/' + x.id + '">' +
+        html += '<a class="exam-hist-row" href="#/exam/review/' + PGRE.ui.esc(x.id) + '">' +
           '<span class="exam-hist-when">' + fmtDate(x.submittedAt) + '</span>' +
           '<span class="chip">' + eng.FORMAT_META[x.format].label + '</span>' +
           '<span class="exam-hist-score">' + x.raw + ' / ' + x.total + ' · ' + pct + '%</span>' +
@@ -461,7 +465,7 @@ PGRE.views.exam = (function () {
   function showPauseOverlay(exam) {
     var host = document.getElementById('exam-modal-host');
     if (!host) return;
-    host.innerHTML = '<div class="exam-overlay"><div class="exam-overlay-card card">' +
+    host.innerHTML = '<div class="exam-overlay is-pause"><div class="exam-overlay-card card">' +
       '<h2>Paused</h2>' +
       '<p class="muted">The clock is stopped and the questions are hidden. A real GRE can’t be ' +
       'paused — use this sparingly so your practice reflects true test conditions.</p>' +
@@ -528,6 +532,10 @@ PGRE.views.exam = (function () {
         ui.statTile('Time used', fmtDur(exam.durationSec), 'of ' + fmtDur(exam.limitSec)) +
         ui.statTile('Flagged', String(exam.flags.length)) +
       '</div>' +
+      (exam.missing ? '<p class="muted exam-missing-note">⚠ ' + exam.missing + ' question' +
+        (exam.missing === 1 ? '' : 's') + ' could not be matched to the current bank and ' +
+        (exam.missing === 1 ? 'was' : 'were') + ' scored as incorrect — the bank changed ' +
+        'since this sitting.</p>' : '') +
       '<p class="muted exam-scale-note">Scaled scores run 200–990; this estimate is interpolated ' +
       'from a hand-averaged lookalike of released ETS practice-test tables and is a rough ballpark only.</p>' +
     '</div>';

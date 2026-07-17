@@ -2,8 +2,9 @@
    js/view-exam.js). Owns: question-draw (weighted current format / verbatim
    legacy replay), the in-progress exam record, scoring, the raw→scaled
    estimate, and submission (which commits answers to the attempt log + mistake
-   book and awards the completion XP). Loaded on demand by view-exam.js because
-   index.html (infra-owned) does not list it. */
+   book and awards the completion XP). Loaded synchronously by index.html (the
+   <script> tag right before view-exam.js); the dynamic-injector fallback in
+   view-exam.js is dormant under that load order. */
 window.PGRE = window.PGRE || {};
 
 PGRE.examEngine = (function () {
@@ -216,11 +217,12 @@ PGRE.examEngine = (function () {
      award the flat completion bonus, and finalize the record. */
   function submit(exam) {
     if (!exam || exam.submittedAt) return exam;
-    var perTopic = {}, raw = 0;
+    var perTopic = {}, raw = 0, missing = 0, answered = 0;
     exam.order.forEach(function (qid) {
       var q = PGRE.questionById(qid);
-      if (!q) return;
+      if (!q) { missing += 1; return; }
       var picked = exam.answers[qid] != null ? exam.answers[qid] : null;
+      if (picked != null) answered += 1;
       var correct = picked === q.answer;
       if (correct) raw += 1;
       var pt = perTopic[q.topic] || { right: 0, total: 0 };
@@ -231,12 +233,24 @@ PGRE.examEngine = (function () {
     });
     exam.raw = raw;
     exam.total = exam.order.length;
+    // qids the bank no longer resolves — still in total (scored as wrong), but
+    // surfaced on the results hero. Absent on older records; read it as 0.
+    exam.missing = missing;
     exam.perTopic = perTopic;
     exam.scaledEst = scaledEstimate(raw, exam.total);
     exam.paused = false;
     exam.submittedAt = new Date().toISOString();
 
     PGRE.store.touchDay(); // sitting a full exam counts as a study day
+    // crit-mass ("Answer 30 questions in a single day"): exam answers bypass
+    // td.answered (recordExamAnswer keeps the day counters practice-only), so we
+    // bank this sitting's answered count into td.examAnswered and set marathonDay
+    // from practice + exam combined. This covers both the full-sitting case and a
+    // day split across a sub-30 exam plus sub-30 practice (35 total still unlocks).
+    PGRE.store.rollDay(); // ensure td is today's before crediting the counter
+    var td = PGRE.store.state.today;
+    td.examAnswered = (td.examAnswered || 0) + answered;
+    if (td.answered + td.examAnswered >= 30) PGRE.store.state.flags.marathonDay = true;
     PGRE.gamify.addXP(150 + raw, '· mock exam complete'); // +150 completion, +1 / correct
     PGRE.store.log('exam', 'Mock exam: ' + raw + ' / ' + exam.total + ' (' +
       FORMAT_META[exam.format].label + ')', 150 + raw);

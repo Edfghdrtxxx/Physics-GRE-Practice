@@ -9,6 +9,9 @@ PGRE.views = PGRE.views || {};
 PGRE.views.analytics = (function () {
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  // pre-cap attempts may hold walked-away outliers (hours) — keep them out of
+  // the pace stats (matches PGRE.gamify.MAX_ATTEMPT_MS at record time)
+  var MAX_SANE_MS = 15 * 60 * 1000;
 
   /* ——— Date helpers (local, Monday-based — matches study-time & store) ——— */
   function pad2(n) { return String(n).padStart(2, '0'); }
@@ -33,7 +36,7 @@ PGRE.views.analytics = (function () {
     var correct = 0, timed = [], byTopic = {}, byWeek = {}, byDay = {};
     attempts.forEach(function (a) {
       if (a.correct) correct++;
-      if (a.ms != null) timed.push(a.ms);
+      if (a.ms != null && a.ms <= MAX_SANE_MS) timed.push(a.ms);
       var bt = byTopic[a.topic] || (byTopic[a.topic] = { total: 0, correct: 0 });
       bt.total++; if (a.correct) bt.correct++;
       var d = new Date(a.ts);

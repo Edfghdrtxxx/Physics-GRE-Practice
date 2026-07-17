@@ -8,6 +8,54 @@ PGRE.views = PGRE.views || {};
 
 PGRE.views.library = (function () {
 
+  // ——— PDF viewer object-URL lifecycle ———
+  // A blob: object URL leaks until revoked, and there is no unmount hook, so we
+  // track the single open viewer at module scope and revoke on close / re-render
+  // (top of refreshFiles) / leaving #/library (the hashchange listener below).
+  var activeURL = null;    // the object URL backing the currently-open viewer
+  var openViewer = null;   // its .pdf-viewer element (removed on close)
+  var openBtn = null;      // its View button (restore label + detect a toggle-off tap)
+
+  function closeViewer() {
+    if (activeURL) { URL.revokeObjectURL(activeURL); activeURL = null; }
+    if (openViewer && openViewer.parentNode) openViewer.parentNode.removeChild(openViewer);
+    if (openBtn) openBtn.textContent = 'View';
+    openViewer = null;
+    openBtn = null;
+  }
+
+  function fileById(files, id) {
+    for (var i = 0; i < files.length; i++) { if (files[i].id === id) return files[i]; }
+    return null;
+  }
+
+  // The inline viewer: a tall frame around the browser's native PDF viewer plus an
+  // "Open in new tab" link. Built as trusted app DOM — NEVER through
+  // PGRE.renderMarkdown, whose sanitizer strips iframe/embed. `url` is our own
+  // blob: object URL (no quotes/spaces), so it is safe to interpolate directly.
+  function buildViewer(url) {
+    var div = document.createElement('div');
+    div.className = 'pdf-viewer';
+    div.innerHTML =
+      '<div class="pdf-frame"><iframe class="pdf-iframe" src="' + url + '" title="PDF preview"></iframe></div>' +
+      '<div class="pdf-viewer-foot"><a class="btn btn-ghost" href="' + url + '" target="_blank" rel="noopener">Open in new tab ↗</a></div>';
+    return div;
+  }
+
+  // A PDF record renders its own card (name / size / when + View + Remove) instead
+  // of the chapter-mapping fileCard — PDFs are never split into sections.
+  function pdfCard(f) {
+    var ui = PGRE.ui;
+    return '<div class="card file-card pdf-card" data-file="' + ui.esc(f.id) + '">' +
+      '<div class="file-head"><h2>' + ui.esc(f.name) + '</h2>' +
+      '<span class="muted">PDF · ' + Math.round((f.size || 0) / 1024) + ' KB · imported ' + ui.timeAgo(f.added) + '</span></div>' +
+      '<div class="btn-row">' +
+        '<button class="btn btn-ghost" data-view="' + ui.esc(f.id) + '">View</button>' +
+        '<button class="btn btn-danger-ghost" data-del="' + ui.esc(f.id) + '">Remove file</button>' +
+      '</div>' +
+    '</div>';
+  }
+
   function fileCard(f) {
     var ui = PGRE.ui;
     var html = '<div class="card file-card" data-file="' + ui.esc(f.id) + '">' +
@@ -33,6 +81,8 @@ PGRE.views.library = (function () {
 
   function refreshFiles() {
     var box = document.getElementById('files-box');
+    if (!box) return;   // called after the user left the Library view
+    closeViewer();      // drop any live object URL before the DOM below is rebuilt
     PGRE.contentDB.all().then(function (files) {
       // the formula deck (parser v2 output) shares the store but is not a book file
       files = files.filter(function (f) { return f.kind !== 'formula-deck'; });
@@ -45,7 +95,29 @@ PGRE.views.library = (function () {
           'against the real file; see <code>docs/Project Docs/DESIGN.md</code>.</p></div>';
         return;
       }
-      box.innerHTML = files.map(fileCard).join('');
+      // PDFs render their own card; everything else keeps the chapter-mapping card.
+      box.innerHTML = files.map(function (f) {
+        return f.kind === 'pdf' ? pdfCard(f) : fileCard(f);
+      }).join('');
+
+      // PDF View buttons: toggle an inline native-PDF viewer open/closed. Only one
+      // viewer is open at a time; opening another (or closing this one) revokes the
+      // previous object URL via closeViewer().
+      box.querySelectorAll('[data-view]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          if (openBtn === b) { closeViewer(); return; }   // tapping the open one closes it
+          closeViewer();                                  // close/revoke any other open viewer
+          var card = b.closest('[data-file]');
+          if (!card) return;
+          var rec = fileById(files, b.getAttribute('data-view'));
+          if (!rec || !rec.blob) return;
+          activeURL = URL.createObjectURL(rec.blob);
+          openViewer = buildViewer(activeURL);
+          card.appendChild(openViewer);
+          openBtn = b;
+          b.textContent = 'Hide';
+        });
+      });
 
       box.querySelectorAll('select[data-ch]').forEach(function (sel) {
         sel.addEventListener('change', function () {
@@ -57,6 +129,9 @@ PGRE.views.library = (function () {
             if (sel.value) f.mapping[idx] = sel.value; else delete f.mapping[idx];
             PGRE.contentDB.put(f).then(function () {
               PGRE.toast('Section mapping saved', 'info');
+            }).catch(function () {
+              PGRE.toast('Could not save the mapping — storage unavailable.', 'error');
+              refreshFiles();   // snap the select back to what is actually stored
             });
           });
         });
@@ -71,7 +146,35 @@ PGRE.views.library = (function () {
     });
   }
 
+  function isPdf(file) {
+    return /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+  }
+
+  // PDFs are stored, not parsed: IndexedDB keeps the Blob natively, and the native
+  // browser viewer renders it later. No text extraction, no chapter split, and no
+  // tome badge (that badge is about importing the book *text* that powers Notes) —
+  // but the import is still logged like any other.
+  function importPdf(file) {
+    var rec = {
+      id: 'f-' + Date.now(),
+      kind: 'pdf',
+      name: file.name,
+      size: file.size,
+      added: new Date().toISOString(),
+      blob: file
+    };
+    PGRE.contentDB.put(rec).then(function () {
+      PGRE.store.log('import', 'Imported ' + file.name, 0);
+      PGRE.store.save();
+      PGRE.toast('<strong>' + PGRE.ui.esc(file.name) + '</strong> imported — PDF ready to view', 'info');
+      refreshFiles();
+    }).catch(function () {
+      PGRE.toast('Import failed — IndexedDB unavailable in this browser context.', 'error');
+    });
+  }
+
   function importFile(file) {
+    if (isPdf(file)) { importPdf(file); return; }
     var reader = new FileReader();
     reader.onload = function () {
       var text = String(reader.result || '');
@@ -98,16 +201,22 @@ PGRE.views.library = (function () {
     reader.readAsText(file);
   }
 
+  // Registered ONCE at module eval (like view-focus's zen cleanup): whenever the
+  // hash leaves #/library, revoke any open PDF object URL — there is no unmount hook.
+  window.addEventListener('hashchange', function () {
+    if (!/^#\/library\b/.test(location.hash)) closeViewer();
+  });
+
   return {
     render: function () {
       return '' +
       '<div class="card"><h1>Library</h1>' +
         '<p class="muted">Everything stays on this machine: progress in localStorage, book content in IndexedDB. Nothing is sent anywhere.</p>' +
         '<div id="dropzone" class="dropzone">' +
-          '<p><strong>Drop the book markdown here</strong> (.md / .txt)</p>' +
+          '<p><strong>Drop the book markdown or a PDF here</strong> (.md / .txt / .pdf)</p>' +
           '<p class="muted">or</p>' +
           '<button class="btn btn-primary" id="pick-btn">Choose a file…</button>' +
-          '<input type="file" id="file-input" accept=".md,.markdown,.txt" hidden>' +
+          '<input type="file" id="file-input" accept=".md,.markdown,.txt,.pdf" hidden>' +
         '</div>' +
       '</div>' +
       '<div id="files-box"></div>' +
@@ -144,11 +253,13 @@ PGRE.views.library = (function () {
 
       document.getElementById('export-btn').addEventListener('click', function () {
         var blob = new Blob([PGRE.store.exportJSON()], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
         var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
+        a.href = url;
         a.download = 'physics-gre-progress-' + PGRE.store.today() + '.json';
         a.click();
-        URL.revokeObjectURL(a.href);
+        // revoke later — a synchronous revoke can abort the download in some browsers
+        setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
       });
 
       var pInput = document.getElementById('progress-input');
@@ -159,6 +270,7 @@ PGRE.views.library = (function () {
         r.onload = function () {
           try {
             PGRE.store.importJSON(String(r.result));
+            PGRE.applyTheme(PGRE.store.state.settings.theme);
             PGRE.toast('Progress restored.', 'info');
             PGRE.route();
           } catch (e) {
@@ -173,6 +285,7 @@ PGRE.views.library = (function () {
         if (confirm('Reset ALL progress — XP, achievements, streaks and plan check-offs? This cannot be undone.') &&
             confirm('Really sure? Consider exporting a backup first.')) {
           PGRE.store.reset();
+          PGRE.applyTheme(PGRE.store.state.settings.theme);
           PGRE.toast('Progress reset.', 'info');
           PGRE.route();
         }

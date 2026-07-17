@@ -17,6 +17,7 @@ PGRE.notes = {
     text = String(text == null ? '' : text).trim();
     if (text) s.notes[qid] = { text: text, updatedAt: new Date().toISOString() };
     else delete s.notes[qid];
+    PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
     PGRE.store.save();
   },
 
@@ -25,6 +26,7 @@ PGRE.notes = {
     var s = PGRE.store.state;
     if (s.bookmarks[qid]) delete s.bookmarks[qid];
     else s.bookmarks[qid] = new Date().toISOString();
+    PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
     PGRE.store.save();
     return !!s.bookmarks[qid];
   },

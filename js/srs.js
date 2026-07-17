@@ -25,6 +25,17 @@ PGRE.srs = {
     return this.dayStr(d);
   },
 
+  /* Local-date arithmetic anchored on an arbitrary base 'YYYY-MM-DD' (addDays
+     anchors on today). Same local-midday-free construction as store.dayBefore.
+     Used by the ITEM 5 Easy migration to re-derive due from each card's own
+     last-review day. */
+  addDaysTo: function (dayStr, n) {
+    var p = String(dayStr).split('-');
+    var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    d.setDate(d.getDate() + n);
+    return this.dayStr(d);
+  },
+
   /* Whole days from today until dateStr; 0 or negative means due. */
   daysUntil: function (dateStr) {
     var a = new Date(this.today() + 'T12:00:00');
@@ -165,7 +176,9 @@ PGRE.srs = {
   nextIntervals: function (st) {
     var out;
     if (!st || !st.reps) {
-      out = { again: 0, hard: 1, good: 1, easy: 3 };
+      // ITEM 4: Easy schedules 10 days out (was 3). Exam-cap clamping below
+      // still applies, so late in the run this squeezes toward the final pass.
+      out = { again: 0, hard: 1, good: 1, easy: 10 };
     } else {
       var ease = st.ease || this.EASE_START;
       var ivl = Math.max(1, st.interval || 1);
@@ -173,7 +186,7 @@ PGRE.srs = {
         again: 0,
         hard: Math.max(1, Math.round(ivl * 1.2)),
         good: st.reps === 1 ? 3 : Math.max(2, Math.round(ivl * ease)),
-        easy: Math.max(3, Math.round(ivl * ease * 1.3))
+        easy: Math.max(10, Math.round(ivl * ease * 1.3))  // ITEM 4: Easy floor 10 (was 3)
       };
     }
     // F3: clamp each non-Again interval to the exam cap so the grade-button
@@ -187,6 +200,22 @@ PGRE.srs = {
     return out;
   },
 
+  /* ITEM 3 — "Mark as mastered": a fixed 20-day interval, exam-cap clamped like
+     every non-Again grade. Shared by gradeCard and the grade-button preview so
+     the button label matches exactly what it schedules. Mastered is the strongest
+     grade, so it must never schedule SOONER than Easy: for a maturing card Easy
+     can reach the exam cap (e.g. 21 d today), which would exceed the fixed 20 and
+     invert the Again<Hard<Good<Easy<Mastered order. Floor Mastered at that card's
+     Easy interval (already exam-cap clamped by nextIntervals) before capping, so
+     Mastered >= Easy always holds. Pass the card's current state; omitted (null)
+     yields the stateless Easy floor and the plain 20-day value as before. */
+  MASTERED_DAYS: 20,
+  masteredInterval: function (st) {
+    var cap = this.examCap();
+    var raw = Math.max(this.MASTERED_DAYS, this.nextIntervals(st).easy);
+    return cap != null ? Math.min(raw, cap) : raw;
+  },
+
   gradeCard: function (id, grade) {
     var s = PGRE.store.state;
     // Review-log capture (bundle 2) — read BEFORE the default-object creation:
@@ -196,7 +225,11 @@ PGRE.srs = {
     var st = s.cards[id] || { reps: 0, lapses: 0, interval: 0,
                               ease: this.EASE_START, due: this.today(), reviews: 0 };
     var prevIvl = st.interval || 0;
-    var next = this.nextIntervals(st)[grade];
+    // ITEM 3: 'mastered' isn't an SM-2 grade — nextIntervals has no entry for it,
+    // so schedule its fixed (capped) 20 days explicitly. It counts as a real
+    // review and graduates the card (reps+1) via the non-Again branch below.
+    var next = grade === 'mastered' ? this.masteredInterval(st)
+                                    : this.nextIntervals(st)[grade];
     if (grade === 'again') {
       st.lapses += 1;
       st.reps = 0;
@@ -221,6 +254,35 @@ PGRE.srs = {
                m: prevIvl >= 21 ? 1 : 0, n: hadState ? 1 : 0 });
     if (log.length > 8000) log.shift();
     return st;
+  },
+
+  /* ITEM 5 — one-time recompute (the user chose "recompute now" over "apply on
+     next review"): bring every already-graded Easy card onto the new 10-day
+     scheme. For each card with lastGrade === 'easy' and interval < 10, stretch
+     the interval to min(10, examCap) and re-derive due from the card's own
+     last-review day (fall back to today when that stamp predates it). A
+     persistent one-shot flag (state.migrations.easy10) guards it to exactly one
+     run per stored state; the flag is stamped and saved unconditionally so it
+     never re-runs. No other grade is touched (no legacy card can be 'mastered',
+     and Good/Hard/Again due dates are correct as-is). Called from store.load()
+     after migrate(), where PGRE.srs and the backfilled settings are ready. */
+  migrateEasy10: function () {
+    var s = PGRE.store.state;
+    if (!s.migrations || typeof s.migrations !== 'object') s.migrations = {};
+    if (s.migrations.easy10) return;            // already migrated this state
+    var cap = this.examCap();
+    var target = Math.min(10, cap || 10);       // clamp to the exam cap when active
+    var cards = s.cards || {};
+    for (var id in cards) {
+      var st = cards[id];
+      if (!st || st.lastGrade !== 'easy' || (st.interval || 0) >= 10) continue;
+      st.interval = target;
+      st.due = this.addDaysTo(st.lastReviewedDay || this.today(), target);
+    }
+    // Stamping the flag is itself a state change, so persist once regardless of
+    // whether any card moved — that is what makes the run one-shot.
+    s.migrations.easy10 = new Date().toISOString();
+    PGRE.store.save();
   },
 
   /* Was this card graded today (local date)? Prefer the local lastReviewedDay

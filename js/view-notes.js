@@ -14,6 +14,7 @@ PGRE.views.notes = (function () {
   var ui;
   var state;                 // { filter, topic, text }
   var saveTimers;            // qid -> debounce timeout id
+  var searchTimer;           // text-filter debounce (matches view-search's 200 ms)
 
   function root() { return document.getElementById('notes-root'); }
   function listEl() { return document.getElementById('nb-list'); }
@@ -91,7 +92,11 @@ PGRE.views.notes = (function () {
     var sel = document.getElementById('nb-topic');
     if (sel) sel.addEventListener('change', function () { state.topic = sel.value; renderList(); });
     var srch = document.getElementById('nb-search');
-    if (srch) srch.addEventListener('input', function () { state.text = srch.value; renderList(); });
+    if (srch) srch.addEventListener('input', function () {
+      // debounced: renderList re-typesets every card, far too heavy per keystroke
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () { state.text = srch.value; renderList(); }, 200);
+    });
   }
 
   /* ——— The list (re-rendered on filter change / bookmark toggle) ——— */
@@ -260,6 +265,11 @@ PGRE.views.notes = (function () {
       if (ta) flushSave(qid, ta);
     });
   }
+
+  /* Closing/reloading the tab mid-typing fires no blur and kills the debounce
+     timers — flush pending notes so the edits survive (same pagehide pattern
+     as js/study-time.js). flushAllPending no-ops when this view isn't mounted. */
+  window.addEventListener('pagehide', function () { flushAllPending(); });
 
   function updateCounts() {
     var c = PGRE.notes.counts();

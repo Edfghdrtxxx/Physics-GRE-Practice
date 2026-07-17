@@ -23,6 +23,7 @@ PGRE.views.practice = (function () {
   var paceTimer = null;   // module-scoped so it survives a session reset
   var keyBound = false;   // the document keydown listener is installed once
   var noteTimers = {};    // qid -> debounce timeout id for the feedback note field
+  var lastRenderAt = 0;   // stamps each render so a double-click can't click through
 
   function shuffle(arr) {
     var a = arr.slice();
@@ -138,6 +139,17 @@ PGRE.views.practice = (function () {
     showNoteSaved(ta);
   }
 
+  /* Closing/reloading the tab mid-typing fires no blur and kills the debounce
+     timer — flush the visible note field so the edit survives (same pagehide
+     pattern as js/study-time.js). */
+  window.addEventListener('pagehide', function () {
+    var ta = document.querySelector('.practice-nb [data-note]');
+    if (!ta) return;
+    var wrap = ta.closest('.practice-nb');
+    var qid = wrap && wrap.getAttribute('data-qid');
+    if (qid) flushNoteSave(qid, ta);
+  });
+
   function showNoteSaved(ta) {
     var tick = ta.parentNode.querySelector('.nb-saved');
     if (!tick) return;
@@ -198,7 +210,9 @@ PGRE.views.practice = (function () {
       'Build a set in the <a href="' + (topicId === 'all' ? '#/build' : '#/build/topic-' + topicId) +
       '">custom quiz builder</a>.</p>' +
       '</div>';
+    lastRenderAt = Date.now();
     el().innerHTML = html;
+    window.scrollTo(0, 0);
     el().querySelectorAll('[data-count]').forEach(function (b) {
       b.addEventListener('click', function () {
         start(topicId, parseInt(b.getAttribute('data-count'), 10));
@@ -246,15 +260,16 @@ PGRE.views.practice = (function () {
   /* ——— Question stage ——— */
   function renderQuestion() {
     var q = session.qs[session.i];
-    var t = PGRE.topicById(q.topic);
+    var t = PGRE.topicById(q.topic) || { id: 'xx', short: '?', name: 'Unknown topic' };
     session.stage = 'question';
     session.tagged = null;
+    lastRenderAt = Date.now();
     var html = '<div class="card practice-card">' +
       '<div class="practice-meta">' +
         '<span>Question ' + (session.i + 1) + ' of ' + session.qs.length + '</span>' +
         (session.label ? '<span class="chip chip-session">' + PGRE.ui.esc(session.label) + '</span>' : '') +
         '<span class="chip">' + t.name + '</span>' +
-        '<span class="chip chip-diff">' + '●'.repeat(q.difficulty) + '○'.repeat(3 - q.difficulty) + '</span>' +
+        '<span class="chip chip-diff">' + PGRE.ui.diffDots(q.difficulty) + '</span>' +
         (settings().paceTrainer ? '<span class="chip pace-chip" id="pace-chip">⏱ 0 s</span>' : '') +
       '</div>' +
       PGRE.ui.meter(100 * session.i / session.qs.length, 'meter-thin') +
@@ -275,6 +290,7 @@ PGRE.views.practice = (function () {
     html += '<div id="feedback"></div></div>';
     el().innerHTML = html;
     PGRE.typesetMath(el());
+    window.scrollTo(0, 0); // in-place swap: route()'s reset doesn't run here
     session.qStart = Date.now();
     startPaceTimer();
 
@@ -285,6 +301,9 @@ PGRE.views.practice = (function () {
 
   /* ——— Answer + feedback stage ——— */
   function answer(idx) {
+    // the second click of a double-click on "Next" lands on the freshly
+    // rendered choices — ignore clicks inside the render's settling window
+    if (Date.now() - lastRenderAt < 300) return;
     if (!session || session.stage !== 'question') return;
     var q = session.qs[session.i];
     var isCorrect = idx === q.answer;
@@ -373,6 +392,7 @@ PGRE.views.practice = (function () {
   function renderSummary() {
     clearPace();
     session.stage = 'summary';
+    lastRenderAt = Date.now();
     PGRE.gamify.endSession(session.sid);
     PGRE.gamify.recordSession(session.qs.length, session.correct);
     var pct = Math.round(100 * session.correct / session.qs.length);
@@ -405,6 +425,7 @@ PGRE.views.practice = (function () {
     el().innerHTML = html;
     PGRE.typesetMath(el());
     document.getElementById('again-btn').addEventListener('click', function () {
+      if (Date.now() - lastRenderAt < 300) return; // Finish double-click guard
       if (custom) startCustom();
       else renderConfig(topicId);
     });

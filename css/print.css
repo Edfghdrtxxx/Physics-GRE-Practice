@@ -18,7 +18,31 @@
   /* ——— Neutralise the app shell + interactive DOM ——— */
   #sidebar,
   #sidebar-footer,
+  #topbar,
   #toasts { display: none !important; }
+
+  /* Reset every theme token to print-safe values: elements that colour
+     themselves from the tokens (.choice, .muted, .chip, …) would otherwise
+     print the dark theme's near-white ink on white paper. !important because
+     style.css's [data-theme="dark"] block has identical specificity. */
+  :root, [data-theme="dark"] {
+    --bg: #ffffff !important; --panel: #ffffff !important; --surface: #ffffff !important;
+    --ivory: #ffffff !important; --ink: #111111 !important; --ink-2: #333333 !important;
+    --ink-3: #555555 !important; --line: #cccccc !important;
+    --accent: #a85b3f !important; --accent-deep: #a85b3f !important;
+    --accent-tint: #ffffff !important; --accent-track: #cccccc !important;
+    --good: #2f6b43 !important; --good-tint: #ffffff !important;
+    --bad: #b04a3d !important; --bad-tint: #ffffff !important;
+    --bronze: #7a5a3a !important; --silver: #555555 !important;
+    --gold: #7a5a1f !important; --platinum: #4a5a63 !important;
+    --amber: #7a5a1f !important; --amber-tint: #ffffff !important;
+    --heat-0: #ffffff !important; --heat-1: #ffffff !important;
+    --heat-2: #ffffff !important; --heat-3: #ffffff !important;
+    --heat-4: #ffffff !important;
+    --heat-edge: rgba(0, 0, 0, 0.08) !important; --on-accent: #111111 !important;
+    --btn-primary-hover: #333333 !important; --scrim: rgba(0, 0, 0, 0.15) !important;
+    --shadow: rgba(0, 0, 0, 0.15) !important;
+  }
 
   html, body {
     background: #ffffff !important;
@@ -141,7 +165,12 @@
     border-radius: 5pt;
     padding: 7pt 9pt;
     margin-bottom: 8pt;
+    overflow: hidden; /* an equation may not bleed into the neighbouring column */
   }
+  /* Overlong equations (flagged by view-formulas' flagWideCards, measured
+     offscreen via style.css's .print-sheet.measuring) span both columns
+     instead of clipping. */
+  .ps-card.wide { column-span: all; }
   .ps-card-tag {
     font-size: 7.5pt;
     font-weight: 700;

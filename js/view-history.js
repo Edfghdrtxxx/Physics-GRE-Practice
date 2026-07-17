@@ -7,7 +7,11 @@ PGRE.views = PGRE.views || {};
 PGRE.views.history = (function () {
   var LETTERS = ['A', 'B', 'C', 'D', 'E'];
   var PAGE = 50;
-  var shown, topicFilter, resultFilter;
+  var SESS_PAGE = 20;
+  // pre-cap attempts may hold walked-away outliers (hours) — keep them out of
+  // the average (matches PGRE.gamify.MAX_ATTEMPT_MS at record time)
+  var MAX_SANE_MS = 15 * 60 * 1000;
+  var shown, shownSessions, topicFilter, resultFilter;
 
   var MODE_LABEL = { practice: 'Practice', mistakes: 'Mistake drill' };
 
@@ -44,28 +48,62 @@ PGRE.views.history = (function () {
     '</div>';
   }
 
-  function sessionCard(sess, attempts) {
+  function sessionCard(sess) {
     var ui = PGRE.ui;
     var t = sess.topicId && sess.topicId !== 'all' && sess.topicId !== 'mistakes'
             ? PGRE.topicById(sess.topicId) : null;
     var scope = sess.mode === 'mistakes' ? 'Mistake book'
+              : sess.topicId === 'custom' ? (sess.label || 'Custom quiz')
               : t ? t.name : 'All topics';
-    var mine = attempts.filter(function (a) { return a.sid === sess.id; });
     var open = !sess.endedAt && sess.answered < sess.planned;
     var dur = sess.endedAt
       ? Math.max(1, Math.round((new Date(sess.endedAt) - new Date(sess.startedAt)) / 60000)) + ' min'
       : 'unfinished';
-    var html = '<details class="hist-session">' +
+    // attempt rows are filled lazily on first open (renderSessions) so a long
+    // history doesn't render + typeset every answer ever given up front
+    return '<details class="hist-session" data-sid="' + ui.esc(sess.id) + '">' +
       '<summary><span class="hist-sess-when">' + fmtWhen(sess.startedAt) + '</span>' +
-        '<span>' + (MODE_LABEL[sess.mode] || sess.mode) + ' · ' + ui.esc(scope) + '</span>' +
+        '<span>' + ui.esc(MODE_LABEL[sess.mode] || sess.mode) + ' · ' + ui.esc(scope) + '</span>' +
         '<span class="hist-sess-score">' + sess.correct + '/' + sess.answered +
           (open ? ' of ' + sess.planned : '') + '</span>' +
         '<span class="hist-sess-meta">' + dur + ' · +' + sess.xp + ' XP</span>' +
-      '</summary><div class="hist-rows">';
-    if (mine.length) mine.forEach(function (a) { html += attemptRow(a); });
-    else html += '<p class="muted">No answers recorded in this session.</p>';
-    html += '</div></details>';
-    return html;
+      '</summary><div class="hist-rows"></div></details>';
+  }
+
+  function renderSessions() {
+    var box = document.getElementById('hist-sessions');
+    if (!box) return;
+    var s = PGRE.store.state;
+    var list = s.sessions.slice().reverse();
+    var bySid = {};  // one pass over the log, not one filter per session
+    s.attempts.forEach(function (a) {
+      if (a.sid) (bySid[a.sid] = bySid[a.sid] || []).push(a);
+    });
+    var html = '';
+    list.slice(0, shownSessions).forEach(function (sess) { html += sessionCard(sess); });
+    if (list.length > shownSessions) {
+      html += '<div class="btn-row"><button class="btn btn-ghost" id="hist-sess-more">Show ' +
+        Math.min(SESS_PAGE, list.length - shownSessions) + ' more (' +
+        (list.length - shownSessions) + ' left)</button></div>';
+    }
+    box.innerHTML = html;
+    box.querySelectorAll('.hist-session').forEach(function (det) {
+      det.addEventListener('toggle', function () {
+        if (!det.open || det.getAttribute('data-filled')) return;
+        det.setAttribute('data-filled', '1');
+        var rows = det.querySelector('.hist-rows');
+        var mine = bySid[det.getAttribute('data-sid')] || [];
+        var rh = '';
+        mine.forEach(function (a) { rh += attemptRow(a); });
+        rows.innerHTML = rh || '<p class="muted">No answers recorded in this session.</p>';
+        PGRE.typesetMath(rows);
+      });
+    });
+    var more = document.getElementById('hist-sess-more');
+    if (more) more.addEventListener('click', function () {
+      shownSessions += SESS_PAGE;
+      renderSessions();
+    });
   }
 
   function filteredAttempts() {
@@ -81,27 +119,53 @@ PGRE.views.history = (function () {
   function renderLog() {
     var box = document.getElementById('hist-log');
     var list = filteredAttempts();
+    if (!list.length) {
+      box.innerHTML = '<p class="muted">Nothing here for this filter yet.</p>';
+      return;
+    }
     var html = '';
     list.slice(0, shown).forEach(function (a) { html += attemptRow(a); });
-    if (!list.length) html = '<p class="muted">Nothing here for this filter yet.</p>';
-    if (list.length > shown) {
-      html += '<div class="btn-row"><button class="btn btn-ghost" id="hist-more">Show ' +
-        Math.min(PAGE, list.length - shown) + ' more (' + (list.length - shown) + ' left)</button></div>';
-    }
-    box.innerHTML = html;
-    PGRE.typesetMath(box);
-    var more = document.getElementById('hist-more');
-    if (more) more.addEventListener('click', function () { shown += PAGE; renderLog(); });
+    box.innerHTML = '<div id="hist-rows-flat">' + html + '</div>' +
+      '<div class="btn-row" id="hist-more-row"></div>';
+    PGRE.typesetMath(document.getElementById('hist-rows-flat'));
+    updateMoreBtn(list);
+  }
+
+  function updateMoreBtn(list) {
+    var row = document.getElementById('hist-more-row');
+    if (!row) return;
+    var left = list.length - shown;
+    if (left <= 0) { row.innerHTML = ''; return; }
+    row.innerHTML = '<button class="btn btn-ghost" id="hist-more">Show ' +
+      Math.min(PAGE, left) + ' more (' + left + ' left)</button>';
+    document.getElementById('hist-more').addEventListener('click', function () {
+      shown += PAGE;
+      appendLog();
+    });
+  }
+
+  /* "Show more" appends only the next page — the rows (and math) already on
+     screen are not rebuilt or re-typeset. */
+  function appendLog() {
+    var rows = document.getElementById('hist-rows-flat');
+    if (!rows) return;
+    var list = filteredAttempts();
+    var from = rows.children.length;
+    var html = '';
+    list.slice(from, shown).forEach(function (a) { html += attemptRow(a); });
+    rows.insertAdjacentHTML('beforeend', html);
+    for (var i = from; i < rows.children.length; i++) PGRE.typesetMath(rows.children[i]);
+    updateMoreBtn(list);
   }
 
   return {
     render: function () {
-      shown = PAGE; topicFilter = 'all'; resultFilter = 'all';
+      shown = PAGE; shownSessions = SESS_PAGE; topicFilter = 'all'; resultFilter = 'all';
       var ui = PGRE.ui, s = PGRE.store.state;
       var total = s.attempts.length;
       var correct = s.attempts.filter(function (a) { return a.correct; }).length;
       var acc = total ? Math.round(100 * correct / total) + '%' : '—';
-      var timed = s.attempts.filter(function (a) { return a.ms != null; });
+      var timed = s.attempts.filter(function (a) { return a.ms != null && a.ms <= MAX_SANE_MS; });
       var avgMs = timed.length
         ? Math.round(timed.reduce(function (sum, a) { return sum + a.ms; }, 0) / timed.length) : null;
       var openMistakes = PGRE.srs.openMistakes().length;
@@ -124,9 +188,7 @@ PGRE.views.history = (function () {
         html += '<p class="muted">No sessions yet — <a href="#/practice/all">do a practice set</a> ' +
           'and it will be recorded here.</p>';
       } else {
-        s.sessions.slice().reverse().forEach(function (sess) {
-          html += sessionCard(sess, s.attempts);
-        });
+        html += '<div id="hist-sessions"></div>';
       }
       html += '</div>';
 
@@ -147,9 +209,8 @@ PGRE.views.history = (function () {
     },
 
     mount: function () {
+      renderSessions(); // session cards typeset their rows lazily, on first open
       renderLog();
-      var view = document.getElementById('view');
-      PGRE.typesetMath(view); // session cards contain question text
       document.getElementById('hist-topic').addEventListener('change', function (e) {
         topicFilter = e.target.value; shown = PAGE; renderLog();
       });

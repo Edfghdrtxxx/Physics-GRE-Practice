@@ -31,6 +31,13 @@ PGRE.ui = {
     return '<span class="mono mono-' + topic.id + '">' + topic.short + '</span>';
   },
 
+  /* Difficulty dots, clamped to 1–3: bank data outside the range degrades to
+     an odd chip instead of a repeat() RangeError blanking the whole view. */
+  diffDots: function (difficulty) {
+    var d = Math.max(0, Math.min(3, (Number(difficulty) || 0) | 0));
+    return '●'.repeat(d) + '○'.repeat(3 - d);
+  },
+
   timeAgo: function (iso) {
     var s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
     if (s < 60) return 'just now';
@@ -48,13 +55,65 @@ PGRE.ui = {
   }
 };
 
-/* ——— Markdown + math rendering (vendored, fully offline) ——— */
-PGRE.renderMarkdown = function (text) {
-  if (window.marked && marked.parse) {
-    try { return marked.parse(text); } catch (e) { /* fall through */ }
+/* ——— Markdown + math rendering (vendored, fully offline) ———
+   Imported book markdown comes from an external OCR pipeline and legitimately
+   relies on raw-HTML passthrough for formatting (<sup>, <br>), so marked's
+   output is run through an allowlist sanitizer before any caller injects it:
+   unknown tags are unwrapped (their text kept), script-capable elements are
+   dropped whole, and event-handler / script-URL attributes never survive. */
+PGRE.renderMarkdown = (function () {
+  var ALLOWED = { a: 1, b: 1, blockquote: 1, br: 1, code: 1, del: 1, div: 1,
+                  em: 1, h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1, hr: 1, i: 1,
+                  img: 1, li: 1, ol: 1, p: 1, pre: 1, s: 1, small: 1, span: 1,
+                  strong: 1, sub: 1, sup: 1, table: 1, tbody: 1, td: 1,
+                  tfoot: 1, th: 1, thead: 1, tr: 1, u: 1, ul: 1 };
+  var DROP = { base: 1, button: 1, embed: 1, form: 1, iframe: 1, input: 1,
+               link: 1, math: 1, meta: 1, noscript: 1, object: 1, script: 1,
+               select: 1, style: 1, svg: 1, template: 1, textarea: 1, title: 1 };
+  var ATTRS = { align: 1, alt: 1, class: 1, colspan: 1, height: 1, href: 1,
+                rowspan: 1, src: 1, start: 1, title: 1, width: 1 };
+
+  function safeUrl(v) {
+    return !/^(javascript|vbscript|data):/
+      .test(String(v).replace(/[\s\u0000-\u001f]+/g, '').toLowerCase());
   }
-  return '<pre class="md-fallback">' + PGRE.ui.esc(text) + '</pre>';
-};
+
+  function scrub(node) {
+    var kids = Array.prototype.slice.call(node.childNodes);
+    kids.forEach(function (child) {
+      if (child.nodeType === 8) { node.removeChild(child); return; } // comments
+      if (child.nodeType !== 1) return;                              // text stays
+      var tag = child.tagName.toLowerCase();
+      if (DROP[tag]) { node.removeChild(child); return; }
+      if (!ALLOWED[tag]) {           // unknown tag (e.g. a stray <E>): keep its text
+        scrub(child);
+        while (child.firstChild) node.insertBefore(child.firstChild, child);
+        node.removeChild(child);
+        return;
+      }
+      Array.prototype.slice.call(child.attributes).forEach(function (a) {
+        var name = a.name.toLowerCase();
+        if (!ATTRS[name] || ((name === 'href' || name === 'src') && !safeUrl(a.value))) {
+          child.removeAttribute(a.name);
+        }
+      });
+      scrub(child);
+    });
+  }
+
+  function sanitize(html) {
+    var doc = new DOMParser().parseFromString(String(html), 'text/html');
+    scrub(doc.body);
+    return doc.body.innerHTML;
+  }
+
+  return function (text) {
+    if (window.marked && marked.parse) {
+      try { return sanitize(marked.parse(text)); } catch (e) { /* fall through */ }
+    }
+    return '<pre class="md-fallback">' + PGRE.ui.esc(text) + '</pre>';
+  };
+})();
 
 PGRE.typesetMath = function (el) {
   if (window.renderMathInElement) {
@@ -66,26 +125,161 @@ PGRE.typesetMath = function (el) {
           { left: '$', right: '$', display: false },
           { left: '\\(', right: '\\)', display: false }
         ],
-        throwOnError: false
+        throwOnError: false,
+        ignoredClasses: ['fcard-mnemonic'] // user mnemonics are plain text, never math
       });
     } catch (e) { /* math stays as source text */ }
   }
 };
 
 /* ——— Toasts ——— */
-PGRE.toast = function (html, kind) {
+PGRE.toast = function (html, kind, sticky) {
   var box = document.getElementById('toasts');
-  if (!box) return;
+  if (!box) return null;
   var el = document.createElement('div');
   el.className = 'toast toast-' + (kind || 'info');
   el.innerHTML = html;
   box.appendChild(el);
   requestAnimationFrame(function () { el.classList.add('show'); });
-  setTimeout(function () {
+  var dismiss = function () {
     el.classList.remove('show');
     setTimeout(function () { el.remove(); }, 350);
-  }, 4200);
+  };
+  if (sticky) { // stays until clicked — for conditions the user must notice
+    el.style.cursor = 'pointer';
+    el.title = 'Dismiss';
+    el.addEventListener('click', dismiss);
+  } else {
+    setTimeout(dismiss, 4200);
+  }
+  return el;
 };
+
+/* store.save() failure hook: a sticky warning while progress cannot be
+   persisted (storage full or blocked), cleared once a save succeeds again. */
+PGRE.persistWarning = (function () {
+  var el = null;
+  return function (failing) {
+    if (failing) {
+      if (!el || !el.isConnected) {
+        el = PGRE.toast('Saving failed — browser storage may be full. Recent progress ' +
+          'is <b>not</b> being recorded. Back up from the Library page, then free up space.',
+          'error', true);
+      }
+    } else {
+      if (el && el.isConnected) el.click();
+      el = null;
+      PGRE.toast('Saving works again — your progress is being recorded.', 'info');
+    }
+  };
+})();
+
+/* ——— Finder-style breadcrumb top bar (BUNDLE G) ———
+   A slim bar at the top of #main on every route: ◀ ▶ history arrows (wired at
+   boot to history.back()/forward(), always enabled) + a clickable breadcrumb
+   trail. route() calls PGRE.nav.route() on every navigation to derive the base
+   trail from the current route and repaint the bar; a view may append deeper
+   crumbs for an in-view state (formulas "Study" / "Choose new cards", mistakes
+   "Drill") via PGRE.nav.setTrail(extra). Those refinements reset naturally on
+   the next hashchange because route() rebuilds the base from scratch. */
+PGRE.nav = (function () {
+  // Human labels for each sidebar route, keyed by the router's view name. These
+  // match the sidebar wording exactly (esc'd at paint time).
+  var LABELS = {
+    plan: 'Study plan', history: 'History', analytics: 'Analytics',
+    build: 'Custom quiz', search: 'Search', notes: 'Notes & bookmarks',
+    mistakes: 'Mistake book', formulas: 'Formula recall', focus: 'Focus timer',
+    studytime: 'Study time', achievements: 'Achievements', library: 'Library',
+    exam: 'Mock exam'
+  };
+  var HREF = {
+    plan: '#/plan', history: '#/history', analytics: '#/analytics',
+    build: '#/build', search: '#/search', notes: '#/notes',
+    mistakes: '#/mistakes', formulas: '#/formulas', focus: '#/focus',
+    studytime: '#/study-time', achievements: '#/achievements',
+    library: '#/library', exam: '#/exam'
+  };
+
+  var base = [{ label: 'Home', href: '#/' }];   // base trail for the active route
+
+  // Render a trail: every crumb except the last is an <a>; the last (current
+  // page) is plain text with aria-current. A crumb with no href is never a link.
+  function paint(trail) {
+    var el = document.getElementById('breadcrumbs');
+    if (!el) return;
+    // Delegated once on the stable #breadcrumbs container (paint only swaps its
+    // innerHTML, so this survives repaints). The in-view deep states — the formula
+    // Study session and "Choose new cards" picker (both at #/formulas) and the
+    // mistake Drill (at #/mistakes) — are entered WITHOUT a hash change, so an
+    // ancestor crumb whose href equals the current hash would assign the same
+    // fragment and fire NO hashchange: the router never reruns and the deep state
+    // never clears. Detect that exact case and force a re-route, which re-mounts
+    // the base view (settling/clearing the deep state) and rebuilds the base trail.
+    // Every crumb label is plain esc'd text, so a click's target IS the <a>.
+    if (!el._pgreCrumbBound) {
+      el._pgreCrumbBound = true;
+      el.addEventListener('click', function (e) {
+        var a = e.target;
+        if (!a || a.tagName !== 'A') return;
+        var href = a.getAttribute('href');
+        if (href && href.charAt(0) === '#' && href === location.hash) {
+          e.preventDefault();
+          PGRE.route();
+        }
+      });
+    }
+    var ui = PGRE.ui, h = '';
+    trail.forEach(function (c, i) {
+      var last = i === trail.length - 1;
+      if (i) h += '<span class="crumb-sep" aria-hidden="true">▸</span>';
+      if (last) {                       // current page — emphasised, never a link
+        h += '<span class="crumb crumb-here" aria-current="page">' + ui.esc(c.label) + '</span>';
+      } else if (c.href) {              // ancestor with a destination
+        h += '<a class="crumb" href="' + c.href + '">' + ui.esc(c.label) + '</a>';
+      } else {                          // ancestor with no page (e.g. "All topics")
+        h += '<span class="crumb">' + ui.esc(c.label) + '</span>';
+      }
+    });
+    el.innerHTML = h;
+  }
+
+  return {
+    // Rebuild the base trail from the freshly-routed view + params and paint it.
+    // Called by route() on every navigation.
+    route: function (view, params) {
+      var trail = [{ label: 'Home', href: '#/' }];
+      params = params || {};
+      if (view === 'dashboard') {
+        /* Home alone. */
+      } else if (view === 'topic') {
+        var t = PGRE.topicById(params.id);
+        trail.push({ label: t ? t.name : 'Topic' });
+      } else if (view === 'practice') {
+        var pt = params.id && params.id !== 'all' ? PGRE.topicById(params.id) : null;
+        trail.push(pt ? { label: pt.name, href: '#/topic/' + pt.id }
+                      : { label: 'All topics' });
+        trail.push({ label: 'Practice' });
+      } else if (LABELS[view]) {
+        trail.push({ label: LABELS[view], href: HREF[view] });
+        if (view === 'exam' && params.sub === 'run') trail.push({ label: 'Run' });
+        else if (view === 'exam' && params.sub === 'review') trail.push({ label: 'Review' });
+      }
+      base = trail;
+      paint(base);
+    },
+
+    // A view appends deeper crumbs for an in-view state. `extra` is an array of
+    // label strings (or {label,href} objects); passing [] / nothing resets to
+    // the base trail. Kept a one-liner at each view-internal transition.
+    setTrail: function (extra) {
+      var trail = base.slice();
+      (extra || []).forEach(function (c) {
+        trail.push(typeof c === 'string' ? { label: c } : c);
+      });
+      paint(trail);
+    }
+  };
+})();
 
 /* ——— Router ———
    Every view receives the generic sub-path params sub/sub2
@@ -107,6 +301,8 @@ PGRE.route = function () {
   else if (parts[0] === 'notes') { view = 'notes'; }
   else if (parts[0] === 'mistakes') { view = 'mistakes'; }
   else if (parts[0] === 'formulas') { view = 'formulas'; }
+  else if (parts[0] === 'focus') { view = 'focus'; }
+  else if (parts[0] === 'study-time') { view = 'studytime'; }
   else if (parts[0] === 'achievements') { view = 'achievements'; }
   else if (parts[0] === 'library') { view = 'library'; }
   else if (parts[0] === 'exam') { view = 'exam'; }
@@ -117,6 +313,7 @@ PGRE.route = function () {
   if (!v) { main.innerHTML = '<p>Unknown view.</p>'; return; }
 
   PGRE.store.rollDay();
+  PGRE.nav.route(view, params);   // base breadcrumb trail before the view mounts
   main.innerHTML = v.render(params);
   if (v.mount) v.mount(params);
   main.scrollTop = 0;
@@ -162,6 +359,8 @@ PGRE.buildNav = function () {
       '<span class="nav-badge nav-badge-due" id="nav-mist-due" hidden></span></a>' +
     '<a href="#/formulas" data-nav="formulas">Formula recall' +
       '<span class="nav-badge nav-badge-due" id="nav-form-due" hidden></span></a>' +
+    '<a href="#/focus" data-nav="focus">Focus timer</a>' +
+    '<a href="#/study-time" data-nav="studytime">Study time</a>' +
     '<a href="#/achievements" data-nav="achievements">Achievements</a>' +
     '<a href="#/library" data-nav="library">Library</a>' +
     '<a href="#/exam" data-nav="exam">Mock exam</a>' +
@@ -195,10 +394,17 @@ PGRE.boot = function () {
   PGRE.applyTheme(PGRE.store.state.settings.theme);
   PGRE.buildNav();
   PGRE.studyTime.start();       // passive active-minutes heartbeat
+  if (PGRE.timer) PGRE.timer.boot();   // F3 focus timer: resume/credit + wire the sidebar widget
   var toggle = document.getElementById('theme-toggle');
   if (toggle) toggle.addEventListener('click', function () {
     PGRE.setTheme(PGRE.store.state.settings.theme === 'dark' ? 'light' : 'dark');
   });
+  // Finder-style history arrows — hash routes ride the browser session history,
+  // so back/forward are always meaningful; a no-op click is harmless.
+  var tbBack = document.getElementById('topbar-back');
+  var tbFwd = document.getElementById('topbar-fwd');
+  if (tbBack) tbBack.addEventListener('click', function () { history.back(); });
+  if (tbFwd) tbFwd.addEventListener('click', function () { history.forward(); });
   window.addEventListener('hashchange', PGRE.route);
   PGRE.route();                 // first paint never waits on IndexedDB
   PGRE.contentDB.open();        // warm the connection in the background

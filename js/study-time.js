@@ -28,15 +28,34 @@ PGRE.studyTime = (function () {
   }
 
   function beat() {
-    if (document.hidden) { flush(); lastBeat = 0; return; } // tab away: break the chain
     var now = Date.now();
-    if (lastBeat) {
-      var day = dayStr(new Date());
-      var log = PGRE.store.state.studyLog;
-      log[day] = (log[day] || 0) + Math.min((now - lastBeat) / 1000, GAP_MAX);
-      dirty = true;
+    // F3: while the focus timer is actively crediting it owns crediting — the
+    // passive heartbeat must not also credit (double counting). Break the chain
+    // (lastBeat = 0) so stopping the timer doesn't back-credit the focused
+    // span, but keep flushing any earlier pending write on the usual throttle.
+    // BUNDLE D: a PAUSED session credits nothing (js/timer.js credit() no-ops on
+    // paused), and the user is back to using the app — so passive crediting must
+    // resume while held. Guard on actively-running only (t.on && !t.paused); when
+    // paused this falls through to the normal heartbeat below. No double count:
+    // the focus timer resumes crediting from the resume instant, and the first
+    // beat after resume re-breaks this chain (t.on && !t.paused is true again).
+    var t = PGRE.store.state.timer;
+    if (t && t.on && !t.paused) {
       if (now - lastSave >= SAVE_MS) flush();
+      lastBeat = 0;
+      return;
     }
+    if (lastBeat) {
+      var gap = (now - lastBeat) / 1000;
+      if (gap > 0) { // a clock set backwards credits nothing
+        var day = dayStr(new Date());
+        var log = PGRE.store.state.studyLog;
+        log[day] = (log[day] || 0) + Math.min(gap, GAP_MAX);
+        dirty = true;
+      }
+    }
+    if (document.hidden) { flush(); lastBeat = 0; return; } // tab away: break the chain
+    if (now - lastSave >= SAVE_MS) flush();
     lastBeat = now;
   }
 
@@ -46,12 +65,16 @@ PGRE.studyTime = (function () {
         var target = type === 'hashchange' ? window : document;
         target.addEventListener(type, beat, { capture: true, passive: true });
       });
-      window.addEventListener('pagehide', flush); // last unsaved seconds survive closing
+      window.addEventListener('pagehide', function () { beat(); flush(); }); // last unsaved seconds survive closing
     },
+
+    /* F3: the focus timer calls this on stop so the passive chain restarts
+       cleanly (lastBeat = 0) — no back-credit of the just-focused span. */
+    resetBeat: function () { lastBeat = 0; },
 
     /* Active seconds on one day; date is a 'YYYY-MM-DD' string. */
     daySec: function (date) {
-      return PGRE.store.state.studyLog[date] || 0;
+      return Math.max(0, PGRE.store.state.studyLog[date] || 0);
     },
 
     todaySec: function () {

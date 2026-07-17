@@ -22,6 +22,9 @@
   --silver: #8E8E8E;
   --gold: #BB952F;
   --platinum: #71838F;
+  /* Tint pair for the "mastered" grade chip/button (ITEM 3) — reuses the
+     platinum blue-grey so it reads distinct from again/hard/good/easy. */
+  --platinum-tint: #E7ECEE;
   /* Amber warning state (exam timer 15-min mark) — was hardcoded #F6ECD6/#8A6A1F. */
   --amber: #8A6A1F;
   --amber-tint: #F6ECD6;
@@ -133,6 +136,58 @@ code { background: var(--ivory); border-radius: 4px; padding: 1px 5px; font-size
 #main { flex: 1; min-width: 0; }
 #view { max-width: 1040px; margin: 0 auto; padding: 36px 40px 80px; }
 
+/* ——— Finder-style breadcrumb top bar (BUNDLE G) ———
+   Slim sticky bar at the top of #main, present on every route: ◀ ▶ history
+   arrows + a clickable breadcrumb trail. The inner wrapper mirrors #view's
+   centred content column so the trail aligns with the page content. All colours
+   are tokens, so the dark layer recolours it for free; hidden in focus-zen, the
+   exam takeover, and print (see those sections). */
+#topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.topbar-inner {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 8px 40px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.topbar-arrows { display: flex; gap: 4px; flex: none; }
+.topbar-arrow {
+  font-family: var(--sans);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  width: 28px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color .12s, background .12s, color .12s;
+}
+.topbar-arrow:hover { border-color: var(--ink-3); background: var(--ivory); color: var(--ink); }
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+  font-size: 13px;
+}
+.crumb { color: var(--ink-2); }
+a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
+.crumb-here { color: var(--ink); font-weight: 600; }
+.crumb-sep { color: var(--ink-3); font-size: 11px; flex: none; }
+
 /* ——— Cards ——— */
 .card {
   background: var(--surface);
@@ -207,6 +262,9 @@ code { background: var(--ivory); border-radius: 4px; padding: 1px 5px; font-size
 .challenge-top { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
 .challenge-xp { color: var(--accent-deep); font-weight: 600; white-space: nowrap; font-size: 13px; }
 .challenge-prog { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; }
+.challenge-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 3px; }
+.challenge-foot .challenge-prog { margin-top: 0; }
+.challenge-foot .btn { margin: 0; }
 .challenge.done .challenge-top { color: var(--ink-3); }
 .check { color: var(--good); font-weight: 700; }
 .next-tasks { margin: 10px 0 12px 18px; font-size: 13.5px; color: var(--ink-2); }
@@ -295,6 +353,11 @@ code { background: var(--ivory); border-radius: 4px; padding: 1px 5px; font-size
   margin-bottom: 8px;
 }
 .q-text { font-size: 17px; line-height: 1.6; margin: 20px 0; }
+/* Book figures and wide KaTeX must never widen the page past a phone
+   viewport: images shrink to their card, overlong math scrolls in place. */
+#view img { max-width: 100%; height: auto; }
+.katex-display { overflow-x: auto; overflow-y: hidden; }
+.q-text, .solution, .choice { overflow-x: auto; }
 .choices { display: flex; flex-direction: column; gap: 8px; }
 .choice {
   display: flex;
@@ -453,7 +516,7 @@ code { background: var(--ivory); border-radius: 4px; padding: 1px 5px; font-size
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--ink-3);
+  color: var(--ink-2); /* ink-3 on ivory fails 4.5:1 at this size */
   background: var(--ivory);
   border-radius: 999px;
   padding: 2px 10px;
@@ -470,6 +533,9 @@ code { background: var(--ivory); border-radius: 4px; padding: 1px 5px; font-size
 .task input { accent-color: var(--accent); width: 15px; height: 15px; flex: none; position: relative; top: 2px; }
 .task.done .task-label { color: var(--ink-3); text-decoration: line-through; }
 .task-meta { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.week-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 20px 14px; }
+.week-links-label { font-size: 12.5px; color: var(--ink-3); }
+.week-links .btn { margin: 0; }
 
 /* ——— Library ——— */
 .dropzone {
@@ -505,6 +571,20 @@ code { background: var(--ivory); border-radius: 4px; padding: 1px 5px; font-size
 }
 .placeholder { text-align: left; }
 .placeholder p { margin-bottom: 6px; }
+
+/* PDF library items — the browser's native viewer inside a tall inline frame.
+   Token-based so the frame + link re-derive under [data-theme="dark"]. */
+.pdf-viewer { margin-top: 14px; }
+.pdf-frame {
+  height: 75vh;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--ivory);
+}
+.pdf-iframe { width: 100%; height: 100%; border: 0; display: block; }
+.pdf-viewer-foot { margin-top: 10px; }
+.pdf-viewer-foot .btn { margin: 0; }
 
 /* ——— Notes / markdown ——— */
 .note-chapter { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; }
@@ -608,14 +688,14 @@ code { background: var(--ivory); border-radius: 4px; padding: 1px 5px; font-size
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--ink-3);
+  color: var(--ink-2); /* ink-3 on ivory fails 4.5:1 at this size */
   background: var(--ivory);
   border-radius: 999px;
   padding: 2px 10px;
   white-space: nowrap;
 }
 .due-chip.due-now { background: var(--accent-tint); color: var(--accent-deep); }
-.due-chip.due-archived { background: var(--ivory); color: var(--ink-3); }
+.due-chip.due-archived { background: var(--ivory); color: var(--ink-2); }
 
 /* ——— Mistake book ——— */
 .miss-card .q-text { font-size: 15.5px; margin: 14px 0; }
@@ -728,6 +808,9 @@ code { background: var(--ivory); border-radius: 4px; padding: 1px 5px; font-size
 .grade-again:hover { background: var(--bad-tint); border-color: var(--bad); }
 .grade-easy { border-color: var(--good); color: var(--good); }
 .grade-easy:hover { background: var(--good-tint); border-color: var(--good); }
+/* ITEM 3: Mastered — platinum accent, matching its browse-list grade chip. */
+.grade-mastered { border-color: var(--platinum); color: var(--platinum); }
+.grade-mastered:hover { background: var(--platinum-tint); border-color: var(--platinum); }
 .key-hint {
   font-size: 10px;
   color: var(--ink-3);
@@ -771,6 +854,7 @@ code { background: var(--ivory); border-radius: 4px; padding: 1px 5px; font-size
   #sidebar-nav a { padding: 6px 10px; }
   .nav-heading { display: none; }
   .nav-weight, .nav-mono { display: none; }
+  .topbar-inner { padding: 8px 16px; }
   #view { padding: 20px 16px 60px; }
   .two-col { grid-template-columns: 1fr; }
   .hero { flex-direction: column; align-items: stretch; }
@@ -831,6 +915,7 @@ code { background: var(--ivory); border-radius: 4px; padding: 1px 5px; font-size
 
 /* ——— Full-screen takeover ——— */
 body.exam-fullscreen #sidebar { display: none; }
+body.exam-fullscreen #topbar { display: none; }  /* the exam room owns the top bar */
 body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 
 .exam-room { display: flex; flex-direction: column; min-height: 100vh; }
@@ -987,6 +1072,9 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   justify-content: center;
   padding: 24px;
 }
+/* Pause promises "the questions are hidden" — its backdrop must be opaque
+   (the submit modal keeps the translucent scrim). */
+.exam-overlay.is-pause { background: var(--bg); }
 .exam-overlay-card { max-width: 460px; width: 100%; margin: 0; box-shadow: 0 12px 40px rgba(20, 20, 19, 0.25); }
 .exam-overlay-card h2 { margin-bottom: 8px; }
 
@@ -1596,6 +1684,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .grade-chip.grade-hard { color: var(--amber); background: var(--amber-tint); }
 .grade-chip.grade-good { color: var(--good); background: var(--good-tint); }
 .grade-chip.grade-easy { color: var(--accent-deep); background: var(--accent-tint); }
+.grade-chip.grade-mastered { color: var(--platinum); background: var(--platinum-tint); } /* ITEM 3 */
 .due-chip.today-chip { color: var(--accent-deep); background: var(--accent-track); }
 
 /* ——— In-session back-stepping peek ——— */
@@ -1730,6 +1819,11 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .mem-stats-head h2 { margin-bottom: 0; }
 .mem-stats-head .btn { margin-top: 0; }
 .stat-row-3 { grid-template-columns: repeat(3, 1fr); }
+/* Declared after the main responsive block, so it needs its own phone
+   override (mirrors .stat-row's 2-up collapse at this width). */
+@media (max-width: 860px) {
+  .stat-row-3 { grid-template-columns: repeat(2, 1fr); }
+}
 #mem-stats-body { margin-top: 14px; }
 .mem-retention { margin-top: 6px; }
 .mem-retention h3, .mem-forecast h3 { font-size: 15px; margin-bottom: 4px; }
@@ -2147,9 +2241,376 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 [data-theme="dark"] #theme-toggle::before { content: '☀'; color: var(--amber); }
 #theme-toggle:hover { background: var(--ivory); border-color: transparent; color: var(--ink); }
 
+/* ==================================================================
+   FOCUS PAGE (F5) — full-page calm focus app at #/focus.
+   Ambient token-based gradient + centered oversized clock + growing
+   atom reward. All colours are tokens, so the dark layer recolours it.
+   ================================================================== */
+.focus-page {
+  position: relative;
+  min-height: calc(100vh - 116px);        /* fill the view area for a full-page feel */
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.focus-ambient {
+  position: absolute; inset: 0; z-index: 0;
+  background: linear-gradient(130deg,
+    var(--accent-tint) 0%, var(--bg) 32%, var(--panel) 62%, var(--accent-tint) 100%);
+  background-size: 320% 320%;
+  animation: focus-drift 44s ease-in-out infinite;
+  opacity: 0.9;
+}
+@keyframes focus-drift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.focus-stage {
+  position: relative; z-index: 1;
+  width: 100%; max-width: 560px;
+  padding: 40px 28px;
+  text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+}
+.focus-reward { width: 208px; height: 208px; }
+.focus-clock {
+  font-family: var(--serif);
+  font-size: 74px; font-weight: 650; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.focus-sub { font-size: 14px; color: var(--ink-2); min-height: 20px; }
+
+/* BUNDLE D — paused (held) session on the full page: the clock dims to read as
+   "on hold", the caption picks up the amber hold accent. Token-based (--amber /
+   --ink-3 are redefined under [data-theme="dark"]) so dark theme re-derives. */
+.focus-page.is-paused .focus-clock { color: var(--ink-3); opacity: 0.7; }
+.focus-page.is-paused .focus-sub { color: var(--amber); }
+
+/* goal picker */
+.focus-goals { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.focus-chip {
+  font-family: var(--serif); font-size: 13px; font-weight: 600;
+  padding: 7px 14px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
+  cursor: pointer; transition: border-color .15s, background .15s, color .15s;
+}
+.focus-chip:hover { border-color: var(--ink-3); color: var(--ink); }
+.focus-chip.active { border-color: var(--accent); background: var(--accent-tint); color: var(--accent-deep); }
+.focus-chip-custom { padding: 0; border: none; background: none; }
+.focus-custom-in {
+  width: 84px; font-family: var(--serif); font-size: 13px;
+  padding: 7px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+}
+
+.focus-controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.focus-hero { min-width: 150px; font-size: 15px; padding: 11px 26px; }
+
+/* quiet stats + recent sessions live on the surface, not the gradient */
+.focus-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
+.focus-recent {
+  width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px 18px;
+}
+.focus-recent h2 { font-size: 16px; margin-bottom: 8px; }
+.focus-sess-list { list-style: none; }
+.focus-sess { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.focus-sess:last-child { border-bottom: none; }
+.focus-sess-dur { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 64px; }
+.focus-tag { font-size: 12px; color: var(--ink-3); background: var(--ivory); border-radius: 999px; padding: 2px 9px; }
+.focus-tag-met { color: var(--accent-deep); background: var(--accent-tint); font-weight: 600; }
+.focus-sess-when { margin-left: auto; font-size: 12px; }
+
+/* ——— reward atom ——— */
+.focus-atom { width: 100%; height: 100%; overflow: visible; }
+.fa-track   { fill: none; stroke: var(--accent-track); stroke-width: 6; opacity: 0.6; }
+.fa-ring    { fill: none; stroke: var(--accent); stroke-width: 6; stroke-linecap: round;
+              transform: rotate(-90deg); transform-origin: 100px 100px; transition: stroke-dashoffset .9s linear; }
+.fa-orbit   { fill: none; stroke: var(--accent-deep); stroke-width: 1.5; opacity: 0; transition: opacity .5s ease; }
+.fa-electron{ fill: var(--accent); opacity: 0; transition: opacity .5s ease; }
+.fa-nucleus { fill: var(--accent-deep); }
+.focus-atom.orbits-1 .fa-g1 .fa-orbit, .focus-atom.orbits-1 .fa-g1 .fa-electron,
+.focus-atom.orbits-2 .fa-g1 .fa-orbit, .focus-atom.orbits-2 .fa-g1 .fa-electron,
+.focus-atom.orbits-2 .fa-g2 .fa-orbit, .focus-atom.orbits-2 .fa-g2 .fa-electron,
+.focus-atom.orbits-3 .fa-orbit, .focus-atom.orbits-3 .fa-electron { opacity: 1; }
+/* orbiting electrons — CSS only, spin the whole orbit group around the nucleus */
+.focus-atom.is-running .fa-orbit-grp { transform-box: fill-box; transform-origin: center;
+  animation: fa-spin 7s linear infinite; }
+.focus-atom.is-running .fa-g2 { animation-duration: 9s; }
+.focus-atom.is-running .fa-g3 { animation-duration: 11s; }
+@keyframes fa-spin { to { transform: rotate(360deg); } }
+.focus-atom.is-complete .fa-nucleus,
+.focus-atom.is-complete .fa-ring { animation: fa-pop 1.2s ease-out 2; }
+@keyframes fa-pop { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+/* BUNDLE D — paused: hold the electrons mid-orbit rather than snapping them back
+   to the start angle (is-running keeps the animation applied; this only pauses it).
+   The ring is frozen too because progress stops advancing while held. */
+.focus-atom.is-paused .fa-orbit-grp { animation-play-state: paused; }
+.focus-atom.is-paused .fa-nucleus { opacity: 0.6; }
+
+/* ——— zen mode: collapse chrome for distraction-free focus ——— */
+body.focus-zen #sidebar { display: none; }
+body.focus-zen #topbar { display: none; }
+body.focus-zen #view { max-width: none; padding: 0; }
+body.focus-zen .focus-page { border-radius: 0; min-height: 100vh; }
+.focus-zen-exit {
+  position: fixed; top: 16px; right: 16px; z-index: 5;
+  font-family: var(--serif); font-size: 13px; font-weight: 600;
+  padding: 7px 14px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); cursor: pointer;
+}
+.focus-zen-exit:hover { border-color: var(--ink-3); color: var(--ink); }
+
+/* ——— reduced motion: still legible, just still ——— */
+@media (prefers-reduced-motion: reduce) {
+  .focus-ambient { animation: none; }
+  .focus-atom.is-running .fa-orbit-grp { animation: none; }
+  .focus-atom.is-complete .fa-nucleus, .focus-atom.is-complete .fa-ring { animation: none; }
+  .fa-ring { transition: none; }
+}
+
+/* ——— responsive ——— */
+@media (max-width: 860px) {
+  .focus-page { min-height: calc(100vh - 200px); }
+  .focus-clock { font-size: 58px; }
+  .focus-stats { grid-template-columns: repeat(2, 1fr); }
+  body.focus-zen .focus-page { min-height: 100vh; }
+}
+
+/* ==================================================================
+   FOCUS TIMER (F3) — sidebar-footer widget above the theme toggle.
+   A single toggle: hollow dot + "Start focus" when idle; accent-tinted
+   with a pulsing solid dot + live elapsed when running. Pure token
+   colours, so the dark layer re-derives it with no extra rules.
+   ================================================================== */
+.focus-timer { margin-bottom: 8px; }
+.focus-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  justify-content: flex-start;
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.focus-toggle:hover { border-color: var(--ink-3); color: var(--ink); }
+.focus-dot {
+  width: 9px; height: 9px; flex: none;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink-3);
+  background: transparent;
+}
+.focus-time {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+/* F5: split the toggle button from a nav-able readout that links to #/focus. */
+.focus-row { display: flex; align-items: stretch; gap: 6px; }
+.focus-row .focus-toggle { flex: 1; }
+.focus-open {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 9px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--surface); color: var(--ink-3);
+  font-variant-numeric: tabular-nums; font-size: 12.5px;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.focus-open:hover { border-color: var(--accent); color: var(--accent-deep); text-decoration: none; background: var(--accent-tint); }
+.focus-open .focus-time { margin-left: 0; }
+.focus-open-ico { font-size: 13px; line-height: 1; }
+.focus-timer.is-running .focus-open { color: var(--accent-deep); border-color: var(--accent); }
+.focus-hint {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--ink-3);
+  margin: 4px 2px 0;
+}
+
+/* Running: accent-tinted button, solid pulsing dot, accent elapsed. */
+.focus-timer.is-running .focus-toggle {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+}
+.focus-timer.is-running .focus-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  animation: focus-pulse 1.6s ease-in-out infinite;
+}
+.focus-timer.is-running .focus-time { color: var(--accent-deep); font-weight: 700; }
+
+/* BUNDLE D — Paused (held): amber, steady (no pulse). Distinct from the accent
+   green of a live session so the sidebar reads its three states at a glance.
+   Token-based (--amber / --amber-tint redefine under [data-theme="dark"]). */
+.focus-timer.is-paused .focus-toggle {
+  border-color: var(--amber);
+  background: var(--amber-tint);
+  color: var(--amber);
+}
+.focus-timer.is-paused .focus-dot {
+  border-color: var(--amber);
+  background: var(--amber);
+  animation: none;                 /* held: steady dot, not the running pulse */
+}
+.focus-timer.is-paused .focus-time { color: var(--amber); font-weight: 700; }
+.focus-timer.is-paused .focus-open { color: var(--amber); border-color: var(--amber); }
+
+@keyframes focus-pulse {
+  0%, 100% { opacity: 1;    box-shadow: 0 0 0 0 var(--accent-track); }
+  50%      { opacity: 0.55; box-shadow: 0 0 0 4px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .focus-timer.is-running .focus-dot { animation: none; }
+}
+
 /* Print sheets are built into the DOM but hidden on screen; css/print.css
    (media="print") lays them out for paper / PDF. */
 .print-sheet { display: none; }
+
+/* Offscreen measurement context for view-formulas' flagWideCards(). print.css
+   is media="print", so the sheet has no layout on screen and none yet when
+   beforeprint fires (Chromium dispatches it before switching media) — this
+   class lays the sheet out invisibly at one print column's card CONTENT width
+   so scrollWidth comparisons mirror print layout. 233pt = A4 210mm − 2×13mm
+   page margins (⇒ 521.6pt) minus the 16pt column gap, halved, minus the
+   card's 2×9pt padding + 2×0.75pt border. Keep these numbers in sync with
+   print.css's @page / .ps-cards / .ps-card* rules. */
+.print-sheet.measuring {
+  display: block;
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 233pt;
+  font-size: 11pt;
+  line-height: 1.45;
+}
+.print-sheet.measuring .ps-card-front { font-size: 9.5pt; line-height: 1.4; }
+.print-sheet.measuring .ps-card-back { font-size: 10pt; line-height: 1.5; }
+
+/* ————————————————————————————————————————————————————————————————
+   STUDY TIME — dedicated page (#/study-time, js/view-study-time.js).
+   Pure-div charts (no libraries); every colour is a token so dark theme
+   re-derives automatically. The dashboard's "Details →" link reuses .btn-sm.
+   ———————————————————————————————————————————————————————————————— */
+.dash-study-more { margin-top: 12px; }
+
+/* Eight stat tiles — 4-up, collapsing to 2-up on narrow screens. */
+.st-stats { grid-template-columns: repeat(4, 1fr); }
+
+.st-lead { margin-bottom: 12px; }
+.st-note { margin-top: 12px; font-size: 12.5px; }
+
+/* Daily activity — 28 pure-div bars sharing the forecast-strip look. */
+.stbar-strip {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 132px;
+  padding: 8px 4px 0;
+  background: var(--ivory);
+  border-radius: 10px;
+}
+.stbar-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+}
+.stbar {
+  width: 100%;
+  max-width: 14px;
+  min-height: 2px;
+  background: var(--accent);
+  border-radius: 3px 3px 0 0;
+}
+.stbar-today { background: var(--accent-deep); }
+.stbar-zero { background: var(--line); }
+.stbar-x { font-size: 9.5px; color: var(--ink-3); margin-top: 5px; height: 12px; white-space: nowrap; }
+.stbar-x-cur { color: var(--accent-deep); font-weight: 700; }
+
+/* Weekly totals — 8 bars over a shaded 15–17 h target band. */
+.stweek { margin-top: 2px; }
+.stweek-plot {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 150px;
+  padding: 0 6px;
+  background: var(--ivory);
+  border-radius: 10px;
+}
+.stweek-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--accent-tint);
+  border-top: 1px dashed var(--accent);
+  border-bottom: 1px dashed var(--accent);
+  z-index: 0;
+}
+.stweek-col {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 100%;
+}
+.stweek-bar {
+  width: 100%;
+  max-width: 34px;
+  min-height: 2px;
+  background: var(--accent);
+  border-radius: 4px 4px 0 0;
+}
+.stweek-bar.stweek-met { background: var(--good); }
+.stweek-bar.stweek-current { outline: 2px solid var(--accent-deep); outline-offset: -2px; }
+.stweek-labels { display: flex; gap: 8px; padding: 0 6px; margin-top: 6px; }
+.stweek-lab { flex: 1; display: flex; flex-direction: column; align-items: center; line-height: 1.25; }
+.stweek-h { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stweek-h-met { color: var(--good); }
+.stweek-x { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; }
+.stweek-x-cur { color: var(--accent-deep); font-weight: 700; }
+
+/* Focus vs. app-activity — a single stacked bar with a legend. */
+.st-split-bar {
+  display: flex;
+  height: 22px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--ivory);
+}
+.st-split-focus { background: var(--accent-deep); }
+.st-split-passive { background: var(--accent-track); }
+.st-split-legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; font-size: 13.5px; }
+.st-split-item { display: flex; align-items: center; gap: 8px; }
+.st-swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.st-swatch-focus { background: var(--accent-deep); }
+.st-swatch-passive { background: var(--accent-track); }
+
+/* Recent focus sessions — card head with a jump to the timer. */
+.st-recent-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.st-recent-head h2 { margin-bottom: 0; }
+
+@media (max-width: 860px) {
+  .st-stats { grid-template-columns: repeat(2, 1fr); }
+}
 
 /* ==================================================================
    DARK THEME — [data-theme="dark"] token overrides (proposal #15)
@@ -2181,6 +2642,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   --silver: #ADAAA3;
   --gold: #D8B65B;
   --platinum: #9DB0BC;
+  --platinum-tint: #232B30;
   --amber: #E6C879;
   --amber-tint: #3A3117;
   --heat-0: #262320;

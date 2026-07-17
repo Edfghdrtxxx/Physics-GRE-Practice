@@ -40,6 +40,11 @@ PGRE.gamify = {
     }
   },
 
+  /* Cap on the per-attempt ms persisted into the append-only log: a question
+     left open overnight must not skew the permanent pace averages. The live
+     per-question display still shows the honest raw time. */
+  MAX_ATTEMPT_MS: 15 * 60 * 1000,
+
   /* ——— Recording an answered question ———
      ctx (optional): { picked: choiceIdx, sid: sessionId, mode: 'practice'|'mistakes' } */
   recordAnswer: function (q, isCorrect, elapsedMs, ctx) {
@@ -54,7 +59,7 @@ PGRE.gamify = {
       ts: now, qid: q.id, topic: q.topic,
       picked: typeof ctx.picked === 'number' ? ctx.picked : null,
       answer: q.answer, correct: isCorrect,
-      ms: elapsedMs == null ? null : elapsedMs,
+      ms: elapsedMs == null ? null : Math.min(elapsedMs, this.MAX_ATTEMPT_MS),
       sid: ctx.sid || null, mode: ctx.mode || 'practice',
       confidence: ctx.confidence || null // 'sure' | 'guess' | null
     });
@@ -110,8 +115,13 @@ PGRE.gamify = {
     // secret flags
     var hour = new Date().getHours();
     if (isCorrect && hour >= 0 && hour < 4) s.flags.nightOwl = true;
+    if (isCorrect && hour >= 5 && hour < 7) s.flags.earlyBird = true;
     if (isCorrect && elapsedMs != null && elapsedMs < 15000) s.flags.quickThinker = true;
     if (td.bestRun >= 15) s.flags.run15 = true;
+    // Critical Mass counts practice + exam answers together (exam answers land in
+    // td.examAnswered via exam-engine submit) so a 30+ day split across both modes
+    // still qualifies.
+    if (td.answered + (td.examAnswered || 0) >= 30) s.flags.marathonDay = true;
 
     // live session tallies (kept current so an abandoned session still shows
     // its real progress in the history)
@@ -147,7 +157,7 @@ PGRE.gamify = {
       ts: now, qid: q.id, topic: q.topic,
       picked: typeof ctx.picked === 'number' ? ctx.picked : null,
       answer: q.answer, correct: isCorrect,
-      ms: elapsedMs == null ? null : elapsedMs,
+      ms: elapsedMs == null ? null : Math.min(elapsedMs, this.MAX_ATTEMPT_MS),
       sid: ctx.sid || null, mode: 'exam',
       confidence: ctx.confidence || null
     });
@@ -173,16 +183,20 @@ PGRE.gamify = {
       if (!mk.archivedAt) PGRE.srs.mistakeSolved(mk);
     }
 
-    var rec = s.questions[q.id] || { attempts: 0, correct: 0, firstCorrect: false };
-    rec.attempts += 1;
-    if (isCorrect) rec.correct += 1;
-    if (isCorrect && !rec.firstCorrect) rec.firstCorrect = true;
-    s.questions[q.id] = rec;
+    // a blank (picked null) scores as a miss above, but only a question the
+    // user actually answered counts toward the answered/accuracy aggregates
+    if (typeof ctx.picked === 'number') {
+      var rec = s.questions[q.id] || { attempts: 0, correct: 0, firstCorrect: false };
+      rec.attempts += 1;
+      if (isCorrect) rec.correct += 1;
+      if (isCorrect && !rec.firstCorrect) rec.firstCorrect = true;
+      s.questions[q.id] = rec;
 
-    var t = s.topics[q.topic] || { attempted: 0, correct: 0, xp: 0 };
-    t.attempted += 1;
-    if (isCorrect) t.correct += 1;
-    s.topics[q.topic] = t;
+      var t = s.topics[q.topic] || { attempted: 0, correct: 0, xp: 0 };
+      t.attempted += 1;
+      if (isCorrect) t.correct += 1;
+      s.topics[q.topic] = t;
+    }
     // NB: no addXP / checkChallenges / checkAchievements here — see doc above.
   },
 
@@ -277,6 +291,9 @@ PGRE.gamify = {
     PGRE.TOPICS.forEach(function (t) {
       var rec = s.topics[t.id];
       if (rec && rec.attempted > 0) topicsPracticed++;
+      // mastery tiers need a meaningful sample — without the book bank a topic
+      // can hold 1–4 preview questions, and one solve must not read as mastery
+      if (PGRE.questionsForTopic(t.id).length < 10) return;
       var m = self.mastery(t.id);
       if (m >= 60) topics60++;
       if (m >= 80) topics80++;
@@ -309,6 +326,46 @@ PGRE.gamify = {
       prevPct = pct;
     });
 
+    // ——— Formula recall (state.cards / cardReviews / cardNotes) ———
+    // cardsSeen counts every card that has any SRS state — a card gets state
+    // the moment it is first graded, so this is monotonic (state is never
+    // deleted). cardsMature = well-recalled cards, measured by reps (consecutive
+    // successful recalls) NOT interval: the F3 exam-interval cap
+    // (srs.examCap = ceil(0.2*days)) squeezes every card's interval below 21 for
+    // almost the whole prep window, so an interval>=21 test would never fire.
+    // reps is cap-independent; reps>=5 is the SM-2 depth an uncapped card hits
+    // around a 21-day interval, so it reads as "matured" here too.
+    var cards = s.cards || {};
+    var cardsSeen = 0, cardsMature = 0;
+    for (var cid in cards) {
+      cardsSeen++;
+      if ((cards[cid].reps || 0) >= 5) cardsMature++;
+    }
+    var formulaReviews = (s.cardReviews || []).length;
+    var mnemonics = 0, cnotes = s.cardNotes || {};
+    for (var mnid in cnotes) if (cnotes[mnid] && cnotes[mnid].text) mnemonics++;
+
+    // ——— Review lab: mistake book, question notes, bookmarks, sessions ———
+    var mistakesArchived = 0, mkAll = s.mistakes || {};
+    for (var aqid in mkAll) if (mkAll[aqid] && mkAll[aqid].archivedAt) mistakesArchived++;
+    var notesWritten = 0, qnotes = s.notes || {};
+    for (var nqid in qnotes) if (qnotes[nqid] && qnotes[nqid].text) notesWritten++;
+    var bookmarks = 0, bm = s.bookmarks || {};
+    for (var bqid in bm) bookmarks++;
+    var sessionsCompleted = 0, sessArr = s.sessions || [];
+    for (var si = 0; si < sessArr.length; si++) if (sessArr[si].endedAt) sessionsCompleted++;
+
+    // ——— Focus & study time ———
+    // studyHours = ALL active seconds (passive tracker + F3 focus timer both
+    // write state.studyLog); focusHours = the timer's share only. timerStats
+    // may be absent on old saves — guard per the F3 shared contract.
+    var studySec = 0, slog = s.studyLog || {};
+    for (var d in slog) studySec += slog[d] || 0;
+    var studyHours = Math.floor(studySec / 3600);
+    var tstats = s.timerStats || { sessions: 0, seconds: 0 };
+    var focusSessions = tstats.sessions || 0;
+    var focusHours = Math.floor((tstats.seconds || 0) / 3600);
+
     return {
       answered: answered,
       xp: s.xp,
@@ -322,7 +379,18 @@ PGRE.gamify = {
       planPhasesDone: phasesDone,
       examsDone: exams.length,
       examBestPct: examBestPct,
-      examImprovements: examImprovements
+      examImprovements: examImprovements,
+      cardsSeen: cardsSeen,
+      cardsMature: cardsMature,
+      formulaReviews: formulaReviews,
+      mnemonics: mnemonics,
+      mistakesArchived: mistakesArchived,
+      notesWritten: notesWritten,
+      bookmarks: bookmarks,
+      sessionsCompleted: sessionsCompleted,
+      studyHours: studyHours,
+      focusSessions: focusSessions,
+      focusHours: focusHours
     };
   },
 
@@ -440,9 +508,8 @@ PGRE.gamify = {
   },
 
   daysToExam: function () {
-    var now = new Date();
-    var exam = new Date(PGRE.EXAM_DATE + 'T08:00:00');
-    var ms = exam - new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    return Math.max(0, Math.ceil(ms / 86400000));
+    // same noon-anchored calendar-day math the formulas final-pass banner uses,
+    // so the two countdowns can never disagree (js/srs.js loads first)
+    return Math.max(0, PGRE.srs.daysUntil(PGRE.EXAM_DATE));
   }
 };

@@ -8,6 +8,7 @@ PGRE.views = PGRE.views || {};
 PGRE.views.mistakes = (function () {
   var LETTERS = ['A', 'B', 'C', 'D', 'E'];
   var drill = null; // { qs, i, correct, xp, sid }
+  var lastRenderAt = 0; // stamps each drill render so a double-click can't click through
 
   function root() { return document.getElementById('mistakes-root'); }
 
@@ -18,6 +19,60 @@ PGRE.views.mistakes = (function () {
       var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
     }
     return a;
+  }
+
+  /* ——— ITEM 8: user-set drill size ———
+     How many questions "Drill due" / "Drill all" pull from the pool. Persisted in
+     state.settings.mistakeDrillSize via PGRE.store.save(). Read defensively: an
+     absent / 0 / invalid value all mean "draw the whole pool" (the original
+     behaviour). A custom value is clamped to 1–99 to match the number input. */
+  function drillSize() {
+    var s = PGRE.store.state.settings || {};
+    var n = parseInt(s.mistakeDrillSize, 10);
+    if (!n || n < 1) return 0;          // 0 = the whole pool
+    return n > 99 ? 99 : n;
+  }
+  function setDrillSize(n) {
+    var s = PGRE.store.state.settings || (PGRE.store.state.settings = {});
+    s.mistakeDrillSize = (n && n > 0) ? Math.min(99, n) : 0;
+    PGRE.store.save();
+  }
+  /* Draw a random min(N, pool) sample; 0 or N≥pool keeps the whole pool.
+     startDrill() reshuffles anyway, so the extra shuffle here is harmless. */
+  function sampleForDrill(qs) {
+    var n = drillSize();
+    if (!n || n >= qs.length) return qs;
+    return shuffle(qs).slice(0, n);
+  }
+  /* Honest button caption: "Drill due (5 of 7)" when a size caps the pool,
+     plain "Drill due (7)" when the whole pool will be drawn. */
+  function drillLabel(base, pool) {
+    var n = drillSize();
+    return (n && n < pool) ? (base + ' (' + n + ' of ' + pool + ')')
+                           : (base + ' (' + pool + ')');
+  }
+  /* Preset chips (All / 5 / 10 / 15) + a custom number input, reusing the focus
+     page's .focus-chip / .focus-custom-in look. Active preset reflects the saved
+     size; a non-preset size prefills the custom box. */
+  function drillSizeHTML() {
+    var n = drillSize();
+    var presets = [[0, 'All'], [5, '5'], [10, '10'], [15, '15']];
+    var isPreset = false, chips = '';
+    presets.forEach(function (p) {
+      var on = (p[0] === n);
+      if (on) isPreset = true;
+      chips += '<button type="button" class="focus-chip' + (on ? ' active' : '') +
+        '" data-size="' + p[0] + '">' + p[1] + '</button>';
+    });
+    var customVal = (!isPreset && n > 0) ? String(n) : '';
+    return '<div class="chip-row" id="drill-size-row">' +
+      '<span class="muted" style="align-self:center;">Questions per drill</span>' +
+      chips +
+      '<span class="focus-chip focus-chip-custom">' +
+        '<input id="drill-size-custom" class="focus-custom-in" type="number" min="1" max="99" ' +
+          'inputmode="numeric" placeholder="custom" aria-label="Custom questions per drill" ' +
+          'value="' + customVal + '"></span>' +
+    '</div>';
   }
 
   function dueChip(mk) {
@@ -70,7 +125,8 @@ PGRE.views.mistakes = (function () {
 
   /* ——— The book ——— */
   function missCard(e) {
-    var ui = PGRE.ui, q = e.q, mk = e.mk, t = PGRE.topicById(q.topic);
+    var ui = PGRE.ui, q = e.q, mk = e.mk;
+    var t = PGRE.topicById(q.topic) || { id: 'xx', short: '?', name: 'Unknown topic' };
     var wrong = mk.lastPick != null ? mk.lastPick : mk.wrongPicks[mk.wrongPicks.length - 1];
     var metaBits = [];
     if (mk.misses > 0) metaBits.push('missed ×' + mk.misses);
@@ -89,7 +145,28 @@ PGRE.views.mistakes = (function () {
         '</span>' +
       '</div>' +
       '<div class="q-text">' + q.q + '</div>';
+    // ITEM 7 — the book (list) page must NOT reveal the answer. Show the five
+    // choices as a plain, non-interactive list: disabled .choice buttons (the
+    // exact look practice leaves behind after answering) get no hover, no pointer,
+    // and — crucially — NO is-answer / is-wrong marker, so nothing on the always-
+    // visible card signals the key, not even by elimination. The reveal now lives
+    // one click away, inside the <details> Solution block below.
+    html += '<div class="choices miss-choices">';
+    q.choices.forEach(function (c, idx) {
+      html += '<button class="choice" disabled>' +
+        '<span class="choice-letter">' + LETTERS[idx] + '</span>' +
+        '<span class="choice-body">' + c + '</span></button>';
+    });
+    html += '</div>';
+    var conf = lastConfidence(q.id);
+    if (conf) {
+      html += '<div class="conf-note muted">Your last confidence on this question: ' +
+        '<strong>' + (conf === 'guess' ? 'Guessed' : 'Knew it') + '</strong></div>';
+    }
+    html += '<details class="miss"><summary>Solution</summary>';
     if (wrong != null) {
+      // moved here from the always-visible card body: your pick + the correct
+      // letter are now gated behind the same one click as the worked solution.
       html += '<div class="miss-picks">' +
         '<div class="miss-pick is-bad"><span class="fb-icon">✗</span><strong>You picked ' +
           LETTERS[wrong] + '</strong> — <span class="miss-pick-body">' + q.choices[wrong] + '</span></div>' +
@@ -97,13 +174,7 @@ PGRE.views.mistakes = (function () {
           LETTERS[q.answer] + '</strong> — <span class="miss-pick-body">' + q.choices[q.answer] + '</span></div>' +
       '</div>';
     }
-    var conf = lastConfidence(q.id);
-    if (conf) {
-      html += '<div class="conf-note muted">Your last confidence on this question: ' +
-        '<strong>' + (conf === 'guess' ? 'Guessed' : 'Knew it') + '</strong></div>';
-    }
-    html += '<details class="miss"><summary>Solution</summary>' +
-      '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div></details>' +
+    html += '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div></details>' +
     distractorBlock(q) +
     '</div>';
     return html;
@@ -111,6 +182,7 @@ PGRE.views.mistakes = (function () {
 
   function renderBook() {
     drill = null;
+    if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: book list is the base screen
     var open = PGRE.srs.openMistakes();
     var due = PGRE.srs.dueMistakes();
     var archived = PGRE.srs.archivedMistakes();
@@ -126,11 +198,13 @@ PGRE.views.mistakes = (function () {
       '(' + PGRE.srs.MISTAKE_LADDER.join(' → ') + ' days). Missing it again resets the ladder.</p>' +
       '<div class="btn-row">' +
         '<button class="btn btn-primary" id="drill-due"' + (due.length ? '' : ' disabled') + '>' +
-          'Drill due (' + due.length + ')</button>' +
+          drillLabel('Drill due', due.length) + '</button>' +
         '<button class="btn btn-ghost" id="drill-all"' + (open.length ? '' : ' disabled') + '>' +
-          'Drill all (' + open.length + ')</button>' +
+          drillLabel('Drill all', open.length) + '</button>' +
         (open.length ? '<button class="btn btn-ghost" id="print-mistakes">Print / PDF</button>' : '') +
-      '</div></div>';
+      '</div>' +
+      drillSizeHTML() +
+      '</div>';
 
     if (!open.length && !archived.length) {
       html += '<div class="card placeholder">' +
@@ -155,11 +229,46 @@ PGRE.views.mistakes = (function () {
     var dd = document.getElementById('drill-due');
     var da = document.getElementById('drill-all');
     if (dd) dd.addEventListener('click', function () {
-      startDrill(PGRE.srs.dueMistakes().map(function (e) { return e.q; }));
+      startDrill(sampleForDrill(PGRE.srs.dueMistakes().map(function (e) { return e.q; })));
     });
     if (da) da.addEventListener('click', function () {
-      startDrill(PGRE.srs.openMistakes().map(function (e) { return e.q; }));
+      startDrill(sampleForDrill(PGRE.srs.openMistakes().map(function (e) { return e.q; })));
     });
+
+    // ITEM 8 — drill-size control: preset chips + custom input, saved on change.
+    // Labels update in place (mirrors the focus page's goal picker) so editing the
+    // custom box never re-renders the book and steals the input's focus. due/open
+    // are captured from this render; the disabled state depends only on the pool,
+    // so it never changes with size — only the caption does.
+    function applyLabels() {
+      if (dd) dd.textContent = drillLabel('Drill due', due.length);
+      if (da) da.textContent = drillLabel('Drill all', open.length);
+    }
+    var sizeCustom = document.getElementById('drill-size-custom');
+    root().querySelectorAll('.focus-chip[data-size]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        setDrillSize(parseInt(b.getAttribute('data-size'), 10) || 0);
+        if (sizeCustom) sizeCustom.value = '';
+        root().querySelectorAll('.focus-chip[data-size]').forEach(function (x) { x.classList.remove('active'); });
+        b.classList.add('active');
+        applyLabels();
+      });
+    });
+    if (sizeCustom) {
+      sizeCustom.addEventListener('input', function () {
+        var n = parseInt(sizeCustom.value, 10);
+        setDrillSize((n > 0) ? Math.min(99, n) : 0);   // empty/≤0 falls back to "all"
+        root().querySelectorAll('.focus-chip[data-size]').forEach(function (x) { x.classList.remove('active'); });
+        applyLabels();
+      });
+      // Snap an out-of-range / fractional / non-positive entry to what was saved
+      // once focus leaves the box, so the number shown matches what drills draw.
+      sizeCustom.addEventListener('blur', function () {
+        var n = parseInt(sizeCustom.value, 10);
+        var norm = (n > 0) ? String(Math.min(99, n)) : '';
+        if (sizeCustom.value !== norm) sizeCustom.value = norm;
+      });
+    }
     root().querySelectorAll('[data-drill-one]').forEach(function (b) {
       b.addEventListener('click', function () {
         var q = PGRE.questionById(b.getAttribute('data-drill-one'));
@@ -171,6 +280,7 @@ PGRE.views.mistakes = (function () {
         var mk = PGRE.store.state.mistakes[b.getAttribute('data-archive')];
         if (!mk) return;
         mk.archivedAt = new Date().toISOString();
+        PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
         PGRE.store.save();
         PGRE.toast('Archived — it stays in the book, hidden from drills. A new miss reopens it.', 'info');
         renderBook();
@@ -268,14 +378,16 @@ PGRE.views.mistakes = (function () {
   /* ——— Re-drill: same answering pipeline as practice (mode: mistakes) ——— */
   function startDrill(qs) {
     if (!qs.length) return;
+    if (PGRE.nav) PGRE.nav.setTrail(['Drill']);   // BUNDLE G: drill is live
     drill = { qs: shuffle(qs), i: 0, correct: 0, xp: 0,
               sid: PGRE.gamify.beginSession('mistakes', 'mistakes', qs.length) };
     renderDrillQuestion();
   }
 
   function renderDrillQuestion() {
+    lastRenderAt = Date.now();
     var q = drill.qs[drill.i];
-    var t = PGRE.topicById(q.topic);
+    var t = PGRE.topicById(q.topic) || { id: 'xx', short: '?', name: 'Unknown topic' };
     var html = '<div class="card practice-card">' +
       '<div class="practice-meta">' +
         '<span>Mistake drill — ' + (drill.i + 1) + ' of ' + drill.qs.length + '</span>' +
@@ -292,6 +404,7 @@ PGRE.views.mistakes = (function () {
     html += '</div><div id="feedback"></div></div>';
     root().innerHTML = html;
     PGRE.typesetMath(root());
+    window.scrollTo(0, 0); // in-place swap: route()'s reset doesn't run here
     drill.qStart = Date.now();
 
     root().querySelectorAll('.choice').forEach(function (b) {
@@ -302,6 +415,10 @@ PGRE.views.mistakes = (function () {
   }
 
   function drillAnswer(idx) {
+    if (!drill) return;
+    // the second click of a double-click on "Next" lands on the freshly
+    // rendered choices — ignore clicks inside the render's settling window
+    if (Date.now() - lastRenderAt < 300) return;
     var q = drill.qs[drill.i];
     var isCorrect = idx === q.answer;
     var xp = PGRE.gamify.recordAnswer(q, isCorrect, Date.now() - drill.qStart,
@@ -340,8 +457,11 @@ PGRE.views.mistakes = (function () {
   }
 
   function renderDrillSummary() {
+    if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: drill over — back to base
+    lastRenderAt = Date.now();
     PGRE.gamify.endSession(drill.sid);
     PGRE.store.log('mistake', 'Mistake drill: ' + drill.correct + '/' + drill.qs.length + ' correct', 0);
+    PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
     PGRE.store.save();
     var stillDue = PGRE.srs.dueMistakes().length;
     root().innerHTML = '<div class="card practice-card">' +
@@ -354,7 +474,10 @@ PGRE.views.mistakes = (function () {
         '<button class="btn btn-primary" id="back-book">Back to the book</button>' +
         '<a class="btn btn-ghost" href="#/">Dashboard</a>' +
       '</div></div>';
-    document.getElementById('back-book').addEventListener('click', renderBook);
+    document.getElementById('back-book').addEventListener('click', function () {
+      renderBook();
+      window.scrollTo(0, 0); // direct re-render, not a route change
+    });
   }
 
   return {

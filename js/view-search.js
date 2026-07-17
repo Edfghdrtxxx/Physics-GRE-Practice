@@ -2,8 +2,9 @@
    debounced input; ≥2 characters run a query against PGRE.search's in-memory
    index, grouped by kind with per-group counts and highlighted snippets. An
    empty box shows this session's recent searches and an index-stats card.
-   The index (PGRE.search) is built lazily on first mount and cached for the
-   page load; recent searches live only in this module's memory. */
+   The index (PGRE.search) is rebuilt on every mount, so imports, notes and
+   mistakes made since the last visit always show up; recent searches live only
+   in this module's memory. */
 window.PGRE = window.PGRE || {};
 PGRE.views = PGRE.views || {};
 
@@ -89,7 +90,7 @@ PGRE.views.search = (function () {
     return '<div class="card srch-statcard"><h2>What’s searchable</h2>' +
       '<p class="muted">' + PGRE.ui.fmt(s.total) + ' item' + (s.total === 1 ? '' : 's') +
       ' indexed this session — questions, the mistake book, formula cards, imported ' +
-      'book sections and your notes. The index rebuilds on every page load.</p>' +
+      'book sections and your notes. The index rebuilds each time you open Search.</p>' +
       '<div class="srch-stats">' + tiles + '</div></div>';
   }
 
@@ -162,18 +163,23 @@ PGRE.views.search = (function () {
 
     mount: function () {
       idx = null;
+      // drop the engine's cached index so this visit picks up anything new —
+      // book imports, remappings, fresh notes and mistakes
+      if (window.PGRE && PGRE.search) PGRE.search.invalidate();
       var input = document.getElementById('srch-input');
       var timer = null;
 
       renderEmpty();   // recents + a "building…" note while the index warms up
 
       ensureEngine().then(function () {
+        if (!input.isConnected) return;   // navigated away — this mount's DOM is gone
         if (!window.PGRE || !PGRE.search) {
           results().innerHTML = '<div class="card"><p class="muted">Search is ' +
             'unavailable — the index engine failed to load.</p></div>';
           return;
         }
         return PGRE.search.buildIndex().then(function (built) {
+          if (!input.isConnected) return;   // navigated away while the index built
           idx = built;
           run(input.value);   // re-render for whatever is in the box now
         });

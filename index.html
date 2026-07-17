@@ -17,11 +17,37 @@
     </div>
     <nav id="sidebar-nav"></nav>
     <div id="sidebar-footer">
+      <div id="focus-timer" class="focus-timer">
+        <div class="focus-row">
+          <button id="focus-toggle" class="focus-toggle" type="button"
+                  aria-pressed="false" aria-label="Start focus timer">
+            <span class="focus-dot" aria-hidden="true"></span>
+            <span id="focus-label" class="focus-label">Start focus</span>
+          </button>
+          <a id="focus-open" class="focus-open" href="#/focus"
+             aria-label="Open the focus page" title="Open the full focus page">
+            <span id="focus-time" class="focus-time" hidden>0:00</span>
+            <span class="focus-open-ico" aria-hidden="true">&#10530;</span>
+          </a>
+        </div>
+        <div class="focus-hint">Times reading &amp; derivations you do away from the app.</div>
+      </div>
       <button id="theme-toggle" class="btn btn-ghost btn-sm" type="button">Dark mode</button>
     </div>
   </aside>
 
   <main id="main">
+    <div id="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-arrows">
+          <button id="topbar-back" class="topbar-arrow" type="button"
+                  aria-label="Go back" title="Back">&#9664;</button>
+          <button id="topbar-fwd" class="topbar-arrow" type="button"
+                  aria-label="Go forward" title="Forward">&#9654;</button>
+        </div>
+        <nav id="breadcrumbs" class="breadcrumbs" aria-label="Breadcrumb"></nav>
+      </div>
+    </div>
     <div id="view"></div>
   </main>
 
@@ -50,6 +76,7 @@
   <script src="js/srs.js"></script>
   <script src="js/bank.js"></script>
   <script src="js/study-time.js"></script>
+  <script src="js/timer.js"></script>
   <script src="js/notes.js"></script>
   <script src="js/gamify.js"></script>
 
@@ -64,6 +91,8 @@
   <script src="js/view-notes.js"></script>
   <script src="js/view-mistakes.js"></script>
   <script src="js/view-formulas.js"></script>
+  <script src="js/view-focus.js"></script>        <!-- F5 focus page -->
+  <script src="js/view-study-time.js"></script>   <!-- dedicated study-time page -->
   <script src="js/view-achievements.js"></script>
   <script src="js/view-plan.js"></script>
   <script src="js/view-content.js"></script>

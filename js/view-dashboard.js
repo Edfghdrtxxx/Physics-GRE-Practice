@@ -9,7 +9,20 @@ PGRE.views = PGRE.views || {};
 PGRE.views.dashboard = (function () {
   var LETTERS = ['A', 'B', 'C', 'D', 'E'];
   var WEEK_TARGET_LO = 15, WEEK_TARGET_HI = 17;   // plan's 15–17 h/week budget
+
+  /* F4: where each daily challenge is actually completed, so its card offers a
+     one-click jump there (keyed by CHALLENGE_POOL id). Answering-based challenges
+     go to mixed practice; the plan/notes challenges go to their own views. */
+  var CHALLENGE_NAV = {
+    'c-answer8':  { href: '#/practice/all', label: 'Practice' },
+    'c-correct5': { href: '#/practice/all', label: 'Practice' },
+    'c-run4':     { href: '#/practice/all', label: 'Practice' },
+    'c-topics2':  { href: '#/practice/all', label: 'Practice' },
+    'c-plantask': { href: '#/plan',         label: 'Study plan' },
+    'c-notes':    { href: '#/topic/cm',     label: 'Open a topic' }
+  };
   var qotdStart = 0;                              // per-render answer timer
+  var qotdBoundDate = null;                       // today.date when the card was wired
 
   /* Local YYYY-MM-DD for an offset from today (same convention as store.today). */
   function dayKey(offset) {
@@ -64,7 +77,7 @@ PGRE.views.dashboard = (function () {
     var t = PGRE.topicById(q.topic);
     var html = '<div class="dash-qotd-meta">' +
         (t ? '<span class="chip">' + PGRE.ui.esc(t.name) + '</span>' : '') +
-        '<span class="chip chip-diff">' + '●'.repeat(q.difficulty) + '○'.repeat(3 - q.difficulty) + '</span>' +
+        '<span class="chip chip-diff">' + PGRE.ui.diffDots(q.difficulty) + '</span>' +
       '</div>' +
       '<div class="q-text">' + q.q + '</div>' +
       '<div class="choices dash-qotd-choices">';
@@ -112,6 +125,14 @@ PGRE.views.dashboard = (function () {
     var isCorrect = idx === q.answer;
     var xp = PGRE.gamify.recordAnswer(q, isCorrect, Date.now() - qotdStart,
                                       { picked: idx, mode: 'qotd' });
+    // recordAnswer's rollDay may have started a fresh day mid-interaction: the
+    // attempt is already durably logged, but yesterday's question must not
+    // claim the NEW day's QOTD slot — re-route so today's question appears.
+    if (PGRE.store.state.today.date !== qotdBoundDate) {
+      PGRE.toast('A new day started — your answer was logged, and today’s fresh question is ready.', 'info');
+      PGRE.route();
+      return;
+    }
     // schema: today.qotd gains `picked` (the chosen idx) alongside {qid, correct}
     // so a reload can redraw your wrong pick. store.migrate tolerates extra keys.
     s.today.qotd = { qid: q.id, correct: isCorrect, picked: idx };
@@ -136,6 +157,7 @@ PGRE.views.dashboard = (function () {
     PGRE.typesetMath(body);
     if (PGRE.store.state.today.qotd) return;         // already solved: nothing to bind
     qotdStart = Date.now();
+    qotdBoundDate = PGRE.store.state.today.date;
     body.querySelectorAll('.choice').forEach(function (b) {
       b.addEventListener('click', function () {
         answerQotd(q, parseInt(b.getAttribute('data-idx'), 10));
@@ -203,6 +225,7 @@ PGRE.views.dashboard = (function () {
       spark +
       '<p class="muted dash-study-note">Counts active time in this tab only — a heartbeat while you interact. ' +
       'Reading on paper or in another tab isn’t tracked.</p>' +
+      '<a class="btn btn-ghost btn-sm dash-study-more" href="#/study-time">Details →</a>' +
     '</div>';
   }
 
@@ -370,11 +393,18 @@ PGRE.views.dashboard = (function () {
     html += '<div class="two-col">';
     html += '<div class="card"><h2>Today’s challenges</h2><div class="challenge-list">';
     g.todaysChallenges().forEach(function (c) {
+      // F4: an un-finished challenge gets a button to where you complete it
+      var nav = CHALLENGE_NAV[c.id];
+      var jump = (!c.done && nav)
+        ? '<a class="btn btn-ghost btn-sm" href="' + nav.href + '">' + nav.label + ' →</a>'
+        : '';
       html += '<div class="challenge' + (c.done ? ' done' : '') + '">' +
         '<div class="challenge-top"><span>' + (c.done ? '<span class="check">✓</span> ' : '') + ui.esc(c.label) + '</span>' +
         '<span class="challenge-xp">+' + c.xp + ' XP</span></div>' +
         ui.meter(100 * c.cur / c.max, 'meter-thin') +
-        '<div class="challenge-prog">' + c.cur + ' / ' + c.max + '</div>' +
+        '<div class="challenge-foot">' +
+          '<span class="challenge-prog">' + c.cur + ' / ' + c.max + '</span>' + jump +
+        '</div>' +
       '</div>';
     });
     html += '</div></div>';
@@ -461,7 +491,7 @@ PGRE.views.dashboard = (function () {
       s.log.slice(0, 8).forEach(function (e) {
         var icon = { practice: '✎', achievement: '★', plan: '☑', level: '↑', challenge: '◎',
                    import: '⤓', mistake: '✗', review: '⟳' }[e.kind] || '·';
-        html += '<li><span class="act-icon act-' + e.kind + '">' + icon + '</span>' +
+        html += '<li><span class="act-icon act-' + ui.esc(e.kind) + '">' + icon + '</span>' +
           '<span class="act-text">' + ui.esc(e.text) + '</span>' +
           (e.xp ? '<span class="act-xp">+' + e.xp + ' XP</span>' : '') +
           '<span class="act-time">' + ui.timeAgo(e.ts) + '</span></li>';

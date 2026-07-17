@@ -61,7 +61,18 @@ PGRE.views.plan = (function () {
             '<span class="task-label">' + ui.esc(t.label) + '</span></label>' +
             '<span class="task-meta">' + t.hours + ' h · +' + t.xp + ' XP</span></li>';
         });
-        html += '</ul></details>';
+        html += '</ul>';
+        // F4: each week names the topics it covers — offer a one-click jump to
+        // those topic portals (the hub where you read up and drill them).
+        if (w.topics && w.topics.length) {
+          html += '<div class="week-links"><span class="week-links-label">Study:</span>';
+          w.topics.forEach(function (tid) {
+            var t = PGRE.topicById(tid);
+            if (t) html += '<a class="btn btn-ghost btn-sm" href="#/topic/' + t.id + '">' + ui.esc(t.short) + ' →</a>';
+          });
+          html += '</div>';
+        }
+        html += '</details>';
       });
       html += '</div>';
     });

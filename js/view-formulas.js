@@ -18,17 +18,20 @@ PGRE.views.formulas = (function () {
   var mode = 'study';
   // Study session: { queue, total, done, again, xp, flipped, history, peek,
   //   overlay: null|'peek'|'scaffold'|'checkpoint', steps: {id->learningStep},
-  //   undo: [snapshots], pressCount, pendingOverlays: [] }
+  //   undo: [snapshots], pressCount, pendingOverlays: [], settled }
   var study = null;
   var activeGame = null; // Match/Type/Quiz controller { onKey, stop } or null
   var browseTab = 'learned'; // Browse sub-tab: 'learned' | 'upcoming'
   var memStatsOpen = false;  // F10: Memory stats card starts collapsed each mount
   var ROUND_SIZE = 10;   // F11: grade presses per round (every press counts)
+  // ITEM 3: Mastered is a 5th action beside Again/Hard/Good/Easy — a fixed
+  // (exam-cap clamped) 20-day interval that graduates the card immediately.
   var GRADES = [
-    { key: 'again', label: 'Again', hint: '1' },
-    { key: 'hard',  label: 'Hard',  hint: '2' },
-    { key: 'good',  label: 'Good',  hint: '3' },
-    { key: 'easy',  label: 'Easy',  hint: '4' }
+    { key: 'again',    label: 'Again',    hint: '1' },
+    { key: 'hard',     label: 'Hard',     hint: '2' },
+    { key: 'good',     label: 'Good',     hint: '3' },
+    { key: 'easy',     label: 'Easy',     hint: '4' },
+    { key: 'mastered', label: 'Mastered', hint: '5' }
   ];
   // F8: generic reconstruction prompts — used by "Rebuild hints" (pre-flip) and
   // the post-Again interstitial. Deriving beats re-reading.
@@ -109,6 +112,7 @@ PGRE.views.formulas = (function () {
     text = (text || '').trim();
     if (!text) delete s.cardNotes[id];
     else s.cardNotes[id] = { text: text, updatedAt: new Date().toISOString() };
+    PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
     PGRE.store.save();
   }
   /* Rendered mnemonic block (plain text — ui.esc, never typeset), shown under the
@@ -121,9 +125,10 @@ PGRE.views.formulas = (function () {
   }
 
   /* js/flashmodes.js is not linked from the (infra-owned) index.html, so it is
-     loaded on first entry with a one-shot dynamic <script> — the game logic
-     stays in its own file without editing the shell. Resolves even on failure
-     so Study mode keeps working. */
+     loaded on first entry with a dynamic <script> — the game logic stays in
+     its own file without editing the shell. Resolves even on failure so Study
+     mode keeps working; a failed load clears the cached promise so the game
+     tabs' Retry (and the next mount) can try again. */
   var flashLoad = null;
   function ensureFlashmodes() {
     if (PGRE.flashmodes) return Promise.resolve();
@@ -132,7 +137,7 @@ PGRE.views.formulas = (function () {
       var s = document.createElement('script');
       s.src = 'js/flashmodes.js';
       s.onload = function () { resolve(); };
-      s.onerror = function () { resolve(); };
+      s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
     });
     return flashLoad;
@@ -225,6 +230,10 @@ PGRE.views.formulas = (function () {
     sheet.innerHTML = html;
     view.appendChild(sheet);
     PGRE.typesetMath(sheet);
+    flagWideCards();
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(flagWideCards); // re-measure with real metrics
+    }
   }
 
   function printSheet() {
@@ -237,9 +246,42 @@ PGRE.views.formulas = (function () {
     document.body.classList.remove('pgre-printing');
   });
 
+  /* Flag cards too wide for print.css's 2-column grid so they span both
+     columns (.ps-card.wide) instead of clipping. The sheet can't be measured
+     in place: it is display:none on screen, and Chromium fires beforeprint
+     BEFORE switching to print-media layout, so every width reads 0 there.
+     Instead `.measuring` (css/style.css) lays the sheet out offscreen at one
+     print column's card metrics. An overlong equation shows up as overflow of
+     its .katex-display box — style.css gives those overflow-x:auto, which
+     keeps the card's own scrollWidth put — so the boxes are checked directly;
+     the card-level check still catches wide inline math. Runs at build time
+     (headless Page.printToPDF fires no print events) and again on beforeprint
+     so real prints re-measure after webfonts settle. */
+  function flagWideCards() {
+    var sheet = document.getElementById('formulas-print');
+    if (!sheet) return;
+    sheet.classList.add('measuring');
+    var cards = sheet.querySelectorAll('.ps-card'), flags = [];
+    cards.forEach(function (card) {
+      var over = card.scrollWidth > card.clientWidth + 1;
+      if (!over) {
+        var maths = card.querySelectorAll('.katex-display');
+        for (var i = 0; i < maths.length; i++) {
+          if (maths[i].scrollWidth > maths[i].clientWidth + 1) { over = true; break; }
+        }
+      }
+      flags.push(over);
+    });
+    cards.forEach(function (card, i) { card.classList.toggle('wide', flags[i]); });
+    sheet.classList.remove('measuring');
+  }
+
+  window.addEventListener('beforeprint', flagWideCards);
+
   function switchMode(m) {
     if (m === mode) return;
     teardownGame();
+    settleStudy();
     study = null;
     mode = m;
     renderShell();
@@ -253,6 +295,7 @@ PGRE.views.formulas = (function () {
   /* ——— Study mode home — progressive daily batch, rendered into body ——— */
   function renderHome() {
     study = null;
+    if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: back to base (Home ▸ Formula recall)
     var ui = PGRE.ui, srs = PGRE.srs;
     var fresh = srs.newInDeck(deck);
     var reviewedToday = 0;
@@ -356,7 +399,14 @@ PGRE.views.formulas = (function () {
     }
     html += '<p class="muted comp-line">' + comp + '</p>';
 
-    if (M > 0) {
+    // ITEM 2: a Study session left mid-flight earlier today (any source, leech
+    // drills included) offers Resume as the primary action; the fresh "Study N
+    // remaining" path only governs when no saved session exists.
+    var resumeCards = rehydrateSavedStudy();
+    if (resumeCards) {
+      html += '<div class="btn-row"><button class="btn btn-primary" id="resume-btn">' +
+        'Resume session — ' + resumeCards.length + ' left</button>';
+    } else if (M > 0) {
       html += '<div class="btn-row"><button class="btn btn-primary" id="study-btn">Study ' +
         M + ' remaining</button>';
     } else {
@@ -394,6 +444,14 @@ PGRE.views.formulas = (function () {
     var sb = document.getElementById('study-btn');
     if (sb) sb.addEventListener('click', function () {
       startStudy(PGRE.srs.formulaDayRemaining(deck));
+    });
+    // ITEM 2: resume the persisted session (re-rehydrate at click time in case
+    // the deck/session shifted; fall back to a home refresh if it vanished).
+    var rsb = document.getElementById('resume-btn');
+    if (rsb) rsb.addEventListener('click', function () {
+      var cards = rehydrateSavedStudy();
+      if (cards) resumeStudy(cards);
+      else renderHome();
     });
     wireStepper();
     var ed = document.getElementById('exam-date');
@@ -623,6 +681,7 @@ PGRE.views.formulas = (function () {
           o.classList.toggle('active', o.getAttribute('data-btab') === tab);
         });
         box.innerHTML = browseBodyHTML();
+        PGRE.typesetMath(box);   // deck names/tags can carry $…$ — typeset the swapped-in list
         wirePeek(box);
       });
     });
@@ -704,6 +763,7 @@ PGRE.views.formulas = (function () {
 
   /* ——— New-card picker: topic-grouped checklist, capped at the open slots ——— */
   function renderPicker() {
+    if (PGRE.nav) PGRE.nav.setTrail(['Choose new cards']);   // BUNDLE G
     var ui = PGRE.ui, srs = PGRE.srs;
     var batch = srs.formulaDay(deck);
     var T = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
@@ -717,6 +777,7 @@ PGRE.views.formulas = (function () {
       '<div class="picker-bar"><span class="picker-count" id="picker-count"></span>' +
       '<div class="btn-row picker-actions">' +
       '<button class="btn btn-primary" id="picker-save">Save picks</button>' +
+      '<button class="btn btn-ghost" id="picker-clear">Clear all</button>' +
       '<button class="btn btn-ghost" id="picker-cancel">Cancel</button></div></div>';
 
     function rowsFor(cards) {
@@ -800,6 +861,11 @@ PGRE.views.formulas = (function () {
     });
     refresh();
 
+    document.getElementById('picker-clear').addEventListener('click', function () {
+      selectable().forEach(function (b) { b.checked = false; });
+      body().querySelectorAll('.picker-selall-box').forEach(function (sa) { sa.checked = false; });
+      refresh();
+    });
     document.getElementById('picker-cancel').addEventListener('click', renderHome);
     document.getElementById('picker-save').addEventListener('click', function () {
       var ids = [];
@@ -811,10 +877,94 @@ PGRE.views.formulas = (function () {
 
   function startStudy(cards) {
     if (!cards.length) return;
+    if (PGRE.nav) PGRE.nav.setTrail(['Study']);   // BUNDLE G: session is live
     study = { queue: interleaveByTopic(cards), total: cards.length, done: 0,
-              again: 0, xp: 0, flipped: false, history: [], peek: null,
+              doneBase: 0, again: 0, againBase: 0, xp: 0, flipped: false,
+              history: [], peek: null,
               overlay: null, steps: {}, undo: [], pressCount: 0,
-              pendingOverlays: [] };
+              pendingOverlays: [], settled: false };
+    persistStudy();          // ITEM 2: snapshot the fresh order so a resume matches
+    PGRE.store.save();
+    renderCard();
+  }
+
+  /* ——— ITEM 2: in-session persistence ———
+     Mirror the live session into state.formulaStudy so an exit/re-enter resumes
+     it instead of restarting. Card objects are stored as ids only (rehydrated
+     from the deck on resume); counters, learning steps and history ride along.
+     The undo stack is deliberately NOT persisted — it stays session-only.
+     persistStudy() only stages state; the caller's existing store.save() writes
+     it, so there is no extra save churn. leech-drill sessions persist too (they
+     go through startStudy like every other session — the resume simply restores
+     whatever queue was mid-flight). */
+  function persistStudy() {
+    if (!study) return;
+    var stepsCopy = {};
+    for (var k in study.steps) stepsCopy[k] = study.steps[k];
+    PGRE.store.state.formulaStudy = {
+      date: PGRE.srs.today(),
+      queueIds: study.queue.map(function (c) { return c.id; }),
+      done: study.done,
+      again: study.again,
+      steps: stepsCopy,
+      pressCount: study.pressCount,
+      history: study.history.map(function (h) { return { id: h.c.id, grade: h.grade }; })
+    };
+  }
+
+  /* Rebuild the card list for a session saved earlier TODAY, or null. Drops ids
+     that have left the deck; drops (and clears) the whole saved session when it
+     is from another day or rehydrates to an empty queue. Never touches the
+     schedule — it only reads the deck. */
+  function rehydrateSavedStudy() {
+    var saved = PGRE.store.state.formulaStudy;
+    // Array.isArray (not a truthy check): a corrupt/hand-edited backup may carry a
+    // same-day formulaStudy whose queueIds is a non-array (e.g. a string) — that has
+    // a .length so a truthy guard would pass, then .forEach below throws and aborts
+    // renderHome. Requiring a real array drops such a session as unresumable.
+    if (!saved || saved.date !== PGRE.srs.today() ||
+        !Array.isArray(saved.queueIds) || !saved.queueIds.length) {
+      if (saved) { PGRE.store.state.formulaStudy = null; PGRE.store.save(); }
+      return null;
+    }
+    var cards = [];
+    saved.queueIds.forEach(function (id) {
+      var c = deckById(id);
+      if (c) cards.push(c);
+    });
+    if (!cards.length) {
+      PGRE.store.state.formulaStudy = null;
+      PGRE.store.save();
+      return null;
+    }
+    return cards;
+  }
+
+  /* Resume the saved session: restore the exact queue order, learning steps,
+     counters and history (card objects rehydrated from the deck by id). Per the
+     brief, XP restarts at 0 for the resumed segment — the earlier segment's XP
+     already settled on exit — and settled resets to false so this segment settles
+     too. The undo stack starts empty (it never crossed the exit). */
+  function resumeStudy(cards) {
+    if (PGRE.nav) PGRE.nav.setTrail(['Study']);   // BUNDLE G: resumed session is live
+    var saved = PGRE.store.state.formulaStudy || {};
+    var history = [];
+    // Guard against a corrupt backup where history/steps are the wrong type: a
+    // truthy non-array history would throw on .forEach, and a non-object steps
+    // would enumerate garbage. Both fall back to empty rather than aborting.
+    (Array.isArray(saved.history) ? saved.history : []).forEach(function (h) {
+      var c = deckById(h.id);
+      if (c) history.push({ c: c, grade: h.grade });
+    });
+    var stepsCopy = {};
+    var savedSteps = (saved.steps && typeof saved.steps === 'object') ? saved.steps : {};
+    for (var k in savedSteps) stepsCopy[k] = savedSteps[k];
+    study = { queue: cards, total: (saved.done || 0) + cards.length,
+              done: saved.done || 0, doneBase: saved.done || 0,
+              again: saved.again || 0, againBase: saved.again || 0, xp: 0,
+              flipped: false, history: history, peek: null, overlay: null,
+              steps: stepsCopy, undo: [], pressCount: saved.pressCount || 0,
+              pendingOverlays: [], settled: false };
     renderCard();
   }
 
@@ -965,8 +1115,12 @@ PGRE.views.formulas = (function () {
       // F7: a stateless card at step 0 requeues in-session on Hard/Good (a learning
       // step, not a scheduled interval) — show "soon"; Easy commits its real
       // interval, and a step-1 card shows real committed intervals for all grades.
-      var lbl = (stateless && step === 0 && (g.key === 'hard' || g.key === 'good'))
-        ? 'soon' : PGRE.srs.ivlLabel(ivls[g.key]);
+      // ITEM 3: Mastered always commits its fixed (capped) interval — nextIntervals
+      // has no 'mastered' entry, so read it from srs.masteredInterval directly.
+      var lbl;
+      if (g.key === 'mastered') lbl = PGRE.srs.ivlLabel(PGRE.srs.masteredInterval(st));
+      else if (stateless && step === 0 && (g.key === 'hard' || g.key === 'good')) lbl = 'soon';
+      else lbl = PGRE.srs.ivlLabel(ivls[g.key]);
       html += '<button class="btn grade-btn grade-' + g.key + '" data-grade="' + g.key + '">' +
         g.label + '<span class="grade-ivl">' + lbl + '</span>' +
         '<span class="key-hint">' + g.hint + '</span></button>';
@@ -993,8 +1147,8 @@ PGRE.views.formulas = (function () {
     var recycled = false;                       // an Again press → post-Again scaffold
 
     if (stateless) {
-      if (g === 'easy') {                       // graduate immediately
-        PGRE.srs.gradeCard(id, 'easy');
+      if (g === 'easy' || g === 'mastered') {   // graduate immediately (ITEM 3)
+        PGRE.srs.gradeCard(id, g);
         delete study.steps[id];
         study.queue.shift();
         study.done++;
@@ -1022,6 +1176,7 @@ PGRE.views.formulas = (function () {
     PGRE.store.touchDay();          // reviewing formulas counts as a study day
     study.xp += 2;                  // every press rewards effort (unchanged from before)
     study.history.push({ c: c, grade: g }); // every press (a card can recur)
+    persistStudy();                 // ITEM 2: stage the resume snapshot into the same save
     PGRE.store.save();
 
     // F8 + F11: queue overlays. When the round-closing press is an Again, the
@@ -1052,6 +1207,7 @@ PGRE.views.formulas = (function () {
     for (var k in study.steps) stepsCopy[k] = study.steps[k];
     study.undo.push({
       id: id,
+      day: PGRE.srs.today(),   // grade-time day, so an undo across midnight still pops its row
       prevCardState: prev ? JSON.parse(JSON.stringify(prev)) : null,
       queueIds: study.queue.slice(),          // shallow copy of the queue (card refs)
       done: study.done, xp: study.xp, again: study.again,
@@ -1072,7 +1228,7 @@ PGRE.views.formulas = (function () {
     var revs = PGRE.store.state.cardReviews;
     if (revs && revs.length) {
       var last = revs[revs.length - 1];
-      if (last && last.id === e.id && last.d === PGRE.srs.today()) revs.pop();
+      if (last && last.id === e.id && last.d === e.day) revs.pop();
     }
     study.queue = e.queueIds.slice();
     study.done = e.done;
@@ -1084,6 +1240,7 @@ PGRE.views.formulas = (function () {
     study.pressCount = e.pressCount;
     study.overlay = null;
     study.pendingOverlays = [];
+    persistStudy();                 // ITEM 2: keep the resume snapshot in step with the undo
     PGRE.store.save();
     renderCard();
   }
@@ -1119,10 +1276,15 @@ PGRE.views.formulas = (function () {
   /* F11 round checkpoint: pause after ROUND_SIZE presses with cards still queued. */
   function renderCheckpoint() {
     study.overlay = 'checkpoint';
+    // study.done is cumulative across a resume (doneBase carries the earlier
+    // segment's cards forward) but study.xp resets to 0 on resume, so pairing
+    // them understates the session's XP. Use the session-wide pressCount * 2 —
+    // the same honest basis renderStudySummary uses — beside the card count.
+    var totalXp = study.pressCount * 2;
     body().innerHTML = '<div class="card practice-card checkpoint-card">' +
       '<h2>Round complete</h2>' +
       '<p class="muted">' + study.done + ' card' + (study.done === 1 ? '' : 's') +
-        ' graded · ' + study.queue.length + ' left in queue · +' + study.xp + ' XP so far.</p>' +
+        ' graded · ' + study.queue.length + ' left in queue · +' + totalXp + ' XP so far.</p>' +
       '<div class="btn-row">' +
       '<button class="btn btn-primary" id="cp-keep">Keep going <span class="key-hint">space</span></button>' +
       '<button class="btn btn-ghost" id="cp-finish">Finish for now</button></div></div>';
@@ -1134,16 +1296,44 @@ PGRE.views.formulas = (function () {
     });
   }
 
-  function renderStudySummary() {
+  /* Settle the session's XP + activity-log line exactly once. The summary
+     path calls it on a natural finish; switchMode / hashchange / mount call
+     it when a round is abandoned after grades were already committed. */
+  function settleStudy() {
+    if (!study || study.settled || study.xp === 0) return;
+    study.settled = true;
     PGRE.gamify.addXP(study.xp, '· formula review', true);
-    PGRE.store.log('review', 'Formula review: ' + study.done + ' card' +
-      (study.done === 1 ? '' : 's') + (study.again ? ' (' + study.again + ' repeated)' : ''), study.xp);
+    // Log only the cards graded in THIS segment. done is cumulative across a
+    // resume (resumeStudy carries saved.done forward), so subtract the segment's
+    // starting count — otherwise a resumed segment re-counts the earlier segment's
+    // cards in the recent-activity feed (which already logged them on exit).
+    var segDone = study.done - (study.doneBase || 0);
+    var segAgain = study.again - (study.againBase || 0);
+    PGRE.store.log('review', 'Formula review: ' + segDone + ' card' +
+      (segDone === 1 ? '' : 's') + (segAgain ? ' (' + segAgain + ' repeated)' : ''), study.xp);
+    if (study.done >= 20 && study.again === 0) PGRE.store.state.flags.cleanRecall = true;
     PGRE.gamify.checkAchievements();
     PGRE.store.save();
+  }
+
+  function renderStudySummary() {
+    if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: session over — back to base
+    settleStudy();
+    // ITEM 2: the session is finished (queue drained or "Finish for now") — drop
+    // the resume snapshot so the home screen offers a fresh batch, not a resume.
+    PGRE.store.state.formulaStudy = null;
+    PGRE.store.save();
+    // study.done/again are cumulative across the whole logical session, but study.xp
+    // resets to 0 on a resume (each segment settles its own XP on exit). Pairing the
+    // cumulative card count with the segment-only XP reads as if the whole session
+    // earned only the resumed segment's XP. Every press awards a flat +2 XP and
+    // pressCount carries across resumes, so pressCount * 2 is the session-wide XP —
+    // the honest figure to sit beside the cumulative card count.
+    var totalXp = study.pressCount * 2;
     body().innerHTML = '<div class="card practice-card">' +
       '<h1>Review complete</h1>' +
       '<div class="summary-score">' + study.done + ' card' + (study.done === 1 ? '' : 's') +
-        '<span class="summary-pct">+' + study.xp + ' XP</span></div>' +
+        '<span class="summary-pct">+' + totalXp + ' XP</span></div>' +
       '<p class="muted">' + (study.again ? study.again + ' came back for another pass this session. ' : '') +
       'Each card returns on the schedule your grade set.</p>' +
       '<div class="btn-row"><button class="btn btn-primary" id="back-deck">Back to the deck</button>' +
@@ -1168,8 +1358,19 @@ PGRE.views.formulas = (function () {
   };
 
   function renderGameIntro(kind) {
+    if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: game tabs sit at base
     teardownGame();
-    if (!PGRE.flashmodes) { body().innerHTML = '<div class="card"><p class="muted">Loading…</p></div>'; return; }
+    if (!PGRE.flashmodes) {
+      // load failed earlier (mount already tried): say so and offer a retry
+      body().innerHTML = '<div class="card"><p class="muted">Game modes are unavailable — ' +
+        'flashmodes failed to load. Study mode still works.</p>' +
+        '<div class="btn-row"><button class="btn btn-ghost" id="flash-retry">Retry</button></div></div>';
+      var rt = document.getElementById('flash-retry');
+      if (rt) rt.addEventListener('click', function () {
+        ensureFlashmodes().then(function () { renderGameIntro(kind); });
+      });
+      return;
+    }
     var ui = PGRE.ui, m = INTRO[kind];
     var remaining = PGRE.srs.formulaDayRemaining(deck).length;
     var metNote = 'Study today’s formulas first — games drill cards you’ve met.';
@@ -1266,6 +1467,7 @@ PGRE.views.formulas = (function () {
       // live card underneath).
       var ov = study.overlay;
       if (ov === 'peek') {
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
         if (e.key === 'ArrowLeft') { e.preventDefault(); peekStep(-1); }
         else if (e.key === 'ArrowRight') {
           e.preventDefault();
@@ -1275,15 +1477,20 @@ PGRE.views.formulas = (function () {
         return;
       }
       if (ov === 'scaffold' || ov === 'checkpoint') {   // space/Enter = continue
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
         if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); runNextOverlay(); }
         return;
       }
-      // ov === null: normal flip/grade flow + F1a undo
+      // ov === null: normal flip/grade flow + F1a undo. ⌘Z is the only chord
+      // that acts — any other held modifier (⌘1…4 tab switching etc.) is inert.
       if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
         e.preventDefault(); undoGrade();
+      } else if (e.metaKey || e.ctrlKey || e.altKey) {
+        return;
       } else if ((e.key === ' ' || e.key === 'Enter') && !study.flipped) {
         e.preventDefault(); flip();
-      } else if (study.flipped && e.key >= '1' && e.key <= '4') {
+      } else if (study.flipped && e.key >= '1' && e.key <= '5') {
+        // ITEM 3: key 5 = Mastered (GRADES now has five entries).
         e.preventDefault(); grade(GRADES[parseInt(e.key, 10) - 1].key);
       } else if (e.key === 'ArrowLeft' && study.history.length) {
         e.preventDefault(); openPeek();
@@ -1294,14 +1501,43 @@ PGRE.views.formulas = (function () {
     if (activeGame && activeGame.onKey) activeGame.onKey(e);
   });
 
-  /* Leaving the portal mid-game stops any timers/intervals promptly. */
+  /* Leaving the portal mid-game stops any timers/intervals promptly (and
+     settles an abandoned Study round's earned XP). */
   window.addEventListener('hashchange', function () {
-    if (!/^#\/formulas/.test(location.hash)) { teardownGame(); study = null; }
+    if (!/^#\/formulas/.test(location.hash)) { teardownGame(); settleStudy(); study = null; }
+  });
+
+  /* A tab/window close fires neither hashchange nor mount, so a mid-session
+     segment's earned XP would otherwise never reach the total — and the
+     summary's session-wide pressCount * 2 figure would then overstate what was
+     actually awarded once a later segment resumes. Settle on pagehide to close
+     that gap; settleStudy is a no-op once a segment is settled or has no XP. */
+  window.addEventListener('pagehide', function () { settleStudy(); });
+
+  /* bfcache twist: a same-tab cross-document Back/Forward (or a mobile
+     freeze/restore) fires pagehide — settling the live segment (settled=true,
+     xp awarded) — then restores THIS document from memory with the graded card
+     DOM still interactive. settleStudy can't null study here (the preserved grade
+     buttons dereference it), so post-restore grades would keep accumulating
+     pressCount/xp that a later settleStudy short-circuits away on the settled
+     flag — yet renderCheckpoint/renderStudySummary read pressCount * 2, re-
+     overstating the awarded total. Treat the restore like a resume: re-open the
+     already-settled segment exactly as resumeStudy does (fresh xp, rebased
+     done/again bases, pressCount carried forward) so post-restore grades settle
+     on their own and pressCount * 2 stays honest. The pagehide award stays
+     awarded; only the new segment's XP is added on the next settle. */
+  window.addEventListener('pageshow', function (e) {
+    if (!e.persisted || !study || !study.settled) return;
+    study.settled = false;
+    study.xp = 0;
+    study.doneBase = study.done;
+    study.againBase = study.again;
   });
 
   return {
     render: function () { return '<div id="formulas-root"></div>'; },
     mount: function () {
+      settleStudy();
       study = null;
       teardownGame();
       mode = 'study';

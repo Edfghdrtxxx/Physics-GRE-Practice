@@ -3,7 +3,8 @@ window.PGRE = window.PGRE || {};
 PGRE.views = PGRE.views || {};
 
 PGRE.views.achievements = (function () {
-  var filter = 'all';
+  var filter = 'all';         // category dimension
+  var statusFilter = 'all';   // earned dimension: all / unlocked / locked
 
   function card(a) {
     var s = PGRE.store.state, ui = PGRE.ui;
@@ -52,9 +53,25 @@ PGRE.views.achievements = (function () {
     });
     html += '</div>';
 
+    // Earned filter — composes with the category filter above. Counts reflect
+    // whichever category is currently selected so they match what's shown.
+    var nUnlocked = 0, nLocked = 0;
+    PGRE.ACHIEVEMENTS.forEach(function (a) {
+      if (filter !== 'all' && a.cat !== filter) return;
+      if (s.achievements[a.id]) nUnlocked++; else nLocked++;
+    });
+    html += '<div class="filter-row" id="ach-status-filters">' +
+      '<button class="filter-btn' + (statusFilter === 'all' ? ' active' : '') + '" data-s="all">All</button>' +
+      '<button class="filter-btn' + (statusFilter === 'unlocked' ? ' active' : '') + '" data-s="unlocked">Unlocked (' + nUnlocked + ')</button>' +
+      '<button class="filter-btn' + (statusFilter === 'locked' ? ' active' : '') + '" data-s="locked">Locked (' + nLocked + ')</button>' +
+      '</div>';
+
     html += '<div class="ach-grid">';
     PGRE.ACHIEVEMENTS.forEach(function (a) {
       if (filter !== 'all' && a.cat !== filter) return;
+      var unlocked = !!s.achievements[a.id];
+      if (statusFilter === 'unlocked' && !unlocked) return;
+      if (statusFilter === 'locked' && unlocked) return;
       html += card(a);
     });
     html += '</div>';
@@ -62,12 +79,21 @@ PGRE.views.achievements = (function () {
   }
 
   function wire() {
+    function rerender() {
+      var root = document.getElementById('ach-root');
+      root.innerHTML = body();
+      wire();
+    }
     document.querySelectorAll('#ach-filters .filter-btn').forEach(function (b) {
       b.addEventListener('click', function () {
         filter = b.getAttribute('data-f');
-        var root = document.getElementById('ach-root');
-        root.innerHTML = body();
-        wire();
+        rerender();
+      });
+    });
+    document.querySelectorAll('#ach-status-filters .filter-btn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        statusFilter = b.getAttribute('data-s');
+        rerender();
       });
     });
   }

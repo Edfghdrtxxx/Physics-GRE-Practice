@@ -295,6 +295,16 @@ PGRE.flashmodes = (function () {
       return ta < tb ? 1 : ta > tb ? -1 : 0;
     });
     var pool = shuffle(remaining).concat(studied);
+    // two equation numbers can share one formula text — identical tiles would
+    // force a blind 50/50 pick, so keep only the first card per formula
+    var seen = {};
+    pool = pool.filter(function (c) {
+      var k = normText(stripLegend(c.back));
+      if (!k) return true;
+      if (seen[k]) return false;
+      seen[k] = 1;
+      return true;
+    });
     return pool.slice(0, Math.min(MAX_MATCH_PAIRS, pool.length));
   }
 
@@ -441,9 +451,9 @@ PGRE.flashmodes = (function () {
   function startType(ctx) {
     var el = ctx.el;
     // F1b: st.undo holds the LAST committed grade (one level, cleared at round end):
-    //   { id, prevState (deep copy or null), prevDone, prevAgain }.
+    //   { id, day, prevState (deep copy or null), prevDone, prevAgain }.
     var st = { queue: ctx.cards || [], i: 0, done: 0, again: 0, submitted: false,
-               revealAt: 0, defaultGrade: 'good', undo: null };
+               revealAt: 0, defaultGrade: 'good', undo: null, settled: false };
 
     function renderPrompt() {
       var c = st.queue[st.i];
@@ -467,7 +477,8 @@ PGRE.flashmodes = (function () {
       var inp = document.getElementById('flash-input');
       inp.focus();
       inp.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); submit(); }
+        // ignore OS auto-repeat from a held Enter — it must not chain-submit
+        if (e.key === 'Enter') { e.preventDefault(); if (!e.repeat) submit(); }
       });
       document.getElementById('flash-submit').addEventListener('click', submit);
       document.getElementById('flash-reveal-btn').addEventListener('click', submit);
@@ -532,7 +543,8 @@ PGRE.flashmodes = (function () {
       if (!st.submitted) return;
       var c = st.queue[st.i], id = c.id;
       var prev = PGRE.store.state.cards[id];
-      st.undo = { id: id, prevState: prev ? JSON.parse(JSON.stringify(prev)) : null,
+      st.undo = { id: id, day: PGRE.srs.today(),
+                  prevState: prev ? JSON.parse(JSON.stringify(prev)) : null,
                   prevDone: st.done, prevAgain: st.again };
       reviewCard(id, g);
       st.done++;
@@ -554,7 +566,7 @@ PGRE.flashmodes = (function () {
       var revs = PGRE.store.state.cardReviews;
       if (revs && revs.length) {
         var last = revs[revs.length - 1];
-        if (last && last.id === u.id && last.d === PGRE.srs.today()) revs.pop();
+        if (last && last.id === u.id && last.d === u.day) revs.pop();
       }
       st.done = u.prevDone;
       st.again = u.prevAgain;
@@ -564,15 +576,25 @@ PGRE.flashmodes = (function () {
       if (link && link.parentNode) link.parentNode.removeChild(link);
     }
 
+    /* Credit +2 XP per graded card exactly once — finish() settles a full
+       round, stop() a round abandoned mid-way via a mode switch or a route
+       change (0 cards graded records nothing). */
+    function settle() {
+      if (st.settled || st.done === 0) return;
+      st.settled = true;
+      awardReviewXP(2 * st.done, 'Type-to-recall: ' + st.done + ' card' + (st.done === 1 ? '' : 's'));
+    }
+
     function finish() {
-      var xp = 2 * st.done;
-      awardReviewXP(xp, 'Type-to-recall: ' + st.done + ' card' + (st.done === 1 ? '' : 's'));
-      reviewSummary(el, 'Type-to-recall complete', st.done, st.again, xp, ctx);
+      settle();
+      reviewSummary(el, 'Type-to-recall complete', st.done, st.again, 2 * st.done, ctx);
     }
 
     renderPrompt();
     return {
       onKey: function (e) {
+        if (e.metaKey || e.ctrlKey || e.altKey) return; // browser chords never grade
+        if (e.repeat) return;                // a held key confirms at most once
         if (st.i >= st.queue.length) return; // round over: the summary card is showing
         if (st.submitted) {
           // swallow a key that bounced in within 300 ms of the reveal (e.g. an
@@ -590,7 +612,7 @@ PGRE.flashmodes = (function () {
           e.preventDefault(); submit();
         }
       },
-      stop: function () {}
+      stop: function () { settle(); }
     };
   }
 
@@ -600,7 +622,8 @@ PGRE.flashmodes = (function () {
     var deck = ctx.deck || ctx.cards || [];
     // F1b: st.undo holds the LAST committed grade (one level, cleared at round end).
     var st = { queue: ctx.cards || [], i: 0, correct: 0, done: 0,
-               streak: 0, best: 0, answered: false, built: null, undo: null };
+               streak: 0, best: 0, answered: false, built: null, undo: null,
+               settled: false };
 
     /* F6: options are legend-stripped for display; grading stays index-based.
        Correct formula + up to 3 near-miss perturbations of it; if fewer than 3
@@ -664,7 +687,8 @@ PGRE.flashmodes = (function () {
       st.answered = true;
       var c = st.queue[st.i], correctIdx = st.built.correctIdx;
       var prev = PGRE.store.state.cards[c.id];
-      st.undo = { id: c.id, prevState: prev ? JSON.parse(JSON.stringify(prev)) : null,
+      st.undo = { id: c.id, day: PGRE.srs.today(),
+                  prevState: prev ? JSON.parse(JSON.stringify(prev)) : null,
                   prevCorrect: st.correct, prevDone: st.done,
                   prevStreak: st.streak, prevBest: st.best };
       var isCorrect = idx === correctIdx;
@@ -709,7 +733,7 @@ PGRE.flashmodes = (function () {
       var revs = PGRE.store.state.cardReviews;
       if (revs && revs.length) {
         var last = revs[revs.length - 1];
-        if (last && last.id === u.id && last.d === PGRE.srs.today()) revs.pop();
+        if (last && last.id === u.id && last.d === u.day) revs.pop();
       }
       st.correct = u.prevCorrect;
       st.done = u.prevDone;
@@ -728,9 +752,17 @@ PGRE.flashmodes = (function () {
       else finish();
     }
 
+    /* Credit +2 XP per answer exactly once — finish() settles a full round,
+       stop() a round abandoned mid-way (0 answers records nothing). */
+    function settle() {
+      if (st.settled || st.done === 0) return;
+      st.settled = true;
+      awardReviewXP(2 * st.done, 'Auto-quiz: ' + st.correct + '/' + st.done + ' correct');
+    }
+
     function finish() {
       var total = st.queue.length, xp = 2 * st.done;
-      awardReviewXP(xp, 'Auto-quiz: ' + st.correct + '/' + total + ' correct');
+      settle();
       var pct = total ? Math.round(100 * st.correct / total) : 0;
       el.innerHTML = '<div class="card"><h2>Quiz complete</h2>' +
         '<div class="summary-score">' + st.correct + ' / ' + total +
@@ -746,6 +778,7 @@ PGRE.flashmodes = (function () {
     render();
     return {
       onKey: function (e) {
+        if (e.metaKey || e.ctrlKey || e.altKey) return; // browser chords never answer
         if (st.i >= st.queue.length) return; // round over: the completion card is showing
         if (!st.answered) {
           var n = parseInt(e.key, 10);
@@ -754,7 +787,7 @@ PGRE.flashmodes = (function () {
           e.preventDefault(); next();
         }
       },
-      stop: function () {}
+      stop: function () { settle(); }
     };
   }
 
@@ -967,7 +1000,7 @@ PGRE.flashmodes = (function () {
     var deck = ctx.deck || ctx.cards || [];
     var harvest = clozeHarvest(deck);
     var st = { queue: (ctx.cards || []).slice(), i: 0, correct: 0, done: 0,
-               answered: false, spec: null, timer: null };
+               answered: false, spec: null, timer: null, settled: false };
 
     function clearTimer() { if (st.timer) { clearTimeout(st.timer); st.timer = null; } }
 
@@ -1035,10 +1068,18 @@ PGRE.flashmodes = (function () {
       if (st.i < st.queue.length) render(); else finish();
     }
 
+    /* Credit +2 XP per answer exactly once — finish() settles a full round,
+       stop() a round abandoned mid-way (0 answers records nothing). */
+    function settle() {
+      if (st.settled || st.done === 0) return;
+      st.settled = true;
+      awardReviewXP(2 * st.done, 'Cloze: ' + st.correct + '/' + st.done + ' correct');
+    }
+
     function finish() {
       clearTimer();
       var total = st.done, xp = 2 * st.done;
-      awardReviewXP(xp, 'Cloze: ' + st.correct + '/' + total + ' correct');
+      settle();
       var pct = total ? Math.round(100 * st.correct / total) : 0;
       el.innerHTML = '<div class="card"><h2>Cloze complete</h2>' +
         '<div class="summary-score">' + st.correct + ' / ' + total +
@@ -1053,11 +1094,12 @@ PGRE.flashmodes = (function () {
     render();
     return {
       onKey: function (e) {
+        if (e.metaKey || e.ctrlKey || e.altKey) return; // browser chords never answer
         if (st.i >= st.queue.length || st.answered) return;
         var n = parseInt(e.key, 10);
         if (n >= 1 && n <= st.spec.opts.length) { e.preventDefault(); pick(n - 1); }
       },
-      stop: clearTimer
+      stop: function () { clearTimer(); settle(); }
     };
   }
 

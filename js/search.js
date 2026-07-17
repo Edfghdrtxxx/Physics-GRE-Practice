@@ -1,16 +1,16 @@
 /* Search engine — one box across the whole studio (feature #9, #/search).
    Builds a lazy, in-memory index over every corner of the app: questions
    (incl. sample-exam ones), the mistake book, formula cards, imported book
-   sections and personal notes. The index is built on first use and cached for
-   the life of the page load — nothing is persisted, so the banks and IndexedDB
-   are re-read fresh on every reload. All searchable text is run through plain()
+   sections and personal notes. The index is built on first use and cached
+   until invalidate() — nothing is persisted, so the banks and IndexedDB are
+   re-read fresh on every rebuild. All searchable text is run through plain()
    first, which strips HTML tags and reduces LaTeX to its bare letters, so
    `$\frac{v^2}{R}$` is findable as "v 2 R". The view (js/view-search.js) owns
    the input, grouping and rendering; this module owns the index and matching. */
 window.PGRE = window.PGRE || {};
 
 PGRE.search = (function () {
-  var index = null;     // cached entries[] once built (rebuilt only on reload)
+  var index = null;     // cached entries[] once built (until invalidate())
   var building = null;  // in-flight build promise, so concurrent calls share it
 
   /* Result groups, in display order. */
