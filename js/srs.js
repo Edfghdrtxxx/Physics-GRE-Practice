@@ -66,15 +66,20 @@ PGRE.srs = {
     mk.srs = { step: step, due: this.addDays(this.MISTAKE_LADDER[step]) };
   },
 
-  /* ——— Confidence tagging (proposal #6) ———
-     The answer is recorded first (confidence null); the "knew it / guessed" tap
-     lands a beat later, so we stamp the most recent attempt row for this qid in
-     place. Store-safe: no-op if the row can't be found. */
-  setLastConfidence: function (qid, confidence) {
+  /* ——— Self-assessment tagging (proposal #6, extended to multi-select) ———
+     The answer is recorded first (confidence null, no tags); the assessment
+     taps land a beat later, so we stamp the most recent attempt row for this
+     qid in place. confidence is 'sure' | 'guess' | null; tags is an array
+     drawn from ['slow', 'forgot'] (absent when empty). Re-stamping the same
+     row is fine — the chips stay editable until the next question.
+     Store-safe: no-op if the row can't be found. */
+  setLastAssess: function (qid, confidence, tags) {
     var arr = PGRE.store.state.attempts;
     for (var i = arr.length - 1; i >= 0; i--) {
       if (arr[i].qid === qid) {
-        arr[i].confidence = confidence;
+        arr[i].confidence = confidence || null;
+        if (tags && tags.length) arr[i].tags = tags.slice();
+        else delete arr[i].tags;
         PGRE.store.save();
         return arr[i];
       }
@@ -99,6 +104,22 @@ PGRE.srs = {
     if (!mk.srs) this.mistakeMissed(mk);
     PGRE.store.save();
     return mk;
+  },
+
+  /* Undo a markLucky from the same feedback screen (the user un-toggled
+     "Guessed"). An entry that exists ONLY because of that lucky filing
+     (never missed, never re-solved) is removed outright so no ghost entry
+     lingers in the book; an older entry just loses the flag. */
+  unmarkLucky: function (qid) {
+    var s = PGRE.store.state, mk = s.mistakes[qid];
+    if (!mk || !mk.lucky) return;
+    if (!mk.misses && !mk.solves) {
+      delete s.mistakes[qid];
+    } else {
+      delete mk.lucky;
+      delete mk.lastLuckyAt;
+    }
+    PGRE.store.save();
   },
 
   /* Clear the lucky-guess flag once the question is answered correctly AND with

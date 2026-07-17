@@ -312,11 +312,36 @@ PGRE.timer = (function () {
     // paused — the steadier is-paused look reads as "held".
     wrap.classList.toggle('is-running', on && !paused);
     wrap.classList.toggle('is-paused', paused);
+    // Dynamic dressing: a quick pop on every state change (idle/running/paused),
+    // and — for goal sessions — a left-to-right progress fill across the pill,
+    // driven by the --fprog custom property (see the .has-goal css rules). The
+    // first paint after load sets the baseline silently (no pop).
+    var stateName = paused ? 'paused' : (on ? 'running' : 'idle');
+    if (wrap.dataset.fstate && wrap.dataset.fstate !== stateName) {
+      wrap.classList.remove('state-pop');
+      void wrap.offsetWidth;                   // restart the pop animation
+      wrap.classList.add('state-pop');
+    }
+    wrap.dataset.fstate = stateName;
+    // Elapsed excludes held time (pausedMs) and, while paused, freezes at the
+    // pause instant (lastCredit) instead of tracking the wall clock. Computed
+    // once here from persisted fields for both the readout and the fill, so a
+    // reload mid-pause shows the same frozen value.
+    var refNow = paused ? (t.lastCredit || t.startedAt) : Date.now();
+    var elapsed = (on && t.startedAt) ? (refNow - t.startedAt - (t.pausedMs || 0)) / 1000 : 0;
+    var hasGoal = !!(on && typeof t.goalMin === 'number' && t.goalMin > 0);
+    wrap.classList.toggle('has-goal', hasGoal);
+    if (hasGoal) {
+      var pct = Math.max(0, Math.min(100, 100 * elapsed / (t.goalMin * 60)));
+      wrap.style.setProperty('--fprog', pct.toFixed(1) + '%');
+    } else {
+      wrap.style.removeProperty('--fprog');
+    }
     var btn = document.getElementById('focus-toggle');
     var label = document.getElementById('focus-label');
     var time = document.getElementById('focus-time');
-    // idle -> Start, running -> Stop, paused -> Resume (the sidebar has no separate
-    // Pause control; Pause lives on the full-page #/focus face).
+    // idle -> Start, running -> Stop, paused -> Resume (the top-bar widget has no
+    // separate Pause control; Pause lives on the full-page #/focus face).
     if (label) label.textContent = paused ? 'Resume focus' : (on ? 'Stop focus' : 'Start focus');
     if (btn) {
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -326,12 +351,7 @@ PGRE.timer = (function () {
     if (time) {
       if (on && t.startedAt) {
         time.hidden = false;
-        // Elapsed excludes held time (pausedMs) and, while paused, freezes at the
-        // pause instant (lastCredit) instead of tracking the wall clock. Computed
-        // from persisted fields so a reload mid-pause shows the same frozen value.
-        var refNow = paused ? (t.lastCredit || t.startedAt) : Date.now();
-        var elapsed = (refNow - t.startedAt - (t.pausedMs || 0)) / 1000;
-        var hint = paused ? ' · paused' : '';
+        var hint = paused ? ' · paused' : '';   // elapsed computed above
         if (typeof t.goalMin === 'number' && t.goalMin > 0) {
           // F5: a countdown-goal session. Show REMAINING (not elapsed) so this always-
           // visible widget agrees numerically with the full-page #/focus face, which
@@ -355,13 +375,13 @@ PGRE.timer = (function () {
     btn.addEventListener('click', function () {
       var t = st();
       if (t && t.on) {
-        if (t.paused) { resume(); return; }   // BUNDLE D: paused sidebar button = Resume
+        if (t.paused) { resume(); return; }   // BUNDLE D: paused top-bar button = Resume
         stop();
         return;
       }
       // F5: when the full-page focus face is mounted with a goal picked, honor it so the
-      // sidebar quick-start and the page hero agree on what Start does. pendingGoal()
-      // returns null off that page, preserving the classic open-ended sidebar start.
+      // top-bar quick-start and the page hero agree on what Start does. pendingGoal()
+      // returns null off that page, preserving the classic open-ended quick start.
       var g = null;
       if (window.PGRE && PGRE.views && PGRE.views.focus && typeof PGRE.views.focus.pendingGoal === 'function') {
         try { g = PGRE.views.focus.pendingGoal(); } catch (e) { g = null; }

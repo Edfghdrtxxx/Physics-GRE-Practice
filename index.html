@@ -17,21 +17,6 @@
     </div>
     <nav id="sidebar-nav"></nav>
     <div id="sidebar-footer">
-      <div id="focus-timer" class="focus-timer">
-        <div class="focus-row">
-          <button id="focus-toggle" class="focus-toggle" type="button"
-                  aria-pressed="false" aria-label="Start focus timer">
-            <span class="focus-dot" aria-hidden="true"></span>
-            <span id="focus-label" class="focus-label">Start focus</span>
-          </button>
-          <a id="focus-open" class="focus-open" href="#/focus"
-             aria-label="Open the focus page" title="Open the full focus page">
-            <span id="focus-time" class="focus-time" hidden>0:00</span>
-            <span class="focus-open-ico" aria-hidden="true">&#10530;</span>
-          </a>
-        </div>
-        <div class="focus-hint">Times reading &amp; derivations you do away from the app.</div>
-      </div>
       <button id="theme-toggle" class="btn btn-ghost btn-sm" type="button">Dark mode</button>
     </div>
   </aside>
@@ -39,6 +24,9 @@
   <main id="main">
     <div id="topbar">
       <div class="topbar-inner">
+        <button id="sidebar-toggle" class="topbar-arrow" type="button"
+                aria-expanded="true" aria-controls="sidebar"
+                aria-label="Hide sidebar" title="Hide sidebar">&#9776;</button>
         <div class="topbar-arrows">
           <button id="topbar-back" class="topbar-arrow" type="button"
                   aria-label="Go back" title="Back">&#9664;</button>
@@ -46,6 +34,23 @@
                   aria-label="Go forward" title="Forward">&#9654;</button>
         </div>
         <nav id="breadcrumbs" class="breadcrumbs" aria-label="Breadcrumb"></nav>
+        <!-- focus timer quick control — lives in the top bar (not the sidebar)
+             so folding the sidebar never hides it -->
+        <div id="focus-timer" class="focus-timer">
+          <div class="focus-row">
+            <button id="focus-toggle" class="focus-toggle" type="button"
+                    aria-pressed="false" aria-label="Start focus timer"
+                    title="Times reading &amp; derivations you do away from the app.">
+              <span class="focus-dot" aria-hidden="true"></span>
+              <span id="focus-label" class="focus-label">Start focus</span>
+            </button>
+            <a id="focus-open" class="focus-open" href="#/focus"
+               aria-label="Open the focus page" title="Open the full focus page">
+              <span id="focus-time" class="focus-time" hidden>0:00</span>
+              <span class="focus-open-ico" aria-hidden="true">&#10530;</span>
+            </a>
+          </div>
+        </div>
       </div>
     </div>
     <div id="view"></div>

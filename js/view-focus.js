@@ -33,36 +33,87 @@ PGRE.views.focus = (function () {
     return (ref - t.startedAt - (t.pausedMs || 0)) / 1000;
   }
 
-  /* ——— reward atom (static SVG; paint only toggles classes + one ring offset) ——— */
+  /* Pause a live session / resume a held one — shared by the clock tap and the
+     Space shortcut. No-op when idle (starting stays on the hero button). */
+  function toggleHold() {
+    var t = st();
+    if (!t || !t.on) return;
+    if (t.paused) PGRE.timer.resume(); else PGRE.timer.pause();
+    paintLive();
+  }
+
+  /* Space starts / pauses / resumes; Esc leaves zen. Bound ONCE on document
+     (mount sets keyBound) and self-gating: inert unless the focus page is in
+     the DOM, and it never steals keys from form fields, buttons, links, or the
+     clock (which handles its own Enter/Space as a role=button). */
+  var keyBound = false;
+  function onKey(e) {
+    var page = document.getElementById('focus-page');
+    if (!page || !page.isConnected) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var el = e.target, tg = (el && el.tagName) || '';
+    if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || tg === 'BUTTON' ||
+        tg === 'A' || (el && el.isContentEditable) || (el && el.id === 'focus-clock')) return;
+    if (e.key === ' ') {
+      e.preventDefault();
+      if (isOn()) { toggleHold(); return; }
+      var hero = document.getElementById('focus-hero');
+      if (hero) hero.click();               // idle: start with the picked goal
+    } else if (e.key === 'Escape' && zenOn()) {
+      setZen(false);
+    }
+  }
+
+  /* ——— reward mark (static SVG; paint only toggles classes + one ring offset) ———
+     A radiating spark in the Anthropic mold: a dotted minute track with the
+     progress arc riding it, a slow-drifting wheel of 12 rounded spokes that
+     light up in interleaved thirds as the session advances (fa-g1..3 map onto
+     the existing orbits-1..3 rungs), and a soft breathing core. */
   var RING_C = 553;              // 2*pi*88, rounded — matches r="88" in the markup
   function atomSVG() {
+    var spokes = '';
+    for (var i = 0; i < 12; i++) {
+      var grp = (i % 3) + 1;                          // interleaved thirds — each
+      var a = (i * 30 - 90) * Math.PI / 180;          // rung lights 4 spokes evenly
+      var r1 = 34, r2 = (i % 2 === 0) ? 57 : 50;      // alternating lengths, organic
+      spokes += '<line class="fa-spoke fa-g' + grp + '"' +
+        ' x1="' + (100 + r1 * Math.cos(a)).toFixed(1) + '" y1="' + (100 + r1 * Math.sin(a)).toFixed(1) + '"' +
+        ' x2="' + (100 + r2 * Math.cos(a)).toFixed(1) + '" y2="' + (100 + r2 * Math.sin(a)).toFixed(1) + '"/>';
+    }
     return '' +
       '<svg class="focus-atom" id="focus-atom" viewBox="0 0 200 200" role="img" aria-label="Focus progress">' +
+        // gradient for the progress arc — both stops are tokens, so dark theme re-derives
+        '<defs><linearGradient id="fa-grad" x1="0" y1="0" x2="1" y2="1">' +
+          '<stop offset="0" stop-color="var(--accent)"/>' +
+          '<stop offset="1" stop-color="var(--accent-deep)"/>' +
+        '</linearGradient></defs>' +
         '<circle class="fa-track" cx="100" cy="100" r="88"/>' +
         '<circle class="fa-ring"  cx="100" cy="100" r="88" id="fa-ring"/>' +
-        '<g class="fa-orbit-grp fa-g1"><ellipse class="fa-orbit" cx="100" cy="100" rx="72" ry="27"/>' +
-          '<circle class="fa-electron" cx="172" cy="100" r="5"/></g>' +
-        '<g class="fa-orbit-grp fa-g2" transform="rotate(60 100 100)"><ellipse class="fa-orbit" cx="100" cy="100" rx="72" ry="27"/>' +
-          '<circle class="fa-electron" cx="172" cy="100" r="5"/></g>' +
-        '<g class="fa-orbit-grp fa-g3" transform="rotate(120 100 100)"><ellipse class="fa-orbit" cx="100" cy="100" rx="72" ry="27"/>' +
-          '<circle class="fa-electron" cx="172" cy="100" r="5"/></g>' +
-        '<circle class="fa-nucleus" cx="100" cy="100" r="13"/>' +
+        '<circle class="fa-mid"   cx="100" cy="100" r="70"/>' +
+        '<g class="fa-spokes">' + spokes + '</g>' +
+        '<circle class="fa-halo" cx="100" cy="100" r="26"/>' +
+        '<circle class="fa-core" cx="100" cy="100" r="12"/>' +
+        // comet head riding the arc tip: the wrapper rotates by --fa-tip (paintAtom)
+        // around the atom centre; the dot itself sits at 12 o'clock (progress 0)
+        '<g class="fa-tipwrap"><circle class="fa-tip" cx="100" cy="12" r="4.5"/></g>' +
       '</svg>';
   }
-  // progress in [0,1]; orbitCount 0..3 (which orbits are lit); complete adds a pulse.
+  // progress in [0,1]; orbitCount 0..3 (how many spoke-thirds are lit); complete adds a pulse.
   function paintAtom(progress, orbitCount, complete) {
     var atom = document.getElementById('focus-atom');
     var ring = document.getElementById('fa-ring');
     if (!atom || !ring) return;
     ring.style.strokeDasharray = RING_C;
     ring.style.strokeDashoffset = Math.max(0, Math.min(RING_C, RING_C * (1 - progress)));
+    // the comet head tracks the arc tip; CSS transitions the rotation between ticks
+    atom.style.setProperty('--fa-tip', (360 * Math.max(0, Math.min(1, progress))).toFixed(1) + 'deg');
     atom.classList.toggle('orbits-1', orbitCount >= 1);
     atom.classList.toggle('orbits-2', orbitCount >= 2);
     atom.classList.toggle('orbits-3', orbitCount >= 3);
-    // BUNDLE D: keep is-running while paused so the orbit animation stays applied,
-    // then is-paused pauses it in place (animation-play-state) instead of resetting
-    // the electrons to their start angle. The ring is frozen too because progress
-    // is computed from the frozen elapsedSec().
+    // BUNDLE D: keep is-running while paused so the drift/breathe animations stay
+    // applied, then is-paused holds them in place (animation-play-state) instead
+    // of resetting the spark wheel to its start angle. The ring is frozen too
+    // because progress is computed from the frozen elapsedSec().
     atom.classList.toggle('is-running', isOn());
     atom.classList.toggle('is-paused', isPaused());
     atom.classList.toggle('is-complete', !!complete);
@@ -136,8 +187,15 @@ PGRE.views.focus = (function () {
           '<button class="btn btn-ghost focus-pause" id="focus-pause" hidden>Pause</button>' +
           '<button class="btn btn-ghost focus-zen-btn" id="focus-zen-btn">Zen mode</button>' +
         '</div>' +
-        statsHTML() +
-        recentHTML() +
+        // .focus-quiet: the "everything else" band. One stable wrapper (never
+        // rebuilt by the per-second paints inside it) so zen mode can fade and
+        // collapse it as a unit with a CSS display transition.
+        '<div class="focus-quiet" id="focus-quiet">' +
+          '<div class="focus-keys muted"><span class="key-hint">Space</span> start / pause · ' +
+            'tap the clock to pause · <span class="key-hint">Esc</span> exit zen</div>' +
+          statsHTML() +
+          recentHTML() +
+        '</div>' +
       '</div>' +
       '<button class="focus-zen-exit" id="focus-zen-exit" type="button" hidden>Exit zen ✕</button>' +
     '</div>';
@@ -153,7 +211,29 @@ PGRE.views.focus = (function () {
     var pauseBtn = document.getElementById('focus-pause');
     var goals = document.getElementById('focus-goals');
     var page = document.getElementById('focus-page');
-    if (page) page.classList.toggle('is-paused', paused);
+    if (page) {
+      page.classList.toggle('is-paused', paused);
+      // is-running drives the live dressing: warmer ambient glow, breathing
+      // clock (css). Dropped while paused so the page visibly "holds".
+      page.classList.toggle('is-running', on && !paused);
+    }
+    // The oversized clock doubles as a pause/resume control while a session is
+    // live (mount() wires the click/keydown); reflect that in its affordances.
+    if (clock) {
+      clock.classList.toggle('is-live', on);
+      if (on) {
+        var act = paused ? 'Resume — click or press Space' : 'Pause — click or press Space';
+        clock.setAttribute('role', 'button');
+        clock.setAttribute('tabindex', '0');
+        clock.setAttribute('title', act);
+        clock.setAttribute('aria-label', act);
+      } else {
+        clock.removeAttribute('role');
+        clock.removeAttribute('tabindex');
+        clock.removeAttribute('title');
+        clock.removeAttribute('aria-label');
+      }
+    }
 
     var progress = 0, orbits = 0;
     if (on) {
@@ -235,9 +315,22 @@ PGRE.views.focus = (function () {
       flashComplete(lastRunLen); // then lay the completion state on top — but only if a session was actually logged
       return;
     }
+    if (!wasOn && nowOn) igniteStart();  // started from the top-bar quick-start while this page is open
     wasOn = nowOn;
     if (nowOn) lastRunLen = (PGRE.store.state.focusSessions || []).length; // pre-append baseline for the next stop
     paintLive();
+  }
+
+  /* One-shot ignition burst on the reward mark when a session starts (css
+     .ignite). remove -> reflow -> add so back-to-back starts re-fire it; a
+     stale celebrate class is dropped so the two bursts never stack. */
+  function igniteStart() {
+    var reward = document.querySelector('#focus-page .focus-reward');
+    if (!reward) return;
+    reward.classList.remove('celebrate');
+    reward.classList.remove('ignite');
+    void reward.offsetWidth;
+    reward.classList.add('ignite');
   }
 
   // prevLen: the focusSessions.length from just BEFORE this stop. finalizeAndStop()
@@ -250,6 +343,15 @@ PGRE.views.focus = (function () {
     var sub = document.getElementById('focus-sub');
     if (last && last.met) {
       paintAtom(1, 3, true);                                  // completed atom pulse
+      // celebration burst: expanding rings + atom bounce (css .celebrate);
+      // remove → reflow → add so back-to-back completions re-fire it
+      var reward = document.querySelector('#focus-page .focus-reward');
+      if (reward) {
+        reward.classList.remove('ignite');       // never let the start burst stack on this one
+        reward.classList.remove('celebrate');
+        void reward.offsetWidth;
+        reward.classList.add('celebrate');
+      }
       if (sub) { sub.textContent = 'Goal complete — ' + last.goalMin + ' min logged.'; sub.dataset.flash = '1'; }
     } else if (last) {
       if (sub) { sub.textContent = 'Session logged — ' + fmtClock(last.seconds) + '.'; sub.dataset.flash = '1'; }
@@ -259,9 +361,33 @@ PGRE.views.focus = (function () {
 
   /* ——— zen mode (ephemeral body class; cleaned up on leaving #/focus) ——— */
   function zenOn() { return document.body.classList.contains('focus-zen'); }
+  var zenEnteredAt = 0;   // suppresses the mouse-move peek right after entering (the
+                          // pointer inevitably moves off the just-clicked button)
+  var peekT = null;
   function setZen(on) {
     document.body.classList.toggle('focus-zen', !!on);
+    if (on) zenEnteredAt = Date.now();
+    else {
+      // leave cleanly: no lingering peek state or pending un-peek timer
+      var page = document.getElementById('focus-page');
+      if (page) page.classList.remove('zen-peek');
+      if (peekT) { clearTimeout(peekT); peekT = null; }
+    }
     syncZen();
+  }
+  /* Pointer activity in zen briefly surfaces the faded controls (css .zen-peek),
+     video-player style, then they sink away again after a beat of stillness. */
+  function zenPeek() {
+    if (!zenOn()) return;
+    if (Date.now() - zenEnteredAt < 1200) return;   // let the enter-fade finish first
+    var page = document.getElementById('focus-page');
+    if (!page) return;
+    page.classList.add('zen-peek');
+    if (peekT) clearTimeout(peekT);
+    peekT = setTimeout(function () {
+      peekT = null;
+      if (page.isConnected) page.classList.remove('zen-peek');
+    }, 2600);
   }
   function syncZen() {
     var btn = document.getElementById('focus-zen-btn');
@@ -321,6 +447,19 @@ PGRE.views.focus = (function () {
     var page = document.getElementById('focus-page');
     if (!page) return;
 
+    // keyboard shortcuts (Space / Esc) — one document listener for the app's life
+    if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
+
+    // the big clock is a pause/resume control while live (affordances set in
+    // paintLive); Enter/Space here follow the role=button convention
+    var clockEl = document.getElementById('focus-clock');
+    if (clockEl) {
+      clockEl.addEventListener('click', toggleHold);
+      clockEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleHold(); }
+      });
+    }
+
     // Idle-page stat freshness: study-time.js's heartbeat (js/study-time.js `beat`,
     // a CAPTURE-phase listener on document) credits studyLog on every click/keydown
     // while the focus timer is OFF, so the "Today"/"This week" tiles would otherwise
@@ -335,6 +474,10 @@ PGRE.views.focus = (function () {
     page.addEventListener('click', refreshStatsOnActivity, true);
     page.addEventListener('keydown', refreshStatsOnActivity, true);
 
+    // zen: pointer activity briefly surfaces the faded controls (no-op outside zen)
+    page.addEventListener('mousemove', zenPeek);
+    page.addEventListener('touchstart', zenPeek, { passive: true });
+
     // hero (primary): idle -> Start (with the selected goal); running -> Stop;
     // paused -> Resume. finalizeAndStop only fires on the Stop branch.
     var hero = document.getElementById('focus-hero');
@@ -348,7 +491,8 @@ PGRE.views.focus = (function () {
         var g = readCustomThenSelected();
         lastRunLen = (PGRE.store.state.focusSessions || []).length;    // pre-append baseline for the eventual stop
         PGRE.timer.start(g);            // number|null; engine persists goalMin
-        wasOn = true;
+        wasOn = true;                   // set before faceTick, so ignite fires here instead
+        igniteStart();
         clearFlash();
         paintLive();
       }
@@ -392,7 +536,7 @@ PGRE.views.focus = (function () {
       // Snap the box to the value Start will actually arm once focus leaves the field, so it
       // can't keep displaying an out-of-range (>240), fractional, or non-positive number that
       // disagrees with the countdown. Uses the same clamp as readCustomThenSelected(). Clicking
-      // Start (page hero or the sidebar quick-start) blurs this input first, so the number read
+      // Start (page hero or the top-bar quick-start) blurs this input first, so the number read
       // at start matches what's shown; setting .value here fires no input/change event -> no loop.
       custom.addEventListener('blur', function () {
         var n = parseInt(custom.value, 10);
@@ -415,10 +559,10 @@ PGRE.views.focus = (function () {
   }
 
   // F5 single-source-of-truth bridge. When the full-page focus face is mounted, its hero
-  // 'Start focus' AND the always-visible sidebar quick-start (#focus-toggle) are on screen
-  // together. The sidebar button calls PGRE.timer.start() blind; this lets it adopt the
+  // 'Start focus' AND the always-visible top-bar quick-start (#focus-toggle) are on screen
+  // together. The top-bar button calls PGRE.timer.start() blind; this lets it adopt the
   // page's picked goal so both Start controls agree. Returns null when the page is gone
-  // (element absent) so the sidebar keeps its classic open-ended stopwatch elsewhere.
+  // (element absent) so the top-bar widget keeps its classic open-ended stopwatch elsewhere.
   function pendingGoal() {
     var page = document.getElementById('focus-page');
     if (!page || !page.isConnected) return null;

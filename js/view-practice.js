@@ -189,15 +189,46 @@ PGRE.views.practice = (function () {
       ' <span class="pace-target">(target ' + target + ' s)</span></div>';
   }
 
-  /* ——— Config (topic / all modes) ——— */
-  function renderConfig(topicId) {
-    var t = topicId === 'all' ? null : PGRE.topicById(topicId);
+  /* ——— Config (topic / all modes; optional done-status filter) ———
+     filter 'new' keeps never-attempted questions, 'done' keeps those attempted
+     at least once (state.questions — practice, drills and mock exams all
+     count); anything else means the whole bank. The topic portal's split
+     buttons land here via #/practice/<topic>/new and /done. */
+  function isDone(q) {
+    var r = PGRE.store.state.questions[q.id];
+    return !!(r && r.attempts > 0);
+  }
+
+  function filteredBank(topicId, filter) {
     var bank = PGRE.questionsForTopic(topicId);
-    var name = t ? t.name : 'All topics (mixed)';
+    if (filter === 'new') return bank.filter(function (q) { return !isDone(q); });
+    if (filter === 'done') return bank.filter(isDone);
+    return bank;
+  }
+
+  function renderConfig(topicId, filter) {
+    if (filter !== 'new' && filter !== 'done') filter = null;
+    var t = topicId === 'all' ? null : PGRE.topicById(topicId);
+    var bank = filteredBank(topicId, filter);
+    var name = (t ? t.name : 'All topics (mixed)') +
+      (filter === 'new' ? ' · not yet done' : filter === 'done' ? ' · done before' : '');
     var counts = [5, 10, 20].filter(function (n) { return n < bank.length; });
     var html = '<div class="card practice-card">' +
-      '<h1>Practice — ' + name + '</h1>' +
-      '<p class="muted">' + bank.length + ' question' + (bank.length === 1 ? '' : 's') +
+      '<h1>Practice — ' + name + '</h1>';
+    if (!bank.length && filter) {
+      html += '<p class="muted">' + (filter === 'new'
+          ? 'Nothing left in this group — every question in this bank has been done at least once.'
+          : 'Nothing here yet — a question joins this group once you have done it once.') + '</p>' +
+        '<div class="btn-row">' +
+          (t ? '<a class="btn btn-primary" href="#/topic/' + t.id + '">Back to the portal</a>' : '') +
+          '<a class="btn btn-ghost" href="#/practice/' + topicId + '">Practice the whole bank</a>' +
+        '</div></div>';
+      lastRenderAt = Date.now();
+      el().innerHTML = html;
+      window.scrollTo(0, 0);
+      return;
+    }
+    html += '<p class="muted">' + bank.length + ' question' + (bank.length === 1 ? '' : 's') +
       ' available. Correct answers earn 10 XP (15 the first time); a wrong answer still earns 2 XP for the attempt.</p>' +
       '<div class="btn-row">';
     counts.forEach(function (n) {
@@ -215,14 +246,16 @@ PGRE.views.practice = (function () {
     window.scrollTo(0, 0);
     el().querySelectorAll('[data-count]').forEach(function (b) {
       b.addEventListener('click', function () {
-        start(topicId, parseInt(b.getAttribute('data-count'), 10));
+        start(topicId, filter, parseInt(b.getAttribute('data-count'), 10));
       });
     });
   }
 
-  function start(topicId, count) {
-    var qs = shuffle(PGRE.questionsForTopic(topicId)).slice(0, count);
-    beginPractice(qs, { topicId: topicId });
+  function start(topicId, filter, count) {
+    var qs = shuffle(filteredBank(topicId, filter)).slice(0, count);
+    beginPractice(qs, { topicId: topicId, filter: filter,
+                        label: filter === 'new' ? 'Not yet done'
+                             : filter === 'done' ? 'Done before' : null });
   }
 
   /* ——— Custom quiz (#3): consume the builder's handoff ——— */
@@ -252,7 +285,7 @@ PGRE.views.practice = (function () {
     var topicId = opts.topicId || 'all';
     session = { topicId: topicId, qs: qs, i: 0, correct: 0, xpEarned: 0, answers: [],
                 qStart: Date.now(), label: opts.label || null, custom: !!opts.custom,
-                stage: 'question', tagged: null,
+                filter: opts.filter || null, stage: 'question', assess: null,
                 sid: PGRE.gamify.beginSession(topicId, 'practice', qs.length) };
     renderQuestion();
   }
@@ -262,7 +295,7 @@ PGRE.views.practice = (function () {
     var q = session.qs[session.i];
     var t = PGRE.topicById(q.topic) || { id: 'xx', short: '?', name: 'Unknown topic' };
     session.stage = 'question';
-    session.tagged = null;
+    session.assess = null;
     lastRenderAt = Date.now();
     var html = '<div class="card practice-card">' +
       '<div class="practice-meta">' +
@@ -285,7 +318,8 @@ PGRE.views.practice = (function () {
         '<span class="key-hint">A</span>–<span class="key-hint">E</span> or ' +
         '<span class="key-hint">1</span>–<span class="key-hint">5</span> to answer · ' +
         '<span class="key-hint">Enter</span> next · ' +
-        '<span class="key-hint">G</span> guessed · <span class="key-hint">K</span> knew it</div>';
+        '<span class="key-hint">K</span> knew it · <span class="key-hint">G</span> guessed · ' +
+        '<span class="key-hint">T</span> too slow · <span class="key-hint">F</span> forgot</div>';
     }
     html += '<div id="feedback"></div></div>';
     el().innerHTML = html;
@@ -331,55 +365,23 @@ PGRE.views.practice = (function () {
         '<span class="fb-xp">+' + xp + ' XP</span>' +
       '</div>' +
       paceMark(elapsed) +
-      '<div class="conf-row" id="conf-row">' +
-        '<span class="conf-q">How sure were you?</span>' +
-        '<button class="btn btn-ghost btn-sm" data-conf="sure">Knew it' +
-          (settings().keyboard ? ' <span class="key-hint">K</span>' : '') + '</button>' +
-        '<button class="btn btn-ghost btn-sm" data-conf="guess">Guessed' +
-          (settings().keyboard ? ' <span class="key-hint">G</span>' : '') + '</button>' +
-      '</div>' +
+      PGRE.assess.html(settings().keyboard) +
       '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
       distractorBlock(q) +
       notesBlock(q) +
       '<div class="btn-row"><button class="btn btn-primary" id="next-btn">' +
         (session.i + 1 < session.qs.length ? 'Next question →' : 'Finish session') + '</button></div>';
     PGRE.typesetMath(fb);
-    fb.querySelectorAll('[data-conf]').forEach(function (b) {
-      b.addEventListener('click', function () { tag(b.getAttribute('data-conf')); });
-    });
+    session.assess = PGRE.assess.bind(fb, q, isCorrect);
     bindNotes(fb, q);
     var nb = document.getElementById('next-btn');
     nb.addEventListener('click', next);
     nb.focus();
   }
 
-  /* One-tap confidence (#6). Committed once per question. */
-  function tag(conf) {
-    if (!session || session.stage !== 'feedback' || session.tagged) return;
-    var a = session.answers[session.answers.length - 1];
-    if (!a) return;
-    session.tagged = conf;
-    PGRE.srs.setLastConfidence(a.q.id, conf);
-    var luckyFiled = false;
-    if (conf === 'guess' && a.correct) { PGRE.srs.markLucky(a.q.id); luckyFiled = true; }
-    // Answering it correctly and sure clears any stale "lucky guess" flag from a
-    // prior correct-but-guessed attempt — you actually know it now.
-    if (conf === 'sure' && a.correct) PGRE.srs.clearLucky(a.q.id);
-
-    var row = document.getElementById('conf-row');
-    if (row) {
-      row.classList.add('is-tagged');
-      // DESIGN §6: the confirmation text stays neutral; only the mark beside it
-      // carries colour (green for "knew it", accent for a logged guess).
-      row.innerHTML = conf === 'sure'
-        ? '<span class="conf-done-ic" style="color:var(--good)" aria-hidden="true">✓</span> ' +
-            '<span class="muted">Marked “knew it”.</span>'
-        : '<span class="conf-done-ic" style="color:var(--accent-deep)" aria-hidden="true">⚑</span> ' +
-            '<span class="muted">Logged as a guess' +
-            (luckyFiled ? ' — filed as a lucky guess in your mistake book.' : '.') + '</span>';
-    }
-    if (luckyFiled) PGRE.refreshNavBadges();
-  }
+  /* Self-assessment (#6, multi-select): rendering, storage and the lucky-guess
+     bookkeeping all live in the shared PGRE.assess component (js/app.js) —
+     session.assess is the per-question controller it returns. */
 
   function next() {
     if (!session) return;
@@ -421,13 +423,13 @@ PGRE.views.practice = (function () {
       '<button class="btn btn-primary" id="again-btn">' + (custom ? 'Run this set again' : 'Practice again') + '</button>' +
       '<a class="btn btn-ghost" href="' + backLink + '">Done</a>' +
     '</div></div>';
-    var topicId = session.topicId;
+    var topicId = session.topicId, filter = session.filter;
     el().innerHTML = html;
     PGRE.typesetMath(el());
     document.getElementById('again-btn').addEventListener('click', function () {
       if (Date.now() - lastRenderAt < 300) return; // Finish double-click guard
       if (custom) startCustom();
-      else renderConfig(topicId);
+      else renderConfig(topicId, filter);
     });
   }
 
@@ -458,10 +460,14 @@ PGRE.views.practice = (function () {
         e.preventDefault();
         var nb = document.getElementById('next-btn');
         if (nb) nb.click();
-      } else if (k === 'g' || k === 'G') {
-        e.preventDefault(); tag('guess');
-      } else if (k === 'k' || k === 'K') {
-        e.preventDefault(); tag('sure');
+      } else if (session.assess && (k === 'g' || k === 'G')) {
+        e.preventDefault(); session.assess.toggle('guess');
+      } else if (session.assess && (k === 'k' || k === 'K')) {
+        e.preventDefault(); session.assess.toggle('sure');
+      } else if (session.assess && (k === 't' || k === 'T')) {
+        e.preventDefault(); session.assess.toggle('slow');
+      } else if (session.assess && (k === 'f' || k === 'F')) {
+        e.preventDefault(); session.assess.toggle('forgot');
       }
     }
   }
@@ -474,7 +480,7 @@ PGRE.views.practice = (function () {
       if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
       var id = params.id || 'all';
       if (id === 'custom') startCustom();
-      else renderConfig(id);
+      else renderConfig(id, params.sub2); // #/practice/<id>/new | /done
     }
   };
 })();

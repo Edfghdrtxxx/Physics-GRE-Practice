@@ -65,7 +65,9 @@ PGRE.store = {
                   examDate: '2026-10-28',
                   // F5 — formula Study direction: false = Prompt → Formula (recall
                   // the equation); true = Formula → Prompt (name/state it)
-                  formulaReverse: false },
+                  formulaReverse: false,
+                  // sidebar fold state — the ☰ toggle in the top bar (app.js)
+                  sidebarFolded: false },
       // today's progressive formula batch (js/srs.js): rebuilt when the date
       // rolls over — { date, reviewIds: [], newIds: [] }
       formulaDay: null,

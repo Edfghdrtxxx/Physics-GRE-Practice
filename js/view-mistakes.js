@@ -114,11 +114,13 @@ PGRE.views.mistakes = (function () {
       '<div class="distractor-list">' + items + '</div></details>';
   }
 
-  /* Most recent recorded confidence for a question, if any. */
-  function lastConfidence(qid) {
+  /* Most recent recorded self-assessment for a question (confidence and/or
+     tags — 'slow'/'forgot'), if any. Returns the attempt row or null. */
+  function lastAssess(qid) {
     var arr = PGRE.store.state.attempts;
     for (var i = arr.length - 1; i >= 0; i--) {
-      if (arr[i].qid === qid && arr[i].confidence) return arr[i].confidence;
+      if (arr[i].qid === qid &&
+          (arr[i].confidence || (arr[i].tags && arr[i].tags.length))) return arr[i];
     }
     return null;
   }
@@ -158,10 +160,13 @@ PGRE.views.mistakes = (function () {
         '<span class="choice-body">' + c + '</span></button>';
     });
     html += '</div>';
-    var conf = lastConfidence(q.id);
-    if (conf) {
-      html += '<div class="conf-note muted">Your last confidence on this question: ' +
-        '<strong>' + (conf === 'guess' ? 'Guessed' : 'Knew it') + '</strong></div>';
+    var la = lastAssess(q.id);
+    if (la) {
+      var bits = [];
+      if (la.confidence) bits.push(la.confidence === 'guess' ? 'Guessed' : 'Knew it');
+      (la.tags || []).forEach(function (tg) { bits.push(PGRE.assess.LABELS[tg] || tg); });
+      html += '<div class="conf-note muted">Your last self-assessment on this question: ' +
+        '<strong>' + bits.join(' · ') + '</strong></div>';
     }
     html += '<details class="miss"><summary>Solution</summary>';
     if (wrong != null) {
@@ -444,10 +449,12 @@ PGRE.views.mistakes = (function () {
                                   '; back to the bottom of the ladder') + '</strong>' +
         '<span class="fb-xp">+' + xp + ' XP</span>' +
       '</div>' +
+      PGRE.assess.html(false) +
       '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
       '<div class="btn-row"><button class="btn btn-primary" id="next-btn">' +
         (drill.i + 1 < drill.qs.length ? 'Next →' : 'Finish drill') + '</button></div>';
     PGRE.typesetMath(fb);
+    PGRE.assess.bind(fb, q, isCorrect);
     document.getElementById('next-btn').addEventListener('click', function () {
       drill.i++;
       if (drill.i < drill.qs.length) renderDrillQuestion();

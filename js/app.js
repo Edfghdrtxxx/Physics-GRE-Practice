@@ -155,6 +155,96 @@ PGRE.toast = function (html, kind, sticky) {
   return el;
 };
 
+/* ——— Post-answer self-assessment (practice sessions + mistake drills) ———
+   A multi-select chip row in the feedback block after every answer:
+   Knew it / Guessed (mutually exclusive) plus Too slow / Forgot something
+   (combine freely with anything). Every tap re-stamps the newest attempt row
+   (srs.setLastAssess) and keeps the lucky-guess bookkeeping in sync, so the
+   chips stay editable until the next question and a mid-session exit loses
+   nothing. Tapping an active chip un-picks it. */
+PGRE.assess = (function () {
+  var OPTIONS = [
+    { key: 'sure',   label: 'Knew it',          kbd: 'K' },
+    { key: 'guess',  label: 'Guessed',          kbd: 'G' },
+    { key: 'slow',   label: 'Too slow',         kbd: 'T' },
+    { key: 'forgot', label: 'Forgot something', kbd: 'F' }
+  ];
+  var LABELS = {};
+  OPTIONS.forEach(function (o) { LABELS[o.key] = o.label; });
+
+  function html(showKeys) {
+    var h = '<div class="conf-row assess-row" id="assess-row">' +
+      '<span class="conf-q">How did it go?</span>';
+    OPTIONS.forEach(function (o) {
+      h += '<button type="button" class="focus-chip assess-chip" data-assess="' + o.key +
+        '" aria-pressed="false">' + o.label +
+        (showKeys ? ' <span class="key-hint">' + o.kbd + '</span>' : '') + '</button>';
+    });
+    h += '<span class="assess-note muted" id="assess-note">pick any that apply</span></div>';
+    return h;
+  }
+
+  /* Wire a freshly rendered row for question q. Returns { toggle(key) } so
+     keyboard shortcuts drive the exact same path as clicks. */
+  function bind(container, q, isCorrect) {
+    var row = container.querySelector('#assess-row');
+    if (!row) return { toggle: function () {} };
+    var on = { sure: false, guess: false, slow: false, forgot: false };
+    var luckyFiled = false;
+
+    function paint() {
+      row.querySelectorAll('[data-assess]').forEach(function (b) {
+        var k = b.getAttribute('data-assess');
+        b.classList.toggle('active', !!on[k]);
+        b.setAttribute('aria-pressed', on[k] ? 'true' : 'false');
+      });
+      var note = row.querySelector('#assess-note');
+      if (note) {
+        note.textContent = luckyFiled
+          ? '⚑ filed as a lucky guess in your mistake book'
+          : 'pick any that apply';
+      }
+    }
+
+    function commit() {
+      var conf = on.sure ? 'sure' : on.guess ? 'guess' : null;
+      var tags = [];
+      if (on.slow) tags.push('slow');
+      if (on.forgot) tags.push('forgot');
+      PGRE.srs.setLastAssess(q.id, conf, tags);
+    }
+
+    function toggle(key) {
+      if (!(key in on)) return;
+      on[key] = !on[key];
+      if (key === 'sure' && on.sure) on.guess = false;
+      if (key === 'guess' && on.guess) on.sure = false;
+      // Lucky-guess bookkeeping applies to correct answers only (a wrong
+      // answer already filed a real mistake-book entry when it was recorded).
+      if (isCorrect) {
+        var luckyChanged = false;
+        if (on.guess && !luckyFiled) {
+          PGRE.srs.markLucky(q.id); luckyFiled = true; luckyChanged = true;
+        } else if (!on.guess && luckyFiled) {
+          PGRE.srs.unmarkLucky(q.id); luckyFiled = false; luckyChanged = true;
+        }
+        if (on.sure) PGRE.srs.clearLucky(q.id); // knew it for real — retire stale flags
+        if (luckyChanged) PGRE.refreshNavBadges();
+      }
+      commit();
+      paint();
+    }
+
+    row.querySelectorAll('[data-assess]').forEach(function (b) {
+      b.addEventListener('click', function () { toggle(b.getAttribute('data-assess')); });
+    });
+
+    return { toggle: toggle };
+  }
+
+  return { OPTIONS: OPTIONS, LABELS: LABELS, html: html, bind: bind };
+})();
+
 /* store.save() failure hook: a sticky warning while progress cannot be
    persisted (storage full or blocked), cleared once a save succeeds again. */
 PGRE.persistWarning = (function () {
@@ -258,7 +348,10 @@ PGRE.nav = (function () {
         var pt = params.id && params.id !== 'all' ? PGRE.topicById(params.id) : null;
         trail.push(pt ? { label: pt.name, href: '#/topic/' + pt.id }
                       : { label: 'All topics' });
-        trail.push({ label: 'Practice' });
+        // sub2 carries the portal's done-status filter (#/practice/<id>/new|done)
+        trail.push({ label: params.sub2 === 'new' ? 'Practice · not yet done'
+                          : params.sub2 === 'done' ? 'Practice · done before'
+                          : 'Practice' });
       } else if (LABELS[view]) {
         trail.push({ label: LABELS[view], href: HREF[view] });
         if (view === 'exam' && params.sub === 'run') trail.push({ label: 'Run' });
@@ -373,6 +466,27 @@ PGRE.buildNav = function () {
   el.innerHTML = html;
 };
 
+/* ——— Foldable sidebar ———
+   The ☰ button in the top bar hides/shows #sidebar (body.sidebar-folded, see
+   css). Persisted in settings.sidebarFolded so the choice survives reloads. */
+PGRE.applySidebar = function (folded) {
+  document.body.classList.toggle('sidebar-folded', !!folded);
+  var btn = document.getElementById('sidebar-toggle');
+  if (btn) {
+    var label = folded ? 'Show sidebar' : 'Hide sidebar';
+    btn.setAttribute('aria-expanded', folded ? 'false' : 'true');
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('title', label);
+  }
+};
+
+PGRE.toggleSidebar = function () {
+  var s = PGRE.store.state.settings;
+  s.sidebarFolded = !s.sidebarFolded;
+  PGRE.store.save();
+  PGRE.applySidebar(s.sidebarFolded);
+};
+
 /* ——— Theme: 'light' (default) or 'dark', a data-theme layer on <html> ——— */
 PGRE.applyTheme = function (t) {
   t = t || 'light';
@@ -392,9 +506,12 @@ PGRE.setTheme = function (t) {
 PGRE.boot = function () {
   PGRE.store.load();
   PGRE.applyTheme(PGRE.store.state.settings.theme);
+  PGRE.applySidebar(PGRE.store.state.settings.sidebarFolded);
+  var sbToggle = document.getElementById('sidebar-toggle');
+  if (sbToggle) sbToggle.addEventListener('click', PGRE.toggleSidebar);
   PGRE.buildNav();
   PGRE.studyTime.start();       // passive active-minutes heartbeat
-  if (PGRE.timer) PGRE.timer.boot();   // F3 focus timer: resume/credit + wire the sidebar widget
+  if (PGRE.timer) PGRE.timer.boot();   // F3 focus timer: resume/credit + wire the top-bar widget
   var toggle = document.getElementById('theme-toggle');
   if (toggle) toggle.addEventListener('click', function () {
     PGRE.setTheme(PGRE.store.state.settings.theme === 'dark' ? 'light' : 'dark');
