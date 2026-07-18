@@ -54,6 +54,10 @@ PGRE.search = (function () {
 
   function buildQuestions(out) {
     PGRE.allQuestions({ includeExam: true }).forEach(function (q) {
+      // intact released ETS exams stay out of the index — they must stay
+      // fresh for verbatim replay (CLAUDE.md spoiler rule); the book's
+      // sample exams remain searchable under the 'exam' group as before
+      if (q.src === 'ets-exam') return;
       var choices = (q.choices || []).map(plain).join(' · ');
       var kind = q.src === 'cpg-exam' ? 'exam' : 'question';
       out.push(entry(kind, q.id, plain(q.q),

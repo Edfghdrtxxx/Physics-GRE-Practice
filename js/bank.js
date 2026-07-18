@@ -1,7 +1,9 @@
 /* Question bank — the single source of truth for question pools. Sources:
    - PGRE.QUESTIONS       (js/data-questions.js)          preview set, src 'preview'
    - PGRE.BOOK_QUESTIONS  (content/bank/cpg-questions.js) chapter problems, src 'cpg'
+   - PGRE.ETS_DRILLS      (content/bank/ets-exams.js)     GR8677/GR9277 drills, src 'ets-drill'
    - PGRE.BOOK_EXAMS      (content/bank/cpg-exams.js)     sample exams, src 'cpg-exam'
+   - PGRE.ETS_EXAMS       (content/bank/ets-exams.js)     released ETS exams, src 'ets-exam'
    The content/bank files are gitignored placeholders until the book extraction
    pipeline fills them, so every read below is guarded against absence.
    The helpers here supersede the preview-only fallbacks at the bottom of
@@ -9,10 +11,13 @@
 window.PGRE = window.PGRE || {};
 
 /* Merged question pool, deduped by id (first occurrence wins). The default is
-   the practice pool: preview questions + book chapter problems. Pass
-   { includeExam: true } to also flatten in the sample-exam questions (the
-   exam simulator draws from the full bank). Each question is tagged with its
-   src at merge time, so data files stay untouched. */
+   the practice pool: preview questions + book chapter problems + the ETS
+   drill sets (GR8677/GR9277 — the user-approved exception to the spoiler
+   rule; see CLAUDE.md → Content Rules). Pass { includeExam: true } to also
+   flatten in the INTACT exam questions (book sample exams + kept released
+   ETS exams) — only the exam simulator's draw and by-id lookups may do that,
+   so those exams stay unspoiled for verbatim simulation. Each question is
+   tagged with its src at merge time, so data files stay untouched. */
 PGRE.allQuestions = function (opts) {
   opts = opts || {};
   var seen = {}, out = [];
@@ -26,9 +31,15 @@ PGRE.allQuestions = function (opts) {
   }
   add(PGRE.QUESTIONS, 'preview');
   add(PGRE.BOOK_QUESTIONS, 'cpg');
+  (PGRE.ETS_DRILLS || []).forEach(function (d) {
+    add(d && d.questions, 'ets-drill');
+  });
   if (opts.includeExam) {
     (PGRE.BOOK_EXAMS || []).forEach(function (ex) {
       add(ex && ex.questions, 'cpg-exam');
+    });
+    (PGRE.ETS_EXAMS || []).forEach(function (ex) {
+      add(ex && ex.questions, 'ets-exam');
     });
   }
   return out;

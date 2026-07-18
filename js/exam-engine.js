@@ -89,7 +89,13 @@ PGRE.examEngine = (function () {
 
   /* ——— Draw: current format (weighted, prefer-unseen) ——— */
   function buildWeighted(seed) {
-    var pool = PGRE.allQuestions({ includeExam: true });
+    // weighted mocks may draw the book's sample-exam questions (pre-existing
+    // behavior) but never the intact released ETS exams — those stay fresh
+    // for verbatim replay (CLAUDE.md spoiler rule; whether sat exams should
+    // graduate into this pool is still an open user decision)
+    var pool = PGRE.allQuestions({ includeExam: true }).filter(function (q) {
+      return q.src !== 'ets-exam';
+    });
     var need = FORMAT_META['70x120'].questions;
     if (pool.length < need) return null;
 
@@ -133,27 +139,55 @@ PGRE.examEngine = (function () {
     return { order: order, format: '70x120', source: 'weighted', title: null };
   }
 
-  /* ——— Draw: legacy format (verbatim sample-exam replay) ——— */
+  /* ——— Draw: verbatim replay (book sample exams + released ETS exams) ——— */
+  /* Every replayable exam, real ETS releases first. Both banks are gitignored
+     content files, so reads stay guarded against absence. */
+  function replayList() {
+    return (PGRE.ETS_EXAMS || []).concat(PGRE.BOOK_EXAMS || []);
+  }
+
+  function examById(id) {
+    var list = replayList();
+    for (var i = 0; i < list.length; i++) if (list[i] && list[i].id === id) return list[i];
+    // Back-compat: 'x1'..'x3' predate exam ids and mean BOOK_EXAMS by position.
+    var idx = { x1: 0, x2: 1, x3: 2 }[id];
+    return idx != null ? ((PGRE.BOOK_EXAMS || [])[idx] || null) : null;
+  }
+
   function legacyExam(source) {
-    var idx = { x1: 0, x2: 1, x3: 2 }[source];
-    if (idx == null) return null;
-    var ex = (PGRE.BOOK_EXAMS || [])[idx];
+    var ex = examById(source);
     if (!ex || !ex.questions || !ex.questions.length) return null;
     return {
       order: ex.questions.map(function (q) { return q.id; }),
-      format: ex.format || '100x170',
+      format: FORMAT_META[ex.format] ? ex.format : '100x170',
       source: source,
-      title: ex.title || ('Sample Exam ' + (idx + 1))
+      title: ex.title || 'Released exam'
     };
+  }
+
+  /* Official raw→scaled conversion for replayed exams that carry their
+     practice book's published table ({raw, scaled} rows). Exact row lookup;
+     null when the exam has no table or the raw value isn't in it — callers
+     fall back to the estimate. */
+  function officialScaled(raw, source) {
+    var ex = source ? examById(source) : null;
+    var rows = ex && ex.scale;
+    if (!rows || !rows.length) return null;
+    for (var i = 0; i < rows.length; i++) if (rows[i].raw === raw) return rows[i].scaled;
+    return null;
   }
 
   /* Is there enough content to start this format/source right now? */
   function canStart(format, source) {
-    if (format === '100x170') {
+    if (source || format === '100x170') {
       var built = legacyExam(source);
       return built ? { ok: true } : { ok: false, need: 0, have: 0, legacy: true };
     }
-    var have = PGRE.allQuestions({ includeExam: true }).length;
+    // must mirror buildWeighted's pool (ets-exam excluded) or canStart could
+    // approve a draw the builder cannot fill
+    var have = PGRE.allQuestions({ includeExam: true }).filter(function (q) {
+      return q.src !== 'ets-exam';
+    }).length;
     var need = FORMAT_META['70x120'].questions;
     return have >= need ? { ok: true } : { ok: false, need: need, have: have, legacy: false };
   }
@@ -179,7 +213,7 @@ PGRE.examEngine = (function () {
 
   function create(config) {
     var seed = newSeed();
-    var built = config.format === '100x170' ? legacyExam(config.source) : buildWeighted(seed);
+    var built = config.source ? legacyExam(config.source) : buildWeighted(seed);
     if (!built) return null;
     var s = PGRE.store.state;
     // drop any earlier unfinished exam — only one active sitting at a time
@@ -238,6 +272,9 @@ PGRE.examEngine = (function () {
     exam.missing = missing;
     exam.perTopic = perTopic;
     exam.scaledEst = scaledEstimate(raw, exam.total);
+    // Replayed released exams score on their own published ETS table instead
+    var official = officialScaled(raw, exam.source);
+    if (official != null) { exam.scaledEst = official; exam.scaledOfficial = true; }
     exam.paused = false;
     exam.submittedAt = new Date().toISOString();
 
@@ -264,6 +301,7 @@ PGRE.examEngine = (function () {
     WEIGHTS: WEIGHTS,
     SCALE_ANCHORS: SCALE_ANCHORS,
     scaledEstimate: scaledEstimate,
+    examById: examById,
     canStart: canStart,
     create: create,
     active: active,

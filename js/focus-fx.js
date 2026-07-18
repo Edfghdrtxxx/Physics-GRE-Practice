@@ -70,8 +70,9 @@ PGRE.focusFx = (function () {
   var TRACK_CAP = 48;        // hard cap so the fans never clutter
   var BLOOM_MS = 600;        // life of the collision glow at the IP
   var MAX_ELECTRONS = 500;   // ambient pool cap; oldest evicted so bursts never stall
-  // muted event-display palette sampled from the reference image
-  var PALETTE = ['#6b8cba', '#7ba37b', '#c9847a', '#b89b4f',
+  // muted event-display palette — blue/green/orange snapped to the Anthropic
+  // brand accents (#6A9BCC / #788C5D / #D97757), rest kept from the reference
+  var PALETTE = ['#6a9bcc', '#788c5d', '#d97757', '#b89b4f',
                  '#a06a8c', '#8b7ab8', '#97a86b'];
 
   function reduced() {
@@ -316,8 +317,8 @@ PGRE.focusFx = (function () {
 
   function draw(w, h, now, g) {
     ctx.clearRect(0, 0, w, h);
-    var accent = tok('--accent', '#b3541e'), deep = tok('--accent-deep', '#8a3c12');
-    var ion = pageTok('--fp-ion', '#5C7C8A');
+    var accent = tok('--accent', '#d97757'), deep = tok('--accent-deep', '#c0502b');
+    var ion = pageTok('--fp-ion', '#6a9bcc');
     var i, j, p, k;
 
     // ——— ambient field: behind everything, instrument noise on the paper ———

@@ -104,7 +104,8 @@ PGRE.views.exam = (function () {
     var act = eng.active();
     var pool = PGRE.allQuestions({ includeExam: true }).length;
     var need70 = eng.FORMAT_META['70x120'].questions;
-    var exams = (PGRE.BOOK_EXAMS || []).slice(0, 3);
+    var bookExams = PGRE.BOOK_EXAMS || [];
+    var etsExams = PGRE.ETS_EXAMS || [];
 
     var html = '<div class="card"><h1>Timed mock exam</h1>' +
       '<p class="muted">A full exam-room simulation: countdown clock, question palette, ' +
@@ -142,6 +143,32 @@ PGRE.views.exam = (function () {
     }
     html += '</div>';
 
+    // Released ETS exams — verbatim replay, official key + published scaling
+    html += '<div class="card exam-format">' +
+      '<div class="exam-format-head"><h2>Released ETS exams</h2>' +
+      '<span class="chip">official</span></div>' +
+      '<p class="muted">Verbatim replays of real exams released by ETS, scored with the official ' +
+      'answer key and each exam’s own published raw→scaled table. The exam PDFs stay local-only ' +
+      '(ETS copyright — link, don’t republish); sources are listed in the project’s ' +
+      'Practice Resources doc.</p>';
+    if (etsExams.length) {
+      html += '<div class="btn-row">';
+      etsExams.forEach(function (ex) {
+        var fm = eng.FORMAT_META[ex.format];
+        html += '<button class="btn btn-ghost" data-replay="' + ui.esc(ex.id) + '"' +
+          (act ? ' disabled' : '') + ' title="' + (fm ? ui.esc(fm.label) : '') + '">' +
+          ui.esc(ex.title || ex.id) + '</button>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div class="exam-empty">' +
+        '<span class="exam-empty-icon" aria-hidden="true">⌛</span>' +
+        '<div><strong>No released exams imported yet.</strong> ' +
+        '<span class="muted">They unlock once the extraction pipeline fills ' +
+        'content/bank/ets-exams.js from the local exam PDFs.</span></div></div>';
+    }
+    html += '</div>';
+
     // Legacy format — verbatim sample-exam replay
     html += '<div class="card exam-format">' +
       '<div class="exam-format-head"><h2>Legacy format</h2>' +
@@ -149,10 +176,10 @@ PGRE.views.exam = (function () {
       '<p class="muted">Replays a full released-style sample exam verbatim, in book order — ' +
       'matching the 100-question ETS practice tests your <a href="#/plan">study plan</a> ' +
       'schedules on paper.</p>';
-    if (exams.length) {
+    if (bookExams.length) {
       html += '<div class="btn-row">';
-      exams.forEach(function (ex, i) {
-        html += '<button class="btn btn-ghost" data-legacy="x' + (i + 1) + '"' +
+      bookExams.forEach(function (ex, i) {
+        html += '<button class="btn btn-ghost" data-replay="' + ui.esc(ex.id || ('x' + (i + 1))) + '"' +
           (act ? ' disabled' : '') + '>' + ui.esc(ex.title || ('Sample Exam ' + (i + 1))) + '</button>';
       });
       html += '</div>';
@@ -172,9 +199,10 @@ PGRE.views.exam = (function () {
       eng.discard(act); PGRE.toast('In-progress exam discarded.', 'info'); renderSetup();
     });
     if ((g = document.getElementById('start-70'))) g.addEventListener('click', function () { startExam({ format: '70x120' }); });
-    root().querySelectorAll('[data-legacy]').forEach(function (b) {
+    root().querySelectorAll('[data-replay]').forEach(function (b) {
       b.addEventListener('click', function () {
-        startExam({ format: '100x170', source: b.getAttribute('data-legacy') });
+        // the engine resolves the exam id and takes the exam's own format
+        startExam({ source: b.getAttribute('data-replay') });
       });
     });
   }
@@ -204,7 +232,7 @@ PGRE.views.exam = (function () {
           '<span class="exam-hist-when">' + fmtDate(x.submittedAt) + '</span>' +
           '<span class="chip">' + eng.FORMAT_META[x.format].label + '</span>' +
           '<span class="exam-hist-score">' + x.raw + ' / ' + x.total + ' · ' + pct + '%</span>' +
-          '<span class="exam-hist-scaled">~' + x.scaledEst + ' scaled</span>' +
+          '<span class="exam-hist-scaled">' + (x.scaledOfficial ? '' : '~') + x.scaledEst + ' scaled</span>' +
         '</a>';
       });
       html += '</div>';
@@ -528,7 +556,9 @@ PGRE.views.exam = (function () {
       '<p class="muted">' + verdict + '</p>' +
       '<div class="stat-row exam-result-stats">' +
         ui.statTile('Raw score', exam.raw + ' / ' + exam.total) +
-        ui.statTile('Scaled estimate', '~' + exam.scaledEst, 'ballpark, not ETS-equated') +
+        (exam.scaledOfficial
+          ? ui.statTile('Scaled score', String(exam.scaledEst), 'official ETS table')
+          : ui.statTile('Scaled estimate', '~' + exam.scaledEst, 'ballpark, not ETS-equated')) +
         ui.statTile('Time used', fmtDur(exam.durationSec), 'of ' + fmtDur(exam.limitSec)) +
         ui.statTile('Flagged', String(exam.flags.length)) +
       '</div>' +
@@ -536,8 +566,10 @@ PGRE.views.exam = (function () {
         (exam.missing === 1 ? '' : 's') + ' could not be matched to the current bank and ' +
         (exam.missing === 1 ? 'was' : 'were') + ' scored as incorrect — the bank changed ' +
         'since this sitting.</p>' : '') +
-      '<p class="muted exam-scale-note">Scaled scores run 200–990; this estimate is interpolated ' +
-      'from a hand-averaged lookalike of released ETS practice-test tables and is a rough ballpark only.</p>' +
+      '<p class="muted exam-scale-note">' + (exam.scaledOfficial
+        ? 'Scaled with the raw→scaled conversion table ETS published for this released exam.'
+        : 'Scaled scores run 200–990; this estimate is interpolated from a hand-averaged lookalike ' +
+          'of released ETS practice-test tables and is a rough ballpark only.') + '</p>' +
     '</div>';
 
     // Per-topic breakdown

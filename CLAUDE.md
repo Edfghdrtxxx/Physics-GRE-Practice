@@ -1,2 +1,8 @@
 # Personal Context
 I have little background in computer science. When a decision is required of me, please explain the options clearly and in plain terms so that I can respond meaningfully.
+
+# Content Rules
+
+- **Spoiler protection (user-approved):** real-exam questions — the book's sample exams (`src: 'cpg-exam'`) and released ETS exams (`src: 'ets-exam'`) — must never enter the daily/topic practice pool. `PGRE.allQuestions()` (the default pool) excludes them; only the exam simulator's draw and by-id lookups (review, mistake book, analytics) may pass `{ includeExam: true }`. Never weaken this when adding features — intact exams must stay fresh for realistic simulation. Consumers of `includeExam` outside the sanctioned two (global search, the custom-quiz toggle, the weighted 70-question draw) filter `src === 'ets-exam'` back out as a protective default (2026-07-18). Open decision: whether ETS exams the user has already sat should graduate into the weighted draw.
+  - **Approved exception (2026-07-18):** GR8677 and GR9277 only — the two oldest forms — are broken up into daily-drill questions (`src: 'ets-drill'`, `PGRE.ETS_DRILLS`) that DO live in the default pool, and are never offered as simulator mocks. This exception covers exactly these two exams; the other five stay under the rule.
+- **ETS copyright:** released-exam PDFs and everything derived from them (extracted questions, figures, keys) live only in gitignored paths — `docs/ETS Released Exams/`, `content/ets-src/`, `content/ets-assets/`, `content/bank/`. The public repo carries code only. Link to sources; never commit or republish exam content.

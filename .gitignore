@@ -5,3 +5,7 @@ docs/Conquering the Physics GRE (Yoni Kahn)/
 # Book-derived question bank, formula deck, and figures — same rule
 content/bank/
 content/book-assets/
+# ETS released exam PDFs, extracted questions, and figures — ETS copyright, link don't republish
+docs/ETS Released Exams/
+content/ets-assets/
+content/ets-src/

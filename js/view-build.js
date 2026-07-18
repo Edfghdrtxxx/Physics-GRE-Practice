@@ -75,7 +75,10 @@ PGRE.views.build = (function () {
   }
 
   function matching() {
-    var pool = PGRE.allQuestions(sel.includeExam ? { includeExam: true } : {});
+    // the include-exam toggle means the BOOK's sample exams only; intact
+    // released ETS exams never enter practice (CLAUDE.md spoiler rule)
+    var pool = PGRE.allQuestions(sel.includeExam ? { includeExam: true } : {})
+      .filter(function (q) { return q.src !== 'ets-exam'; });
     var topicKeys = Object.keys(sel.topics);
     var diffKeys = Object.keys(sel.diffs);
     var statusKeys = Object.keys(sel.statuses);

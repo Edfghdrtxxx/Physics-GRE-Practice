@@ -69,6 +69,27 @@ It will become more meaningful as the bank grows past the 20 preview questions.
 > default pool (preview + chapter problems; exam questions are opt-in via the quiz builder
 > to keep sims fresh). The pipeline is re-runnable; regenerated files simply overwrite.
 
+> **Released ETS exams (2026-07-18):** seven real ETS exams (2024 practice book — the current
+> 70-question format, with official P+ stats — plus GR1777/GR0877/GR0177/GR9677/GR9277/GR8677)
+> are extracted from local PDFs (gitignored `docs/ETS Released Exams/`) by a multi-agent
+> pipeline (transcribe → fidelity audit → blind-solve vs official key → reconcile) into
+> gitignored `content/ets-src/`, then built by `tools/build-ets-exams.js` into gitignored
+> `content/bank/ets-exams.js` (`PGRE.ETS_EXAMS`). The simulator replays them verbatim with the
+> official answer key and each exam's own published raw→scaled table (`exam.scaledOfficial`).
+> **Spoiler-protection rule (user-approved):** exam-sourced questions (`cpg-exam`, `ets-exam`)
+> never enter the default practice pool — `{ includeExam: true }` is reserved for the
+> simulator draw and by-id lookups (review, mistake book, analytics) so intact exams stay
+> fresh for simulation. The three other `includeExam` consumers — global search, the
+> custom-quiz "include sample-exam" toggle, and the weighted 70-question draw — filter
+> `src === 'ets-exam'` back out (protective default, 2026-07-18), so only the book's
+> sample exams flow through them. See CLAUDE.md → Content Rules.
+> **Approved exception (2026-07-18):** GR8677 (1986) and GR9277 (1992) — the two oldest,
+> least-representative forms — are deliberately broken up into ~200 daily-drill questions
+> instead of mocks: built with `drill: true` into `PGRE.ETS_DRILLS` (src `ets-drill`), they
+> DO join the default practice pool and are never listed in the simulator. The other five
+> exams stay pristine under the rule above. Drill questions that near-duplicate a kept
+> exam's question are quarantined (`meta.json → quarantine`) so they can't spoil that mock.
+
 The site is frame-first: **20 preview questions** (hand-written, GRE-style, 5 choices)
 spread across all 9 topics stand in until the *Conquering the Physics GRE* markdown arrives.
 
