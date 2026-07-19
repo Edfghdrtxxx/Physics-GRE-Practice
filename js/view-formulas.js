@@ -189,14 +189,18 @@ PGRE.views.formulas = (function () {
       { year: 'numeric', month: 'long', day: 'numeric' });
   }
 
+  function formulaHTML(text) {
+    return PGRE.formulaTextHTML ? PGRE.formulaTextHTML(text) : (text || '');
+  }
+
   function topicCardsHTML(cards) {
     var ui = PGRE.ui, h = '<div class="ps-cards">';
     cards.forEach(function (c) {
       var nm = cardName(c);
       h += '<div class="ps-card">' +
         (nm ? '<div class="ps-card-tag">' + ui.esc(nm) + '</div>' : '') +
-        '<div class="ps-card-front">' + (c.front || '') + '</div>' +
-        '<div class="ps-card-back">' + (c.back || '') + '</div>' +
+        '<div class="ps-card-front">' + formulaHTML(c.front) + '</div>' +
+        '<div class="ps-card-back">' + formulaHTML(c.back) + '</div>' +
       '</div>';
     });
     return h + '</div>';
@@ -357,7 +361,9 @@ PGRE.views.formulas = (function () {
     }
 
     // ——— Leech nudge (F2) — cards that keep slipping despite reviews ———
-    var leeches = deck.filter(function (c) { return srs.isLeech(srs.cardState(c.id)); });
+    var leeches = deck.filter(function (c) {
+      return srs.isLeech(srs.cardState(c.id)) && !srs.isSuspended(c.id);
+    });
     if (leeches.length) {
       html += '<div class="card leech-banner"><strong>' + leeches.length +
         ' formula' + (leeches.length === 1 ? '' : 's') + ' keep' +
@@ -414,9 +420,15 @@ PGRE.views.formulas = (function () {
         '<p class="muted">Today’s batch is done — the next cards return on their schedule.</p>' +
         '<div class="btn-row">';
     }
+    var unlockedNew = batch.newIds.filter(function (id) {
+      return !srs.studiedToday(srs.cardState(id));
+    }).length;
     if (S > 0) {
       html += '<button class="btn btn-ghost" id="pick-btn">Choose today’s new cards</button>' +
         '<button class="btn btn-ghost" id="reroll-btn">Re-roll random picks</button>';
+      if (unlockedNew > 0) {
+        html += '<button class="btn btn-ghost" id="clear-new-btn">Skip new cards</button>';
+      }
     }
     html += '</div></div>';
 
@@ -467,11 +479,20 @@ PGRE.views.formulas = (function () {
       PGRE.srs.rerollFormulaNewPicks(deck);
       renderHome();
     });
+    var cnb = document.getElementById('clear-new-btn');
+    if (cnb) cnb.addEventListener('click', function () {
+      PGRE.srs.clearFormulaNewPicks(deck);
+      renderHome();
+    });
     // F2: drill the leeches — a normal-grading session independent of the daily
     // batch (these cards may already be studied today; they still surface here).
+    // Put-away cards are excluded: a shelved card is very often also a leech,
+    // and grading it here would rewrite the schedule the user shelved it to avoid.
     var ld = document.getElementById('leech-drill');
     if (ld) ld.addEventListener('click', function () {
-      startStudy(deck.filter(function (c) { return PGRE.srs.isLeech(PGRE.srs.cardState(c.id)); }));
+      startStudy(deck.filter(function (c) {
+        return PGRE.srs.isLeech(PGRE.srs.cardState(c.id)) && !PGRE.srs.isSuspended(c.id);
+      }));
     });
     // F5: flip the Study direction, persist, re-render.
     var dt = document.getElementById('dir-toggle');
@@ -623,6 +644,7 @@ PGRE.views.formulas = (function () {
         } else {
           chips += '<span class="due-chip">new</span>';
         }
+        if (srs.isSuspended(c.id)) chips += '<span class="due-chip suspended-chip">put away</span>';
         if (inBatch[c.id]) chips += '<span class="due-chip today-chip">today</span>';
         html += '<div class="browse-row" data-cardid="' + ui.esc(c.id) + '">' +
           '<span class="deck-name">' + ui.esc(cardName(c)) + '</span>' +
@@ -653,6 +675,7 @@ PGRE.views.formulas = (function () {
         } else {
           chips += '<span class="due-chip">new</span>';
         }
+        if (srs.isSuspended(c.id)) chips += '<span class="due-chip suspended-chip">put away</span>';
         if (inBatch[c.id]) chips += '<span class="due-chip today-chip">today</span>';
         html += '<div class="browse-row" data-cardid="' + ui.esc(c.id) + '">' +
           '<span class="deck-name">' + ui.esc(cardName(c)) + '</span>' +
@@ -700,9 +723,10 @@ PGRE.views.formulas = (function () {
         if (!peek.getAttribute('data-filled')) {
           var c = deckById(id);
           if (c) {
-            peek.innerHTML = '<div class="fcard-front">' + (c.front || '') + '</div>' +
-              '<div class="fcard-back">' + (c.back || '') +
-              (c.note ? '<div class="fcard-note">' + c.note + '</div>' : '') + '</div>' +
+            peek.innerHTML = '<div class="fcard-front">' + formulaHTML(c.front) + '</div>' +
+              '<div class="fcard-back">' + formulaHTML(c.back) +
+              (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') + '</div>' +
+              '<div class="peek-suspend" data-susp-for="' + cssAttr(c.id) + '"></div>' +
               '<div class="peek-mnemonic" data-mnem-for="' + cssAttr(c.id) + '"></div>';
             peek.setAttribute('data-filled', '1');
             PGRE.typesetMath(peek);
@@ -710,9 +734,43 @@ PGRE.views.formulas = (function () {
             wireMnemonic(peek.querySelector('.peek-mnemonic'), c.id);
           }
         }
+        // Redrawn on every open (not just the first fill) so the control tracks
+        // the card’s current suspended state rather than the state at fill time.
+        wireRestore(peek.querySelector('.peek-suspend'), id, row);
         peek.hidden = false;
         row.classList.add('open');
       });
+    });
+  }
+
+  /* Restore ("un-put-away") control inside a browse peek. Draws nothing for a
+     card that isn’t suspended. Restoring only clears the flag — the daily batch
+     reconciler decides on its own whether the card rejoins today or waits for
+     its scheduled due date. Updates the row in place so the open peek and the
+     scroll position survive. */
+  function wireRestore(section, id, row) {
+    if (!section) return;
+    if (!PGRE.srs.isSuspended(id)) { section.innerHTML = ''; return; }
+    section.innerHTML = '<p class="peek-suspend-note">Put away — held out of the daily batch.</p>' +
+      '<button class="btn btn-ghost btn-sm" data-susp="restore">Restore to deck</button>';
+    var b = section.querySelector('[data-susp="restore"]');
+    if (b) b.addEventListener('click', function () {
+      PGRE.srs.unsuspendCard(id);
+      PGRE.store.save();
+      var chip = row.querySelector('.suspended-chip');
+      if (chip && chip.parentNode) chip.parentNode.removeChild(chip);
+      // Reconcile before reporting, so the message states what actually happened
+      // rather than assuming: a restored card rejoins today only if it is due and
+      // the batch has an open slot — otherwise it waits for its scheduled date.
+      var batch = PGRE.srs.formulaDay(deck);
+      var today = batch.reviewIds.concat(batch.newIds).indexOf(id) !== -1;
+      var chips = row.querySelector('.browse-chips');
+      if (today && chips && !row.querySelector('.today-chip')) {
+        chips.insertAdjacentHTML('beforeend', '<span class="due-chip today-chip">today</span>');
+      }
+      section.innerHTML = '<p class="peek-suspend-note">' + (today ?
+        'Restored — it’s back in today’s batch.' :
+        'Restored — it returns on its next scheduled day.') + '</p>';
     });
   }
 
@@ -977,7 +1035,7 @@ PGRE.views.formulas = (function () {
     var undoBtn = study.undo.length ?      // F1a ghost undo when the stack is live
       '<button class="btn btn-ghost btn-sm study-undo" id="study-undo">Undo ' +
         '<span class="key-hint">⌘Z</span></button>' : '';
-    var noteHTML = c.note ? '<div class="fcard-note">' + c.note + '</div>' : '';
+    var noteHTML = c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '';
     var mnem = mnemonicHTML(c.id);         // F2: shown under the note after a flip
     // F5: reverse direction shows the formula as the question ("what is this?")
     // and reveals name + prompt + note + mnemonic. Same SM-2 state and grading —
@@ -986,13 +1044,13 @@ PGRE.views.formulas = (function () {
     var frontFace, backFace;
     if (reverse) {
       frontFace = '<div class="fcard-rev-q">What is this? When does it apply?</div>' +
-        '<div class="fcard-front" id="fcard-front">' + (c.back || '') + '</div>';
+        '<div class="fcard-front" id="fcard-front">' + formulaHTML(c.back) + '</div>';
       backFace = (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
-        '<div class="fcard-rev-prompt">' + (c.front || '') + '</div>' + noteHTML + mnem;
+        '<div class="fcard-rev-prompt">' + formulaHTML(c.front) + '</div>' + noteHTML + mnem;
     } else {
       frontFace = (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
-        '<div class="fcard-front" id="fcard-front">' + (c.front || 'Recall the formula.') + '</div>';
-      backFace = c.back + noteHTML + mnem;
+        '<div class="fcard-front" id="fcard-front">' + formulaHTML(c.front || 'Recall the formula.') + '</div>';
+      backFace = formulaHTML(c.back) + noteHTML + mnem;
     }
     var html = '<div class="card practice-card">' +
       '<div class="practice-meta">' +
@@ -1013,6 +1071,8 @@ PGRE.views.formulas = (function () {
         // F8 scaffold prompts reconstruct a formula, so they only fit the
         // forward face — suppress in reverse (F5) where the formula IS the prompt.
         (reverse ? '' : '<button class="btn btn-ghost" id="rebuild-btn">Rebuild hints</button>') +
+        '<button class="btn btn-ghost" id="skip-btn">Skip</button>' +
+        '<button class="btn btn-ghost" id="putaway-btn">Put away</button>' +
       '</div></div>';
     body().innerHTML = html;
     PGRE.typesetMath(body());
@@ -1029,6 +1089,10 @@ PGRE.views.formulas = (function () {
     if (ub) ub.addEventListener('click', function (e) { e.stopPropagation(); undoGrade(); });
     var rb = document.getElementById('rebuild-btn');
     if (rb) rb.addEventListener('click', function (e) { e.stopPropagation(); showRebuildHints(); });
+    var sb = document.getElementById('skip-btn');
+    if (sb) sb.addEventListener('click', function (e) { e.stopPropagation(); skipCard(); });
+    var pa = document.getElementById('putaway-btn');
+    if (pa) pa.addEventListener('click', function (e) { e.stopPropagation(); putAwayCard(); });
   }
 
   /* F8 pre-flip scaffold: swap the card front for the generic prompt list; the
@@ -1065,9 +1129,9 @@ PGRE.views.formulas = (function () {
       '</div>' +
       '<div class="fcard">' +
         (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
-        '<div class="fcard-front">' + (c.front || '') + '</div>' +
-        '<div class="fcard-back">' + (c.back || '') +
-          (c.note ? '<div class="fcard-note">' + c.note + '</div>' : '') + '</div>' +
+        '<div class="fcard-front">' + formulaHTML(c.front) + '</div>' +
+        '<div class="fcard-back">' + formulaHTML(c.back) +
+          (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') + '</div>' +
       '</div>' +
       '<div class="btn-row session-peek-bar">' +
         '<button class="btn btn-ghost" id="peek-older"' + (idx <= 0 ? ' disabled' : '') +
@@ -1193,6 +1257,29 @@ PGRE.views.formulas = (function () {
 
   /* F7: pull the current card off the front and reinsert it a few cards back so a
      learning card returns within the session without immediately repeating. */
+  function skipCard() {
+    if (!study || study.overlay) return;
+    study.queue.shift();
+    study.total--;
+    study.undo = [];
+    persistStudy();
+    PGRE.store.save();
+    if (study.queue.length) renderCard();
+    else renderStudySummary();
+  }
+
+  function putAwayCard() {
+    if (!study || study.overlay) return;
+    var c = study.queue.shift();
+    PGRE.srs.suspendCard(c.id);
+    study.total--;
+    study.undo = [];
+    persistStudy();
+    PGRE.store.save();
+    if (study.queue.length) renderCard();
+    else renderStudySummary();
+  }
+
   function reinsertCard() {
     var c = study.queue.shift();
     var p = Math.min(study.queue.length, 3 + Math.floor(Math.random() * 3));
@@ -1265,7 +1352,7 @@ PGRE.views.formulas = (function () {
     body().innerHTML = '<div class="card practice-card scaffold-card">' +
       '<h2>Reconstruct it</h2>' +
       '<p class="muted">Missed — rebuild this one from the ground up before moving on.</p>' +
-      '<div class="fcard-back scaffold-back">' + (c.back || '') + '</div>' +
+      '<div class="fcard-back scaffold-back">' + formulaHTML(c.back) + '</div>' +
       scaffoldPromptsHTML() +
       '<div class="btn-row"><button class="btn btn-primary" id="scaffold-continue">' +
       'Continue <span class="key-hint">space</span></button></div></div>';

@@ -46,6 +46,10 @@ PGRE.flashmodes = (function () {
     return m + ':' + String(r).padStart(2, '0');
   }
 
+  function formulaHTML(text) {
+    return PGRE.formulaTextHTML ? PGRE.formulaTextHTML(text) : (text || '');
+  }
+
   /* Plain-text normalization for the type-to-recall auto-check: peel the common
      LaTeX wrappers, then drop everything that isn't a letter or digit so
      spacing, case and punctuation stop mattering. It only lights an
@@ -276,7 +280,7 @@ PGRE.flashmodes = (function () {
   function pickQueue(deck) {
     var pool = PGRE.srs.formulaDayRemaining(deck);
     if (!pool.length) {
-      pool = deck.filter(function (c) { return PGRE.srs.cardState(c.id); });
+      pool = deck.filter(function (c) { return PGRE.srs.cardState(c.id) && !PGRE.srs.isSuspended(c.id); });
     }
     return shuffle(pool).slice(0, Math.min(SESSION_CAP, pool.length));
   }
@@ -287,7 +291,7 @@ PGRE.flashmodes = (function () {
     var remaining = PGRE.srs.formulaDayRemaining(deck), inSet = {};
     remaining.forEach(function (c) { inSet[c.id] = 1; });
     var studied = deck.filter(function (c) {
-      return !inSet[c.id] && PGRE.srs.cardState(c.id);
+      return !inSet[c.id] && PGRE.srs.cardState(c.id) && !PGRE.srs.isSuspended(c.id);
     });
     studied.sort(function (a, b) {
       var sa = PGRE.srs.cardState(a.id), sb = PGRE.srs.cardState(b.id);
@@ -318,8 +322,8 @@ PGRE.flashmodes = (function () {
 
     cards.forEach(function (c) {
       st.tiles.push({ id: c.id, kind: 'prompt',
-        html: c.front ? c.front : PGRE.ui.esc(cardName(c)) });
-      st.tiles.push({ id: c.id, kind: 'formula', html: c.back });
+        html: c.front ? formulaHTML(c.front) : PGRE.ui.esc(cardName(c)) });
+      st.tiles.push({ id: c.id, kind: 'formula', html: formulaHTML(c.back) });
     });
     st.tiles = shuffle(st.tiles);
 
@@ -466,7 +470,7 @@ PGRE.flashmodes = (function () {
           undoLink + '</div>' +
         PGRE.ui.meter(100 * st.i / st.queue.length, 'meter-thin') +
         (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
-        '<div class="flash-type-prompt">' + (c.front || 'Recall the formula.') + '</div>' +
+        '<div class="flash-type-prompt">' + formulaHTML(c.front || 'Recall the formula.') + '</div>' +
         '<input class="flash-type-input" id="flash-input" type="text" autocomplete="off" ' +
           'spellcheck="false" placeholder="Type the formula, then press Enter">' +
         '<div class="btn-row">' +
@@ -521,8 +525,8 @@ PGRE.flashmodes = (function () {
               (typed && typed.trim() ? PGRE.ui.esc(typed) : '<span class="muted">(blank)</span>') +
             '</div></div>' +
           '<div class="flash-compare-col is-real"><div class="flash-compare-label">Answer</div>' +
-            '<div class="flash-compare-body">' + c.back +
-              (c.note ? '<div class="fcard-note">' + c.note + '</div>' : '') + '</div></div>' +
+            '<div class="flash-compare-body">' + formulaHTML(c.back) +
+              (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') + '</div></div>' +
         '</div>' +
         '<div class="btn-row">' + gradesHtml + '</div>';
       PGRE.typesetMath(box);
@@ -664,7 +668,7 @@ PGRE.flashmodes = (function () {
             (st.streak > 1 ? 'Streak ' + st.streak : '') + '</span></div>' +
         PGRE.ui.meter(100 * st.i / st.queue.length, 'meter-thin') +
         (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
-        '<div class="q-text">' + (c.front || 'Which formula matches?') + '</div>' +
+        '<div class="q-text">' + formulaHTML(c.front || 'Which formula matches?') + '</div>' +
         '<div class="choices">';
       st.built.opts.forEach(function (o, idx) {
         html += '<button class="choice" data-idx="' + idx + '">' +
@@ -711,7 +715,7 @@ PGRE.flashmodes = (function () {
           (isCorrect && st.streak > 1 ? '<span class="fb-xp">Streak ' + st.streak + '</span>' : '') +
           '<button class="btn btn-ghost btn-sm flash-undo-link" id="flash-undo">Undo</button>' +
         '</div>' +
-        (c.note ? '<div class="solution"><div class="solution-label">Note</div>' + c.note + '</div>' : '') +
+        (c.note ? '<div class="solution"><div class="solution-label">Note</div>' + formulaHTML(c.note) + '</div>' : '') +
         '<div class="btn-row"><button class="btn btn-primary" id="flash-next">' +
           (st.i + 1 < st.queue.length ? 'Next →' : 'Finish') + '</button></div>';
       PGRE.typesetMath(fb);
@@ -985,7 +989,7 @@ PGRE.flashmodes = (function () {
      capped at 12. Filtering stops once 12 are found, bounding the KaTeX probing. */
   function clozePool(deck) {
     var pool = PGRE.srs.formulaDayRemaining(deck);
-    if (!pool.length) pool = deck.filter(function (c) { return PGRE.srs.cardState(c.id); });
+    if (!pool.length) pool = deck.filter(function (c) { return PGRE.srs.cardState(c.id) && !PGRE.srs.isSuspended(c.id); });
     var harvest = clozeHarvest(deck);
     pool = shuffle(pool);
     var out = [];
@@ -1021,7 +1025,7 @@ PGRE.flashmodes = (function () {
           '<span class="chip">' + (st.i + 1) + ' / ' + st.queue.length + '</span></div>' +
         PGRE.ui.meter(100 * st.i / st.queue.length, 'meter-thin') +
         (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
-        (c.front ? '<div class="q-text">' + c.front + '</div>' : '') +
+        (c.front ? '<div class="q-text">' + formulaHTML(c.front) + '</div>' : '') +
         '<div class="cloze-formula">' + spec.display + '</div>' +
         '<div class="cloze-options">';
       spec.opts.forEach(function (o, idx) {

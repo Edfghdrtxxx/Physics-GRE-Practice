@@ -1760,6 +1760,16 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .grade-chip.grade-easy { color: var(--accent-deep); background: var(--accent-tint); }
 .grade-chip.grade-mastered { color: var(--platinum); background: var(--platinum-tint); } /* ITEM 3 */
 .due-chip.today-chip { color: var(--accent-deep); background: var(--accent-track); }
+/* Shelved cards read as dormant: outlined rather than filled, so a "put away"
+   chip never competes with the due/today chips beside it. */
+.due-chip.suspended-chip {
+  color: var(--ink-2);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.peek-suspend { margin: 10px 0 0; }
+.peek-suspend-note { margin: 0 0 6px; color: var(--ink-2); font-size: 13px; }
+.peek-suspend .btn { margin: 0; }
 
 /* ——— In-session back-stepping peek ——— */
 .session-back { margin: 0; padding: 4px 12px; }

@@ -132,6 +132,49 @@ PGRE.typesetMath = function (el) {
   }
 };
 
+/* Formula-card imports contain prose as well as equations. Existing equations use
+   $...$; this prepares the compact symbols in their prose for KaTeX without
+   changing general site text or user mnemonics. */
+PGRE.formulaTextHTML = function (text) {
+  if (text == null || text === '') return '';
+  var greek = {
+    alpha: '\\alpha', beta: '\\beta', gamma: '\\gamma', delta: '\\delta',
+    epsilon: '\\epsilon', theta: '\\theta', lambda: '\\lambda', mu: '\\mu',
+    nu: '\\nu', rho: '\\rho', sigma: '\\sigma', tau: '\\tau', phi: '\\phi',
+    omega: '\\omega', Omega: '\\Omega'
+  };
+  var protectedPart = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$]*?\$|<[^>]*>)/g;
+
+  function mathToken(tex) { return '$' + tex + '$'; }
+  function plain(part) {
+    // Handle named Greek variants first so tau_0 is one mathematical span.
+    part = part.replace(/\b(alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|rho|sigma|tau|phi|omega|Omega)(?:_([A-Za-z0-9]+|\{[^}]+\})|\^([A-Za-z0-9]+|\{[^}]+\}))?(\/\d+)?\b/g,
+      function (_, name, sub, sup, frac) {
+        return mathToken(greek[name] + (sub ? '_' + sub : '') + (sup ? '^' + sup : '') + (frac || ''));
+      });
+    // A subscript/superscript makes a one-letter token unambiguously mathematical.
+    part = part.replace(/\b([A-Za-z])(_(?:[A-Za-z0-9]+|\{[^}]+\})|\^(?:[A-Za-z0-9]+|\{[^}]+\}))(\/\d+)?\b/g,
+      function (_, base, decoration, frac) { return mathToken(base + decoration + (frac || '')); });
+    // These are common standalone physics variables; omit prose words such as a,
+    // an, and I so the formula-card prompt remains readable.
+    return part.replace(/\b([A-Z]|[txyzvwrmEgFBpq])\b/g,
+      function (_, symbol) { return mathToken(symbol); });
+  }
+
+  var parts = String(text).split(protectedPart);
+  var codeDepth = 0;
+  return parts.map(function (part) {
+    if (!part) return part;
+    if (part.charAt(0) === '<') {
+      if (/^<(code|pre)\b/i.test(part)) codeDepth++;
+      else if (/^<\/(code|pre)\b/i.test(part) && codeDepth) codeDepth--;
+      return part;
+    }
+    if (/^(?:\$\$[\s\S]*\$\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\)|\$[^$]*\$)$/.test(part)) return part;
+    return codeDepth ? part : plain(part);
+  }).join('');
+};
+
 /* ——— Toasts ——— */
 PGRE.toast = function (html, kind, sticky) {
   var box = document.getElementById('toasts');

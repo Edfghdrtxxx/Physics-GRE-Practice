@@ -386,21 +386,20 @@ PGRE.srs = {
 
   _buildFormulaDay: function (deck, T, t) {
     var self = this;
+    var susp = PGRE.store.state.formulaSuspended || {};
     var finalPass = this.finalPassActive();
     var reviews = deck.filter(function (c) {
       var st = self.cardState(c.id);
-      // F3 final pass: every learned card is eligible (overdue first, then
-      // future-due learned cards, both oldest-due first via the sort below).
-      return st && (finalPass || st.due <= t);
+      return st && !susp[c.id] && (finalPass || st.due <= t);
     });
-    reviews.sort(function (a, b) {           // oldest due first
+    reviews.sort(function (a, b) {
       var da = self.cardState(a.id).due, db = self.cardState(b.id).due;
       return da < db ? -1 : da > db ? 1 : 0;
     });
     var reviewIds = reviews.slice(0, Math.min(T, reviews.length))
       .map(function (c) { return c.id; });
     var slots = Math.max(0, T - reviewIds.length);
-    var never = deck.filter(function (c) { return !self.cardState(c.id); });
+    var never = deck.filter(function (c) { return !self.cardState(c.id) && !susp[c.id]; });
     var newIds = this._sampleSpread(never, slots).map(function (c) { return c.id; });
     return { date: t, reviewIds: reviewIds, newIds: newIds };
   },
@@ -409,13 +408,14 @@ PGRE.srs = {
      changed (so the caller only persists on a real edit). */
   _reconcileFormulaDay: function (batch, deck, byId, T, t) {
     var self = this, changed = false;
+    var susp = PGRE.store.state.formulaSuspended || {};
     var finalPass = this.finalPassActive();   // F3: all learned cards eligible
     function studied(id) { return self.studiedToday(self.cardState(id)); }
 
-    // (a) drop ids that have left the deck
+    // (a) drop ids that have left the deck or are suspended
     var beforeR = batch.reviewIds.length, beforeN = batch.newIds.length;
-    batch.reviewIds = batch.reviewIds.filter(function (id) { return byId[id]; });
-    batch.newIds = batch.newIds.filter(function (id) { return byId[id]; });
+    batch.reviewIds = batch.reviewIds.filter(function (id) { return byId[id] && !susp[id]; });
+    batch.newIds = batch.newIds.filter(function (id) { return byId[id] && !susp[id]; });
     if (batch.reviewIds.length !== beforeR || batch.newIds.length !== beforeN) changed = true;
 
     var inBatch = {};
@@ -463,7 +463,7 @@ PGRE.srs = {
       var slots = T - total;
       var dueRev = deck.filter(function (c) {
         var st = self.cardState(c.id);
-        return st && (finalPass || st.due <= t) && !inBatch[c.id];
+        return st && !susp[c.id] && (finalPass || st.due <= t) && !inBatch[c.id];
       });
       dueRev.sort(function (a, b) {
         var da = self.cardState(a.id).due, db = self.cardState(b.id).due;
@@ -473,8 +473,8 @@ PGRE.srs = {
         batch.reviewIds.push(dueRev[m].id); inBatch[dueRev[m].id] = 1;
         slots--; changed = true;
       }
-      if (slots > 0) {
-        var never = deck.filter(function (c) { return !self.cardState(c.id) && !inBatch[c.id]; });
+      if (slots > 0 && !batch.skipNew) {
+        var never = deck.filter(function (c) { return !self.cardState(c.id) && !susp[c.id] && !inBatch[c.id]; });
         this._sampleSpread(never, slots).forEach(function (c) {
           batch.newIds.push(c.id); inBatch[c.id] = 1; changed = true;
         });
@@ -537,9 +537,10 @@ PGRE.srs = {
     var batch = this.formulaDay(deck);
     var byId = {};
     (deck || []).forEach(function (c) { byId[c.id] = c; });
+    var susp = PGRE.store.state.formulaSuspended || {};
     var allDue = (deck || []).filter(function (c) {
       var st = self.cardState(c.id);
-      return st && st.due <= t;
+      return st && !susp[c.id] && st.due <= t;
     }).length;
     var inBatchDue = 0;
     batch.reviewIds.concat(batch.newIds).forEach(function (id) {
@@ -567,10 +568,12 @@ PGRE.srs = {
     var picks = [];
     (ids || []).forEach(function (id) {
       if (lockedSet[id] || !byId[id] || self.cardState(id) || picks.indexOf(id) !== -1) return;
+      self.unsuspendCard(id);
       picks.push(id);
     });
     var room = Math.max(0, S - locked.length);
     batch.newIds = locked.concat(picks.slice(0, room));
+    delete batch.skipNew;
     PGRE.store.state.formulaDay = batch;
     PGRE.store.save();
     return batch;
@@ -590,12 +593,49 @@ PGRE.srs = {
     });
     var lockedSet = {};
     locked.forEach(function (id) { lockedSet[id] = 1; });
-    var never = deck.filter(function (c) { return !self.cardState(c.id) && !lockedSet[c.id]; });
+    var susp = PGRE.store.state.formulaSuspended || {};
+    var never = deck.filter(function (c) { return !self.cardState(c.id) && !susp[c.id] && !lockedSet[c.id]; });
     var room = Math.max(0, S - locked.length);
     var pick = this._sampleSpread(never, room).map(function (c) { return c.id; });
     batch.newIds = locked.concat(pick);
+    delete batch.skipNew;
     PGRE.store.state.formulaDay = batch;
     PGRE.store.save();
     return batch;
+  },
+
+  clearFormulaNewPicks: function (deck) {
+    var self = this;
+    var batch = this.formulaDay(deck);
+    var byId = {};
+    (deck || []).forEach(function (c) { byId[c.id] = c; });
+    batch.newIds = batch.newIds.filter(function (id) {
+      return byId[id] && self.studiedToday(self.cardState(id));
+    });
+    batch.skipNew = true;
+    PGRE.store.state.formulaDay = batch;
+    PGRE.store.save();
+    return batch;
+  },
+
+  suspendCard: function (id) {
+    var s = PGRE.store.state;
+    if (!s.formulaSuspended) s.formulaSuspended = {};
+    s.formulaSuspended[id] = 1;
+    var batch = s.formulaDay;
+    if (batch) {
+      batch.reviewIds = batch.reviewIds.filter(function (x) { return x !== id; });
+      batch.newIds = batch.newIds.filter(function (x) { return x !== id; });
+    }
+  },
+
+  unsuspendCard: function (id) {
+    var susp = PGRE.store.state.formulaSuspended;
+    if (susp) delete susp[id];
+  },
+
+  isSuspended: function (id) {
+    var susp = PGRE.store.state.formulaSuspended;
+    return !!(susp && susp[id]);
   }
 };

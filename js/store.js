@@ -102,6 +102,10 @@ PGRE.store = {
       // auto-stopped sessions log too. Shown on #/focus "Recent sessions".
       //   { startedAt: ISO, endedAt: ISO, seconds: int, goalMin: number|null, met: bool }
       focusSessions: [],
+      // formula cards the user shelved mid-session ("put away"): cardId -> 1.
+      // Excluded from all batch building and reconciliation until the user
+      // re-selects via the picker or Browse.
+      formulaSuspended: {},
       // formula-card SRS state: cardId ->
       //   { reps, lapses, interval, ease, due, reviews, lastGrade, lastReviewedAt }
       cards: {},
