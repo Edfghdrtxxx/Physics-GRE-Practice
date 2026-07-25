@@ -787,6 +787,38 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
 .archived-block summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
 .archived-block .miss-card { border: 1px solid var(--line); box-shadow: none; margin-top: 12px; }
 
+/* ——— Mistake drill: browse + skip ———
+   The palette reuses the exam room's .pal-cell / .pal-swatch geometry (see the
+   Exam palette block below), but sits under the question instead of in a
+   sidebar and tints by result, since the drill gives feedback as you go. */
+/* An answered question keeps live choices (re-answering is allowed), so the
+   result markers must outrank .choice:hover:not(:disabled), which is defined
+   further up with higher specificity than .choice.is-answer / .is-wrong. */
+.choices .choice.is-answer:hover { border-color: var(--good); background: var(--good-tint); }
+.choices .choice.is-wrong:hover { border-color: var(--bad); background: var(--bad-tint); }
+.drill-navrow { margin-top: 20px; }
+.drill-navrow .drill-finish { margin-left: auto; }
+.drill-reanswer-hint { font-size: 12.5px; margin: 10px 0 4px; }
+.drill-palette .pal-cell[disabled] { cursor: default; }
+.drill-palette { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
+.drill-palette .exam-palette-grid {
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  max-width: 420px;
+}
+.drill-palette .pal-cell.is-correct {
+  background: var(--good-tint); border-color: var(--good); color: var(--good);
+}
+.drill-palette .pal-cell.is-wrong {
+  background: var(--bad-tint); border-color: var(--bad); color: var(--bad);
+}
+/* .exam-legend (stacked, sidebar-shaped) is defined further down the file, so
+   these overrides need the extra .drill-palette specificity to win. */
+.drill-palette .drill-legend {
+  flex-direction: row; flex-wrap: wrap; gap: 16px; border-top: none; padding-top: 12px;
+}
+.pal-swatch.sw-correct { background: var(--good-tint); border-color: var(--good); }
+.pal-swatch.sw-wrong { background: var(--bad-tint); border-color: var(--bad); }
+
 /* ——— History ——— */
 .hist-session { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
 .hist-session summary {
@@ -1954,6 +1986,185 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .fc-x { font-size: 10px; color: var(--ink-3); margin-top: 4px; height: 12px; }
 .forecast-total { margin-top: 8px; }
 
+/* ——— Search tab (js/view-formulas.js + js/formula-search.js) ———
+   Results are flashcards, not text hits: face-down by default, one click to
+   reveal, and the whole matched set can be handed to a Study session. */
+.fs-box h2 { margin-bottom: 6px; }
+.fs-box code {
+  font-family: var(--mono-instr);
+  font-size: 0.88em;
+  background: var(--ivory);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.fs-input {
+  width: 100%;
+  font-family: var(--serif);
+  font-size: 17px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 13px 16px;
+  margin-top: 14px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.fs-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint); }
+.fs-input::placeholder { color: var(--ink-3); }
+
+.fs-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+.fs-ctl { display: flex; flex-direction: column; gap: 3px; }
+.fs-ctl > span {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-3);
+}
+.fs-ctl select {
+  font-family: var(--serif);
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+.fs-ctl select:focus { outline: none; border-color: var(--accent); }
+.card .fs-controls .btn.fs-reset { margin-top: 0; align-self: flex-end; }
+
+.fs-statusline { margin-top: 10px; min-height: 18px; font-size: 12.5px; }
+
+.fs-help { margin-top: 10px; }
+.fs-help > summary { cursor: pointer; font-size: 13px; color: var(--accent-deep); }
+.fs-help > summary::-webkit-details-marker { display: none; }
+.fs-help p { font-size: 13px; margin: 8px 0; }
+.fs-tips { list-style: none; margin: 8px 0 0; padding: 0; }
+.fs-tips li {
+  font-size: 13px;
+  color: var(--ink-2);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.fs-tips li:last-child { border-bottom: none; }
+.fs-egs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.fs-eg, .fs-fix {
+  font-family: var(--mono-instr);
+  font-size: 12px;
+  color: var(--ink-2);
+  background: var(--ivory);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 11px;
+  cursor: pointer;
+  transition: border-color .12s, color .12s, background .12s;
+}
+.fs-eg:hover, .fs-fix:hover { border-color: var(--accent); color: var(--accent-deep); background: var(--accent-tint); }
+
+/* ——— Drill bar: study exactly the cards on screen ——— */
+.fs-actionbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 18px;
+}
+.card.fs-actionbar .btn { margin-top: 0; flex: 0 0 auto; }
+.fs-actionnote { font-size: 12.5px; flex: 1 1 220px; }
+.fs-actionwarn {
+  flex: 1 1 100%;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--bad);
+}
+
+/* ——— A result: a face-down flashcard ——— */
+.fs-group { margin-bottom: 20px; }
+.fs-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  margin: 0 2px 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.fs-group-head .mono { font-size: 11px; padding: 4px 8px; }
+
+.fs-card {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: border-color .12s, box-shadow .12s, transform .12s;
+}
+.fs-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.fs-card.is-open { border-color: var(--accent-track); box-shadow: 0 1px 3px var(--shadow, rgba(0,0,0,.06)); }
+
+.fs-card-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.fs-card-head .mono { font-size: 10px; padding: 3px 7px; }
+.fs-tag { font-weight: 600; font-size: 13.5px; }
+.fs-eq { font-size: 11.5px; color: var(--ink-3); }
+/* The head chip labels a face-down card (and hints at the eq:5.16 filter). Once
+   the formula is revealed it carries its own book-style \tag, so drop the chip
+   rather than print the same number twice on one card. */
+.fs-card.is-open .fs-eq { display: none; }
+.fs-why {
+  font-size: 10.5px;
+  letter-spacing: .04em;
+  color: var(--accent-deep);
+  background: var(--accent-tint);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+
+.fs-front { font-size: 15px; line-height: 1.55; color: var(--ink); }
+.fs-front mark, .fs-tag mark {
+  background: var(--accent-track);
+  color: var(--accent-deep);
+  border-radius: 3px;
+  padding: 0 1px;
+  font-weight: 600;
+}
+.fs-back { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.fs-back .fcard-back { font-size: 16px; line-height: 1.6; text-align: center; }
+.fs-back .fcard-note { font-size: 13px; color: var(--ink-2); margin-top: 8px; text-align: left; }
+
+.fs-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.card .fs-card-foot .btn, .fs-card-foot .btn { margin-top: 0; }
+.fs-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.due-chip.fs-mnem-chip { color: var(--accent-deep); background: var(--accent-tint); }
+.fs-morerow { justify-content: center; }
+.fs-empty p { margin-bottom: 6px; }
+
+@media (max-width: 640px) {
+  .fs-controls { gap: 8px; }
+  .fs-ctl { flex: 1 1 140px; }
+  .fs-ctl select { width: 100%; }
+}
+
 /* ————————————————————————————————————————————————————————————————
    [6] NOTES — notes & bookmarks browser (#/notes, js/view-notes.js)
    ———————————————————————————————————————————————————————————————— */
@@ -3110,6 +3321,31 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
 }
 .print-sheet.measuring .ps-card-front { font-size: 9.5pt; line-height: 1.4; }
 .print-sheet.measuring .ps-card-back { font-size: 10pt; line-height: 1.5; }
+
+/* ——— Book equation number on a formula answer (KaTeX \tag) ———
+   katex.min.css pins .tag at position:absolute; right:0, so it reserves no
+   width of its own and a wide centred equation runs straight under it. Whether
+   that happens depends on the width of the CONTAINER, never the viewport — the
+   Type-mode Answer column is one half of a 760px .practice-card even on a 27"
+   monitor — so the number is put in the flow unconditionally rather than behind
+   a media query. That costs the flush-right margin and buys an overlap that can
+   never happen; .katex-display is overflow-x:auto (line 424), so an equation
+   that no longer fits scrolls instead of clipping. In flow the number also
+   counts toward .katex-display scrollWidth, which is what lets flagWideCards()
+   promote a too-wide equation+number to .ps-card.wide on the print sheet.
+   --ink-3 is re-derived by the dark theme and forced to #555 by print.css's
+   token reset, so the one token covers screen, dark and paper. The selectors
+   name span.tag rather than .tag because katex.min.css is linked AFTER this
+   file — at equal specificity KaTeX's own position rule would win. */
+.katex-display > .katex > .katex-html > span.tag {
+  color: var(--ink-3);
+  font-size: .78em;
+  position: static;
+  display: inline-block;
+  margin-left: 1.4em;
+}
+/* Tighter gap in the print sheet's two narrow columns. */
+.print-sheet .katex-display > .katex > .katex-html > span.tag { margin-left: 1.2em; }
 
 /* ————————————————————————————————————————————————————————————————
    STUDY TIME — dedicated page (#/study-time, js/view-study-time.js).

@@ -145,8 +145,28 @@ PGRE.formulaTextHTML = function (text) {
   };
   var protectedPart = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$]*?\$|<[^>]*>)/g;
 
-  function mathToken(tex) { return '$' + tex + '$'; }
   function plain(part) {
+    // The passes below run in sequence over one string, so a token an earlier
+    // pass built is still ordinary prose to a later one: the standalone-symbol
+    // pass would re-enter the "$x^0$" it was just handed — the x sits between
+    // $ and ^, and both count as word boundaries — and emit "$$x$^0$", which
+    // KaTeX rejects outright. (Subscripts escaped this only by accident, since
+    // _ is a word character and so suppresses the boundary.) Park each finished
+    // token behind a sentinel and restore them all at the end, so every pass
+    // only ever sees prose no earlier pass has already claimed.
+    var held = [];
+    var HOLD = '\u0001';   // control char: cannot occur in prose, so no pass can re-match it
+    var HELD_REF = /\u0001(\d+)\u0001/g;
+    part = part.replace(/\u0001/g, '');   // so every sentinel below is one we wrote
+    function mathToken(tex) {
+      // A later pass can swallow an earlier token whole — the braced sub/superscript
+      // forms match across anything, sentinel included — so splice those bodies in
+      // here. The restore below is one non-rescanning replace, and a sentinel buried
+      // inside another token would survive it raw.
+      tex = tex.replace(HELD_REF, function (m, i) { return i in held ? held[i] : m; });
+      return HOLD + (held.push(tex) - 1) + HOLD;
+    }
+
     // Handle named Greek variants first so tau_0 is one mathematical span.
     part = part.replace(/\b(alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|rho|sigma|tau|phi|omega|Omega)(?:_([A-Za-z0-9]+|\{[^}]+\})|\^([A-Za-z0-9]+|\{[^}]+\}))?(\/\d+)?\b/g,
       function (_, name, sub, sup, frac) {
@@ -157,8 +177,11 @@ PGRE.formulaTextHTML = function (text) {
       function (_, base, decoration, frac) { return mathToken(base + decoration + (frac || '')); });
     // These are common standalone physics variables; omit prose words such as a,
     // an, and I so the formula-card prompt remains readable.
-    return part.replace(/\b([A-Z]|[txyzvwrmEgFBpq])\b/g,
+    part = part.replace(/\b([A-Z]|[txyzvwrmEgFBpq])\b/g,
       function (_, symbol) { return mathToken(symbol); });
+    // Bodies are parked bare so they nest cleanly; the delimiters go on last.
+    return part.replace(HELD_REF,
+      function (m, i) { return i in held ? '$' + held[i] + '$' : m; });
   }
 
   var parts = String(text).split(protectedPart);
@@ -173,6 +196,25 @@ PGRE.formulaTextHTML = function (text) {
     if (/^(?:\$\$[\s\S]*\$\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\)|\$[^$]*\$)$/.test(part)) return part;
     return codeDepth ? part : plain(part);
   }).join('');
+};
+
+/* Book-style equation number on a formula card's answer: KaTeX's own \tag puts
+   "(2.1)" in the display block's right margin, so no CSS positioning is needed.
+   Returns a COPY — never write this back onto the card or the deck file, since
+   js/flashmodes.js builds distractors, match keys and cloze offsets out of the
+   raw c.back (normText, stripLegend, perturbLatex, clozeParts) and would read
+   the tag as part of the formula. \tag is display-only and cannot be doubled,
+   so anything that isn't a single leading $$…$$ block passes through untouched. */
+PGRE.formulaBackTagged = function (back, eq) {
+  if (!back || !eq) return back || '';
+  var s = String(back);
+  if (s.indexOf('$$') !== 0) return s;      // inline math: \tag would be a ParseError
+  var end = s.indexOf('$$', 2);
+  if (end < 0) return s;                    // unterminated block — leave it alone
+  var body = s.slice(2, end);
+  if (/\\tag\b/.test(body)) return s;       // "Multiple \tag" is also a ParseError
+  // KaTeX supplies the parentheses itself, so the bare number goes in.
+  return '$$' + body + '\\tag{' + String(eq).replace(/[{}\\$]/g, '') + '}' + s.slice(end);
 };
 
 /* ——— Toasts ——— */

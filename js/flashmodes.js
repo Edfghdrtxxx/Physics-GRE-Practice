@@ -50,6 +50,16 @@ PGRE.flashmodes = (function () {
     return PGRE.formulaTextHTML ? PGRE.formulaTextHTML(text) : (text || '');
   }
 
+  /* Answer-reveal face: the formula carrying its book equation number. Only
+     surfaces shown AFTER the user has committed may use this — an option tile
+     or a match tile would be flagging itself, since distractors are perturbed
+     or borrowed LaTeX with no number of their own. Render-time only: the tag
+     must never reach c.back, which is what acceptSet / the match dedupe key /
+     buildOptions / clozeParts all read. */
+  function backHTML(c) {
+    return formulaHTML(PGRE.formulaBackTagged ? PGRE.formulaBackTagged(c.back, c.eq) : c.back);
+  }
+
   /* Plain-text normalization for the type-to-recall auto-check: peel the common
      LaTeX wrappers, then drop everything that isn't a letter or digit so
      spacing, case and punctuation stop mattering. It only lights an
@@ -525,7 +535,7 @@ PGRE.flashmodes = (function () {
               (typed && typed.trim() ? PGRE.ui.esc(typed) : '<span class="muted">(blank)</span>') +
             '</div></div>' +
           '<div class="flash-compare-col is-real"><div class="flash-compare-label">Answer</div>' +
-            '<div class="flash-compare-body">' + formulaHTML(c.back) +
+            '<div class="flash-compare-body">' + backHTML(c) +
               (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') + '</div></div>' +
         '</div>' +
         '<div class="btn-row">' + gradesHtml + '</div>';
@@ -712,6 +722,10 @@ PGRE.flashmodes = (function () {
         '<div class="feedback ' + (isCorrect ? 'feedback-good' : 'feedback-bad') + '">' +
           '<span class="fb-icon">' + (isCorrect ? '✓' : '✗') + '</span>' +
           '<strong>' + (isCorrect ? 'Correct' : 'Not quite — option ' + (correctIdx + 1)) + '</strong>' +
+          // The options themselves stay unnumbered (only the real card has an eq,
+          // so a tag there would mark the answer) — the number belongs here, once
+          // the pick is locked in.
+          (c.eq ? '<span class="fs-eq">eq ' + PGRE.ui.esc(c.eq) + '</span>' : '') +
           (isCorrect && st.streak > 1 ? '<span class="fb-xp">Streak ' + st.streak + '</span>' : '') +
           '<button class="btn btn-ghost btn-sm flash-undo-link" id="flash-undo">Undo</button>' +
         '</div>' +

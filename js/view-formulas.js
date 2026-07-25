@@ -6,8 +6,12 @@
    • Type  — see the prompt, type the formula, self-grade Close-enough / Missed.
    • Quiz  — multiple choice auto-generated from the deck.
    • Cloze — one blanked term of the formula, picked from four chips.
-   The Match/Type/Quiz/Cloze game logic lives in js/flashmodes.js; this file owns the
-   tabs, the Study flow, and loading flashmodes.js on demand. The deck
+   • Search — find cards by name, prompt wording, topic or equation shape; the
+     results ARE flashcards (face-down, one click to reveal) and can be studied
+     as an ad-hoc session. An empty box browses the whole deck.
+   The Match/Type/Quiz/Cloze game logic lives in js/flashmodes.js and the search
+   matching in js/formula-search.js; this file owns the tabs, the Study flow, the
+   search UI, and loading both helpers on demand. The deck
    (js/data-formulas.js) stays empty until cards arrive from the "Conquering the
    Physics GRE" import — with no deck the game tabs are disabled. */
 window.PGRE = window.PGRE || {};
@@ -135,12 +139,28 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js';
+      s.src = 'js/flashmodes.js?v=20260725b';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
     });
     return flashLoad;
+  }
+
+  /* js/formula-search.js is loaded the same way, on first entry to the Search
+     tab — the matching engine is dead weight for every other mode. */
+  var searchLoad = null, searchFailed = false;
+  function ensureSearchEngine() {
+    if (PGRE.formulaSearch) return Promise.resolve();
+    if (searchLoad) return searchLoad;
+    searchLoad = new Promise(function (resolve) {
+      var s = document.createElement('script');
+      s.src = 'js/formula-search.js';
+      s.onload = function () { resolve(); };
+      s.onerror = function () { searchLoad = null; searchFailed = true; resolve(); };
+      document.head.appendChild(s);
+    });
+    return searchLoad;
   }
 
   function teardownGame() {
@@ -151,7 +171,8 @@ PGRE.views.formulas = (function () {
   /* ——— Shell: mode tabs + a persistent body the modes render into ——— */
   function renderShell() {
     var empty = !deck.length;
-    var tabs = [['study', 'Study'], ['match', 'Match'], ['type', 'Type'], ['quiz', 'Quiz'], ['cloze', 'Cloze']];
+    var tabs = [['study', 'Study'], ['match', 'Match'], ['type', 'Type'],
+                ['quiz', 'Quiz'], ['cloze', 'Cloze'], ['search', 'Search']];
     var html = '<div class="flash-tabs" role="tablist">';
     tabs.forEach(function (t) {
       var dis = empty && t[0] !== 'study';
@@ -160,7 +181,7 @@ PGRE.views.formulas = (function () {
     });
     html += '</div>';
     if (empty) {
-      html += '<p class="flash-tab-note muted">Match, Type and Quiz arrive with the ' +
+      html += '<p class="flash-tab-note muted">The drills and Search arrive with the ' +
         'book import — they light up once the deck fills.</p>';
     } else {
       html += '<div class="flash-print-row">' +
@@ -193,6 +214,14 @@ PGRE.views.formulas = (function () {
     return PGRE.formulaTextHTML ? PGRE.formulaTextHTML(text) : (text || '');
   }
 
+  /* The answer face of a card: the same formula with its book equation number
+     tagged on at RENDER time. Tag first, then formulaHTML — the prose mangler
+     treats $$…$$ as a protected part, so the tag rides through untouched. Cards
+     without an eq (hand-seeded PGRE.FORMULAS, imported decks) render bare. */
+  function backHTML(c) {
+    return formulaHTML(PGRE.formulaBackTagged ? PGRE.formulaBackTagged(c.back, c.eq) : c.back);
+  }
+
   function topicCardsHTML(cards) {
     var ui = PGRE.ui, h = '<div class="ps-cards">';
     cards.forEach(function (c) {
@@ -200,7 +229,7 @@ PGRE.views.formulas = (function () {
       h += '<div class="ps-card">' +
         (nm ? '<div class="ps-card-tag">' + ui.esc(nm) + '</div>' : '') +
         '<div class="ps-card-front">' + formulaHTML(c.front) + '</div>' +
-        '<div class="ps-card-back">' + formulaHTML(c.back) + '</div>' +
+        '<div class="ps-card-back">' + backHTML(c) + '</div>' +
       '</div>';
     });
     return h + '</div>';
@@ -283,7 +312,14 @@ PGRE.views.formulas = (function () {
   window.addEventListener('beforeprint', flagWideCards);
 
   function switchMode(m) {
-    if (m === mode) return;
+    if (m === mode) {
+      /* Re-clicking the tab you are already on is normally a no-op — but a live
+         Study session has taken the body over, and its own tab is the obvious
+         "back to the deck" affordance. Nothing is lost: the round was persisted
+         on every grade, so the home screen meets you with Resume. */
+      if (m === 'study' && study) { settleStudy(); study = null; renderMode(); }
+      return;
+    }
     teardownGame();
     settleStudy();
     study = null;
@@ -293,6 +329,7 @@ PGRE.views.formulas = (function () {
 
   function renderMode() {
     if (mode === 'match' || mode === 'type' || mode === 'quiz' || mode === 'cloze') return renderGameIntro(mode);
+    if (mode === 'search') return renderSearch();
     return renderHome();
   }
 
@@ -724,7 +761,7 @@ PGRE.views.formulas = (function () {
           var c = deckById(id);
           if (c) {
             peek.innerHTML = '<div class="fcard-front">' + formulaHTML(c.front) + '</div>' +
-              '<div class="fcard-back">' + formulaHTML(c.back) +
+              '<div class="fcard-back">' + backHTML(c) +
               (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') + '</div>' +
               '<div class="peek-suspend" data-susp-for="' + cssAttr(c.id) + '"></div>' +
               '<div class="peek-mnemonic" data-mnem-for="' + cssAttr(c.id) + '"></div>';
@@ -1050,7 +1087,7 @@ PGRE.views.formulas = (function () {
     } else {
       frontFace = (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
         '<div class="fcard-front" id="fcard-front">' + formulaHTML(c.front || 'Recall the formula.') + '</div>';
-      backFace = formulaHTML(c.back) + noteHTML + mnem;
+      backFace = backHTML(c) + noteHTML + mnem;
     }
     var html = '<div class="card practice-card">' +
       '<div class="practice-meta">' +
@@ -1130,7 +1167,7 @@ PGRE.views.formulas = (function () {
       '<div class="fcard">' +
         (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
         '<div class="fcard-front">' + formulaHTML(c.front) + '</div>' +
-        '<div class="fcard-back">' + formulaHTML(c.back) +
+        '<div class="fcard-back">' + backHTML(c) +
           (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') + '</div>' +
       '</div>' +
       '<div class="btn-row session-peek-bar">' +
@@ -1169,6 +1206,14 @@ PGRE.views.formulas = (function () {
     var c = study.queue[0];
     study.flipped = true;
     document.getElementById('fcard-back').hidden = false;
+    // F5 reverse: the equation is the QUESTION, so its book number would give the
+    // answer away. It is withheld until here, then the front is re-rendered with
+    // the tag and typeset on its own (re-running it over the whole card would
+    // re-typeset the already-rendered back).
+    if (PGRE.store.state.settings.formulaReverse) {
+      var front = document.getElementById('fcard-front');
+      if (front) { front.innerHTML = backHTML(c); PGRE.typesetMath(front); }
+    }
     var rb = document.getElementById('rebuild-btn');
     if (rb && rb.parentNode) rb.parentNode.removeChild(rb);
     var st = PGRE.srs.cardState(c.id);
@@ -1352,7 +1397,7 @@ PGRE.views.formulas = (function () {
     body().innerHTML = '<div class="card practice-card scaffold-card">' +
       '<h2>Reconstruct it</h2>' +
       '<p class="muted">Missed — rebuild this one from the ground up before moving on.</p>' +
-      '<div class="fcard-back scaffold-back">' + formulaHTML(c.back) + '</div>' +
+      '<div class="fcard-back scaffold-back">' + backHTML(c) + '</div>' +
       scaffoldPromptsHTML() +
       '<div class="btn-row"><button class="btn btn-primary" id="scaffold-continue">' +
       'Continue <span class="key-hint">space</span></button></div></div>';
@@ -1541,6 +1586,456 @@ PGRE.views.formulas = (function () {
     }
   }
 
+  /* ——————————————— Search mode ———————————————
+     The box drives js/formula-search.js; the results are rendered as face-down
+     flashcards. Nothing here writes card state: the only path that touches the
+     schedule is the "Study these N" button, which hands the matched cards to the
+     ordinary startStudy flow. */
+
+  var SEARCH_PAGE = 30;                 // cards rendered before "show more"
+  // Survives tab switches within a visit (the query is usually still wanted) but
+  // is reset by mount(); `open` remembers which result cards were flipped face-up.
+  var searchQ = { q: '', topic: '', status: '', sort: 'relevance' };
+  var searchShown = SEARCH_PAGE;
+  var searchOpen = Object.create(null);
+  var searchIndex = null;
+  var searchLast = null;                // last result set, for paging + the drill
+  // Module-scoped so a re-render (or Clear) can cancel a keystroke still in
+  // flight — a stray timer from a discarded panel used to fire afterwards and
+  // repopulate the fresh one with the old query's results.
+  var searchTimer = null;
+
+  var WHY_ORDER = ['equation', 'acronym', 'synonym', 'fuzzy', 'substr', 'stem'];
+  var SEARCH_EXAMPLES = [
+    'centripetal', 'capacitence', 'shm', 'v^2/r', 'emf',
+    'topic:qm uncertainty', 'status:new', '"time dilation"'
+  ];
+
+  function searchResultsEl() { return document.getElementById('fs-results'); }
+
+  function renderSearch() {
+    if (PGRE.nav) PGRE.nav.setTrail([]);
+    teardownGame();
+    clearTimeout(searchTimer);          // no stale keystroke may outlive this panel
+    // The portal's DOM is gone once the route changes; the async engine-load path
+    // below can land here after that, and writing into a null body would throw.
+    if (!body()) return;
+    if (!PGRE.formulaSearch) {
+      if (searchFailed) {
+        body().innerHTML = '<div class="card"><p class="muted">Search is unavailable — ' +
+          'the matching engine failed to load. Every other mode still works.</p>' +
+          '<div class="btn-row"><button class="btn btn-ghost" id="fs-retry">Retry</button></div></div>';
+        var rt = document.getElementById('fs-retry');
+        if (rt) rt.addEventListener('click', function () {
+          searchFailed = false;
+          renderSearch();
+        });
+        return;
+      }
+      body().innerHTML = '<div class="card"><p class="muted">Loading search…</p></div>';
+      ensureSearchEngine().then(function () {
+        // A script that loads but defines nothing (a parse error inside it) still
+        // resolves, so failure has to be judged on the engine — not on onerror
+        // alone, or this would re-render into the same load attempt forever.
+        if (!PGRE.formulaSearch) { searchFailed = true; searchLoad = null; }
+        if (mode === 'search') renderSearch();
+      });
+      return;
+    }
+
+    // Rebuilt on every entry to the tab: it costs a few milliseconds over a few
+    // hundred cards and keeps mnemonics (which live in the store, not the deck)
+    // in the index without any invalidation bookkeeping.
+    searchIndex = PGRE.formulaSearch.build(deck);
+
+    var ui = PGRE.ui;
+    var topicOpts = '<option value="">All topics</option>';
+    PGRE.TOPICS.forEach(function (t) {
+      topicOpts += '<option value="' + ui.esc(t.id) + '"' +
+        (searchQ.topic === t.id ? ' selected' : '') + '>' + ui.esc(t.name) + '</option>';
+    });
+    var statusOpts = '';
+    PGRE.formulaSearch.STATUSES.forEach(function (s) {
+      statusOpts += '<option value="' + ui.esc(s.key) + '"' +
+        (searchQ.status === s.key ? ' selected' : '') + '>' + ui.esc(s.label) + '</option>';
+    });
+    var sortOpts = '';
+    [['relevance', 'Best match'], ['order', 'Book order'], ['due', 'Due soonest']]
+      .forEach(function (o) {
+        sortOpts += '<option value="' + o[0] + '"' +
+          (searchQ.sort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+      });
+
+    var egs = SEARCH_EXAMPLES.map(function (e) {
+      return '<button type="button" class="fs-eg" data-q="' + ui.esc(e) + '">' +
+        ui.esc(e) + '</button>';
+    }).join('');
+
+    var html = '<div class="card fs-box">' +
+      '<h2>Search the deck</h2>' +
+      '<p class="muted">Find a card by its name, by the words in its prompt, or by the ' +
+      'shape of the equation itself — <code>v^2/r</code> finds the one that <em>is</em> ' +
+      'that. Misspellings and word endings are forgiven, and shorthand like ' +
+      '<strong>SHM</strong> or <strong>emf</strong> finds what it stands for. ' +
+      'Leave the box empty to browse the whole deck.</p>' +
+      '<input type="search" id="fs-input" class="fs-input" autocomplete="off" ' +
+        'spellcheck="false" placeholder="Search ' + deck.length + ' formula cards…" ' +
+        'value="' + ui.esc(searchQ.q) + '">' +
+      '<div class="fs-controls">' +
+        '<label class="fs-ctl"><span>Topic</span><select id="fs-topic">' + topicOpts + '</select></label>' +
+        '<label class="fs-ctl"><span>Status</span><select id="fs-status-sel">' + statusOpts + '</select></label>' +
+        '<label class="fs-ctl"><span>Sort</span><select id="fs-sort">' + sortOpts + '</select></label>' +
+        '<button class="btn btn-ghost btn-sm fs-reset" id="fs-clear">Clear</button>' +
+      '</div>' +
+      '<div class="fs-statusline muted" id="fs-status" aria-live="polite"></div>' +
+      '<details class="fs-help"><summary>Search tips</summary>' +
+        '<p class="muted">Every word has to appear somewhere on the card. If nothing ' +
+        'matches them all, the closest cards are shown instead and labelled as such.</p>' +
+        '<ul class="fs-tips">' +
+          '<li><code>"exact phrase"</code> — quotes demand the words together</li>' +
+          '<li><code>topic:qm</code> — one of ' +
+            PGRE.TOPICS.map(function (t) { return '<code>' + ui.esc(t.id) + '</code>'; }).join(', ') + '</li>' +
+          '<li><code>tag:optics</code> — the card’s section name</li>' +
+          '<li><code>eq:5.16</code> one equation, <code>eq:5</code> a whole chapter</li>' +
+          '<li><code>status:new</code> · <code>due</code> · <code>leech</code> · ' +
+            '<code>away</code> · <code>mnemonic</code> — same list as the dropdown</li>' +
+        '</ul>' +
+        '<div class="fs-egs">' + egs + '</div>' +
+      '</details>' +
+    '</div>' +
+    '<div id="fs-actions"></div>' +
+    '<div id="fs-results"></div>';
+
+    body().innerHTML = html;
+    wireSearch();
+    runSearch(true);
+    var inp = document.getElementById('fs-input');
+    if (inp) inp.focus();
+  }
+
+  function wireSearch() {
+    var inp = document.getElementById('fs-input');
+    inp.addEventListener('input', function () {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () {
+        if (!inp.isConnected) return;   // this panel was replaced mid-keystroke
+        searchQ.q = inp.value;
+        runSearch(true);
+      }, 180);
+    });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { clearTimeout(searchTimer); searchQ.q = inp.value; runSearch(true); }
+      else if (e.key === 'Escape' && inp.value) {
+        e.preventDefault();
+        clearTimeout(searchTimer);
+        inp.value = ''; searchQ.q = ''; runSearch(true);
+      }
+    });
+    function bindSel(id, key) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('change', function () {
+        searchQ[key] = el.value;
+        runSearch(true);
+      });
+    }
+    bindSel('fs-topic', 'topic');
+    bindSel('fs-status-sel', 'status');
+    bindSel('fs-sort', 'sort');
+    var cl = document.getElementById('fs-clear');
+    if (cl) cl.addEventListener('click', function () {
+      clearTimeout(searchTimer);
+      searchQ = { q: '', topic: '', status: '', sort: 'relevance' };
+      renderSearch();
+    });
+
+    // One delegated handler for the whole result list — it survives every
+    // re-render, so paging and re-queries never need to re-wire anything.
+    searchResultsEl().addEventListener('click', function (e) {
+      if (e.target.closest('#fs-more')) {
+        searchShown += SEARCH_PAGE;
+        renderSearchList();
+        return;
+      }
+      var fix = e.target.closest('[data-fsfix]');
+      if (fix) {
+        var box = document.getElementById('fs-input');
+        box.value = fix.getAttribute('data-fsfix');
+        searchQ.q = box.value;
+        runSearch(true);
+        box.focus();
+        return;
+      }
+      // The revealed face is for reading, not a second toggle: collapsing the
+      // card out from under the formula you are studying (or mid text-selection)
+      // is never what was meant. The button and the prompt still flip it.
+      if (e.target.closest('.fs-back')) return;
+      var sel = window.getSelection && window.getSelection();
+      if (sel && !sel.isCollapsed && String(sel).trim()) return;
+      var art = e.target.closest('.fs-card');
+      if (art) toggleSearchCard(art);
+    });
+    // Example chips live in the tips block, above the results.
+    body().querySelectorAll('.fs-eg').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var box = document.getElementById('fs-input');
+        box.value = b.getAttribute('data-q');
+        searchQ.q = box.value;
+        runSearch(true);
+        box.focus();
+      });
+    });
+  }
+
+  function runSearch(reset) {
+    if (reset) searchShown = SEARCH_PAGE;
+    searchLast = PGRE.formulaSearch.run(searchIndex, searchQ.q, {
+      topic: searchQ.topic, status: searchQ.status, sort: searchQ.sort
+    });
+    var st = document.getElementById('fs-status');
+    var r = searchLast;
+    if (st) {
+      if (r.notice) {
+        st.textContent = r.notice;
+      } else if (r.browsing) {
+        st.textContent = 'Browsing ' + PGRE.ui.fmt(r.total) + ' card' +
+          (r.total === 1 ? '' : 's') + ' — type to search.';
+      } else {
+        st.textContent = PGRE.ui.fmt(r.total) + ' card' + (r.total === 1 ? '' : 's') +
+          ' · ' + (r.ms < 10 ? r.ms.toFixed(1) : Math.round(r.ms)) + ' ms' +
+          (r.loose ? ' · no card had every word — showing the closest' : '');
+      }
+    }
+    renderSearchActions();
+    renderSearchList();
+  }
+
+  function renderSearchActions() {
+    var box = document.getElementById('fs-actions');
+    if (!box) return;
+    var n = searchLast ? searchLast.total : 0;
+    if (!n) { box.innerHTML = ''; return; }
+    /* Starting a drill overwrites whatever session was saved mid-flight (the
+       leech drill has always done the same). Search makes that one click away
+       from a browse of the entire deck, so say it plainly BEFORE the click
+       rather than letting a half-finished daily round vanish unannounced. */
+    var pending = rehydrateSavedStudy();
+    var warn = pending ?
+      '<span class="fs-actionwarn">Replaces the session you have in progress (' +
+        pending.length + ' left).</span>' : '';
+    box.innerHTML = '<div class="card fs-actionbar">' +
+      '<button class="btn btn-primary" id="fs-drill">Study these ' + n +
+        ' card' + (n === 1 ? '' : 's') + '</button>' +
+      '<span class="muted fs-actionnote">Grades count — this schedules the cards ' +
+      'exactly like any other session' +
+      (n > 50 ? '. That is a long queue; a round checkpoint lets you stop at any point' : '') +
+      '.</span>' + warn + '</div>';
+    var b = document.getElementById('fs-drill');
+    if (b) b.addEventListener('click', drillSearchResults);
+  }
+
+  /* Hand the matched cards to the ordinary Study flow. Going through switchMode
+     (rather than assigning `mode` by hand) is what keeps the tab bar honest:
+     setting the variable directly left switchMode's `m === mode` guard thinking
+     the Study tab was already showing, so clicking it afterwards did nothing at
+     all. switchMode renders the Study home first; startStudy then replaces it. */
+  function drillSearchResults() {
+    if (!searchLast || !searchLast.total) return;
+    var cards = searchLast.hits.map(function (h) { return h.card; });
+    switchMode('study');
+    startStudy(cards);
+  }
+
+  /* The "why did this card come back" chip — only for the matches a reader would
+     not otherwise explain to themselves. An exact or prefix hit needs no caption. */
+  function whyChipHTML(h) {
+    var fs = PGRE.formulaSearch, bits = [];
+    for (var i = 0; i < WHY_ORDER.length; i++) {
+      if (h.kinds.indexOf(WHY_ORDER[i]) !== -1) { bits.push(fs.KIND_LABEL[WHY_ORDER[i]]); break; }
+    }
+    var where = h.fields.filter(function (f) { return f !== 'front'; });
+    if (where.length) {
+      bits.push('in the ' + where.map(function (f) { return fs.FIELD_LABEL[f] || f; }).join(' + '));
+    }
+    return bits.length ? '<span class="fs-why">' + PGRE.ui.esc(bits.join(' · ')) + '</span>' : '';
+  }
+
+  /* Schedule chips, matching the ones the browse list uses. */
+  function searchChipsHTML(c) {
+    var srs = PGRE.srs, ui = PGRE.ui, st = srs.cardState(c.id), chips = '';
+    if (st) {
+      if (st.lastGrade) {
+        chips += '<span class="grade-chip grade-' + st.lastGrade + '">' +
+          ui.esc(st.lastGrade) + '</span>';
+      }
+      var du = srs.daysUntil(st.due);
+      chips += '<span class="due-chip' + (du <= 0 ? ' due-now' : '') + '">' +
+        (du <= 0 ? 'due now' : 'due in ' + srs.ivlLabel(du)) + '</span>';
+      if (srs.isLeech(st)) chips += '<span class="grade-chip leech-chip">leech</span>';
+    } else {
+      chips += '<span class="due-chip">new</span>';
+    }
+    if (srs.isSuspended(c.id)) chips += '<span class="due-chip suspended-chip">put away</span>';
+    if (mnemonicNote(c.id)) chips += '<span class="due-chip fs-mnem-chip">mnemonic</span>';
+    return chips;
+  }
+
+  function searchCardHTML(h) {
+    var c = h.card, ui = PGRE.ui;
+    var t = PGRE.topicById(c.topic);
+    var open = !!searchOpen[c.id];
+    var nm = cardName(c);
+    // The id is read straight back with getAttribute (never as a CSS selector),
+    // so HTML-escaping is the only escaping it needs.
+    return '<article class="fs-card' + (open ? ' is-open' : '') +
+        '" data-fsid="' + ui.esc(c.id) + '">' +
+      '<div class="fs-card-head">' +
+        (t ? ui.monogram(t) : '') +
+        (nm ? '<span class="fs-tag">' + ui.esc(nm) + '</span>' : '') +
+        (c.eq ? '<span class="fs-eq">eq ' + ui.esc(c.eq) + '</span>' : '') +
+        whyChipHTML(h) +
+      '</div>' +
+      '<div class="fs-front">' + formulaHTML(c.front || 'Recall the formula.') + '</div>' +
+      '<div class="fs-back"' + (open ? '' : ' hidden') + '></div>' +
+      '<div class="fs-card-foot">' +
+        '<button type="button" class="btn btn-ghost btn-sm fs-flip">' +
+          (open ? 'Hide formula' : 'Show formula') + '</button>' +
+        '<span class="fs-chips">' + searchChipsHTML(c) + '</span>' +
+      '</div>' +
+    '</article>';
+  }
+
+  function renderSearchList() {
+    var el = searchResultsEl();
+    if (!el || !searchLast) return;
+    var r = searchLast, ui = PGRE.ui;
+
+    if (!r.total) {
+      var fix = '';
+      if (r.suggestion) {
+        // Case-insensitively: the misspelling is reported lower-cased by the
+        // tokenizer, so a literal replace silently no-ops on "Gravitionall" and
+        // the button just re-runs the same failing query.
+        var swapped = String(searchQ.q).replace(
+          new RegExp(escRe(r.suggestion.from), 'i'), r.suggestion.to);
+        fix = '<p class="muted">Did you mean <button type="button" class="fs-fix" ' +
+          'data-fsfix="' + ui.esc(swapped) + '">' + ui.esc(r.suggestion.to) + '</button>?</p>';
+      }
+      el.innerHTML = '<div class="card fs-empty"><p><strong>No card matches that.</strong></p>' +
+        fix + '<p class="muted">Spelling is already forgiven, so try fewer words, or a ' +
+        'symbol from the formula itself.</p></div>';
+      return;
+    }
+
+    var slice = r.hits.slice(0, searchShown);
+    var html = '';
+    // Book order reads better grouped — and that is what an empty box falls back
+    // to, so a plain browse comes out as the deck's own table of contents.
+    if (r.sort === 'order') {
+      var curTopic = null;
+      slice.forEach(function (h) {
+        if (h.card.topic !== curTopic) {
+          if (curTopic !== null) html += '</div>';
+          curTopic = h.card.topic;
+          var t = PGRE.topicById(curTopic);
+          html += '<div class="fs-group"><h3 class="fs-group-head">' +
+            (t ? ui.monogram(t) + ' ' + ui.esc(t.name) : 'Other') + '</h3>';
+        }
+        html += searchCardHTML(h);
+      });
+      if (curTopic !== null) html += '</div>';
+    } else {
+      slice.forEach(function (h) { html += searchCardHTML(h); });
+    }
+    if (r.total > slice.length) {
+      html += '<div class="btn-row fs-morerow"><button class="btn btn-ghost" id="fs-more">' +
+        'Show ' + Math.min(SEARCH_PAGE, r.total - slice.length) + ' more · ' +
+        (r.total - slice.length) + ' still hidden</button></div>';
+    }
+    el.innerHTML = html;
+    PGRE.typesetMath(el);
+    // Re-fill the faces of cards the reader had already flipped open.
+    el.querySelectorAll('.fs-card.is-open').forEach(function (art) { fillSearchBack(art); });
+    markSearchHits(el, collectMarks(slice));
+  }
+
+  /* Every literal word the engine actually matched, across the rendered slice —
+     these are real card words (a fuzzy hit contributes the card's spelling, not
+     the reader's), so highlighting them is always truthful. */
+  function collectMarks(slice) {
+    var seen = Object.create(null), out = [];   // a card word may be "constructor"
+    slice.forEach(function (h) {
+      h.marks.forEach(function (m) {
+        if (m && !seen[m]) { seen[m] = 1; out.push(m); }
+      });
+    });
+    // Longest first: regex alternation takes the first branch that matches, so
+    // without this "harmonic oscillator" loses to a bare "harmonic" listed earlier
+    // and the same phrase highlights inconsistently from card to card.
+    return out.sort(function (a, b) { return b.length - a.length; });
+  }
+
+  function escRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  /* Highlight matched words in the prompts. Done on the DOM AFTER KaTeX has run,
+     walking text nodes and skipping anything inside a .katex subtree — building
+     the marks into the HTML string instead would corrupt the LaTeX before it is
+     ever typeset. Text nodes are rewritten as text, so nothing can inject HTML. */
+  function markSearchHits(root, marks) {
+    if (!marks || !marks.length) return;
+    var pattern = '\\b(' + marks.map(escRe).join('|') + ')';
+    root.querySelectorAll('.fs-front, .fs-tag').forEach(function (host) {
+      var walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, null, false);
+      var nodes = [], n;
+      while ((n = walker.nextNode())) {
+        if (n.parentNode && n.parentNode.closest && n.parentNode.closest('.katex')) continue;
+        if (n.nodeValue && n.nodeValue.trim()) nodes.push(n);
+      }
+      nodes.forEach(function (node) {
+        var re = new RegExp(pattern, 'gi'), text = node.nodeValue;
+        var frag = null, last = 0, m;
+        while ((m = re.exec(text)) !== null) {
+          if (!frag) frag = document.createDocumentFragment();
+          if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+          var mk = document.createElement('mark');
+          mk.textContent = m[0];
+          frag.appendChild(mk);
+          last = m.index + m[0].length;
+          if (m.index === re.lastIndex) re.lastIndex++;   // never loop on a zero-length hit
+        }
+        if (!frag) return;
+        if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+        node.parentNode.replaceChild(frag, node);
+      });
+    });
+  }
+
+  /* Fill a result card's hidden face on first reveal — same content as a browse
+     peek (formula, the card's own note, your mnemonic), typeset once. */
+  function fillSearchBack(art) {
+    var back = art.querySelector('.fs-back');
+    if (!back || back.getAttribute('data-filled')) return;
+    var c = deckById(art.getAttribute('data-fsid'));
+    if (!c) return;
+    back.innerHTML = '<div class="fcard-back">' + backHTML(c) +
+      (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') + '</div>' +
+      mnemonicHTML(c.id);
+    back.setAttribute('data-filled', '1');
+    PGRE.typesetMath(back);
+  }
+
+  function toggleSearchCard(art) {
+    var id = art.getAttribute('data-fsid');
+    var back = art.querySelector('.fs-back');
+    if (!back) return;
+    var open = !searchOpen[id];
+    searchOpen[id] = open;
+    if (open) fillSearchBack(art);
+    back.hidden = !open;
+    art.classList.toggle('is-open', open);
+    var btn = art.querySelector('.fs-flip');
+    if (btn) btn.textContent = open ? 'Hide formula' : 'Show formula';
+  }
+
   /* One persistent, guarded keyboard handler (the view is a singleton). Study
      keeps its space/1–4 flow; the game modes route through their controller.
      While a text input is focused (Type mode), the input handles its own keys. */
@@ -1581,6 +2076,17 @@ PGRE.views.formulas = (function () {
         e.preventDefault(); grade(GRADES[parseInt(e.key, 10) - 1].key);
       } else if (e.key === 'ArrowLeft' && study.history.length) {
         e.preventDefault(); openPeek();
+      }
+      return;
+    }
+    // Search: the box owns every key while it has focus; "/" from anywhere else
+    // on the page puts the cursor back in it.
+    if (mode === 'search') {
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === '/') {
+        e.preventDefault();
+        var box = document.getElementById('fs-input');
+        if (box) box.focus();
       }
       return;
     }
@@ -1629,6 +2135,14 @@ PGRE.views.formulas = (function () {
       teardownGame();
       mode = 'study';
       memStatsOpen = false;   // F10: honor "starts collapsed each mount"
+      // Search starts fresh each visit too, the way memStatsOpen does — a query
+      // and a set of flipped-open cards from an hour ago are not context worth
+      // restoring when you walk back into the portal.
+      clearTimeout(searchTimer);
+      searchQ = { q: '', topic: '', status: '', sort: 'relevance' };
+      searchShown = SEARCH_PAGE;
+      searchOpen = Object.create(null);
+      searchLast = null;
       ensureFlashmodes().then(function () {
         return PGRE.formulaDeck();
       }).then(function (d) {

@@ -141,6 +141,65 @@ PGRE.gamify = {
     return xp;
   },
 
+  /* ——— Undoing one recorded answer ———
+     The mistake drill (js/view-mistakes.js) lets you walk back to a question
+     and answer it again; the later answer must REPLACE the earlier one, or a
+     single question would pay XP twice and move its review ladder twice.
+     This subtracts exactly what one recordAnswer() call added: its attempt row
+     (removed by identity, not by a timestamp scan), its per-question and
+     mistake-book entries (restored wholesale from the snapshots taken
+     immediately before the answer — which also discards any lucky-guess flag
+     PGRE.assess set from the feedback panel in between, the right net result
+     for an answer that is being replaced), and its per-topic / today / session
+     / global XP tallies.
+     Deliberately NOT reversed, all one-way by design: the daily streak run and
+     bestRun, today.topics, the level-up log row, secret flags, and any
+     achievement or daily challenge the superseded answer unlocked — including
+     the bonus XP those paid out, so a replaced answer can still leave XP
+     behind even though its own award is refunded.
+     rec: { q, row, xp, correct, day, sid, mkBefore, qRecBefore } — see
+     view-mistakes.js commitAnswer(), which builds it. */
+  revertAnswer: function (rec) {
+    if (!rec || !rec.q) return;
+    var s = PGRE.store.state, q = rec.q;
+
+    var ai = s.attempts.indexOf(rec.row);
+    if (ai !== -1) s.attempts.splice(ai, 1);
+
+    if (rec.mkBefore) s.mistakes[q.id] = JSON.parse(JSON.stringify(rec.mkBefore));
+    else delete s.mistakes[q.id];
+
+    if (rec.qRecBefore) s.questions[q.id] = JSON.parse(JSON.stringify(rec.qRecBefore));
+    else delete s.questions[q.id];
+
+    var t = s.topics[q.topic];
+    if (t) {
+      t.attempted = Math.max(0, t.attempted - 1);
+      if (rec.correct) t.correct = Math.max(0, t.correct - 1);
+      t.xp = Math.max(0, t.xp - rec.xp);
+    }
+
+    // only unwind today's counters when the answer was actually recorded today
+    // (a drill left open across midnight rolls the day out from under it)
+    var td = s.today;
+    if (td && rec.day && td.date === rec.day) {
+      td.answered = Math.max(0, td.answered - 1);
+      if (rec.correct) td.correct = Math.max(0, td.correct - 1);
+    }
+
+    if (rec.sid) {
+      var sess = this._session(rec.sid);
+      if (sess) {
+        sess.answered = Math.max(0, sess.answered - 1);
+        if (rec.correct) sess.correct = Math.max(0, sess.correct - 1);
+        sess.xp = Math.max(0, sess.xp - rec.xp);
+      }
+    }
+
+    s.xp = Math.max(0, s.xp - rec.xp);
+    PGRE.store.save();
+  },
+
   /* ——— Exam-mode answer entry point (js/exam-engine.js) ———
      Commits ONE exam question the way recordAnswer does — durable attempt row
      (mode: 'exam'), per-question record (so mastery sees a first-time solve),
