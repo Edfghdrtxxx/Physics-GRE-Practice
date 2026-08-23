@@ -26,16 +26,23 @@
      print the dark theme's near-white ink on white paper. !important because
      style.css's [data-theme="dark"] block has identical specificity. */
   :root, [data-theme="dark"] {
+    /* Paper stays white with black ink — the cream ground is a screen
+       decision, not a paper one. Surfaces and tints all flatten to white;
+       the hue tokens take the print-safe (darkened) form of the new
+       screen values so ink on paper stays ≥4.5:1. */
     --bg: #ffffff !important; --panel: #ffffff !important; --surface: #ffffff !important;
     --ivory: #ffffff !important; --ink: #111111 !important; --ink-2: #333333 !important;
     --ink-3: #555555 !important; --line: #cccccc !important;
-    --accent: #c0502b !important; --accent-deep: #c0502b !important;
+    --accent: #964b32 !important; --accent-deep: #964b32 !important;
     --accent-tint: #ffffff !important; --accent-track: #cccccc !important;
-    --good: #677850 !important; --good-tint: #ffffff !important;
-    --bad: #b04a3d !important; --bad-tint: #ffffff !important;
-    --bronze: #7a5a3a !important; --silver: #555555 !important;
-    --gold: #7a5a1f !important; --platinum: #3c76b0 !important;
-    --amber: #7a5a1f !important; --amber-tint: #ffffff !important;
+    --good: #3a7248 !important; --good-tint: #ffffff !important;
+    --bad: #bd3d3d !important; --bad-tint: #ffffff !important;
+    --bronze: #89643a !important; --silver: #555555 !important;
+    --gold: #8a6812 !important; --platinum: #2f7a6b !important;
+    /* --platinum-tint was missing here, so .grade-chip.grade-mastered
+       printed the dark theme's #232b30 slab on paper. Fixed. */
+    --platinum-tint: #ffffff !important;
+    --amber: #8a6812 !important; --amber-tint: #ffffff !important;
     --heat-0: #ffffff !important; --heat-1: #ffffff !important;
     --heat-2: #ffffff !important; --heat-3: #ffffff !important;
     --heat-4: #ffffff !important;
@@ -81,6 +88,11 @@
   .ps-head h1 { font-size: 19pt; margin: 0 0 2pt; letter-spacing: -0.01em; }
   .ps-sub { font-size: 9.5pt; color: #555555; margin: 0; }
 
+  /* KaTeX guard (R14): .ps-head h1 carries negative letter-spacing and may
+     contain inline math; .katex inherits letter-spacing from its ancestor,
+     so without this reset formula glyphs cramp and overlap inside headings. */
+  .print-sheet .katex, .print-sheet .katex-display { letter-spacing: normal; }
+
   /* ——— Small monogram + meta chips (neutral on paper) ——— */
   .ps-mono {
     display: inline-block;
@@ -123,8 +135,8 @@
   }
   .ps-pick .ps-ic { font-weight: 700; margin-right: 4pt; }
   .ps-wrong { color: #333333; }
-  .ps-wrong .ps-ic { color: #b04a3d; }
-  .ps-right .ps-ic { color: #2f6b43; }
+  .ps-wrong .ps-ic { color: #bd3d3d; }
+  .ps-right .ps-ic { color: #3a7248; }
   .ps-pick strong { font-weight: 700; }
   .ps-sol {
     border-left: 2pt solid #999999;
@@ -176,7 +188,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: #8a6a5c;
+    color: #964b32;
     margin-bottom: 3pt;
   }
   .ps-card-front { font-size: 9.5pt; line-height: 1.4; margin-bottom: 4pt; }

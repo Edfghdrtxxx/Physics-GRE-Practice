@@ -70,10 +70,10 @@ PGRE.focusFx = (function () {
   var TRACK_CAP = 48;        // hard cap so the fans never clutter
   var BLOOM_MS = 600;        // life of the collision glow at the IP
   var MAX_ELECTRONS = 500;   // ambient pool cap; oldest evicted so bursts never stall
-  // muted event-display palette — blue/green/orange snapped to the Anthropic
-  // brand accents (#6A9BCC / #788C5D / #D97757), rest kept from the reference
-  var PALETTE = ['#6a9bcc', '#788c5d', '#d97757', '#b89b4f',
-                 '#a06a8c', '#8b7ab8', '#97a86b'];
+  // muted event-display palette — every entry is a design-system token:
+  // teal, green, coral, gold, coral-700, ink-400, amber
+  var PALETTE = ['#5db8a6', '#5db872', '#cc785c', '#d4a017',
+                 '#a9583e', '#8e8b82', '#e8a55a'];
 
   function reduced() {
     return window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -317,8 +317,8 @@ PGRE.focusFx = (function () {
 
   function draw(w, h, now, g) {
     ctx.clearRect(0, 0, w, h);
-    var accent = tok('--accent', '#d97757'), deep = tok('--accent-deep', '#c0502b');
-    var ion = pageTok('--fp-ion', '#6a9bcc');
+    var accent = tok('--accent', '#cc785c'), deep = tok('--accent-deep', '#964b32');
+    var ion = pageTok('--fp-ion', '#5db8a6');
     var i, j, p, k;
 
     // ——— ambient field: behind everything, instrument noise on the paper ———

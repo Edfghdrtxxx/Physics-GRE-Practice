@@ -272,12 +272,26 @@ PGRE.flashmodes = (function () {
   }
 
   /* Quiet, session-end XP through the formula-review hook (+2 per card/pair),
-     logged into the activity feed just like a flip session. */
+     logged into the activity feed just like a flip session. Also records the
+     once-per-day formula check-in on first qualifying settle of the day.
+     Returns the check-in result (or null) so finish UIs can celebrate. */
   function awardReviewXP(xp, detail) {
     if (xp > 0) PGRE.gamify.addXP(xp, '· formula review', true);
     PGRE.store.log('review', detail, xp);
+    var ci = null;
+    if (xp > 0 && PGRE.formulaCheckIn && typeof PGRE.formulaCheckIn.record === 'function') {
+      ci = PGRE.formulaCheckIn.record();
+    }
     PGRE.gamify.checkAchievements();
     PGRE.store.save();
+    return ci;
+  }
+
+  /* Optional check-in celebrate / already-checked strip under a game summary. */
+  function checkInSummaryHTML(ci) {
+    if (!PGRE.formulaCheckIn) return '';
+    if (ci && ci.claimed) return PGRE.formulaCheckIn.celebrateHTML(ci);
+    return PGRE.formulaCheckIn.alreadyHTML();
   }
 
   function onFormulasRoute() { return /^#\/formulas/.test(location.hash); }
@@ -343,7 +357,7 @@ PGRE.flashmodes = (function () {
     function settle(elapsed) {
       if (st.settled || st.cleared === 0) return;
       st.settled = true;
-      awardReviewXP(2 * st.cleared, 'Match: ' + st.cleared + ' pair' +
+      st.checkInResult = awardReviewXP(2 * st.cleared, 'Match: ' + st.cleared + ' pair' +
         (st.cleared === 1 ? '' : 's') + ' in ' + fmtTime(elapsed));
     }
 
@@ -450,8 +464,10 @@ PGRE.flashmodes = (function () {
         '<h2>Cleared</h2>' +
         '<div class="summary-score">' + fmtTime(elapsed) +
           '<span class="summary-pct">+' + xp + ' XP</span></div>' +
-        '<p class="muted">' + st.total + ' pair' + (st.total === 1 ? '' : 's') + tail + '.</p>' +
-        '<div class="btn-row"><button class="btn btn-primary" id="flash-replay">Play again</button>' +
+        '<p class="muted">' + st.total + ' pair' + (st.total === 1 ? '' : 's') + tail + '.</p></div>' +
+        checkInSummaryHTML(st.checkInResult) +
+        '<div class="card"><div class="btn-row">' +
+        '<button class="btn btn-primary" id="flash-replay">Play again</button>' +
         '<button class="btn btn-ghost" id="flash-exit">Back to deck</button></div></div>';
       document.getElementById('flash-replay').addEventListener('click', ctx.onReplay);
       document.getElementById('flash-exit').addEventListener('click', ctx.onExit);
@@ -596,12 +612,12 @@ PGRE.flashmodes = (function () {
     function settle() {
       if (st.settled || st.done === 0) return;
       st.settled = true;
-      awardReviewXP(2 * st.done, 'Type-to-recall: ' + st.done + ' card' + (st.done === 1 ? '' : 's'));
+      st.checkInResult = awardReviewXP(2 * st.done, 'Type-to-recall: ' + st.done + ' card' + (st.done === 1 ? '' : 's'));
     }
 
     function finish() {
       settle();
-      reviewSummary(el, 'Type-to-recall complete', st.done, st.again, 2 * st.done, ctx);
+      reviewSummary(el, 'Type-to-recall complete', st.done, st.again, 2 * st.done, ctx, st.checkInResult);
     }
 
     renderPrompt();
@@ -775,7 +791,7 @@ PGRE.flashmodes = (function () {
     function settle() {
       if (st.settled || st.done === 0) return;
       st.settled = true;
-      awardReviewXP(2 * st.done, 'Auto-quiz: ' + st.correct + '/' + st.done + ' correct');
+      st.checkInResult = awardReviewXP(2 * st.done, 'Auto-quiz: ' + st.correct + '/' + st.done + ' correct');
     }
 
     function finish() {
@@ -786,8 +802,10 @@ PGRE.flashmodes = (function () {
         '<div class="summary-score">' + st.correct + ' / ' + total +
           '<span class="summary-pct">' + pct + '%</span></div>' +
         '<p class="muted">Best streak ' + st.best + '. +' + xp + ' XP. ' +
-          'Right answers scheduled Good, misses Again.</p>' +
-        '<div class="btn-row"><button class="btn btn-primary" id="flash-replay">Again</button>' +
+          'Right answers scheduled Good, misses Again.</p></div>' +
+        checkInSummaryHTML(st.checkInResult) +
+        '<div class="card"><div class="btn-row">' +
+        '<button class="btn btn-primary" id="flash-replay">Again</button>' +
         '<button class="btn btn-ghost" id="flash-exit">Back to deck</button></div></div>';
       document.getElementById('flash-replay').addEventListener('click', ctx.onReplay);
       document.getElementById('flash-exit').addEventListener('click', ctx.onExit);
@@ -1091,7 +1109,7 @@ PGRE.flashmodes = (function () {
     function settle() {
       if (st.settled || st.done === 0) return;
       st.settled = true;
-      awardReviewXP(2 * st.done, 'Cloze: ' + st.correct + '/' + st.done + ' correct');
+      st.checkInResult = awardReviewXP(2 * st.done, 'Cloze: ' + st.correct + '/' + st.done + ' correct');
     }
 
     function finish() {
@@ -1102,8 +1120,10 @@ PGRE.flashmodes = (function () {
       el.innerHTML = '<div class="card"><h2>Cloze complete</h2>' +
         '<div class="summary-score">' + st.correct + ' / ' + total +
           '<span class="summary-pct">' + pct + '%</span></div>' +
-        '<p class="muted">+' + xp + ' XP. Right answers scheduled Good, misses Again.</p>' +
-        '<div class="btn-row"><button class="btn btn-primary" id="flash-replay">Again</button>' +
+        '<p class="muted">+' + xp + ' XP. Right answers scheduled Good, misses Again.</p></div>' +
+        checkInSummaryHTML(st.checkInResult) +
+        '<div class="card"><div class="btn-row">' +
+        '<button class="btn btn-primary" id="flash-replay">Again</button>' +
         '<button class="btn btn-ghost" id="flash-exit">Back to deck</button></div></div>';
       document.getElementById('flash-replay').addEventListener('click', ctx.onReplay);
       document.getElementById('flash-exit').addEventListener('click', ctx.onExit);
@@ -1121,14 +1141,17 @@ PGRE.flashmodes = (function () {
     };
   }
 
-  /* Shared Type/Quiz-style end card. */
-  function reviewSummary(el, title, done, again, xp, ctx) {
+  /* Shared Type/Quiz-style end card. Optional checkInResult paints the daily
+     check-in celebrate / already-checked strip under the score. */
+  function reviewSummary(el, title, done, again, xp, ctx, checkInResult) {
     el.innerHTML = '<div class="card"><h2>' + title + '</h2>' +
       '<div class="summary-score">' + done + ' card' + (done === 1 ? '' : 's') +
         '<span class="summary-pct">+' + xp + ' XP</span></div>' +
       '<p class="muted">' + (again ? again + ' marked Missed for another pass. ' : '') +
-        'Each grade set the card’s next review on its SM-2 track.</p>' +
-      '<div class="btn-row"><button class="btn btn-primary" id="flash-replay">Again</button>' +
+        'Each grade set the card’s next review on its SM-2 track.</p></div>' +
+      checkInSummaryHTML(checkInResult) +
+      '<div class="card"><div class="btn-row">' +
+      '<button class="btn btn-primary" id="flash-replay">Again</button>' +
       '<button class="btn btn-ghost" id="flash-exit">Back to deck</button></div></div>';
     document.getElementById('flash-replay').addEventListener('click', ctx.onReplay);
     document.getElementById('flash-exit').addEventListener('click', ctx.onExit);

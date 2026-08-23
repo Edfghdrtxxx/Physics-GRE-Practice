@@ -199,7 +199,9 @@ PGRE.timer = (function () {
     // nothing on boot, so a user who reopens while paused and then Stops (without
     // resuming) still has a real multi-minute session that must be logged. The OR
     // keeps the original live-path behaviour exactly (both agree mid-session).
+    var logged = false;
     if (seconds >= 1 || sessionCredited >= 1) {    // ignore no-op taps
+      logged = true;
       PGRE.store.state.timerStats.sessions += 1;   // <-- timerStats semantics UNCHANGED
       var fs = PGRE.store.state.focusSessions;
       if (!fs) fs = PGRE.store.state.focusSessions = [];   // defensive on very old in-memory state
@@ -222,6 +224,15 @@ PGRE.timer = (function () {
     checkAch();     // requirement 8: checkAchievements on stop
     flush(true);    // persist the stop immediately
     render();
+    // Focus SFX: only when a real session was logged (skip sub-second no-ops).
+    // Fully isolated — audio failure must never undo crediting or finalization.
+    if (logged) {
+      try {
+        if (window.PGRE && PGRE.focusSound && typeof PGRE.focusSound.play === 'function') {
+          PGRE.focusSound.play('end');
+        }
+      } catch (e) { /* never crash the timer */ }
+    }
   }
 
   function startTick() { if (!tickHandle) tickHandle = setInterval(onTick, 1000); }
@@ -253,6 +264,13 @@ PGRE.timer = (function () {
     dirty = true;
     flush(true);                   // persist the start so a crash right after resumes correctly
     render();
+    // Focus SFX on session start (user gesture from Start / top-bar unlocks audio).
+    // Isolated so a blocked autoplay policy never aborts the started session.
+    try {
+      if (window.PGRE && PGRE.focusSound && typeof PGRE.focusSound.play === 'function') {
+        PGRE.focusSound.play('start');
+      }
+    } catch (e) { /* never crash the timer */ }
   }
 
   function stop() {
@@ -282,6 +300,14 @@ PGRE.timer = (function () {
     dirty = true;
     flush(true);
     render();
+    // Focus SFX on pause (user gesture from Pause / clock tap). After flush so
+    // audio failure never undoes the held state. Skip when credit() already
+    // finalized the session (goal/cap) — that path already plays 'end'.
+    try {
+      if (window.PGRE && PGRE.focusSound && typeof PGRE.focusSound.play === 'function') {
+        PGRE.focusSound.play('pause');
+      }
+    } catch (e) { /* never crash the timer */ }
   }
 
   /* BUNDLE D — resume: the hold lasted (now - lastCredit) because lastCredit froze
@@ -299,6 +325,12 @@ PGRE.timer = (function () {
     dirty = true;
     flush(true);
     render();
+    // Focus SFX on resume (user gesture). Isolated after state is live again.
+    try {
+      if (window.PGRE && PGRE.focusSound && typeof PGRE.focusSound.play === 'function') {
+        PGRE.focusSound.play('resume');
+      }
+    } catch (e) { /* never crash the timer */ }
   }
 
   function render() {

@@ -67,7 +67,11 @@ PGRE.store = {
                   // the equation); true = Formula → Prompt (name/state it)
                   formulaReverse: false,
                   // sidebar fold state — the ☰ toggle in the top bar (app.js)
-                  sidebarFolded: false },
+                  sidebarFolded: false,
+                  // F5 focus-timer SFX id (js/focus-sound.js catalog). Default
+                  // 'off' so existing users are not surprised by sudden sound;
+                  // migrate() backfills the key on older saves.
+                  focusSound: 'off' },
       // today's progressive formula batch (js/srs.js): rebuilt when the date
       // rolls over — { date, reviewIds: [], newIds: [] }
       formulaDay: null,
@@ -106,6 +110,12 @@ PGRE.store = {
       // Excluded from all batch building and reconciliation until the user
       // re-selects via the picker or Browse.
       formulaSuspended: {},
+      // formula-recall daily check-in (签到) — once per local calendar day after a
+      // qualifying Study / game settle (js/formula-checkin.js). Distinct from the
+      // global study streak (daysActive / streak) so missing practice-only days
+      // does not erase formula perseverance feedback.
+      //   { current, best, lastDay: 'YYYY-MM-DD'|null }
+      formulaCheckIn: { current: 0, best: 0, lastDay: null },
       // formula-card SRS state: cardId ->
       //   { reps, lapses, interval, ease, due, reviews, lastGrade, lastReviewedAt }
       cards: {},
@@ -173,7 +183,7 @@ PGRE.store = {
   migrate: function () {
     var d = this.defaults(), st = this.state;
     for (var k in d) if (!(k in st)) st[k] = d[k];
-    ['settings', 'today', 'timer'].forEach(function (k) {
+    ['settings', 'today', 'timer', 'formulaCheckIn', 'streak'].forEach(function (k) {
       if (!st[k] || typeof st[k] !== 'object' || Array.isArray(st[k])) st[k] = d[k];
       for (var kk in d[k]) if (!(kk in st[k])) st[k][kk] = d[k][kk];
     });

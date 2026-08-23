@@ -154,6 +154,51 @@ PGRE.views.focus = (function () {
     '</div>';
   }
 
+  /* ——— focus SFX picker (always visible on the page; persists via settings) ———
+     Catalog + labels come from js/focus-sound.js (fixed product copy, not user
+     text). Falls back to Off-only if the module is missing so the page still
+     mounts. */
+  function soundChipsHTML() {
+    var sounds = (PGRE.focusSound && typeof PGRE.focusSound.list === 'function')
+      ? PGRE.focusSound.list()
+      : [{ id: 'off', label: 'Off' }];
+    var cur = (PGRE.focusSound && typeof PGRE.focusSound.getChoice === 'function')
+      ? PGRE.focusSound.getChoice()
+      : 'off';
+    // Allowlist only: skip any entry that fails isValid (or is not a plain id).
+    // Catalog labels are fixed product copy; never interpolate raw settings.
+    var chips = sounds.map(function (s) {
+      if (!s || typeof s.id !== 'string') return '';
+      if (PGRE.focusSound && typeof PGRE.focusSound.isValid === 'function' &&
+          !PGRE.focusSound.isValid(s.id)) return '';
+      if (!/^[a-z0-9_-]+$/i.test(s.id)) return '';
+      var active = (s.id === cur) ? ' active' : '';
+      var id = s.id;
+      var label = String(s.label == null ? id : s.label)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+      return '<button type="button" class="focus-chip focus-sound-chip' + active +
+             '" data-sound="' + id + '" aria-pressed="' + (s.id === cur ? 'true' : 'false') +
+             '">' + label + '</button>';
+    }).join('');
+    return '<div class="focus-sounds" id="focus-sounds" role="group" aria-label="Focus timer sound">' +
+      '<span class="focus-sound-label">Sound</span>' + chips +
+    '</div>';
+  }
+
+  function syncSoundChips() {
+    var wrap = document.getElementById('focus-sounds');
+    if (!wrap) return;
+    var cur = (PGRE.focusSound && typeof PGRE.focusSound.getChoice === 'function')
+      ? PGRE.focusSound.getChoice()
+      : 'off';
+    wrap.querySelectorAll('.focus-sound-chip[data-sound]').forEach(function (b) {
+      var on = b.getAttribute('data-sound') === cur;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
   /* ——— quiet stats (studyLog day buckets + timerStats), Recent sessions ——— */
   function statsHTML() {
     var stt = PGRE.studyTime, ts = PGRE.store.state.timerStats || { sessions: 0, seconds: 0 };
@@ -239,6 +284,7 @@ PGRE.views.focus = (function () {
         '<div class="focus-clock" id="focus-clock">0:00</div>' +
         '<div class="focus-sub"  id="focus-sub">Choose a length, then start.</div>' +
         goalChipsHTML() +
+        soundChipsHTML() +
         '<div class="focus-controls">' +
           '<button class="btn btn-primary focus-hero" id="focus-hero">Start focus</button>' +
           // BUNDLE D: secondary action — Pause while running, Stop while paused.
@@ -359,6 +405,7 @@ PGRE.views.focus = (function () {
     paintLive();
     paintStats();          // refresh once on transitions (incl. stop, where paintLive skips it)
     syncChips();           // reconcile the goal-picker highlight with selectedGoal (reload mid-session)
+    syncSoundChips();      // highlight the persisted focus-sound choice
     var recent = document.getElementById('focus-recent');
     if (recent) recent.outerHTML = recentHTML();
     syncZen();
@@ -629,6 +676,24 @@ PGRE.views.focus = (function () {
         if (custom.value !== norm) custom.value = norm;
       });
     }
+
+    // focus SFX chips — persist via PGRE.focusSound; preview on pick (user gesture).
+    // Available while running too so the end-of-session voice can change mid-run.
+    page.querySelectorAll('.focus-sound-chip[data-sound]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-sound') || 'off';
+        if (PGRE.focusSound && typeof PGRE.focusSound.setChoice === 'function') {
+          PGRE.focusSound.setChoice(id);
+        }
+        syncSoundChips();
+        // Preview the new voice (or silence for Off). Gesture-gated; never throws.
+        try {
+          if (PGRE.focusSound && typeof PGRE.focusSound.preview === 'function') {
+            PGRE.focusSound.preview();
+          }
+        } catch (e) { /* ignore */ }
+      });
+    });
 
     // zen toggles
     var zb = document.getElementById('focus-zen-btn');

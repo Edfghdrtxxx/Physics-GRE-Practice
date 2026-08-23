@@ -1,92 +1,123 @@
-/* Physics GRE Prep — Anthropic brand aesthetic:
-   brand ivory ground (#FAF9F5), brand ink (#141413), brand orange accent
-   (#D97757), Lora serif throughout (user preference: serif as the main
-   voice; the brand's Poppins heading face is intentionally not used). */
+/* Physics GRE Prep — Claude Aesthetic design system.
+   ------------------------------------------------------------------
+   The palette is a warm cream ground (#faf9f5) carrying a four-step
+   cream ladder (canvas / soft / card / cream-strong), warm ink text
+   (#141413 → #6c6a64 → #8e8b82) and exactly ONE brand hue: coral
+   (#cc785c). There is not one cool grey and not one pure white in the
+   system. Depth comes from adjacent surface tones and 1px hairlines,
+   never from shadows or glows. Type is "bigger, never bolder": the
+   display serif (Newsreader) is used at weight 400 only, and every
+   heading below h1 is sans (Inter) at 500. Coral is scarce by rule —
+   roughly one coral element per band; chips, hover fills and meter
+   tracks are neutral cream.
 
-/* Self-hosted faces (woff2, latin subset, swap so text never blocks):
-   Lora = headings + body voice, JetBrains Mono = the focus page's
-   instrument-label voice. */
-@font-face {
-  font-family: 'Lora';
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url(../fonts/Lora-normal-400-700.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: 'Lora';
-  font-style: italic;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url(../fonts/Lora-italic-400-700.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: 'JetBrains Mono';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(../fonts/JetBrainsMono-normal-400.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
+   Faces are declared in css/fonts.css (Newsreader, Inter, JetBrains
+   Mono, EB Garamond), which index.html loads BEFORE this file. There
+   are no @font-face blocks here any more.
+
+   KNOWING DEVIATIONS from the design system, recorded so a later pass
+   does not "correct" them:
+   1. Transparency. The system sanctions alpha only for the focus ring
+      and text selection. We additionally keep alpha in --scrim (modal
+      backdrop; overlay *panels* themselves stay opaque, which is the
+      rule as written), --heat-edge (a 1px inset cell hairline on a
+      data grid — diagram furniture) and the focus page's --fp-hair*
+      instrument hairlines.
+   2. The focus page keeps its gradients and its scale/bounce keyframes
+      ("nothing scales, nothing bounces" is waived there by explicit
+      user instruction). That page is recoloured, never restructured.
+   3. --accent-tint no longer means "a coral tint". It is now the
+      neutral cream-strong step (#e8e0d2). The name is kept because
+      renaming costs 42 call-site edits and buys nothing.
+   4. Dark mode is an EXTENSION. The design system documents one mode
+      (cream with dark bands). Where it gives a dark token we use it
+      verbatim; where it does not, the dark block below states its
+      derivation per line.
+   ------------------------------------------------------------------ */
 :root {
-  --bg: #FAF9F5;
-  --panel: #F4F2EB;
-  --surface: #FFFFFF;
-  --ivory: #F0EEE6;
+  /* Cream ladder — surface-canvas / -soft / -card / -cream-strong.
+     --surface is deliberately the same cream as --bg: cards are
+     bordered canvas cards (1px var(--line)), not white slabs. */
+  --bg: #faf9f5;
+  --panel: #f5f0e8;
+  --surface: #faf9f5;
+  --ivory: #efe9de;
+  /* Warm ink ramp. --ink-3 is the caption colour (3.2:1) — captions
+     only, never body copy. */
   --ink: #141413;
-  --ink-2: #5F5E59;
-  --ink-3: #8F8D85;
-  --line: #E8E6DC;               /* brand light gray */
-  --accent: #D97757;             /* brand orange */
-  --accent-deep: #C0502B;        /* brand orange darkened to 4.5:1 on --bg (WCAG AA text) */
-  --accent-tint: #F6E9E2;
-  --accent-track: #F1D5C9;
-  --good: #677850;               /* brand green #788C5D darkened to 4.5:1 on --bg for text */
-  --good-tint: #E8EAE0;
-  --bad: #B04A3D;
-  --bad-tint: #F7E9E6;
-  --bronze: #A9744A;
-  --silver: #B0AEA5;             /* brand mid gray (decorative only — 2.1:1, not for text) */
-  --gold: #BB952F;
-  --platinum: #6A9BCC;           /* brand blue (decorative: dots, chips, fills) */
-  /* Tint pair for the "mastered" grade chip/button (ITEM 3) — reuses the
-     brand blue so it reads distinct from again/hard/good/easy. */
-  --platinum-tint: #E6ECEF;
-  /* Amber warning state (exam timer 15-min mark) — was hardcoded #F6ECD6/#8A6A1F. */
-  --amber: #8A6A1F;
-  --amber-tint: #F6ECD6;
-  /* Practice-volume heatmap intensity ramp (5 steps, empty → hottest). */
+  --ink-2: #6c6a64;
+  --ink-3: #8e8b82;
+  --line: #e6dfd8;               /* border-hairline (= the disabled fill, by design) */
+  --accent: #cc785c;             /* brand coral — fills, borders, rings; never small text on cream */
+  /* NOT the design system's --coral-700 #a9583e, and this is deliberate.
+     --accent-deep is used as TEXT 77 times here, ~20 of those on
+     --accent-tint. Measured, #a9583e is 4.19:1 on cream-200 and 3.86:1
+     on cream-400 — it fails AA on the very tints it sits on. #964b32 is
+     coral-700 stepped ~12% toward --ink-900 and measures 5.95 / 5.53 /
+     5.19 / 4.78 across all four cream steps. Do not "correct" it back. */
+  --accent-deep: #964b32;
+  /* De-coraled (see deviation 3): the selected/active/hover fill and the
+     meter track are neutral cream, which is what keeps coral scarce. */
+  --accent-tint: #e8e0d2;
+  --accent-track: #e6dfd8;
+  /* Status colours. The system specifies its status hues as glyphs
+     inside dark cards; on cream they measure 2.3–4.6:1, so each is
+     darkened along its own hue until it clears 4.5:1 on cream AND on
+     its own tint. The tints are ours — the system has no status
+     backgrounds — each is its hue flattened at ~9% onto cream-50. */
+  --good: #3a7248;
+  --good-tint: #e9ede5;
+  --bad: #bd3d3d;
+  --bad-tint: #f5e8e4;
+  /* Medal ramp — mapped onto the companion accents and warm neutrals so
+     the achievements list has no coral glyph. */
+  --bronze: #89643a;             /* accent-amber stepped 45% toward ink */
+  --silver: #a09d96;             /* ink-300 (decorative only — 2.6:1, not for text) */
+  --gold: #d4a017;               /* gold-500 (decorative dot) */
+  --platinum: #5db8a6;           /* accent-teal — replaces the app's only cool colour */
+  --platinum-tint: #ecf3ef;      /* accent-teal at 8% on cream-50 */
+  /* Amber warning state (exam timer 15-min mark). */
+  --amber: #8a6812;              /* gold-500 darkened to 4.90:1 on cream */
+  --amber-tint: #f7f1de;
+  /* Practice-volume heatmap ramp (5 steps, empty → hottest). No
+     sequential scale exists in the system; this is cream-200 → coral-500
+     interpolated, ending on coral-700. Monotone, single-hue, in-family. */
   --heat-0: var(--ivory);
-  --heat-1: #E8C7B7;
-  --heat-2: #E19F88;
-  --heat-3: #D97757;
-  --heat-4: #C0502B;
-  --heat-edge: rgba(20, 20, 19, 0.05);
-  /* Misc themeable primitives previously baked as literals. */
-  --on-accent: #FFFFFF;        /* text/ink on an accent-filled surface */
-  --btn-primary-hover: #2C2B29;
-  --scrim: rgba(20, 20, 19, 0.44);
-  --shadow: rgba(20, 20, 19, 0.18);
-  --serif: 'Lora', 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
-  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  /* heading voice = the same Lora serif stack (serif-first, per user) */
-  --heading: 'Lora', 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
-  /* focus-page display voice (self-hosted, see @font-face at the top) */
-  --serif-display: 'Lora', 'Iowan Old Style', Palatino, Georgia, serif;
-  --mono-instr: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-  --radius: 14px;
+  --heat-1: #e3c4b3;
+  --heat-2: #d89e88;
+  --heat-3: #cc785c;
+  --heat-4: #a9583e;
+  --heat-edge: rgba(20, 20, 19, 0.05);   /* deviation 1 */
+  /* Misc themeable primitives. */
+  --on-accent: #ffffff;          /* the ONE legal appearance of pure white: type on a coral fill */
+  --btn-primary-hover: #252523;  /* ink-800 — press is a one-step colour move, nothing else */
+  --scrim: rgba(20, 20, 19, 0.44);       /* deviation 1 */
+  --shadow: rgba(20, 20, 19, 0.08);      /* the system's single shadow alpha (0 1px 3px) */
+  /* Type. Display serif is used at weight 400 ONLY. Georgia / Times sit
+     in the stack because Newsreader ships no Greek subset upstream and
+     this app renders μ, λ, Ω, θ in prose. */
+  --serif: Newsreader, 'EB Garamond', Garamond, 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+  --sans: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  /* --heading and --serif-display are live aliases: one display voice,
+     three names, zero call-site edits. */
+  --heading: var(--serif);
+  --serif-display: var(--serif);
+  --mono-instr: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  --radius: 12px;                /* radius-lg — the content-card step */
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html { height: 100%; }
-/* Serif is the default voice everywhere; math is the exception — KaTeX
-   applies its own fonts on .katex, so formulas are untouched. */
+/* Sans (Inter) is the running voice — body-md 16/1.55/400. The display
+   serif is reserved for h1 and the focus page. Math is the third voice:
+   KaTeX applies its own fonts on .katex, so formulas are untouched, and
+   next to a sans body they now read as a deliberate second voice rather
+   than blending. That is the pairing logic, not a bug — never restyle
+   .katex's font-family. */
 body {
-  font-family: var(--serif);
-  font-size: 15.5px;
+  font-family: var(--sans);
+  font-size: 16px;
   line-height: 1.55;
   color: var(--ink);
   background: var(--bg);
@@ -94,14 +125,33 @@ body {
   display: flex;
 }
 
-h1, h2, h3, .topic-card-name, .level-title, .week-title {
+/* "Bigger, never bolder." h1 is the ONLY element that carries the
+   display serif, and it carries it at weight 400. No serif above 400
+   anywhere in this file. Everything else is sans 500. */
+h1 {
   font-family: var(--heading);
-  font-weight: 600;
+  font-weight: 400;
+  letter-spacing: -0.3px;
+}
+h2, h3, .topic-card-name, .level-title, .week-title {
+  font-family: var(--sans);
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
+
+/* ——— Global guards ———
+   1. KaTeX inherits letter-spacing from its container. PGRE.typesetMath
+      (js/app.js) runs over whole views, so any heading containing $…$
+      would render with cramped, overlapping math under the negative
+      tracking above. This rule is load-bearing — do not remove it.
+   2. Selection and the focus ring are the design system's two
+      sanctioned transparencies. */
+.katex, .katex-display { letter-spacing: normal; font-variant-ligatures: none; }
+::selection { background: rgba(204, 120, 92, .22); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 h1 { font-size: 28px; line-height: 1.2; margin-bottom: 6px; }
 h2 { font-size: 19px; margin-bottom: 10px; }
-.section-title { margin: 28px 0 14px; font-size: 21px; }
+.section-title { margin: 28px 0 14px; font-size: 22px; }
 
 a { color: var(--accent-deep); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -127,8 +177,9 @@ body.sidebar-folded #sidebar { display: none; opacity: 0; }
 #sidebar-toggle { font-size: 13px; }
 
 .brand { padding: 0 10px 18px; }
-.brand-name { font-family: var(--heading); font-size: 21px; font-weight: 600; color: var(--ink); }
-.brand-name .accent { color: var(--accent); }
+.brand-name { font-family: var(--heading); font-size: 21px; font-weight: 400; color: var(--ink); }
+/* De-coraled: the sidebar's one coral is #sidebar-nav a.active (coral scarcity). */
+.brand-name .accent { color: var(--ink); }
 .brand-sub { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
 
 #sidebar-nav a {
@@ -141,8 +192,12 @@ body.sidebar-folded #sidebar { display: none; opacity: 0; }
   font-size: 14px;
   margin-bottom: 1px;
 }
-#sidebar-nav a:hover { background: var(--ivory); text-decoration: none; color: var(--ink); }
-#sidebar-nav a.active { background: var(--accent-tint); color: var(--accent-deep); font-weight: 600; }
+/* Hover carries no fill: the design system specifies no hover choreography, and
+   in dark mode --ivory and --accent-tint are the same tone, which would make
+   hover and active indistinguishable. Active keeps the fill — it is this
+   band's single coral. */
+#sidebar-nav a:hover { background: none; text-decoration: none; color: var(--ink); }
+#sidebar-nav a.active { background: var(--accent-tint); color: var(--accent-deep); font-weight: 500; }
 .nav-heading {
   font-size: 11px;
   text-transform: uppercase;
@@ -153,8 +208,8 @@ body.sidebar-folded #sidebar { display: none; opacity: 0; }
 .nav-mono {
   font-size: 10.5px;
   font-weight: 700;
-  color: var(--accent-deep);
-  background: var(--accent-tint);
+  color: var(--ink-2);
+  background: var(--ivory);
   border-radius: 6px;
   min-width: 26px;
   text-align: center;
@@ -224,7 +279,7 @@ body.sidebar-folded #sidebar { display: none; opacity: 0; }
   font-size: 13px;
 }
 .crumb { color: var(--ink-2); }
-a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
+a.crumb:hover { color: var(--ink); text-decoration: none; }
 .crumb-here { color: var(--ink); font-weight: 600; }
 .crumb-sep { color: var(--ink-3); font-size: 11px; flex: none; }
 
@@ -241,8 +296,9 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
 .hero { display: flex; gap: 24px; align-items: center; justify-content: space-between; }
 .hero-left { flex: 1; min-width: 0; }
 .hero-level { color: var(--ink-2); margin: 4px 0 12px; font-size: 15px; }
-.level-title { color: var(--accent-deep); font-size: 17px; }
-.hero-xp-note { font-size: 12.5px; color: var(--ink-3); margin-top: 6px; }
+/* De-coraled: the dashboard band's one coral is .meter-fill. */
+.level-title { color: var(--ink); font-size: 17px; }
+.hero-xp-note { font-size: 12.5px; color: var(--ink-2); margin-top: 6px; }
 .countdown {
   text-align: center;
   background: var(--ivory);
@@ -250,9 +306,11 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
   padding: 16px 22px;
   min-width: 150px;
 }
+/* Display voice: serif at 400. Bigger, never bolder. */
 .countdown-num {
+  font-family: var(--serif);
   font-size: 44px;
-  font-weight: 650;
+  font-weight: 400;
   line-height: 1.05;
   font-variant-numeric: normal;
 }
@@ -288,9 +346,9 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
   padding: 14px 16px;
 }
 .stat-label { font-size: 12px; color: var(--ink-2); }
-.stat-value { font-size: 26px; font-weight: 600; margin-top: 2px; }
+.stat-value { font-size: 22px; font-weight: 500; margin-top: 2px; }
 .stat-unit { font-size: 13px; font-weight: 400; color: var(--ink-3); }
-.stat-sub { font-size: 11.5px; color: var(--ink-3); }
+.stat-sub { font-size: 11.5px; color: var(--ink-2); }
 
 /* ——— Topic portal: done / not-done practice split ——— */
 .portal-split {
@@ -321,8 +379,8 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
 .challenge { padding: 10px 0; border-bottom: 1px solid var(--line); }
 .challenge:last-child { border-bottom: none; }
 .challenge-top { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
-.challenge-xp { color: var(--accent-deep); font-weight: 600; white-space: nowrap; font-size: 13px; }
-.challenge-prog { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; }
+.challenge-xp { color: var(--ink-2); font-weight: 500; white-space: nowrap; font-size: 13px; }
+.challenge-prog { font-size: 11.5px; color: var(--ink-2); margin-top: 3px; }
 .challenge-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 3px; }
 .challenge-foot .challenge-prog { margin-top: 0; }
 .challenge-foot .btn { margin: 0; }
@@ -344,21 +402,21 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
 .mono {
   font-weight: 700;
   font-size: 13px;
-  color: var(--accent-deep);
-  background: var(--accent-tint);
+  color: var(--ink-2);
+  background: var(--ivory);
   border-radius: 9px;
   padding: 6px 10px;
 }
 .weight-chip { font-size: 12px; color: var(--ink-3); }
 .topic-card-name { font-size: 16.5px; margin-bottom: 8px; min-height: 42px; }
-.topic-card-sub { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+.topic-card-sub { font-size: 12px; color: var(--ink-2); margin-top: 6px; }
 
 /* ——— Buttons ——— */
 .btn {
   display: inline-block;
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   border-radius: 10px;
   padding: 9px 18px;
   cursor: pointer;
@@ -385,15 +443,15 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
   border-radius: 999px;
   padding: 3px 11px;
 }
-.chip-diff { letter-spacing: 2px; color: var(--accent-deep); background: var(--accent-tint); }
+.chip-diff { letter-spacing: 2px; color: var(--ink-2); background: var(--ivory); }
 .soon-chip {
   display: inline-block;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--accent-deep);
-  background: var(--accent-tint);
+  color: var(--ink);
+  background: var(--ivory);
   border-radius: 999px;
   padding: 3px 10px;
   vertical-align: middle;
@@ -420,7 +478,7 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
 /* ETS exam figure crops (PDF page renders): cap width, center, and frame on
    white so they read as figures in both themes. */
 .q-fig { text-align: center; margin: 14px 0; }
-.q-fig img { max-width: min(100%, 460px); background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.q-fig img { max-width: min(100%, 460px); background: #fff; /* not a token: ETS figure plates are white-matted line art */ border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
 .katex-display { overflow-x: auto; overflow-y: hidden; }
 .q-text, .solution, .choice { overflow-x: auto; }
 .choices { display: flex; flex-direction: column; gap: 8px; }
@@ -430,7 +488,7 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
   align-items: baseline;
   text-align: left;
   font-size: 15px;
-  font-family: var(--serif);
+  font-family: var(--sans);
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -440,7 +498,7 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
   color: var(--ink);
   line-height: 1.5;
 }
-.choice:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-tint); }
+.choice:hover:not(:disabled) { border-color: var(--accent); background: var(--ivory); }
 .choice:disabled { cursor: default; }
 .choice-letter { font-weight: 700; color: var(--ink-3); min-width: 16px; }
 .choice.is-answer { border-color: var(--good); background: var(--good-tint); }
@@ -510,7 +568,7 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
   color: var(--ink-3);
 }
 .ach-xp { margin-left: auto; font-size: 11.5px; color: var(--ink-3); }
-.ach-name { font-family: var(--serif); font-weight: 600; font-size: 16px; }
+.ach-name { font-family: var(--sans); font-weight: 500; font-size: 16px; }
 .ach-desc { margin-top: 2px; }
 .ach-prog { font-size: 11.5px; color: var(--ink-3); margin-top: 4px; }
 .ach-unlocked { color: var(--good); font-size: 12.5px; font-weight: 600; margin-top: 8px; }
@@ -532,13 +590,13 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
   border: 1px solid var(--line);
 }
 .tier-chip.tier-bronze { border-color: var(--bronze); color: var(--bronze); background: transparent; }
-.tier-chip.tier-silver { border-color: var(--silver); color: #6E6E6E; background: transparent; }
-.tier-chip.tier-gold { border-color: var(--gold); color: #93741F; background: transparent; }
-.tier-chip.tier-platinum { border-color: var(--platinum); color: #3C76B0; background: transparent; }
+.tier-chip.tier-silver { border-color: var(--silver); color: #6c6a64; background: transparent; }
+.tier-chip.tier-gold { border-color: var(--gold); color: #8a6812; background: transparent; }
+.tier-chip.tier-platinum { border-color: var(--platinum); color: #2f7a6b; background: transparent; }
 
 .filter-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 16px; }
 .filter-btn {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 13px;
   font-weight: 600;
   border-radius: 999px;
@@ -626,7 +684,7 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
 }
 .map-table td { padding: 8px; border-bottom: 1px solid var(--line); }
 .map-table select {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 13px;
   padding: 5px 8px;
   border-radius: 8px;
@@ -688,7 +746,7 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
 }
 .act-achievement { background: var(--accent-tint); color: var(--accent-deep); }
 .act-text { flex: 1; }
-.act-xp { color: var(--accent-deep); font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+.act-xp { color: var(--ink-2); font-weight: 500; font-size: 12.5px; white-space: nowrap; }
 .act-time { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
 .mini-list li { padding: 5px 0; font-size: 14px; display: flex; align-items: center; gap: 8px; }
 
@@ -717,7 +775,7 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
   opacity: 0;
   transform: translateY(8px);
   transition: opacity .3s, transform .3s;
-  box-shadow: 0 6px 24px var(--shadow);
+  box-shadow: 0 1px 3px var(--shadow);
 }
 .toast.show { opacity: 1; transform: translateY(0); }
 .toast-achievement { background: var(--accent-deep); }
@@ -731,7 +789,7 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
 .btn-sm { font-size: 12.5px; padding: 5px 12px; border-radius: 8px; }
 
 /* ——— Sidebar due badges ——— */
-.nav-badge-due { background: var(--accent-tint); color: var(--accent-deep); font-weight: 700; }
+.nav-badge-due { background: var(--ivory); color: var(--ink); font-weight: 500; }
 
 /* ——— Review queue (dashboard) ——— */
 .rq-rows { display: flex; flex-direction: column; }
@@ -759,7 +817,7 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
   padding: 2px 10px;
   white-space: nowrap;
 }
-.due-chip.due-now { background: var(--accent-tint); color: var(--accent-deep); }
+.due-chip.due-now { background: var(--ivory); color: var(--ink); }
 .due-chip.due-archived { background: var(--ivory); color: var(--ink-2); }
 
 /* ——— Mistake book ——— */
@@ -850,7 +908,7 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
 .hist-ms { color: var(--ink-3); font-size: 12.5px; white-space: nowrap; min-width: 44px; text-align: right; }
 .hist-when { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
 .hist-select {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 13px;
   font-weight: 600;
   padding: 6px 10px;
@@ -993,7 +1051,10 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
 .exam-empty-icon { font-size: 20px; line-height: 1.3; flex: none; }
 .exam-empty strong { font-size: 14.5px; }
 
-.exam-resume { border-color: var(--accent); }
+/* De-coraled (coral scarcity: the exam room's one coral is the flag).
+   A resumable exam reads as a quiet inset card — --ivory fill on the
+   cream floor, hairline border — not a coral-outlined one. */
+.exam-resume { background: var(--ivory); border-color: var(--line); }
 
 .exam-hist-rows { display: flex; flex-direction: column; }
 .exam-hist-row {
@@ -1007,7 +1068,8 @@ a.crumb:hover { color: var(--accent-deep); text-decoration: none; }
   flex-wrap: wrap;
 }
 .exam-hist-row:last-child { border-bottom: none; }
-.exam-hist-row:hover { text-decoration: none; color: var(--accent-deep); }
+/* A history row is a row, not prose: hover goes to ink, not link-coral. */
+.exam-hist-row:hover { text-decoration: none; color: var(--ink); }
 .exam-hist-when { color: var(--ink-3); font-size: 12.5px; min-width: 108px; }
 .exam-hist-score { font-weight: 700; }
 .exam-hist-scaled { color: var(--ink-2); font-size: 13px; margin-left: auto; }
@@ -1031,7 +1093,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   border-bottom: 1px solid var(--line);
 }
 .exam-bar-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.exam-title { font-family: var(--serif); font-weight: 600; font-size: 16px; }
+.exam-title { font-family: var(--sans); font-weight: 500; font-size: 16px; }
 .exam-bar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .exam-progress { color: var(--ink-2); font-size: 13px; white-space: nowrap; }
 
@@ -1075,11 +1137,16 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   color: var(--ink-2);
   margin-bottom: 6px;
 }
-.exam-flagchip { background: var(--accent-tint); color: var(--accent-deep); }
+/* De-coraled: the ⚑ glyph already carries the meaning, so the chip is a
+   quiet --ivory/--line chip. Coral in this room belongs to the flag
+   control and the palette's flag marker only. */
+.exam-flagchip { background: var(--ivory); color: var(--ink); border: 1px solid var(--line); }
 
 .exam-main .q-text { font-size: 17px; line-height: 1.6; margin: 14px 0 20px; }
-.exam-main .choice.is-picked { border-color: var(--accent); background: var(--accent-tint); }
-.exam-main .choice.is-picked .choice-letter { color: var(--accent-deep); }
+/* The picked choice is the question card's one coral, and it is the
+   BORDER only — neutral --ivory fill, ink letter. */
+.exam-main .choice.is-picked { border-color: var(--accent); background: var(--ivory); }
+.exam-main .choice.is-picked .choice-letter { color: var(--ink); }
 
 .exam-navrow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
 .exam-navrow .exam-navrow-spacer { flex: 1; }
@@ -1125,7 +1192,16 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   transition: border-color .12s, background .12s;
 }
 .pal-cell:hover { border-color: var(--ink-3); }
-.pal-cell.is-answered { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+/* ANSWERED — ink fill, cream number. This was white-on-coral, which
+   measures 3.28:1 and fails AA at this 12.5px size; ink/cream is 17.5:1
+   (17.0:1 dark). It also frees coral for the flag marker below, which is
+   the one thing in this room that earns it. */
+.pal-cell.is-answered { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+/* FLAGGED — this glyph and #exam-flag.is-flagged are the same marker and
+   are the exam room's ONE coral, kept deliberately: with answered now on
+   ink, coral is the only hue left in a 100-cell grid and is what makes a
+   flagged question findable at a glance. It sits outside the cell box on
+   --panel (5.5:1 light / 7.2:1 dark), so it stays legible over any state. */
 .pal-cell.is-flagged::after {
   content: '⚑';
   position: absolute;
@@ -1157,7 +1233,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   font-size: 10px;
   flex: none;
 }
-.pal-swatch.sw-answered { background: var(--accent); border-color: var(--accent); }
+.pal-swatch.sw-answered { background: var(--ink); border-color: var(--ink); }
 .pal-swatch.sw-flagged { color: var(--accent-deep); }
 
 /* ——— Overlays (pause + submit modal) ——— */
@@ -1174,7 +1250,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 /* Pause promises "the questions are hidden" — its backdrop must be opaque
    (the submit modal keeps the translucent scrim). */
 .exam-overlay.is-pause { background: var(--bg); }
-.exam-overlay-card { max-width: 460px; width: 100%; margin: 0; box-shadow: 0 12px 40px rgba(20, 20, 19, 0.25); }
+.exam-overlay-card { max-width: 460px; width: 100%; margin: 0; box-shadow: 0 1px 3px var(--shadow); }
 .exam-overlay-card h2 { margin-bottom: 8px; }
 
 /* ——— Results / review ——— */
@@ -1232,10 +1308,15 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .an-axis-sm { font-size: 8.5px; fill: var(--ink-3); }
 .an-val { font-size: 10.5px; font-weight: 600; fill: var(--ink-2); }
 .an-grid { stroke: var(--line); stroke-width: 1; }
-.an-bar { fill: var(--accent); }
+/* Chart bars are ink, not coral: analytics already spends its one coral
+   on the practice-volume heatmap below, and a coral bar chart in the same
+   scroll would be a second one. (--ink-2 rather than the system's
+   --ink-700, which this app's token layer does not carry; --ink-2 is the
+   nearest step that also re-derives correctly in dark.) */
+.an-bar { fill: var(--ink-2); }
 .an-empty-dot { fill: var(--ink-3); opacity: 0.5; }
-.an-budget { stroke: var(--accent-deep); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; }
-.an-budget-label { fill: var(--accent-deep); font-weight: 600; }
+.an-budget { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; }
+.an-budget-label { fill: var(--ink); font-weight: 600; }
 
 .an-gap { margin-top: 14px; }
 
@@ -1289,7 +1370,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   border-radius: 7px;
   padding: 3px 9px;
 }
-.an-nodata-chip:hover { text-decoration: none; color: var(--accent-deep); background: var(--accent-tint); }
+.an-nodata-chip:hover { text-decoration: none; color: var(--ink); background: var(--accent-tint); }
 
 /* ——— Pace share chips (icon + label, never colour alone) ——— */
 .an-pace-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
@@ -1397,17 +1478,19 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .build-chip { display: inline-flex; align-items: baseline; gap: 8px; }
 .build-chip-mono {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: 0.03em;
-  color: var(--accent-deep);
-  background: var(--accent-tint);
+  color: var(--ink-2);
+  background: var(--ivory);
   border-radius: 6px;
   padding: 2px 6px;
 }
-.build-chip.active .build-chip-mono { color: var(--bg); background: rgba(255, 255, 255, 0.22); }
+/* On the active (ink-filled) pill the inner badge steps to the cream tint
+   with ink type — no hardcoded white-alpha, and no coral. */
+.build-chip.active .build-chip-mono { color: var(--ink); background: var(--accent-tint); }
 .build-chip-hint { font-size: 11px; font-weight: 400; color: var(--ink-3); }
 .build-chip.active .build-chip-hint { color: var(--bg); opacity: 0.8; }
-.chip-diff-dots { letter-spacing: 2px; color: var(--accent-deep); }
+.chip-diff-dots { letter-spacing: 2px; color: var(--ink-2); }
 .build-chip.active .chip-diff-dots { color: var(--bg); }
 
 /* ——— Start card: live preview + count picker ——— */
@@ -1415,7 +1498,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .build-preview { font-size: 15px; color: var(--ink-2); }
 .build-count-num {
   font-size: 26px;
-  font-weight: 650;
+  font-weight: 500;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
   margin-right: 4px;
@@ -1428,25 +1511,25 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
    ———————————————————————————————————————————————————————————————— */
 
 /* ——— Session label chip (custom quiz) ——— */
-.chip-session { color: var(--accent-deep); background: var(--accent-tint); font-weight: 600; }
+.chip-session { color: var(--ink); background: var(--accent-tint); font-weight: 500; }
 .session-label-line { margin-bottom: 8px; }
 
 /* ——— Pace trainer ——— */
 .pace-chip { font-variant-numeric: tabular-nums; color: var(--ink-2); }
-.pace-chip.pace-over { color: var(--accent-deep); background: var(--accent-tint); }
+.pace-chip.pace-over { color: var(--ink); background: var(--accent-tint); }
 .pace-mark {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   border-radius: 999px;
   padding: 4px 12px;
   margin-top: 10px;
   font-variant-numeric: tabular-nums;
 }
 .pace-mark.pace-under { background: var(--ivory); color: var(--ink-2); }
-.pace-mark.pace-over { background: var(--accent-tint); color: var(--accent-deep); }
+.pace-mark.pace-over { background: var(--accent-tint); color: var(--ink); }
 .pace-mark .pace-target { font-weight: 400; color: var(--ink-3); }
 
 /* ——— Confidence tagging ——— */
@@ -1454,7 +1537,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .conf-q { font-size: 13.5px; color: var(--ink-2); }
 .conf-row .btn-sm { margin: 0; display: inline-flex; align-items: center; gap: 6px; }
 .conf-row.is-tagged { min-height: 30px; }
-.conf-done { font-size: 13.5px; color: var(--good); font-weight: 600; }
+.conf-done { font-size: 13.5px; color: var(--good); font-weight: 500; }
 
 /* Multi-select self-assessment chips (PGRE.assess, js/app.js) — practice
    feedback + mistake drills. Rides on the .focus-chip pill look; .active is
@@ -1490,7 +1573,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 
 /* ——— Mistake-book lucky-guess surfacing ———
    .lucky-chip rides on the base .due-chip; .conf-note is the entry-detail line. */
-.lucky-chip { color: var(--accent-deep); background: var(--accent-track); }
+.lucky-chip { color: var(--ink); background: var(--accent-track); }
 .conf-note { margin: 4px 0 8px; font-size: 12.5px; }
 .conf-note strong { color: var(--ink-2); }
 
@@ -1502,9 +1585,9 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 /* ——— Mode tabs ——— */
 .flash-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
 .flash-tab {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   border: 1px solid var(--line);
   background: transparent;
   color: var(--ink-2);
@@ -1529,15 +1612,15 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   color: var(--ink-2);
   margin-bottom: 12px;
 }
-.flash-hud .flash-title { font-weight: 600; color: var(--ink); font-size: 14px; }
+.flash-hud .flash-title { font-weight: 500; color: var(--ink); font-size: 14px; }
 .flash-timer {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
+  font-weight: 500;
   color: var(--ink);
   font-size: 15px;
 }
-.flash-streak { color: var(--accent-deep); font-weight: 600; }
+.flash-streak { color: var(--ink); font-weight: 500; }
 
 /* ——— Match grid ——— */
 .flash-grid {
@@ -1558,20 +1641,22 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   border-radius: 12px;
   background: var(--surface);
   color: var(--ink);
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 15px;
   line-height: 1.4;
   padding: 12px;
   cursor: pointer;
   transition: border-color .12s, background .12s, opacity .2s;
 }
-.flash-tile:hover:not(:disabled):not(.matched) { border-color: var(--accent); background: var(--accent-tint); }
+/* Hover is the quiet ghost-button move (ink-3 hairline on the cream inset);
+   coral is reserved for .selected, the one live marker in the match grid. */
+.flash-tile:hover:not(:disabled):not(.matched) { border-color: var(--ink-3); background: var(--ivory); }
 .flash-tile-kind {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--ink-3);
-  font-weight: 700;
+  font-weight: 500;
 }
 .flash-tile.selected { border-color: var(--accent); background: var(--accent-tint); }
 .flash-tile.matched { opacity: 0.34; cursor: default; border-style: dashed; }
@@ -1589,7 +1674,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .flash-type-prompt { font-size: 18px; line-height: 1.55; margin: 14px 0 16px; }
 .flash-type-input {
   width: 100%;
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 16px;
   color: var(--ink);
   background: var(--surface);
@@ -1600,7 +1685,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .flash-type-input:focus { outline: none; border-color: var(--accent); }
 .flash-type-input:disabled { color: var(--ink-2); background: var(--ivory); }
 .flash-auto { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin: 16px 0 4px; }
-.flash-auto .fb-icon { font-size: 15px; font-weight: 700; }
+.flash-auto .fb-icon { font-size: 15px; font-weight: 500; }
 .flash-auto.is-hit { color: var(--good); }
 .flash-auto.is-miss { color: var(--ink-2); }
 .flash-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0 4px; }
@@ -1613,7 +1698,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .flash-compare-col.is-real { background: var(--good-tint); border-color: var(--good); }
 .flash-compare-label {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--ink-3);
@@ -1634,8 +1719,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .grade-btn.is-default {
   border-color: var(--accent);
   background: var(--accent-tint);
-  box-shadow: inset 0 0 0 1px var(--accent);
-  font-weight: 600;
+  font-weight: 500;
 }
 /* F1b: ghost one-level undo link on the Type prompt hud / Quiz feedback header. */
 .flash-undo-link { margin-left: auto; opacity: 0.85; }
@@ -1643,7 +1727,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 
 /* Distractor explanations ("Why the other choices tempt") */
 .distractors { margin-top: 12px; }
-.distractors summary { cursor: pointer; font-weight: 600; color: var(--ink-2); }
+.distractors summary { cursor: pointer; font-weight: 500; color: var(--ink-2); }
 .distractor-list { margin-top: 10px; }
 .distractor-item { margin: 0 0 10px; padding-left: 10px; border-left: 2px solid var(--line); }
 
@@ -1675,7 +1759,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   flex-wrap: wrap;
   margin: 4px 0 12px;
 }
-.target-label { font-weight: 600; font-size: 14.5px; }
+.target-label { font-weight: 500; font-size: 14.5px; }
 .target-controls { display: flex; align-items: center; gap: 10px; }
 .stepper-btn {
   padding: 4px 14px;
@@ -1686,7 +1770,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 }
 .target-value {
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 500;
   min-width: 34px;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -1705,7 +1789,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   padding-bottom: 12px;
   border-bottom: 1px solid var(--line);
 }
-.picker-count { font-weight: 600; font-size: 14px; color: var(--ink-2); }
+.picker-count { font-weight: 500; font-size: 14px; color: var(--ink-2); }
 .picker-actions { margin-top: 0; }
 .picker-topic { margin-bottom: 14px; }
 .picker-topic-head { margin-bottom: 6px; }
@@ -1714,7 +1798,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   align-items: center;
   gap: 8px;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
 }
 .picker-selall .mono { font-size: 11px; padding: 4px 8px; }
@@ -1736,9 +1820,9 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 /* ——— Browse sub-tabs + expandable peek rows ——— */
 .browse-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
 .browse-tab {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 500;
   border: 1px solid var(--line);
   background: transparent;
   color: var(--ink-2);
@@ -1760,7 +1844,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   cursor: pointer;
   transition: color .12s;
 }
-.browse-row:hover { color: var(--accent-deep); }
+.browse-row:hover { color: var(--ink); }
 .browse-row.open { border-bottom-color: transparent; }
 .browse-row .deck-name { flex: 1; min-width: 0; }
 .browse-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -1778,7 +1862,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 /* Grade + today/done-today chips (browse, picker, in-session peek) */
 .grade-chip {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: capitalize;
   border-radius: 999px;
   padding: 2px 10px;
@@ -1789,9 +1873,16 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .grade-chip.grade-again { color: var(--bad); background: var(--bad-tint); }
 .grade-chip.grade-hard { color: var(--amber); background: var(--amber-tint); }
 .grade-chip.grade-good { color: var(--good); background: var(--good-tint); }
-.grade-chip.grade-easy { color: var(--accent-deep); background: var(--accent-tint); }
-.grade-chip.grade-mastered { color: var(--platinum); background: var(--platinum-tint); } /* ITEM 3 */
-.due-chip.today-chip { color: var(--accent-deep); background: var(--accent-track); }
+.grade-chip.grade-easy { color: var(--ink); background: var(--accent-tint); }
+/* ITEM 3 — Mastered. --platinum (accent-teal) is a 16px-glyph colour: on the
+   light --platinum-tint it measures 2.0:1, far under AA at 11px. Mixing it
+   toward --ink is theme-aware in one declaration: 5.2:1 on light cream,
+   9.1:1 on the dark tint, 11:1 on white paper (print re-declares both). */
+.grade-chip.grade-mastered {
+  color: color-mix(in srgb, var(--platinum) 55%, var(--ink));
+  background: var(--platinum-tint);
+}
+.due-chip.today-chip { color: var(--ink); background: var(--accent-track); }
 /* Shelved cards read as dormant: outlined rather than filled, so a "put away"
    chip never competes with the due/today chips beside it. */
 .due-chip.suspended-chip {
@@ -1802,6 +1893,52 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .peek-suspend { margin: 10px 0 0; }
 .peek-suspend-note { margin: 0 0 6px; color: var(--ink-2); font-size: 13px; }
 .peek-suspend .btn { margin: 0; }
+
+/* Per-card memorizing history (browse peek) — date range + Dn@grade chips */
+.peek-history:empty { display: none; }
+.mem-hist {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.mem-hist-summary {
+  font-size: 12px;
+  color: var(--ink-2);
+  margin: 0 0 8px;
+  letter-spacing: 0.01em;
+}
+.mem-hist-note {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-weight: 400;
+}
+.mem-hist-summary .mem-hist-note { display: block; margin-top: 4px; }
+.mem-hist-empty .mem-hist-summary { margin-bottom: 0; }
+.mem-hist-sep { color: var(--ink-3); margin: 0 2px; }
+.mem-hist-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.mem-hist-chip {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: none; /* keep D1@again readable; grade chips capitalize alone */
+  border-radius: 999px;
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+.mem-hist-pending {
+  color: var(--ink-2);
+  background: var(--ivory);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.mem-hist-pending.due-now {
+  color: var(--ink);
+  background: var(--accent-track);
+  box-shadow: none;
+}
 
 /* ——— In-session back-stepping peek ——— */
 .session-back { margin: 0; padding: 4px 12px; }
@@ -1819,9 +1956,9 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   flex-wrap: wrap;
   margin: 0 0 12px;
 }
-.exam-day-label { font-weight: 600; font-size: 14.5px; }
+.exam-day-label { font-weight: 500; font-size: 14.5px; }
 .exam-date-input {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 14px;
   color: var(--ink);
   background: var(--panel);
@@ -1835,7 +1972,58 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   background: var(--accent-tint);
   font-size: 14.5px;
 }
-.final-pass-banner strong { color: var(--accent-deep); }
+.final-pass-banner strong { color: var(--ink); }
+
+/* ——— Formula daily check-in (签到) — portal strip + post-session celebrate ——— */
+.formula-checkin-card {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-tint);
+}
+.formula-checkin-card .fci-row { display: flex; flex-direction: column; gap: 4px; }
+.formula-checkin-card .fci-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  font-size: 14.5px;
+}
+.fci-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.fci-badge.fci-checked {
+  background: var(--accent);
+  color: #fff;
+}
+.fci-badge.fci-pending {
+  background: var(--bg-2, var(--line));
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+.fci-streak { color: var(--ink); font-weight: 600; }
+.fci-hint { margin: 0; font-size: 13.5px; }
+.formula-checkin-celebrate {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-tint);
+  font-size: 15px;
+  animation: fci-pop 0.45s cubic-bezier(.34, 1.56, .64, 1);
+}
+.formula-checkin-celebrate strong { color: var(--ink); }
+.formula-checkin-already {
+  border-left: 3px solid var(--line);
+  font-size: 14px;
+}
+@keyframes fci-pop {
+  from { transform: scale(0.96); opacity: 0.5; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .formula-checkin-celebrate { animation: none; }
+}
 
 /* ——— Learning steps · undo · scaffold · rounds (F7 / F1a / F8 / F11) ——— */
 .learn-chip { background: var(--amber-tint); color: var(--amber); }
@@ -1892,10 +2080,10 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .mnemonic-label {
   display: block;
   font-size: 10.5px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: .06em;
-  color: var(--accent-deep);
+  color: var(--ink-2);
   margin-bottom: 2px;
 }
 .peek-mnemonic { margin-top: 12px; }
@@ -1917,7 +2105,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 /* F5 — reverse-direction faces */
 .fcard-rev-q {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: .06em;
   color: var(--ink-3);
@@ -1978,7 +2166,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   width: 100%;
   max-width: 22px;
   min-height: 2px;
-  background: var(--accent);
+  background: var(--ink-2);
   border-radius: 3px 3px 0 0;
   transition: height .2s;
 }
@@ -1999,7 +2187,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 }
 .fs-input {
   width: 100%;
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 17px;
   color: var(--ink);
   background: var(--surface);
@@ -2009,7 +2197,9 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   margin-top: 14px;
   transition: border-color .15s, box-shadow .15s;
 }
-.fs-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint); }
+/* THE one coral in this band. --accent-tint is neutral cream now, so the ring
+   takes the system's literal focus value — one of its two legal alphas. */
+.fs-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(204, 120, 92, .15); }
 .fs-input::placeholder { color: var(--ink-3); }
 
 .fs-controls {
@@ -2022,13 +2212,13 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .fs-ctl { display: flex; flex-direction: column; gap: 3px; }
 .fs-ctl > span {
   font-size: 10.5px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: .06em;
   color: var(--ink-3);
 }
 .fs-ctl select {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 13px;
   padding: 6px 10px;
   border-radius: 8px;
@@ -2042,7 +2232,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .fs-statusline { margin-top: 10px; min-height: 18px; font-size: 12.5px; }
 
 .fs-help { margin-top: 10px; }
-.fs-help > summary { cursor: pointer; font-size: 13px; color: var(--accent-deep); }
+.fs-help > summary { cursor: pointer; font-size: 13px; font-weight: 500; color: var(--ink); }
 .fs-help > summary::-webkit-details-marker { display: none; }
 .fs-help p { font-size: 13px; margin: 8px 0; }
 .fs-tips { list-style: none; margin: 8px 0 0; padding: 0; }
@@ -2065,7 +2255,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   cursor: pointer;
   transition: border-color .12s, color .12s, background .12s;
 }
-.fs-eg:hover, .fs-fix:hover { border-color: var(--accent); color: var(--accent-deep); background: var(--accent-tint); }
+.fs-eg:hover, .fs-fix:hover { border-color: var(--ink-3); color: var(--ink); background: var(--accent-tint); }
 
 /* ——— Drill bar: study exactly the cards on screen ——— */
 .fs-actionbar {
@@ -2080,7 +2270,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .fs-actionwarn {
   flex: 1 1 100%;
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--bad);
 }
 
@@ -2107,7 +2297,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   cursor: pointer;
   transition: border-color .12s, box-shadow .12s, transform .12s;
 }
-.fs-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.fs-card:hover { border-color: var(--ink-3); transform: translateY(-1px); }
 .fs-card.is-open { border-color: var(--accent-track); box-shadow: 0 1px 3px var(--shadow, rgba(0,0,0,.06)); }
 
 .fs-card-head {
@@ -2118,7 +2308,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   margin-bottom: 8px;
 }
 .fs-card-head .mono { font-size: 10px; padding: 3px 7px; }
-.fs-tag { font-weight: 600; font-size: 13.5px; }
+.fs-tag { font-weight: 500; font-size: 13.5px; }
 .fs-eq { font-size: 11.5px; color: var(--ink-3); }
 /* The head chip labels a face-down card (and hints at the eq:5.16 filter). Once
    the formula is revealed it carries its own book-style \tag, so drop the chip
@@ -2127,19 +2317,21 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .fs-why {
   font-size: 10.5px;
   letter-spacing: .04em;
-  color: var(--accent-deep);
-  background: var(--accent-tint);
+  color: var(--ink-2);
+  background: var(--ivory);
   border-radius: 999px;
   padding: 3px 9px;
 }
 
 .fs-front { font-size: 15px; line-height: 1.55; color: var(--ink); }
+/* Hit highlighting is a neutral band, not a coral one — a page of results
+   would otherwise be dozens of coral runs. */
 .fs-front mark, .fs-tag mark {
   background: var(--accent-track);
-  color: var(--accent-deep);
+  color: var(--ink);
   border-radius: 3px;
   padding: 0 1px;
-  font-weight: 600;
+  font-weight: 500;
 }
 .fs-back { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .fs-back .fcard-back { font-size: 16px; line-height: 1.6; text-align: center; }
@@ -2154,8 +2346,9 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   margin-top: 12px;
 }
 .card .fs-card-foot .btn, .fs-card-foot .btn { margin-top: 0; }
+.fs-card-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .fs-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.due-chip.fs-mnem-chip { color: var(--accent-deep); background: var(--accent-tint); }
+.due-chip.fs-mnem-chip { color: var(--ink); background: var(--accent-tint); }
 .fs-morerow { justify-content: center; }
 .fs-empty p { margin-bottom: 6px; }
 
@@ -2190,7 +2383,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .nb-segs { margin: 0; }
 .nb-filter-right { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .nb-search {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 13.5px;
   padding: 6px 12px;
   border-radius: 999px;
@@ -2198,8 +2391,10 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   background: var(--surface);
   color: var(--ink);
   min-width: 180px;
+  transition: border-color .15s, box-shadow .15s;
 }
-.nb-search:focus { outline: none; border-color: var(--accent); }
+/* THE one coral on #/notes — same focus treatment as .fs-input / .srch-input. */
+.nb-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(204, 120, 92, .15); }
 .nb-topic { cursor: pointer; }
 
 /* ——— Entry card ——— */
@@ -2232,10 +2427,10 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .nb-mono-q { color: var(--ink-3); background: var(--ivory); }
 
 .nb-more {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 12.5px;
-  font-weight: 600;
-  color: var(--accent-deep);
+  font-weight: 500;
+  color: var(--ink-2);
   background: transparent;
   border: none;
   padding: 4px 0 0;
@@ -2255,14 +2450,16 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   padding: 0 2px;
   transition: color .12s, transform .12s;
 }
-.nb-star:hover { color: var(--accent); transform: scale(1.08); }
-.nb-star.on { color: var(--accent); }
+/* A bookmark star is gold, not coral — the medal ramp already owns this
+   glyph family and it keeps the band's coral for the focused search field. */
+.nb-star:hover { color: var(--gold); transform: scale(1.08); }
+.nb-star.on { color: var(--gold); }
 
 /* ——— Inline note ——— */
 .nb-noteblock { position: relative; margin-top: 14px; }
 .nb-note {
   width: 100%;
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 14.5px;
   line-height: 1.55;
   color: var(--ink);
@@ -2280,7 +2477,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   right: 4px;
   bottom: -18px;
   font-size: 11.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--good);
   opacity: 0;
   transition: opacity .2s;
@@ -2289,7 +2486,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 
 /* ——— Reveal: static answer choices + solution ——— */
 .nb-reveal { margin-top: 14px; }
-.nb-reveal > summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--accent-deep); }
+.nb-reveal > summary { cursor: pointer; font-size: 14px; font-weight: 500; color: var(--ink); }
 .nb-choices { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
 .nb-opt {
   display: flex;
@@ -2301,16 +2498,16 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   border-radius: 10px;
   padding: 10px 14px;
 }
-.nb-opt-letter { font-weight: 700; color: var(--ink-3); min-width: 16px; }
+.nb-opt-letter { font-weight: 500; color: var(--ink-3); min-width: 16px; }
 .nb-opt-body { flex: 1; min-width: 0; }
 .nb-opt.is-answer { border-color: var(--good); background: var(--good-tint); }
 .nb-opt.is-answer .nb-opt-letter { color: var(--good); }
-.nb-correct-tag { margin-left: auto; color: var(--good); font-weight: 700; font-size: 12px; white-space: nowrap; }
+.nb-correct-tag { margin-left: auto; color: var(--good); font-weight: 500; font-size: 12px; white-space: nowrap; }
 
 /* ——— Link chips ——— */
 .nb-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 .nb-chip { cursor: pointer; transition: background .12s, color .12s; }
-.nb-chip:hover { background: var(--accent-tint); color: var(--accent-deep); text-decoration: none; }
+.nb-chip:hover { background: var(--accent-tint); color: var(--ink); text-decoration: none; }
 
 /* ——— Empty / no-match ——— */
 .nb-empty p, .nb-nomatch p { margin-bottom: 6px; }
@@ -2330,7 +2527,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 
 .srch-input {
   width: 100%;
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 17px;
   color: var(--ink);
   background: var(--surface);
@@ -2340,7 +2537,8 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   margin-top: 14px;
   transition: border-color .15s, box-shadow .15s;
 }
-.srch-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint); }
+/* THE one coral on #/search. */
+.srch-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(204, 120, 92, .15); }
 .srch-input::placeholder { color: var(--ink-3); }
 
 .srch-status { margin-top: 10px; min-height: 18px; font-size: 12.5px; }
@@ -2358,9 +2556,9 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .srch-group-head h2 { margin: 0; font-size: 16px; }
 .srch-count {
   font-size: 12px;
-  font-weight: 700;
-  color: var(--accent-deep);
-  background: var(--accent-tint);
+  font-weight: 500;
+  color: var(--ink-2);
+  background: var(--ivory);
   border-radius: 999px;
   padding: 1px 9px;
 }
@@ -2379,14 +2577,14 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   margin-bottom: 8px;
   transition: border-color .12s, background .12s, transform .12s;
 }
-.srch-hit:hover { text-decoration: none; border-color: var(--accent); background: var(--accent-tint); transform: translateY(-1px); }
+.srch-hit:hover { text-decoration: none; border-color: var(--ink-3); background: var(--ivory); transform: translateY(-1px); }
 .srch-hit-mono { flex: none; }
 .srch-hit-mono:empty { display: none; }
 .srch-hit-mono .mono { font-size: 10.5px; padding: 4px 8px; display: inline-block; }
 .srch-hit-body { min-width: 0; flex: 1; }
 .srch-hit-title {
   display: block;
-  font-weight: 600;
+  font-weight: 500;
   font-size: 14.5px;
   line-height: 1.4;
   white-space: nowrap;
@@ -2396,16 +2594,16 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .srch-hit-snip { display: block; font-size: 13px; color: var(--ink-2); line-height: 1.5; margin-top: 2px; }
 .srch-hit mark {
   background: var(--accent-track);
-  color: var(--accent-deep);
+  color: var(--ink);
   border-radius: 3px;
   padding: 0 1px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 /* ——— Recent searches ——— */
 .srch-recent { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .srch-chip {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 13px;
   color: var(--ink-2);
   background: var(--ivory);
@@ -2415,12 +2613,12 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   cursor: pointer;
   transition: border-color .12s, color .12s;
 }
-.srch-chip:hover { border-color: var(--accent); color: var(--accent-deep); }
+.srch-chip:hover { border-color: var(--ink-3); color: var(--ink); }
 
 /* ——— Index stats ——— */
 .srch-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
 .srch-stat { background: var(--ivory); border-radius: 10px; padding: 12px 14px; }
-.srch-stat-val { font-size: 22px; font-weight: 600; }
+.srch-stat-val { font-size: 22px; font-weight: 500; }
 .srch-stat-lab { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
 
 @media (max-width: 860px) {
@@ -2443,10 +2641,10 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .dash-qotd-sol summary {
   cursor: pointer;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: var(--accent-deep);
+  color: var(--ink);
 }
 .dash-qotd-sol summary::-webkit-details-marker { color: var(--ink-3); }
 .dash-qotd-sol .solution { margin-top: 10px; }
@@ -2455,14 +2653,17 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 /* ——— Study-time ——— */
 .dash-study-top { display: flex; gap: 28px; margin-bottom: 12px; }
 .dash-study-fig { line-height: 1.2; }
-.dash-study-big { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+.dash-study-big { font-size: 26px; font-weight: 500; letter-spacing: -0.01em; }
 .dash-study-big .stat-unit { font-size: 13px; font-weight: 400; color: var(--ink-3); }
 .dash-spark { display: block; width: 100%; max-width: 240px; height: 50px; margin: 14px 0 4px; overflow: visible; }
-.dash-bar { fill: var(--accent); }
-.dash-bar-today { fill: var(--accent-deep); }
+/* Chart marks are ink, not coral: the analytics band spends its one coral on
+   the practice heatmap, and a 7-bar spark would otherwise repeat it seven
+   times in the same scroll. Today reads by weight and value, not by hue. */
+.dash-bar { fill: var(--ink-2); }
+.dash-bar-today { fill: var(--ink); }
 .dash-bar-zero { fill: var(--line); }
 .dash-spark-lbl { fill: var(--ink-3); font-size: 9px; font-family: var(--sans); }
-.dash-spark-lbl-today { fill: var(--accent-deep); font-weight: 700; }
+.dash-spark-lbl-today { fill: var(--ink); font-weight: 500; }
 .dash-study-note { margin-top: 8px; }
 
 /* ——— Readiness / score estimate ——— */
@@ -2470,10 +2671,10 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .dash-head h2 { margin-bottom: 0; }
 .dash-est-chip {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: var(--accent-deep);
+  color: var(--ink-2);
   background: var(--accent-tint);
   border-radius: 999px;
   padding: 3px 10px;
@@ -2482,11 +2683,11 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .dash-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 4px; }
 .dash-caption { margin-top: 10px; }
 .dash-blind { margin-top: 12px; font-size: 13.5px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.dash-blind-label { color: var(--ink-2); font-weight: 600; }
+.dash-blind-label { color: var(--ink-2); font-weight: 500; }
 .dash-chip {
   font-size: 11.5px;
-  font-weight: 700;
-  color: var(--accent-deep);
+  font-weight: 500;
+  color: var(--ink);
   background: var(--accent-tint);
   border-radius: 7px;
   padding: 3px 9px;
@@ -2523,7 +2724,9 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   border-color: transparent;
   background: transparent;
   color: var(--ink-2);
-  font-weight: 600;
+  /* font-family comes from .btn (var(--sans)); weight matches every other
+     button in the app — 500, never heavier */
+  font-weight: 500;
   font-size: 13px;
   padding: 8px 10px;
 }
@@ -2552,22 +2755,24 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   overflow: hidden;
   display: flex; align-items: center; justify-content: center;
   /* instrument-sheet primitives, scoped so the dark layer re-derives below:
-     hairlines keyed to the theme ink, graph grid + ionization electrons in
-     the site's slate blue-grey */
+     hairlines keyed to the theme ink (rgb = --ink-900 light / --cream-50 dark),
+     graph grid + ionization electrons in the system's teal. The alphas are
+     deliberate: translucent hairlines are this page's preserved motif, a
+     knowing deviation from the "almost no transparency" rule. */
   --fp-hair: rgba(20, 20, 19, 0.14);
   --fp-hair-soft: rgba(20, 20, 19, 0.07);
-  --fp-grid-major: rgba(106, 155, 204, 0.09);
-  --fp-grid-minor: rgba(106, 155, 204, 0.05);
-  --fp-ion: #6A9BCC;                      /* brand blue; js/focus-fx.js reads this for electrons */
+  --fp-grid-major: rgba(93, 184, 166, 0.09);
+  --fp-grid-minor: rgba(93, 184, 166, 0.05);
+  --fp-ion: #5db8a6;                      /* --accent-teal; js/focus-fx.js reads this for electrons */
 }
 [data-theme="dark"] .focus-page {
-  --fp-hair: rgba(236, 234, 228, 0.15);
-  --fp-hair-soft: rgba(236, 234, 228, 0.07);
-  --fp-grid-major: rgba(151, 185, 219, 0.10);
-  --fp-grid-minor: rgba(151, 185, 219, 0.05);
-  --fp-ion: #97B9DB;
+  --fp-hair: rgba(250, 249, 245, 0.15);
+  --fp-hair-soft: rgba(250, 249, 245, 0.07);
+  --fp-grid-major: rgba(93, 184, 166, 0.11);
+  --fp-grid-minor: rgba(93, 184, 166, 0.06);
+  --fp-ion: #5db8a6;
 }
-/* millimetre graph paper — two-scale slate grid on the warm ground, faint
+/* millimetre graph paper — two-scale teal grid on the warm ground, faint
    enough to live under text (the site's signature backdrop) */
 .focus-ambient {
   position: absolute; inset: 0; z-index: 0;
@@ -2580,11 +2785,14 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   background-size: 80px 80px, 80px 80px, 16px 16px, 16px 16px;
   transition: opacity .9s ease;
 }
-/* a warm radial glow behind the stage fades in while a session is live */
+/* a warm radial glow behind the stage fades in while a session is live.
+   Hardcoded to a coral mix rather than --accent-tint: that token is now a
+   neutral cream step, which would erase the glow entirely. This wash and the
+   reward atom are the ONE sanctioned coral moment on this page. */
 .focus-ambient::after {
   content: '';
   position: absolute; inset: 0;
-  background: radial-gradient(ellipse at 50% 38%, var(--accent-tint) 0%, transparent 62%);
+  background: radial-gradient(ellipse at 50% 38%, color-mix(in srgb, var(--accent) 14%, transparent) 0%, transparent 62%);
   opacity: 0;
   transition: opacity 1.4s ease;
 }
@@ -2627,13 +2835,14 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   text-align: center;
   display: flex; flex-direction: column; align-items: center; gap: 18px;
 }
-/* numbered section tag, boxed in a faint accent hairline (site motif) */
+/* numbered section tag, boxed in a faint instrument hairline (site motif).
+   De-coraled: the page's one coral is the reward atom + detector core. */
 .focus-sec-tag {
   font-family: var(--mono-instr); font-size: 11px; font-weight: 400;
   letter-spacing: 0.16em; text-transform: uppercase;
-  color: var(--accent-deep);
+  color: var(--ink-2);
   padding: 5px 10px;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border: 1px solid var(--fp-hair);
   transition: opacity .55s ease, filter .55s ease;
 }
 .focus-reward {
@@ -2647,8 +2856,8 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
               transform .25s ease-out;
 }
 .focus-clock {
-  /* the display voice: Lora digits, slightly tight (Lora's range starts
-     at 400, so that is the lightest available weight) */
+  /* the display voice: Newsreader digits, slightly tight. 400 is the
+     display weight everywhere — the serif is never set heavier. */
   font-family: var(--serif-display);
   font-size: 86px; font-weight: 400; line-height: 1;
   letter-spacing: -0.01em;
@@ -2693,17 +2902,30 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
    (scoped to the page: .focus-chip is shared with the exam self-assessment
    and mistake-drill chips, which keep the classic pill look) */
 .focus-goals { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+
+/* focus-timer SFX picker — same chip language as the goal row; stays visible
+   while running so the end voice can be changed mid-session */
+.focus-sounds {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  align-items: center; margin-top: 10px;
+}
+.focus-page .focus-sound-label {
+  font-family: var(--mono-instr); font-size: 10px; font-weight: 400;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-3); margin-right: 2px;
+}
+.focus-page .focus-sound-chip { min-width: 4.5em; }
 .focus-chip {
-  font-family: var(--serif); font-size: 13px; font-weight: 600;
+  font-family: var(--sans); font-size: 13px; font-weight: 500;
   padding: 7px 14px; border-radius: 999px;
   border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
   cursor: pointer; transition: border-color .15s, background .15s, color .15s;
 }
 .focus-chip:hover { border-color: var(--ink-3); color: var(--ink); }
-.focus-chip.active { border-color: var(--accent); background: var(--accent-tint); color: var(--accent-deep); }
+.focus-chip.active { border-color: var(--ink-3); background: var(--ivory); color: var(--ink); }
 .focus-chip-custom { padding: 0; border: none; background: none; }
 .focus-custom-in {
-  width: 84px; font-family: var(--serif); font-size: 13px;
+  width: 84px; font-family: var(--sans); font-size: 13px;
   padding: 7px 10px; border-radius: 999px;
   border: 1px solid var(--line); background: var(--surface); color: var(--ink);
 }
@@ -2714,16 +2936,18 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   border: 1px solid var(--fp-hair); background: transparent; color: var(--ink-2);
   transition: border-color .2s ease, background .2s ease, color .2s ease, transform .15s ease;
 }
+/* de-coraled per the coral-scarcity rule: hover and active read as a firmer
+   hairline + a faint ink wash, not a second coral competing with the atom */
 .focus-page .focus-chip:hover {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: var(--ink-3);
+  background: color-mix(in srgb, var(--ink-3) 10%, transparent);
   color: var(--ink);
   transform: translateY(-2px);
 }
 .focus-page .focus-chip.active {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent-deep);
+  border-color: var(--ink-3);
+  background: color-mix(in srgb, var(--ink-3) 16%, transparent);
+  color: var(--ink);
 }
 .focus-page .focus-chip-custom,
 .focus-page .focus-chip-custom:hover { padding: 0; border: none; background: none; transform: none; }
@@ -2736,8 +2960,9 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 }
 .focus-page .focus-custom-in:focus { outline: none; border-color: var(--accent); }
 
-/* controls — the site's two button archetypes: outlined accent that inverts
-   on hover (primary), dashed hairline ghost (secondary). Scoped overrides of
+/* controls — the site's two button archetypes: outlined ink that inverts
+   on hover (primary), dashed hairline ghost (secondary). De-coraled so the
+   atom keeps the page's one coral. Scoped overrides of
    the shared .btn kit; label text stays as-is, CSS carries the voice. */
 .focus-controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .focus-page .focus-controls .btn {
@@ -2747,17 +2972,17 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   transition: background .25s ease, color .25s ease, border-color .25s ease, transform .12s ease;
 }
 .focus-page .focus-controls .btn-primary {
-  background: none; color: var(--accent-deep);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: none; color: var(--ink);
+  border: 1px solid color-mix(in srgb, var(--ink-3) 70%, transparent);
 }
-.focus-page .focus-controls .btn-primary:hover { background: var(--accent-deep); color: var(--on-accent); }
+.focus-page .focus-controls .btn-primary:hover { background: var(--ink); color: var(--bg); }
 .focus-page .focus-controls .btn-ghost {
   background: none; color: var(--ink-2);
   border: 1px dashed var(--fp-hair);
 }
 .focus-page .focus-controls .btn-ghost:hover {
-  background: none; color: var(--accent-deep);
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: none; color: var(--ink);
+  border-color: var(--ink-3);
 }
 .focus-hero { min-width: 150px; padding: 13px 26px; }
 .focus-page .focus-controls .btn:active { transform: scale(0.97); }
@@ -2821,7 +3046,7 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 .focus-sess:last-child { border-bottom: none; }
 .focus-sess-dur { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 64px; }
 .focus-tag { font-size: 12px; color: var(--ink-3); background: var(--ivory); border-radius: 999px; padding: 2px 9px; }
-.focus-tag-met { color: var(--accent-deep); background: var(--accent-tint); font-weight: 600; }
+.focus-tag-met { color: var(--ink); background: var(--ivory); font-weight: 500; }
 .focus-sess-when { margin-left: auto; font-size: 12px; }
 .focus-page .focus-recent {
   background: transparent; border: 1px solid var(--fp-hair);
@@ -2843,9 +3068,9 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
   border: 1px solid var(--fp-hair); border-radius: 0; padding: 2px 8px;
 }
 .focus-page .focus-tag-met {
-  color: var(--accent-deep);
-  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ink-3) 55%, transparent);
+  background: color-mix(in srgb, var(--ink-3) 12%, transparent);
 }
 .focus-page .focus-sess-when {
   font-family: var(--mono-instr); font-size: 9.5px;
@@ -3025,7 +3250,9 @@ body.focus-zen .fhud-tr { top: 60px; }
   content: '';
   position: absolute; inset: 0; z-index: 1;
   pointer-events: none;
-  background: radial-gradient(ellipse at 50% 42%, transparent 46%, rgba(15, 12, 10, 0.32) 100%);
+  /* rgb = --ink-900, warm. The gradient itself is preserved instrument
+     furniture — a knowing deviation from the no-gradients rule. */
+  background: radial-gradient(ellipse at 50% 42%, transparent 46%, rgba(20, 20, 19, 0.32) 100%);
   opacity: 0;
   transition: opacity 1s ease;
 }
@@ -3053,14 +3280,16 @@ body.focus-zen .focus-quiet {
 /* …while the caption + controls only sink to invisible (kept in layout), so a
    wiggle of the pointer can peek them back, video-player style (.zen-peek is
    set by view-focus.js on mouse/touch activity and drops after ~2.6 s). */
-.focus-sub, .focus-goals, .focus-controls { transition: opacity .55s ease, filter .55s ease; }
+.focus-sub, .focus-goals, .focus-sounds, .focus-controls { transition: opacity .55s ease, filter .55s ease; }
 body.focus-zen .focus-sub,
 body.focus-zen .focus-sec-tag,
 body.focus-zen .focus-goals,
+body.focus-zen .focus-sounds,
 body.focus-zen .focus-controls { opacity: 0; filter: blur(5px); pointer-events: none; }
 body.focus-zen .zen-peek .focus-sub,
 body.focus-zen .zen-peek .focus-sec-tag,
 body.focus-zen .zen-peek .focus-goals,
+body.focus-zen .zen-peek .focus-sounds,
 body.focus-zen .zen-peek .focus-controls { opacity: 1; filter: none; pointer-events: auto; }
 
 /* the mouse cursor itself sinks away with the controls after a beat of
@@ -3140,7 +3369,10 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
    tinted with a pulsing solid dot + live elapsed when running. Pure
    token colours, so the dark layer re-derives it with no extra rules.
    ================================================================== */
-.focus-timer { margin-left: auto; flex: none; }
+/* --focus-glow: a locally-scoped coral for the two glow keyframes below,
+   decoupled from --accent-track now that the token means "neutral meter
+   track". Without this the pulse animates an invisible grey throb. */
+.focus-timer { margin-left: auto; flex: none; --focus-glow: color-mix(in srgb, var(--accent) 45%, transparent); }
 /* Register the goal-progress var as a real percentage so the pill's filled
    band GLIDES between the engine's 1 s updates (transition on .focus-toggle)
    instead of stepping. Browsers without @property just step, as before. */
@@ -3155,7 +3387,7 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
   align-items: center;
   gap: 8px;
   height: 26px;                 /* matches .topbar-arrow */
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 12.5px;
   font-weight: 600;
   padding: 0 11px;
@@ -3190,7 +3422,7 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
   font-variant-numeric: tabular-nums; font-size: 12.5px;
   transition: border-color .15s, color .15s, background .15s, transform .12s ease;
 }
-.focus-open:hover { border-color: var(--accent); color: var(--accent-deep); text-decoration: none; background: var(--accent-tint); transform: translateY(-1px); }
+.focus-open:hover { border-color: var(--ink-3); color: var(--ink); text-decoration: none; background: none; transform: translateY(-1px); }
 .focus-open:active { transform: translateY(0) scale(0.96); }
 .focus-open .focus-time { margin-left: 0; }
 .focus-open-ico { font-size: 13px; line-height: 1; }
@@ -3207,7 +3439,7 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
   background: var(--accent);
   animation: focus-pulse 1.6s ease-in-out infinite;
 }
-.focus-timer.is-running .focus-time { color: var(--accent-deep); font-weight: 700; }
+.focus-timer.is-running .focus-time { color: var(--accent-deep); font-weight: 500; }
 
 /* BUNDLE D — Paused (held): amber, steady (no pulse). Distinct from the accent
    green of a live session so the sidebar reads its three states at a glance.
@@ -3233,7 +3465,7 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
 /* soft breathing glow around the pill while a session is live */
 .focus-timer.is-running .focus-toggle { animation: focus-glow 2.6s ease-in-out infinite; }
 @keyframes focus-glow {
-  0%, 100% { box-shadow: 0 0 0 0 var(--accent-track); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--focus-glow); }
   55%      { box-shadow: 0 0 0 5px transparent; }
 }
 
@@ -3271,8 +3503,11 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
 /* goal sessions: the pill itself becomes a progress bar — the filled band
    (accent while running, amber while held) advances via --fprog (timer.js) */
 .focus-timer.is-running.has-goal .focus-toggle {
+  /* --accent-track is now the same neutral cream as --accent-tint (both
+     de-coraled), so the two stops would be indistinguishable — the fill
+     side gets its own coral instead of sharing the invisible track token. */
   background: linear-gradient(90deg,
-    var(--accent-track) var(--fprog, 0%), var(--accent-tint) var(--fprog, 0%));
+    color-mix(in srgb, var(--accent) 30%, transparent) var(--fprog, 0%), var(--accent-tint) var(--fprog, 0%));
 }
 .focus-timer.is-paused.has-goal .focus-toggle {
   background: linear-gradient(90deg,
@@ -3284,7 +3519,7 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
 @keyframes focus-time-in { from { opacity: 0; transform: translateX(5px); } }
 
 @keyframes focus-pulse {
-  0%, 100% { opacity: 1;    box-shadow: 0 0 0 0 var(--accent-track); }
+  0%, 100% { opacity: 1;    box-shadow: 0 0 0 0 var(--focus-glow); }
   50%      { opacity: 0.55; box-shadow: 0 0 0 4px transparent; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -3379,17 +3614,21 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
   justify-content: flex-end;
   height: 100%;
 }
+/* .stbar-today is this chart's one coral bar (coral scarcity, §3.3); the
+   other 27 days are ink, not a second coral. (--ink-2, not the system's
+   --ink-700, which this app's token layer does not carry — same
+   substitution the analytics chart bars use.) */
 .stbar {
   width: 100%;
   max-width: 14px;
   min-height: 2px;
-  background: var(--accent);
+  background: var(--ink-2);
   border-radius: 3px 3px 0 0;
 }
 .stbar-today { background: var(--accent-deep); }
 .stbar-zero { background: var(--line); }
 .stbar-x { font-size: 9.5px; color: var(--ink-3); margin-top: 5px; height: 12px; white-space: nowrap; }
-.stbar-x-cur { color: var(--accent-deep); font-weight: 700; }
+.stbar-x-cur { color: var(--ink); font-weight: 700; }
 
 /* Weekly totals — 8 bars over a shaded 15–17 h target band. */
 .stweek { margin-top: 2px; }
@@ -3408,8 +3647,8 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
   left: 0;
   right: 0;
   background: var(--accent-tint);
-  border-top: 1px dashed var(--accent);
-  border-bottom: 1px dashed var(--accent);
+  border-top: 1px dashed var(--ink-3);
+  border-bottom: 1px dashed var(--ink-3);
   z-index: 0;
 }
 .stweek-col {
@@ -3425,17 +3664,17 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
   width: 100%;
   max-width: 34px;
   min-height: 2px;
-  background: var(--accent);
+  background: var(--ink-2);
   border-radius: 4px 4px 0 0;
 }
 .stweek-bar.stweek-met { background: var(--good); }
-.stweek-bar.stweek-current { outline: 2px solid var(--accent-deep); outline-offset: -2px; }
+.stweek-bar.stweek-current { outline: 2px solid var(--ink); outline-offset: -2px; }
 .stweek-labels { display: flex; gap: 8px; padding: 0 6px; margin-top: 6px; }
 .stweek-lab { flex: 1; display: flex; flex-direction: column; align-items: center; line-height: 1.25; }
 .stweek-h { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .stweek-h-met { color: var(--good); }
 .stweek-x { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; }
-.stweek-x-cur { color: var(--accent-deep); font-weight: 700; }
+.stweek-x-cur { color: var(--ink); font-weight: 700; }
 
 /* Focus vs. app-activity — a single stacked bar with a legend. */
 .st-split-bar {
@@ -3445,12 +3684,12 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
   overflow: hidden;
   background: var(--ivory);
 }
-.st-split-focus { background: var(--accent-deep); }
+.st-split-focus { background: var(--ink-2); }
 .st-split-passive { background: var(--accent-track); }
 .st-split-legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; font-size: 13.5px; }
 .st-split-item { display: flex; align-items: center; gap: 8px; }
 .st-swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
-.st-swatch-focus { background: var(--accent-deep); }
+.st-swatch-focus { background: var(--ink-2); }
 .st-swatch-passive { background: var(--accent-track); }
 
 /* Recent focus sessions — card head with a jump to the timer. */
@@ -3462,51 +3701,62 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
 }
 
 /* ==================================================================
-   DARK THEME — [data-theme="dark"] token overrides (proposal #15)
-   A warm, Anthropic-adjacent dark: near-black warm ground (not pure
-   black), light ivory ink, the same terracotta accent family nudged
-   lighter for contrast. Every card, meter, chart, heatmap step, status
-   colour and the amber timer state re-derive from these tokens, so the
-   rules above are reused untouched. KaTeX inherits `color`, so math
-   follows --ink automatically.
+   DARK THEME — [data-theme="dark"] token overrides.
+   Dark mode is an EXTENSION (see deviation 4 in the file header): the
+   design system documents one mode — cream pages with dark bands — so
+   only some of these values exist upstream. Where a dark token exists
+   it is used verbatim; where it does not, the derivation is stated on
+   the line, and is always either (a) continuing the system's own ladder
+   by its own measured step, or (b) taking the system's hue and moving it
+   along the cream axis until it clears 4.5:1 on --dark-900.
+
+   We invert the system's card convention: upstream, #181715 is a dark
+   *card* on a cream page. Here #181715 is the page floor and cards step
+   UP to #252320. Same three tones, standard product-chrome reading.
+
+   Note --accent is the SAME coral in both modes (5.47:1 on the dark
+   floor). That is the strongest signal that this is one system, not a
+   light/dark pair. Every card, meter, chart, heatmap step and status
+   colour re-derives from these tokens, so the rules above are reused
+   untouched. KaTeX inherits `color`, so math follows --ink.
    ================================================================== */
 [data-theme="dark"] {
-  --bg: #1A1917;
-  --panel: #211F1D;
-  --surface: #262320;
-  --ivory: #2F2B27;
-  --ink: #ECEAE4;
-  --ink-2: #B4B0A7;
-  --ink-3: #87837B;
-  --line: #38352F;
-  --accent: #E19279;             /* brand orange lightened for dark ground (7.2:1 on --bg) */
-  --accent-deep: #E8AD9A;
-  --accent-tint: #3A2A22;
-  --accent-track: #4A3529;
-  --good: #93A37D;               /* brand green lightened for dark ground (6.5:1 on --bg) */
-  --good-tint: #1F2A22;
-  --bad: #EC8371;
-  --bad-tint: #33211D;
-  --bronze: #C99A6E;
-  --silver: #ADAAA3;
-  --gold: #D8B65B;
-  --platinum: #97B9DB;           /* brand blue lightened for dark ground (8.6:1 on --bg) */
-  --platinum-tint: #232B30;
-  --amber: #E6C879;
-  --amber-tint: #3A3117;
-  --heat-0: #262320;
-  --heat-1: #53382D;
-  --heat-2: #804D3B;
-  --heat-3: #B06F5A;
-  --heat-4: #E19279;
-  --heat-edge: rgba(255, 255, 255, 0.06);
-  --on-accent: #211D1A;
-  --btn-primary-hover: #D8D5CE;
-  --scrim: rgba(0, 0, 0, 0.6);
-  --shadow: rgba(0, 0, 0, 0.5);
+  --bg: #181715;                 /* surface-dark */
+  --panel: #1f1e1b;              /* surface-dark-soft */
+  --surface: #252320;            /* surface-dark-elevated — cards step UP from the floor */
+  --ivory: #2c2a26;              /* EXT: the ladder continued by its own step (+7,+7,+6) */
+  --ink: #faf9f5;                /* text-on-dark — on dark, "white" is cream (17.0:1) */
+  --ink-2: #a09d96;              /* text-on-dark-soft / ink-300 (6.62:1) */
+  --ink-3: #807d76;              /* EXT: a third on-dark step, ink-300 stepped down (4.36:1) */
+  --line: #33312d;               /* border-on-dark */
+  --accent: #cc785c;             /* brand coral, unchanged from light (5.47:1 on --bg) */
+  --accent-deep: #e0997d;        /* EXT: on dark, "deeper" moves toward cream (7.70:1) */
+  --accent-tint: #2c2a26;        /* EXT, de-coraled to mirror light — same as dark --ivory */
+  --accent-track: #33312d;       /* border-on-dark — neutral meter track, mirroring light */
+  --good: #5db872;               /* status-success verbatim (7.31:1) */
+  --good-tint: #202a20;          /* status-success at 12% on the floor */
+  --bad: #e07a6a;                /* status-error lightened toward cream (6.11:1) */
+  --bad-tint: #301d1c;           /* status-error at 14% on the floor */
+  --bronze: #d9a068;             /* accent-amber lightened toward cream (7.83:1) */
+  --silver: #a09d96;             /* ink-300 */
+  --gold: #d4a017;               /* gold-500 verbatim (7.54:1) */
+  --platinum: #5db8a6;           /* accent-teal — removes the cool blue from dark too (7.57:1) */
+  --platinum-tint: #202a26;      /* accent-teal at 12% on the floor */
+  --amber: #e8a55a;              /* accent-amber verbatim (8.50:1) */
+  --amber-tint: #322a15;         /* gold-500 at 14% on the floor */
+  /* Heat ramp: dark-700 → coral-500, same construction as light. */
+  --heat-0: #252320;
+  --heat-1: #543b31;
+  --heat-2: #815241;
+  --heat-3: #a7654f;
+  --heat-4: #cc785c;
+  --heat-edge: rgba(250, 249, 245, 0.06);  /* cream-50 at alpha — no pure white on dark */
+  --on-accent: #ffffff;          /* type on a coral fill does not change per mode */
+  --btn-primary-hover: #e8e0d2;  /* cream controls step one cream down */
+  --scrim: rgba(20, 20, 19, 0.6);          /* warm ink, not pure black */
+  --shadow: rgba(20, 20, 19, 0.45);        /* EXT: same geometry, higher alpha to read on #181715 */
 }
-/* Tier-chip text is a hand-darkened shade for the ivory ground; on dark it
-   needs the opposite nudge to stay legible on the transparent chip. */
-[data-theme="dark"] .tier-chip.tier-silver { color: #C9C6BF; }
-[data-theme="dark"] .tier-chip.tier-gold { color: #DCC072; }
-[data-theme="dark"] .tier-chip.tier-platinum { color: #A9BBC7; }
+/* The three .tier-chip.tier-silver/-gold/-platinum dark overrides that
+   used to live here are deleted: the dark --silver / --gold / --platinum
+   values above are already legible on the dark floor (5.26 / 7.54 /
+   7.57), so the tokens carry it. */

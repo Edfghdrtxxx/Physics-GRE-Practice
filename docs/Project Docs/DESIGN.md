@@ -25,6 +25,7 @@ Everything runs from static files; all data stays on this machine (localStorage 
 | Correct answer | +10 (+5 extra the first time a question is solved) |
 | Incorrect answer | +2 |
 | Formula card reviewed | +2 (any grade; awarded quietly at session end) |
+| Formula daily check-in | +15 (once per local day on first Study / Match / Type / Quiz / Cloze settle; formula-specific streak) |
 | Plan task | +10 to +50 (task-specific; granted once, survives un-checking) |
 | Daily challenge | +10 to +30 |
 | Achievement | Bronze +25 · Silver +50 · Gold +100 · Platinum +200 |
@@ -193,24 +194,33 @@ UTC ISO prefix to a local date string).
 cram queue). `settings.formulaDailyTarget` is a **total** daily cap of reviews + new
 combined (clamp **1–100**, default **10**; every read routes the raw value through
 `srs.clampTarget`, so an imported/corrupt value can't poison the queue). `state.formulaDay`
-= `{ date, reviewIds: [], newIds: [] }` holds today's batch, rebuilt at the day roll and
-reconciled on every access (`srs.formulaDay(deck)`, persisted only when it changed; an
+= `{ date, reviewIds: [], newIds: [], softIds?: [] }` holds today's batch, rebuilt at the day
+roll and reconciled on every access (`srs.formulaDay(deck)`, persisted only when it changed; an
 empty deck returns a transient batch WITHOUT persisting, guarding the nav-badge path that
 runs before IndexedDB resolves):
 - **Build:** reviews = cards with state and `due ≤ today`, **oldest-due first**, first
   `min(T, all)`; new = random sample of never-studied cards filling `max(0, T − reviews)` slots.
-- **Reconcile (same day):** drop ids no longer in the deck; keep every `studiedToday`
-  member unconditionally; if over target trim only non-studied items (new picks from the
-  end, then unstudied reviews newest-due first — oldest-due kept); if under target top up
+- **Reconcile (same day):** drop ids no longer in the deck (and clean `softIds` that left the
+  deck or are still suspended); keep every `studiedToday` member and every `softIds` pin
+  unconditionally; if over target trim only non-protected items (new picks from the end,
+  then unstudied reviews newest-due first — oldest-due kept); if under target top up
   with due reviews (oldest first) then random never-studied cards.
-- **Remaining** = batch cards where **(no state) OR (`due ≤ today`)** — an Again-graded
-  card (due today) stays remaining across reloads; a Good/Hard/Easy card (future due) is done.
+- **Soft-add from Search** (`srs.addFormulaDaySoft`): explicit Add buttons pin hits into
+  today's batch (may exceed T). No state → `newIds`; has state → `reviewIds` (including
+  not-yet-due); suspended → unsuspend then add; already in batch → ensure soft pin.
+  `softIds` is same-day only (day roll rebuilds without it). Search stays side-effect free
+  until the user clicks Add (`isInFormulaDay` / status:today never call `formulaDay()`).
+- **Remaining** = batch cards where **(no state) OR (`due ≤ today`) OR (soft-pinned /
+  final-pass AND not studied today)** — an Again-graded card (due today) stays remaining
+  across reloads; a Good/Hard/Easy card (future due) is done. Soft pins surface topical
+  not-yet-due adds from Search until graded today.
 - **Overflow:** due reviews held back from today's batch are **postponed** to tomorrow
   (counted on the composition line).
 - **New-card slots** are filled by the **picker** (topic-grouped checklist; `studiedToday`
   picks are locked and preserved verbatim, counting toward the slot tally) or **random
   auto-fill** / re-roll. Slots `S = max(0, T − reviews)`; when `S = 0` the new-card controls
-  are hidden.
+  are hidden. Soft-pinned never-studied cards (`softIds`) stay sticky through set/reroll/
+  clear of new picks and do **not** consume S (batch may stay above T).
 
 Remaining count drives the dashboard *Review queue* card and the sidebar badge.
 **Browse** the deck via **Learned** (cards with state: last-grade + due chips) / **Upcoming**

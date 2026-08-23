@@ -139,7 +139,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20260725b';
+      s.src = 'js/flashmodes.js?v=20260804b';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -352,6 +352,11 @@ PGRE.views.formulas = (function () {
       'The tabs above add <strong>Match</strong>, <strong>Type</strong> and <strong>Quiz</strong> ' +
       'drills over the same deck.</p></div>';
 
+    // Game-style daily check-in strip (formula-specific streak; not the global study streak).
+    if (PGRE.formulaCheckIn && typeof PGRE.formulaCheckIn.stripHTML === 'function') {
+      html += PGRE.formulaCheckIn.stripHTML();
+    }
+
     if (!deck.length) {
       html += '<div class="stat-row stat-row-4">' +
         ui.statTile('Cards in the deck', ui.fmt(0)) +
@@ -441,6 +446,12 @@ PGRE.views.formulas = (function () {
         ' not yet introduced — raise the daily target to start them.';
     }
     html += '<p class="muted comp-line">' + comp + '</p>';
+    if (batch.softIds && batch.softIds.length) {
+      var nSoft = batch.softIds.length;
+      html += '<p class="muted soft-pin-note">' + nSoft + ' card' +
+        (nSoft === 1 ? '' : 's') +
+        ' pinned from Search (may exceed your daily target).</p>';
+    }
 
     // ITEM 2: a Study session left mid-flight earlier today (any source, leech
     // drills included) offers Resume as the primary action; the fresh "Study N
@@ -748,6 +759,63 @@ PGRE.views.formulas = (function () {
     wirePeek(box);
   }
 
+  /* Read-only memorizing-history strip from cardReviews + current due.
+     Pure model via srs.buildMemHistory; all labels escaped. Empty → ''.
+     Viewing never mutates schedule or the log. */
+  function memHistoryHTML(id) {
+    var st = PGRE.srs.cardState(id);
+    var log = PGRE.store.state.cardReviews || [];
+    var model = PGRE.srs.buildMemHistory(log, id, {
+      due: st && st.due,
+      today: PGRE.srs.today()
+    });
+    var ui = PGRE.ui;
+    // Learned card with no surviving log rows (cap eviction / pre-log grades).
+    if (!model) {
+      if (!st) return '';
+      return '<div class="mem-hist mem-hist-empty">' +
+        '<div class="mem-hist-summary">No review history retained in the log.</div></div>';
+    }
+    var summary = ui.esc(model.firstDay) + ' → ' + ui.esc(model.lastDay) +
+      ' <span class="mem-hist-sep">|</span> ' +
+      model.count + ' review' + (model.count === 1 ? '' : 's');
+    if (model.chipsTruncated) {
+      summary += ' <span class="mem-hist-note">(showing last ' +
+        model.chips.length + ')</span>';
+    }
+    // Global FIFO cap honesty: D1 is first *surviving* day, not necessarily life-of-card.
+    if (log.length >= 8000) {
+      summary += '<div class="mem-hist-note">Recent reviews only — global log is capped.</div>';
+    }
+    var chips = '';
+    model.chips.forEach(function (ch) {
+      var g = ch.grade;
+      // Class only via own-key allowlist — never interpolate unknown grades.
+      var cls = PGRE.srs.isMemGrade(g) ? (' grade-' + g) : '';
+      var dayN = (typeof ch.day === 'number' && isFinite(ch.day)) ? String(ch.day | 0) : '?';
+      chips += '<span class="grade-chip mem-hist-chip' + cls + '" title="' +
+        ui.esc(ch.d + ' · ' + g) + '">D' + dayN + '@' + ui.esc(g) + '</span>';
+    });
+    if (model.pending) {
+      var p = model.pending;
+      var pDay = (typeof p.day === 'number' && isFinite(p.day) && p.day >= 1)
+        ? ('D' + (p.day | 0) + ' ') : '';
+      chips += '<span class="due-chip mem-hist-chip mem-hist-pending' +
+        (p.label === 'due today' ? ' due-now' : '') + '" title="' +
+        ui.esc(p.d + ' · ' + p.label) + '">' + pDay + ui.esc(p.label) + '</span>';
+    }
+    return '<div class="mem-hist" data-mem-hist="' + ui.esc(id) + '">' +
+      '<div class="mem-hist-summary">' + summary + '</div>' +
+      '<div class="mem-hist-chips">' + chips + '</div></div>';
+  }
+
+  /* Paint (or clear) the history section. Called on every peek open so a
+     grade committed elsewhere still shows without re-filling the card body. */
+  function wireMemHistory(section, id) {
+    if (!section) return;
+    section.innerHTML = memHistoryHTML(id);
+  }
+
   /* Row click toggles a view-only peek (front + back + note); the schedule is
      never touched. The peek is typeset lazily on first open. */
   function wirePeek(box) {
@@ -760,11 +828,14 @@ PGRE.views.formulas = (function () {
         if (!peek.getAttribute('data-filled')) {
           var c = deckById(id);
           if (c) {
+            // HTML attributes use PGRE.ui.esc (not cssAttr — that is only for
+            // querySelector). History slot needs no data-id; row id is passed in.
             peek.innerHTML = '<div class="fcard-front">' + formulaHTML(c.front) + '</div>' +
               '<div class="fcard-back">' + backHTML(c) +
               (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') + '</div>' +
-              '<div class="peek-suspend" data-susp-for="' + cssAttr(c.id) + '"></div>' +
-              '<div class="peek-mnemonic" data-mnem-for="' + cssAttr(c.id) + '"></div>';
+              '<div class="peek-history"></div>' +
+              '<div class="peek-suspend" data-susp-for="' + PGRE.ui.esc(c.id) + '"></div>' +
+              '<div class="peek-mnemonic" data-mnem-for="' + PGRE.ui.esc(c.id) + '"></div>';
             peek.setAttribute('data-filled', '1');
             PGRE.typesetMath(peek);
             // F2: mnemonic editor lives below the card body (plain text, no math).
@@ -774,6 +845,8 @@ PGRE.views.formulas = (function () {
         // Redrawn on every open (not just the first fill) so the control tracks
         // the card’s current suspended state rather than the state at fill time.
         wireRestore(peek.querySelector('.peek-suspend'), id, row);
+        // History is view-only over the durable log + current due — refresh each open.
+        wireMemHistory(peek.querySelector('.peek-history'), id);
         peek.hidden = false;
         row.classList.add('open');
       });
@@ -1443,6 +1516,10 @@ PGRE.views.formulas = (function () {
     var segAgain = study.again - (study.againBase || 0);
     PGRE.store.log('review', 'Formula review: ' + segDone + ' card' +
       (segDone === 1 ? '' : 's') + (segAgain ? ' (' + segAgain + ' repeated)' : ''), study.xp);
+    // Formula daily check-in (once per local day) — auto-claim on first settle.
+    if (PGRE.formulaCheckIn && typeof PGRE.formulaCheckIn.record === 'function') {
+      study.checkInResult = PGRE.formulaCheckIn.record();
+    }
     if (study.done >= 20 && study.again === 0) PGRE.store.state.flags.cleanRecall = true;
     PGRE.gamify.checkAchievements();
     PGRE.store.save();
@@ -1462,13 +1539,23 @@ PGRE.views.formulas = (function () {
     // pressCount carries across resumes, so pressCount * 2 is the session-wide XP —
     // the honest figure to sit beside the cumulative card count.
     var totalXp = study.pressCount * 2;
+    var checkInHtml = '';
+    if (PGRE.formulaCheckIn) {
+      if (study.checkInResult && study.checkInResult.claimed) {
+        checkInHtml = PGRE.formulaCheckIn.celebrateHTML(study.checkInResult);
+      } else {
+        checkInHtml = PGRE.formulaCheckIn.alreadyHTML();
+      }
+    }
     body().innerHTML = '<div class="card practice-card">' +
       '<h1>Review complete</h1>' +
       '<div class="summary-score">' + study.done + ' card' + (study.done === 1 ? '' : 's') +
         '<span class="summary-pct">+' + totalXp + ' XP</span></div>' +
       '<p class="muted">' + (study.again ? study.again + ' came back for another pass this session. ' : '') +
-      'Each card returns on the schedule your grade set.</p>' +
-      '<div class="btn-row"><button class="btn btn-primary" id="back-deck">Back to the deck</button>' +
+      'Each card returns on the schedule your grade set.</p></div>' +
+      checkInHtml +
+      '<div class="card practice-card"><div class="btn-row">' +
+      '<button class="btn btn-primary" id="back-deck">Back to the deck</button>' +
       '<a class="btn btn-ghost" href="#/">Dashboard</a></div></div>';
     document.getElementById('back-deck').addEventListener('click', function () {
       study = null;
@@ -1588,9 +1675,10 @@ PGRE.views.formulas = (function () {
 
   /* ——————————————— Search mode ———————————————
      The box drives js/formula-search.js; the results are rendered as face-down
-     flashcards. Nothing here writes card state: the only path that touches the
-     schedule is the "Study these N" button, which hands the matched cards to the
-     ordinary startStudy flow. */
+     flashcards. Search itself is side-effect free (status:today never builds a
+     batch). Explicit Add buttons soft-pin hits into today's formulaDay via
+     srs.addFormulaDaySoft. "Study these N" remains a separate ad-hoc session
+     that grades SRS but does not edit the daily batch. */
 
   var SEARCH_PAGE = 30;                 // cards rendered before "show more"
   // Survives tab switches within a visit (the query is usually still wanted) but
@@ -1765,6 +1853,14 @@ PGRE.views.formulas = (function () {
         box.focus();
         return;
       }
+      // Soft-add one card into today's batch without flipping the card.
+      var addBtn = e.target.closest('[data-fs-add]');
+      if (addBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        softAddToToday([addBtn.getAttribute('data-fs-add')]);
+        return;
+      }
       // The revealed face is for reading, not a second toggle: collapsing the
       // card out from under the formula you are studying (or mid text-selection)
       // is never what was meant. The button and the prompt still flip it.
@@ -1822,15 +1918,50 @@ PGRE.views.formulas = (function () {
     var warn = pending ?
       '<span class="fs-actionwarn">Replaces the session you have in progress (' +
         pending.length + ' left).</span>' : '';
+    var addLabel = n === 1 ? 'Add to today' : 'Add these ' + n + ' to today';
     box.innerHTML = '<div class="card fs-actionbar">' +
       '<button class="btn btn-primary" id="fs-drill">Study these ' + n +
         ' card' + (n === 1 ? '' : 's') + '</button>' +
-      '<span class="muted fs-actionnote">Grades count — this schedules the cards ' +
-      'exactly like any other session' +
+      '<button class="btn btn-ghost" id="fs-add-today" type="button">' +
+        addLabel + '</button>' +
+      '<span class="muted fs-actionnote">Study grades without editing today’s list. ' +
+      'Add soft-pins into the daily batch (may exceed your target)' +
       (n > 50 ? '. That is a long queue; a round checkpoint lets you stop at any point' : '') +
       '.</span>' + warn + '</div>';
     var b = document.getElementById('fs-drill');
     if (b) b.addEventListener('click', drillSearchResults);
+    var add = document.getElementById('fs-add-today');
+    if (add) add.addEventListener('click', function () {
+      if (!searchLast || !searchLast.total) return;
+      softAddToToday(searchLast.hits.map(function (h) { return h.card.id; }));
+    });
+  }
+
+  /* Soft-pin card ids into today's formulaDay batch (may exceed T). Re-renders
+     action/result chrome so "In today" chips update, and refreshes nav badges. */
+  function softAddToToday(ids) {
+    if (!ids || !ids.length) return;
+    var srs = PGRE.srs;
+    var res = srs.addFormulaDaySoft(deck, ids);
+    var batch = res.batch;
+    var N = batch.reviewIds.length + batch.newIds.length;
+    var T = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
+    var parts = [];
+    if (res.added.length) {
+      parts.push('Added ' + res.added.length);
+    }
+    if (res.already.length) {
+      parts.push(res.already.length + ' already in today');
+    }
+    if (res.skipped.length) {
+      parts.push(res.skipped.length + ' skipped');
+    }
+    if (!parts.length) parts.push('No change');
+    var msg = parts.join(' · ') + ' · batch now ' + N + ' (target ' + T + ')';
+    if (PGRE.toast) PGRE.toast(msg, 'info');
+    if (PGRE.refreshNavBadges) PGRE.refreshNavBadges();
+    renderSearchActions();
+    renderSearchList();
   }
 
   /* Hand the matched cards to the ordinary Study flow. Going through switchMode
@@ -1884,6 +2015,13 @@ PGRE.views.formulas = (function () {
     var t = PGRE.topicById(c.topic);
     var open = !!searchOpen[c.id];
     var nm = cardName(c);
+    // isInFormulaDay reads the saved batch only — never formulaDay() — so
+    // rendering search results stays side-effect free.
+    var inToday = PGRE.srs.isInFormulaDay(deck, c.id);
+    var addCtrl = inToday
+      ? '<span class="due-chip today-chip">In today</span>'
+      : '<button type="button" class="btn btn-ghost btn-sm" data-fs-add="' +
+          ui.esc(c.id) + '">Add to today</button>';
     // The id is read straight back with getAttribute (never as a CSS selector),
     // so HTML-escaping is the only escaping it needs.
     return '<article class="fs-card' + (open ? ' is-open' : '') +
@@ -1899,6 +2037,7 @@ PGRE.views.formulas = (function () {
       '<div class="fs-card-foot">' +
         '<button type="button" class="btn btn-ghost btn-sm fs-flip">' +
           (open ? 'Hide formula' : 'Show formula') + '</button>' +
+        '<span class="fs-card-actions">' + addCtrl + '</span>' +
         '<span class="fs-chips">' + searchChipsHTML(c) + '</span>' +
       '</div>' +
     '</article>';
