@@ -13,7 +13,7 @@ window.PGRE = window.PGRE || {};
 /* Merged question pool, deduped by id (first occurrence wins). The default is
    the practice pool: preview questions + book chapter problems + the ETS
    drill sets (GR8677/GR9277 — the user-approved exception to the spoiler
-   rule; see CLAUDE.md → Content Rules). Pass { includeExam: true } to also
+   rule; see AGENTS.md → Content Rules). Pass { includeExam: true } to also
    flatten in the INTACT exam questions (book sample exams + kept released
    ETS exams) — only the exam simulator's draw and by-id lookups may do that,
    so those exams stay unspoiled for verbatim simulation. Each question is

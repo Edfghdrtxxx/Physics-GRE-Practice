@@ -91,7 +91,7 @@ PGRE.examEngine = (function () {
   function buildWeighted(seed) {
     // weighted mocks may draw the book's sample-exam questions (pre-existing
     // behavior) but never the intact released ETS exams — those stay fresh
-    // for verbatim replay (CLAUDE.md spoiler rule; whether sat exams should
+    // for verbatim replay (AGENTS.md spoiler rule; whether sat exams should
     // graduate into this pool is still an open user decision)
     var pool = PGRE.allQuestions({ includeExam: true }).filter(function (q) {
       return q.src !== 'ets-exam';

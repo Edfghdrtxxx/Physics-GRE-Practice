@@ -172,7 +172,7 @@ PGRE.views.formulas = (function () {
   function renderShell() {
     var empty = !deck.length;
     var tabs = [['study', 'Study'], ['match', 'Match'], ['type', 'Type'],
-                ['quiz', 'Quiz'], ['cloze', 'Cloze'], ['search', 'Search']];
+                ['quiz', 'Quiz'], ['cloze', 'Cloze'], ['visual', 'Visualizer Lab'], ['search', 'Search']];
     var html = '<div class="flash-tabs" role="tablist">';
     tabs.forEach(function (t) {
       var dis = empty && t[0] !== 'study';
@@ -329,8 +329,92 @@ PGRE.views.formulas = (function () {
 
   function renderMode() {
     if (mode === 'match' || mode === 'type' || mode === 'quiz' || mode === 'cloze') return renderGameIntro(mode);
+    if (mode === 'visual') return renderVisualizerLab();
     if (mode === 'search') return renderSearch();
     return renderHome();
+  }
+
+  function renderVisualizerLab() {
+    teardownGame();
+    if (PGRE.nav) PGRE.nav.setTrail([{ label: 'Visualizer Lab' }]);
+    var filterTopic = 'all';
+
+    function renderLabContent() {
+      var allVizIds = Object.keys((window.PGRE && window.PGRE.visualizers) || {}).filter(function (k) {
+        return k.startsWith('cpgf-');
+      });
+      var cards = allVizIds.map(function (id) {
+        var v = PGRE.visualizers[id];
+        var c = deckById(id) || { id: id, topic: (v && v.topic) || 'cm', name: (v && v.title) || id, front: (v && v.title) || id, back: (v && v.formulaLatex) || '' };
+        return { id: id, viz: v, card: c };
+      });
+
+      var topicsList = [
+        { id: 'all', name: 'All (' + cards.length + ')' },
+        { id: 'cm', name: 'Classical Mechanics' },
+        { id: 'em', name: 'Electromagnetism' },
+        { id: 'ow', name: 'Optics & Waves' },
+        { id: 'th', name: 'Thermodynamics' },
+        { id: 'qm', name: 'Quantum Mechanics' },
+        { id: 'at', name: 'Atomic Physics' },
+        { id: 'sr', name: 'Special Relativity' },
+        { id: 'lb', name: 'Lab Methods' },
+        { id: 'sp', name: 'Special Topics' }
+      ];
+
+      var filtered = cards.filter(function (item) {
+        return (filterTopic === 'all' || item.card.topic === filterTopic || (item.viz && item.viz.topic === filterTopic));
+      });
+
+      var html = '<div class="viz-lab-container">' +
+        '<div class="viz-lab-header">' +
+          '<h1 class="viz-lab-title">Interactive Formula Visualizer Laboratory</h1>' +
+          '<p class="viz-lab-sub">Hands-on simulations, vector fields, phase-space flows, and limiting cases for Physics GRE formulas.</p>' +
+        '</div>' +
+        '<div class="viz-filter-bar">' +
+          topicsList.map(function (tp) {
+            return '<button class="viz-filter-chip' + (filterTopic === tp.id ? ' active' : '') + '" data-topic="' + tp.id + '">' + tp.name + '</button>';
+          }).join('') +
+        '</div>' +
+        '<div class="viz-cards-grid">';
+
+      filtered.forEach(function (item) {
+        var v = item.viz, c = item.card;
+        var tObj = PGRE.topicById(c.topic);
+        var tName = tObj ? tObj.name : c.topic.toUpperCase();
+        var shortStory = v.physicalStory ? (v.physicalStory.slice(0, 130) + '...') : (c.front || '');
+        html += '<div class="viz-thumb-card" data-viz-id="' + item.id + '">' +
+          '<div class="viz-thumb-head">' +
+            '<span class="viz-inline-badge">' + tName + '</span>' +
+            '<span class="viz-thumb-eq">' + (c.eq ? ('Eq ' + c.eq) : item.id) + '</span>' +
+          '</div>' +
+          '<div class="viz-thumb-title">' + PGRE.ui.esc(v.title || c.name || '') + '</div>' +
+          '<div class="viz-thumb-formula">' + (v.formulaLatex || c.back) + '</div>' +
+          '<div class="viz-thumb-desc">' + PGRE.ui.esc(shortStory) + '</div>' +
+          '<button class="btn btn-primary btn-sm" style="margin-top:auto;">Open Simulation</button>' +
+        '</div>';
+      });
+
+      html += '</div></div>';
+      body().innerHTML = html;
+      PGRE.typesetMath(body());
+
+      body().querySelectorAll('.viz-filter-chip').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+          filterTopic = chip.getAttribute('data-topic');
+          renderLabContent();
+        });
+      });
+
+      body().querySelectorAll('.viz-thumb-card').forEach(function (cardEl) {
+        cardEl.addEventListener('click', function () {
+          var id = cardEl.getAttribute('data-viz-id');
+          if (window.PGRE.openVisualizerModal) window.PGRE.openVisualizerModal(id);
+        });
+      });
+    }
+
+    renderLabContent();
   }
 
   /* ——— Study mode home — progressive daily batch, rendered into body ——— */
@@ -1137,6 +1221,9 @@ PGRE.views.formulas = (function () {
   }
 
   function renderCard() {
+    if (window.PGRE && window.PGRE.teardownInlineVisualizer) {
+      window.PGRE.teardownInlineVisualizer();
+    }
     var c = study.queue[0];
     var t = PGRE.topicById(c.topic);
     var nm = cardName(c);
@@ -1278,7 +1365,13 @@ PGRE.views.formulas = (function () {
   function flip() {
     var c = study.queue[0];
     study.flipped = true;
-    document.getElementById('fcard-back').hidden = false;
+    var backEl = document.getElementById('fcard-back');
+    if (backEl) {
+      backEl.hidden = false;
+      if (window.PGRE && window.PGRE.renderInlineVisualizer) {
+        window.PGRE.renderInlineVisualizer(c.id, backEl);
+      }
+    }
     // F5 reverse: the equation is the QUESTION, so its book number would give the
     // answer away. It is withheld until here, then the front is re-rendered with
     // the tag and typeset on its own (re-running it over the whole card would

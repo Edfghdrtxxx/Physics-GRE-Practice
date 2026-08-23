@@ -83,7 +83,7 @@ It will become more meaningful as the bank grows past the 20 preview questions.
 > fresh for simulation. The three other `includeExam` consumers — global search, the
 > custom-quiz "include sample-exam" toggle, and the weighted 70-question draw — filter
 > `src === 'ets-exam'` back out (protective default, 2026-07-18), so only the book's
-> sample exams flow through them. See CLAUDE.md → Content Rules.
+> sample exams flow through them. See AGENTS.md → Content Rules.
 > **Approved exception (2026-07-18):** GR8677 (1986) and GR9277 (1992) — the two oldest,
 > least-representative forms — are deliberately broken up into ~200 daily-drill questions
 > instead of mocks: built with `drill: true` into `PGRE.ETS_DRILLS` (src `ets-drill`), they
