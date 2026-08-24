@@ -7,6 +7,11 @@ I have little background in computer science. When a decision is required of me,
   - **Approved exception (2026-07-18):** GR8677 and GR9277 only — the two oldest forms — are broken up into daily-drill questions (`src: 'ets-drill'`, `PGRE.ETS_DRILLS`) that DO live in the default pool, and are never offered as simulator mocks. This exception covers exactly these two exams; the other five stay under the rule.
 - **ETS copyright:** released-exam PDFs and everything derived from them (extracted questions, figures, keys) live only in gitignored paths — `docs/ETS Released Exams/`, `content/ets-src/`, `content/ets-assets/`, `content/bank/`. The public repo carries code only. Link to sources; never commit or republish exam content.
 
+
+# Visualizer & Simulation Rules
+
+- **Animation speed control:** Animated content must offer adjustable playback (default 1.0x). Standalone sims: copy `oscillator.html`'s speed cluster. Lab cards: `simSpeed` parameter (0.2–3.0, default 1.0) scaling `dt`. Static cards exempt.
+
 # Style Rules
 
 - **No Emojis or Icons:** Never use emojis or decorative icons anywhere (chat, UI, canvas, code, docs, commit messages).
