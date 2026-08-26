@@ -1,6 +1,6 @@
 /* Library — import the book markdown, map chapters to topics, manage local data.
    The real content parser is deferred until the actual file arrives
-   (docs/Project Docs/DESIGN.md → Content pipeline); this view stores the raw markdown in
+   (20_docs/Project Docs/DESIGN.md → Content pipeline); this view stores the raw markdown in
    IndexedDB, splits it naively on headings, and lets chapters be assigned to
    topic portals so their notes render there. */
 window.PGRE = window.PGRE || {};
@@ -92,7 +92,7 @@ PGRE.views.library = (function () {
           '<p class="muted">This is where <em>Conquering the Physics GRE</em> lands when its markdown is ready. ' +
           'Drop the file above (or keep a copy in the <code>content/</code> folder). ' +
           'A proper parser — chapters, problems, solutions → question bank — is designed and will be built ' +
-          'against the real file; see <code>docs/Project Docs/DESIGN.md</code>.</p></div>';
+          'against the real file; see <code>20_docs/Project Docs/DESIGN.md</code>.</p></div>';
         return;
       }
       // PDFs render their own card; everything else keeps the chapter-mapping card.

@@ -24,7 +24,7 @@ format), countdown timer, question palette with flag-for-review, no feedback unt
 submission, scaled-score estimate, per-topic breakdown.
 **Why:** The single highest-impact feature of every mainstream platform — pacing under
 time pressure is its own skill, and your Phase-2/3 plan is built around mock results.
-**Note:** Already fully designed in `docs/DESIGN.md` §4; deliberately deferred until the
+**Note:** Already fully designed in `20_docs/Project Docs/DESIGN.md` §4; deliberately deferred until the
 real bank arrives, so this is mostly execution, not design.
 
 ### 2. Analytics & trends dashboard — **M**

@@ -434,7 +434,7 @@ PGRE.formulaDeck = function () {
 };
 
 /* Naive chapter splitter for the raw book markdown (placeholder until the
-   real parser is written against the actual file — see docs/Project Docs/DESIGN.md).
+   real parser is written against the actual file — see 20_docs/Project Docs/DESIGN.md).
    Splits on level-1/level-2 headings. */
 PGRE.splitChapters = function (text) {
   var lines = text.split('\n');

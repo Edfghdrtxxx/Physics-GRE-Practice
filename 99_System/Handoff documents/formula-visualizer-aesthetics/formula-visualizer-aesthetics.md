@@ -73,7 +73,7 @@ Engine shell is ES5 (`var`, IIFE). Trio files use `const`/`let`/template strings
 ### Object / CSS hooks that every trio still shares
 
 - Canvas: `#viz-canvas` (modal) / `#viz-inline-canvas` (flashcard). Wrapper `.viz-canvas-wrapper`. Grid `.viz-sim-grid`. Legend `.viz-legend-strip`. Controls `.viz-controls-panel`.
-- Site tokens live in `css/style.css` (`--bg #faf9f5`, `--panel #f5f0e8`, `--accent #cc785c`, `--accent-deep #964b32`, `--platinum #5db8a6`, `--ink #141413`, `--line #e6dfd8`, `--gold #d4a017`, `--good` / `--bad`, `--serif` Newsreader, `--sans` Inter, `--mono-instr` JetBrains Mono). Dark: `[data-theme="dark"]`. Declared aesthetic: `docs/Project Docs/DESIGN.md` §1.
+- Site tokens live in `css/style.css` (`--bg #faf9f5`, `--panel #f5f0e8`, `--accent #cc785c`, `--accent-deep #964b32`, `--platinum #5db8a6`, `--ink #141413`, `--line #e6dfd8`, `--gold #d4a017`, `--good` / `--bad`, `--serif` Newsreader, `--sans` Inter, `--mono-instr` JetBrains Mono). Dark: `[data-theme="dark"]`. Declared aesthetic: `20_docs/Project Docs/DESIGN.md` §1.
 
 ### File map (after the split)
 

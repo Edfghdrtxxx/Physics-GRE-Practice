@@ -4,7 +4,7 @@
    Reading tasks refer to the corresponding chapters of "Conquering the Physics GRE";
    until the markdown is imported, use your own copy of the text.
    Practice-test tasks use released ETS exams (GR8677 … GR1777) on paper —
-   the in-app timed simulator is designed but deferred (docs/Project Docs/DESIGN.md). */
+   the in-app timed simulator is designed but deferred (20_docs/Project Docs/DESIGN.md). */
 window.PGRE = window.PGRE || {};
 
 PGRE.PLAN = [

@@ -72,7 +72,7 @@ It will become more meaningful as the bank grows past the 20 preview questions.
 
 > **Released ETS exams (2026-07-18):** seven real ETS exams (2024 practice book — the current
 > 70-question format, with official P+ stats — plus GR1777/GR0877/GR0177/GR9677/GR9277/GR8677)
-> are extracted from local PDFs (gitignored `docs/ETS Released Exams/`) by a multi-agent
+> are extracted from local PDFs (gitignored `20_docs/ETS Released Exams/`) by a multi-agent
 > pipeline (transcribe → fidelity audit → blind-solve vs official key → reconcile) into
 > gitignored `content/ets-src/`, then built by `tools/build-ets-exams.js` into gitignored
 > `content/bank/ets-exams.js` (`PGRE.ETS_EXAMS`). The simulator replays them verbatim with the

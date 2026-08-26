@@ -1,6 +1,6 @@
 /* Formula deck — recall cards for the formula portal (#/formulas).
    EMPTY BY DESIGN: the deck fills only from the imported "Conquering the
-   Physics GRE" markdown (parser v2, docs/Project Docs/DESIGN.md §3) — no hand-seeded cards.
+   Physics GRE" markdown (parser v2, 20_docs/Project Docs/DESIGN.md §3) — no hand-seeded cards.
 
    Card format (all math LaTeX in $...$, typeset offline by KaTeX):
      { id: 'cpg-f-001', topic: 'cm', name: 'Kepler’s third law',

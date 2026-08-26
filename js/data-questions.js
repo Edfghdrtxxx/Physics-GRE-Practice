@@ -1,6 +1,6 @@
 /* Preview question bank — 20 placeholder questions spanning all 9 topics.
    These stand in until the real content from "Conquering the Physics GRE"
-   markdown is imported (see docs/Project Docs/DESIGN.md → Content pipeline).
+   markdown is imported (see 20_docs/Project Docs/DESIGN.md → Content pipeline).
    Format: id, topic, difficulty 1–3; q/choices/sol are HTML strings in which
    ALL math is LaTeX inside $...$ (typeset offline by KaTeX at render time).
    answer is the 0-based index of the correct choice. GRE style: 5 choices. */
