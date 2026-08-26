@@ -46,16 +46,15 @@ The site is a **frame**: 20 hand-written preview questions stand in until the
 
 ```
 index.html          app shell (hash-routed SPA)
-css/style.css       Anthropic-inspired theme (ivory / ink / terracotta, serif display)
-js/data-*.js        topics · 20 preview questions · formula deck (empty) · 36 achievements · 16-week plan
-js/store.js         localStorage state + IndexedDB content store
-js/srs.js           spaced repetition: mistake ladder + SM-2 formula cards
-js/gamify.js        XP, levels, streaks, daily challenges, achievement engine
-js/view-*.js        one file per page
+css/                stylesheets (Anthropic-inspired theme, fonts, visualizer, print)
+js/                 app logic, stores, engines, seed data (data-*.js), views (view-*.js)
+simulations/        standalone interactive physics visualizers (oscillator.html)
+tools/              offline build scripts, extraction pipelines, test runners
+content/            question banks, book/ETS figures, raw question sources
+docs/               project specs (Project Docs/), reference PDFs (ETS, Kahn)
+99_System/          meta documents and cross-agent handoffs
+fonts/              locally hosted web fonts
 vendor/             marked + KaTeX (offline)
-docs/Project Docs/DESIGN.md      full design doc, incl. the deferred mock-exam spec
-docs/Project Docs/PROPOSAL.md    feature-gap survey vs. mainstream prep platforms (nothing built yet)
-content/            drop zone / archive for the book markdown
 ```
 
 Backup: **Library → Export progress** writes a JSON snapshot you can restore anytime.

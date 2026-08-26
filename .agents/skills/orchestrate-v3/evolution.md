@@ -10,6 +10,7 @@ Folded from archived `/orchestrate`, `/dispatch`, and `/orchestrate-lite-DWorkfl
 - **Long jobs:** run via orchestrator/main `Bash` with background/run_in_background — never agent sleep-polling loops (zombie shells on silent death).
 - **Background-agent reports sometimes fail to relay** — if idle notification arrives without a report, message the agent to resend to main.
 - **Session stickiness:** once invoked, keep coordinating related work under this skill until the user stops multi-agent mode.
+- **Goal-mode does not make you the implementer** — this skill’s agent is still the coordinator. Fan out file-isolated work (e.g. one trio file per child); do not restyle those files in the parent context. A 2026-08-24 visualizer session was stopped for this.
 
 ## Host / remote ops (when relevant)
 

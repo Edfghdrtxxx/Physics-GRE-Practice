@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Driven Damped Harmonic Oscillator · Physics GRE</title>
+  <link rel="stylesheet" href="../css/fonts.css">
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../vendor/katex/katex.min.css">
+  <script src="../vendor/katex/katex.min.js"></script>
+  <style>
+    /* Base Page Layout */
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--sans);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 18px 16px;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+
+    .sim-container {
+      width: 100%;
+      max-width: 1160px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* Header */
+    .sim-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 12px;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .sim-header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .sim-title {
+      font-family: var(--heading);
+      font-size: 1.6rem;
+      font-weight: 400;
+      color: var(--ink);
+      letter-spacing: -0.3px;
+      margin: 0;
+    }
+
+    .sim-equation {
+      font-size: 0.95rem;
+      color: var(--ink-2);
+      margin-top: 2px;
+    }
+
+    .sim-header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sim-btn {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 5px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .sim-btn:hover {
+      background: var(--ivory);
+    }
+
+    .sim-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--on-accent, #ffffff);
+    }
+
+    /* Live Physical Oscillator Card */
+    .sim-mech-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .sim-mech-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .sim-mech-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--ink-2);
+    }
+
+    .sim-mech-title-text {
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .sim-playback-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Dedicated Speed Adjuster Cluster */
+    .sim-speed-control {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--ivory);
+      border: 1px solid var(--line);
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    .sim-speed-label {
+      font-size: 0.78rem;
+      color: var(--ink-2);
+      display: flex;
+      align-items: center;
+    }
+
+    .sim-speed-control input[type="range"] {
+      width: 80px;
+      margin: 0;
+    }
+
+    .sim-speed-badge {
+      font-family: var(--mono-instr);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--accent-deep);
+      min-width: 44px;
+      text-align: right;
+    }
+
+    .sim-speed-presets {
+      display: flex;
+      gap: 3px;
+    }
+
+    .sim-speed-btn {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      color: var(--ink);
+      font-family: var(--mono-instr);
+      font-size: 0.72rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .sim-speed-btn:hover {
+      background: var(--accent-tint);
+    }
+
+    .sim-speed-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--on-accent, #ffffff);
+    }
+
+    .sim-time-scrubber {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--ivory);
+      border: 1px solid var(--line);
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    .sim-time-scrubber input[type="range"] {
+      width: 120px;
+      margin: 0;
+    }
+
+    .sim-time-badge {
+      font-family: var(--mono-instr);
+      font-size: 0.78rem;
+      color: var(--accent-deep);
+      min-width: 58px;
+      text-align: right;
+    }
+
+    .sim-mech-canvas-wrap {
+      width: 100%;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    #canvas-mech {
+      display: block;
+      width: 100%;
+      height: 110px;
+    }
+
+    /* Metrics Strip */
+    .sim-metrics-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .sim-chip {
+      background: var(--ivory);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-size: 0.78rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .sim-chip .chip-label {
+      color: var(--ink-2);
+    }
+
+    .sim-chip .chip-val {
+      color: var(--accent-deep);
+      font-family: var(--mono-instr);
+      font-weight: 600;
+    }
+
+    /* Plot Cards Grid */
+    .sim-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .sim-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px 14px 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .sim-card.full-width {
+      grid-column: 1 / -1;
+    }
+
+    .sim-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .sim-card-title {
+      font-family: var(--sans);
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .sim-legend {
+      display: flex;
+      gap: 12px;
+      font-size: 0.75rem;
+      color: var(--ink-2);
+      flex-wrap: wrap;
+    }
+
+    .sim-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .sim-legend-line {
+      width: 14px;
+      height: 2px;
+      display: inline-block;
+    }
+
+    .sim-legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .sim-canvas-wrap {
+      width: 100%;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: crosshair;
+    }
+
+    canvas.plot-canvas {
+      display: block;
+      width: 100%;
+      height: 190px;
+    }
+
+    .full-width canvas.plot-canvas {
+      height: 175px;
+    }
+
+    /* Controls Panel */
+    .sim-controls {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .sim-controls-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 10px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .sim-controls-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--ink-2);
+    }
+
+    .sim-presets {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    /* Sliders Grid */
+    .sim-sliders-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 28px;
+    }
+
+    .sim-slider-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .sim-slider-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.82rem;
+    }
+
+    .sim-param-name {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      color: var(--ink);
+    }
+
+    .sim-param-desc {
+      color: var(--ink-3);
+      font-weight: 400;
+      font-size: 0.72rem;
+    }
+
+    .sim-param-val {
+      font-family: var(--mono-instr);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--accent-deep);
+      background: var(--ivory);
+      border: 1px solid var(--line);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--accent-track);
+      outline: none;
+      cursor: pointer;
+      margin: 4px 0;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 1px 3px var(--shadow);
+      border: 1px solid var(--line);
+      transition: transform 0.1s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    @media (max-width: 820px) {
+      .sim-grid {
+        grid-template-columns: 1fr;
+      }
+      .sim-sliders-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="sim-container">
+    <!-- Header -->
+    <header class="sim-header">
+      <div class="sim-header-left">
+        <h1 class="sim-title">Driven Damped Harmonic Oscillator</h1>
+        <div id="sim-math-header" class="sim-equation"></div>
+      </div>
+      <div class="sim-header-right">
+        <button id="sim-theme-toggle" class="sim-btn" type="button">Dark mode</button>
+      </div>
+    </header>
+
+    <!-- Physical Oscillator Live Animation Card -->
+    <div class="sim-mech-card">
+      <div class="sim-mech-header">
+        <div class="sim-mech-title-wrap">
+          <span class="sim-mech-title-text">Dynamic Mechanical Oscillator</span>
+          <span id="mech-formula-tag"></span>
+        </div>
+        <div class="sim-playback-controls">
+          <button id="btn-play" class="sim-btn active" type="button">Pause</button>
+          <button id="btn-reset" class="sim-btn" type="button">Reset</button>
+
+          <!-- Always Available Speed Controller -->
+          <div class="sim-speed-control">
+            <span id="label-speed-tex" class="sim-speed-label"></span>
+            <input type="range" id="slider-speed" min="0.1" max="4.0" step="0.05" value="1.0" title="Adjust animation playback speed">
+            <span id="val-speed" class="sim-speed-badge">1.00x</span>
+            <div class="sim-speed-presets">
+              <button id="btn-spd-025" class="sim-speed-btn" type="button" onclick="setAnimSpeed(0.25)">0.25x</button>
+              <button id="btn-spd-05" class="sim-speed-btn" type="button" onclick="setAnimSpeed(0.5)">0.5x</button>
+              <button id="btn-spd-10" class="sim-speed-btn active" type="button" onclick="setAnimSpeed(1.0)">1.0x</button>
+              <button id="btn-spd-20" class="sim-speed-btn" type="button" onclick="setAnimSpeed(2.0)">2.0x</button>
+              <button id="btn-spd-40" class="sim-speed-btn" type="button" onclick="setAnimSpeed(4.0)">4.0x</button>
+            </div>
+          </div>
+
+          <!-- Time Scrubber -->
+          <div class="sim-time-scrubber">
+            <span id="label-time-tex"></span>
+            <input type="range" id="scrubber-t" min="0" max="30" step="0.02" value="0">
+            <span id="val-t" class="sim-time-badge">t = 0.00 s</span>
+          </div>
+        </div>
+      </div>
+      <div class="sim-mech-canvas-wrap">
+        <canvas id="canvas-mech" width="1120" height="110"></canvas>
+      </div>
+    </div>
+
+    <!-- LaTeX Metrics Strip -->
+    <div class="sim-metrics-bar">
+      <div class="sim-chip"><span class="chip-label" id="chip-regime-label"></span><span id="metric-regime" class="chip-val"></span></div>
+      <div class="sim-chip"><span id="metric-q"></span></div>
+      <div class="sim-chip"><span id="metric-wres"></span></div>
+      <div class="sim-chip"><span id="metric-amp"></span></div>
+    </div>
+
+    <!-- 3 Diagnostic Plots Grid -->
+    <div class="sim-grid">
+      <!-- Time Domain -->
+      <div class="sim-card">
+        <div class="sim-card-header">
+          <div class="sim-card-title">Time Domain Response</div>
+          <div class="sim-legend">
+            <div class="sim-legend-item"><span class="sim-legend-line" style="background: var(--accent);"></span> <span id="leg-x"></span></div>
+            <div class="sim-legend-item"><span class="sim-legend-line" style="background: var(--ink-3); border-top: 1px dashed var(--ink-3); height: 0;"></span> <span id="leg-f"></span></div>
+          </div>
+        </div>
+        <div class="sim-canvas-wrap" id="wrap-time" title="Click or drag to scrub time t">
+          <canvas id="canvas-time" class="plot-canvas" width="540" height="190"></canvas>
+        </div>
+      </div>
+
+      <!-- Phase Space -->
+      <div class="sim-card">
+        <div class="sim-card-header">
+          <div class="sim-card-title">Phase Space Portrait</div>
+          <div class="sim-legend">
+            <div class="sim-legend-item"><span class="sim-legend-line" style="background: var(--good);"></span> <span id="leg-phase"></span></div>
+            <div class="sim-legend-item"><span class="sim-legend-dot" style="background: var(--accent);"></span> <span id="leg-start"></span></div>
+          </div>
+        </div>
+        <div class="sim-canvas-wrap">
+          <canvas id="canvas-phase" class="plot-canvas" width="540" height="190"></canvas>
+        </div>
+      </div>
+
+      <!-- Resonance Response -->
+      <div class="sim-card full-width">
+        <div class="sim-card-header">
+          <div class="sim-card-title">Resonance Frequency Response</div>
+          <div class="sim-legend">
+            <div class="sim-legend-item"><span class="sim-legend-line" style="background: var(--accent);"></span> <span id="leg-res-curve"></span></div>
+            <div class="sim-legend-item"><span class="sim-legend-dot" style="background: var(--ink);"></span> <span id="leg-res-point"></span></div>
+          </div>
+        </div>
+        <div class="sim-canvas-wrap">
+          <canvas id="canvas-res" class="plot-canvas" width="1100" height="175"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls Panel -->
+    <div class="sim-controls">
+      <div class="sim-controls-top">
+        <div class="sim-controls-title">Simulation Parameters</div>
+        <div class="sim-presets">
+          <button id="preset-res" class="sim-btn active" onclick="applyPreset(0.15, 2.0, 1.0, 2.0, this)">Resonance</button>
+          <button class="sim-btn" onclick="applyPreset(0.01, 2.0, 1.0, 2.2, this)">Beats</button>
+          <button class="sim-btn" onclick="applyPreset(0.05, 2.0, 0.0, 2.0, this)">Free Decay</button>
+          <button class="sim-btn" onclick="applyPreset(1.00, 2.0, 1.0, 2.0, this)">Critical Damping</button>
+          <button class="sim-btn" onclick="applyPreset(1.80, 2.0, 1.0, 2.0, this)">Overdamped</button>
+          <button class="sim-btn" onclick="applyPreset(0.15, 2.0, 1.5, 4.5, this)">High Frequency</button>
+        </div>
+      </div>
+
+      <div class="sim-sliders-grid">
+        <!-- Slider: Zeta -->
+        <div class="sim-slider-row">
+          <div class="sim-slider-head">
+            <span class="sim-param-name">
+              <span id="param-label-zeta"></span>
+              <span class="sim-param-desc">(Damping ratio)</span>
+            </span>
+            <span id="val-zeta" class="sim-param-val">0.15</span>
+          </div>
+          <input type="range" id="slider-zeta" min="0.0" max="2.0" step="0.01" value="0.15">
+        </div>
+
+        <!-- Slider: Omega 0 -->
+        <div class="sim-slider-row">
+          <div class="sim-slider-head">
+            <span class="sim-param-name">
+              <span id="param-label-omega0"></span>
+              <span class="sim-param-desc">(Natural frequency)</span>
+            </span>
+            <span id="val-omega0" class="sim-param-val">2.00</span>
+          </div>
+          <input type="range" id="slider-omega0" min="0.5" max="4.0" step="0.05" value="2.00">
+        </div>
+
+        <!-- Slider: F0 -->
+        <div class="sim-slider-row">
+          <div class="sim-slider-head">
+            <span class="sim-param-name">
+              <span id="param-label-F0"></span>
+              <span class="sim-param-desc">(Driving force amplitude)</span>
+            </span>
+            <span id="val-F0" class="sim-param-val">1.00</span>
+          </div>
+          <input type="range" id="slider-F0" min="0.0" max="3.0" step="0.05" value="1.00">
+        </div>
+
+        <!-- Slider: Omega -->
+        <div class="sim-slider-row">
+          <div class="sim-slider-head">
+            <span class="sim-param-name">
+              <span id="param-label-omega"></span>
+              <span class="sim-param-desc">(Driving frequency)</span>
+            </span>
+            <span id="val-omega" class="sim-param-val">2.00</span>
+          </div>
+          <input type="range" id="slider-omega" min="0.1" max="5.0" step="0.05" value="2.00">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ---------------------------------------------------------
+    // LaTeX Rendering Helper via KaTeX
+    // ---------------------------------------------------------
+    function tex(str, elId, display = false) {
+      const el = typeof elId === 'string' ? document.getElementById(elId) : elId;
+      if (el && window.katex) {
+        katex.render(str, el, { throwOnError: false, displayMode: display });
+      }
+    }
+
+    function initStaticMath() {
+      tex('\\ddot{x}(t) + 2\\zeta\\omega_0 \\dot{x}(t) + \\omega_0^2 x(t) = \\frac{F_0}{m} \\cos(\\omega t)', 'sim-math-header');
+      tex('m\\ddot{x} + c\\dot{x} + kx = F(t)', 'mech-formula-tag');
+      tex('\\text{Speed:}', 'label-speed-tex');
+      tex('t:', 'label-time-tex');
+      tex('\\text{Regime:}', 'chip-regime-label');
+
+      // Legends
+      tex('x(t)\\text{ [Displacement]}', 'leg-x');
+      tex('\\frac{F(t)}{m} = \\frac{F_0}{m}\\cos(\\omega t)\\text{ [Driving]}', 'leg-f');
+      tex('(x(t), \\dot{x}(t))\\text{ Trajectory}', 'leg-phase');
+      tex('(x_0, v_0)\\text{ Start}', 'leg-start');
+      tex('A(\\omega)\\text{ Spectrum}', 'leg-res-curve');
+      tex('(\\omega, A(\\omega))\\text{ State}', 'leg-res-point');
+
+      // Sliders
+      tex('\\text{Damping Ratio } \\zeta', 'param-label-zeta');
+      tex('\\text{Natural Freq } \\omega_0\\text{ (rad/s)}', 'param-label-omega0');
+      tex('\\text{Driving Force } F_0/m\\text{ (m/s}^2\\text{)}', 'param-label-F0');
+      tex('\\text{Driving Freq } \\omega\\text{ (rad/s)}', 'param-label-omega');
+    }
+
+    // ---------------------------------------------------------
+    // Theme Management
+    // ---------------------------------------------------------
+    const themeBtn = document.getElementById('sim-theme-toggle');
+    function applyTheme(isDark) {
+      if (isDark) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        themeBtn.textContent = 'Light mode';
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+        themeBtn.textContent = 'Dark mode';
+      }
+      render();
+    }
+
+    themeBtn.addEventListener('click', () => {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      applyTheme(!isDark);
+    });
+
+    // ---------------------------------------------------------
+    // Physics Engine: 4th Order Runge-Kutta (RK4) ODE Solver
+    // ---------------------------------------------------------
+    const tStart = 0;
+    const tEnd = 30;
+    const numPoints = 1500;
+    const dt = (tEnd - tStart) / (numPoints - 1);
+    const tEval = new Float64Array(numPoints);
+    for (let i = 0; i < numPoints; i++) {
+      tEval[i] = tStart + i * dt;
+    }
+
+    const x0 = 1.0;
+    const v0 = 0.0;
+    const m = 1.0;
+
+    function odeDerivs(t, x, v, zeta, omega0, F0, omega) {
+      const dxdt = v;
+      const dvdt = -2.0 * zeta * omega0 * v - (omega0 * omega0) * x + (F0 / m) * Math.cos(omega * t);
+      return [dxdt, dvdt];
+    }
+
+    function solveRK4(zeta, omega0, F0, omega) {
+      const xArr = new Float64Array(numPoints);
+      const vArr = new Float64Array(numPoints);
+      const fArr = new Float64Array(numPoints);
+
+      xArr[0] = x0;
+      vArr[0] = v0;
+      fArr[0] = F0 * Math.cos(omega * tEval[0]);
+
+      let curX = x0;
+      let curV = v0;
+
+      for (let i = 0; i < numPoints - 1; i++) {
+        const t = tEval[i];
+
+        // k1
+        const [dx1, dv1] = odeDerivs(t, curX, curV, zeta, omega0, F0, omega);
+        // k2
+        const [dx2, dv2] = odeDerivs(t + 0.5 * dt, curX + 0.5 * dt * dx1, curV + 0.5 * dt * dv1, zeta, omega0, F0, omega);
+        // k3
+        const [dx3, dv3] = odeDerivs(t + 0.5 * dt, curX + 0.5 * dt * dx2, curV + 0.5 * dt * dv2, zeta, omega0, F0, omega);
+        // k4
+        const [dx4, dv4] = odeDerivs(t + dt, curX + dt * dx3, curV + dt * dv3, zeta, omega0, F0, omega);
+
+        curX += (dt / 6.0) * (dx1 + 2.0 * dx2 + 2.0 * dx3 + dx4);
+        curV += (dt / 6.0) * (dv1 + 2.0 * dv2 + 2.0 * dv3 + dv4);
+
+        xArr[i + 1] = curX;
+        vArr[i + 1] = curV;
+        fArr[i + 1] = F0 * Math.cos(omega * tEval[i + 1]);
+      }
+
+      return { x: xArr, v: vArr, f: fArr };
+    }
+
+    function computeResonanceAmplitude(w, zeta, omega0, F0) {
+      const term1 = omega0 * omega0 - w * w;
+      const term2 = 2.0 * zeta * omega0 * w;
+      const denom = Math.sqrt(term1 * term1 + term2 * term2);
+      return (F0 / m) / Math.max(denom, 1e-6);
+    }
+
+    // ---------------------------------------------------------
+    // Dynamic Animation & Playback State
+    // ---------------------------------------------------------
+    let isPlaying = true;
+    let animSpeed = 1.0;
+    let curTime = 0.0; // Current simulation time [0, 30]
+    let lastTimestamp = null;
+    let currentSolution = null;
+
+    const btnPlay = document.getElementById('btn-play');
+    const btnReset = document.getElementById('btn-reset');
+    const scrubberT = document.getElementById('scrubber-t');
+    const valTBadge = document.getElementById('val-t');
+    const sliderSpeed = document.getElementById('slider-speed');
+    const valSpeedBadge = document.getElementById('val-speed');
+
+    function setAnimSpeed(speed) {
+      animSpeed = Math.max(0.05, Math.min(5.0, speed));
+      sliderSpeed.value = animSpeed.toFixed(2);
+      valSpeedBadge.textContent = `${animSpeed.toFixed(2)}x`;
+
+      const presets = [
+        { id: 'btn-spd-025', val: 0.25 },
+        { id: 'btn-spd-05', val: 0.5 },
+        { id: 'btn-spd-10', val: 1.0 },
+        { id: 'btn-spd-20', val: 2.0 },
+        { id: 'btn-spd-40', val: 4.0 }
+      ];
+      presets.forEach(p => {
+        const btn = document.getElementById(p.id);
+        if (btn) btn.classList.toggle('active', Math.abs(animSpeed - p.val) < 0.01);
+      });
+    }
+
+    sliderSpeed.addEventListener('input', (e) => {
+      setAnimSpeed(parseFloat(e.target.value));
+    });
+
+    btnPlay.addEventListener('click', () => {
+      isPlaying = !isPlaying;
+      btnPlay.textContent = isPlaying ? 'Pause' : 'Play';
+      btnPlay.classList.toggle('active', isPlaying);
+    });
+
+    btnReset.addEventListener('click', () => {
+      curTime = 0.0;
+      scrubberT.value = '0';
+      valTBadge.textContent = 't = 0.00 s';
+      render();
+    });
+
+    scrubberT.addEventListener('input', (e) => {
+      curTime = parseFloat(e.target.value);
+      valTBadge.textContent = `t = ${curTime.toFixed(2)} s`;
+      renderPlotsOnly();
+    });
+
+    // Time domain canvas click/drag scrubbing
+    const wrapTime = document.getElementById('wrap-time');
+    let isDraggingTime = false;
+
+    function handleTimeScrub(e) {
+      const rect = wrapTime.getBoundingClientRect();
+      const padLeft = 42;
+      const padRight = 12;
+      const plotW = rect.width - padLeft - padRight;
+      const clickX = e.clientX - rect.left - padLeft;
+      const ratio = Math.max(0, Math.min(1, clickX / plotW));
+      curTime = ratio * 30;
+      scrubberT.value = curTime.toFixed(2);
+      valTBadge.textContent = `t = ${curTime.toFixed(2)} s`;
+      renderPlotsOnly();
+    }
+
+    wrapTime.addEventListener('mousedown', (e) => {
+      isDraggingTime = true;
+      handleTimeScrub(e);
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (isDraggingTime) handleTimeScrub(e);
+    });
+    window.addEventListener('mouseup', () => {
+      isDraggingTime = false;
+    });
+
+    // Keyboard Shortcuts for Speed & Playback
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        btnPlay.click();
+      } else if (e.key === ']' || e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        setAnimSpeed(animSpeed + 0.1);
+      } else if (e.key === '[' || e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        setAnimSpeed(animSpeed - 0.1);
+      } else if (e.key === 'r' || e.key === 'R' || e.key === '0') {
+        e.preventDefault();
+        btnReset.click();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        curTime = Math.min(30, curTime + 0.25);
+        scrubberT.value = curTime.toFixed(2);
+        valTBadge.textContent = `t = ${curTime.toFixed(2)} s`;
+        renderPlotsOnly();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        curTime = Math.max(0, curTime - 0.25);
+        scrubberT.value = curTime.toFixed(2);
+        valTBadge.textContent = `t = ${curTime.toFixed(2)} s`;
+        renderPlotsOnly();
+      }
+    });
+
+    // ---------------------------------------------------------
+    // Canvas Theme Tokens & Drawing Utilities
+    // ---------------------------------------------------------
+    function getThemeTokens() {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      return {
+        bg: isDark ? '#1f1e1b' : '#f5f0e8',
+        cardBg: isDark ? '#252320' : '#faf9f5',
+        gridLine: isDark ? 'rgba(250, 249, 245, 0.08)' : 'rgba(20, 20, 19, 0.08)',
+        axisLine: isDark ? '#33312d' : '#e6dfd8',
+        tickText: isDark ? '#807d76' : '#8e8b82',
+        labelText: isDark ? '#a09d96' : '#6c6a64',
+        accent: '#cc785c',
+        accentDeep: isDark ? '#e0997d' : '#964b32',
+        trajectoryColor: isDark ? '#5db872' : '#3a7248',
+        drivingColor: isDark ? '#807d76' : '#8e8b82',
+        ink: isDark ? '#faf9f5' : '#141413',
+        cursorGlow: isDark ? 'rgba(204, 120, 92, 0.35)' : 'rgba(204, 120, 92, 0.25)',
+        scrubberLine: isDark ? 'rgba(250, 249, 245, 0.45)' : 'rgba(20, 20, 19, 0.4)'
+      };
+    }
+
+    function setupCanvas(canvas) {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      return { ctx, width: rect.width, height: rect.height };
+    }
+
+    function drawAxes(ctx, padLeft, padRight, padTop, padBottom, width, height, xMin, xMax, yMin, yMax, xLabel, yLabel, tokens) {
+      const plotW = width - padLeft - padRight;
+      const plotH = height - padTop - padBottom;
+
+      ctx.fillStyle = tokens.bg;
+      ctx.fillRect(padLeft, padTop, plotW, plotH);
+
+      ctx.strokeStyle = tokens.gridLine;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 2]);
+
+      const numGridX = 6;
+      const numGridY = 4;
+
+      ctx.fillStyle = tokens.tickText;
+      ctx.font = '10px "JetBrains Mono", ui-monospace, monospace';
+
+      for (let i = 0; i <= numGridX; i++) {
+        const gx = padLeft + (i / numGridX) * plotW;
+        const valX = xMin + (i / numGridX) * (xMax - xMin);
+        ctx.beginPath();
+        ctx.moveTo(gx, padTop);
+        ctx.lineTo(gx, padTop + plotH);
+        ctx.stroke();
+
+        ctx.textAlign = 'center';
+        ctx.fillText(valX.toFixed(1), gx, height - padBottom + 13);
+      }
+
+      for (let i = 0; i <= numGridY; i++) {
+        const gy = padTop + (i / numGridY) * plotH;
+        const valY = yMax - (i / numGridY) * (yMax - yMin);
+        ctx.beginPath();
+        ctx.moveTo(padLeft, gy);
+        ctx.lineTo(padLeft + plotW, gy);
+        ctx.stroke();
+
+        ctx.textAlign = 'right';
+        ctx.fillText(valY.toFixed(1), padLeft - 6, gy + 3);
+      }
+      ctx.setLineDash([]);
+
+      if (yMin < 0 && yMax > 0) {
+        const y0 = padTop + ((yMax - 0) / (yMax - yMin)) * plotH;
+        ctx.strokeStyle = tokens.axisLine;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(padLeft, y0);
+        ctx.lineTo(padLeft + plotW, y0);
+        ctx.stroke();
+      }
+      if (xMin < 0 && xMax > 0) {
+        const x0 = padLeft + ((0 - xMin) / (xMax - xMin)) * plotW;
+        ctx.strokeStyle = tokens.axisLine;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(x0, padTop);
+        ctx.lineTo(x0, padTop + plotH);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = tokens.axisLine;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(padLeft, padTop, plotW, plotH);
+
+      ctx.fillStyle = tokens.labelText;
+      ctx.font = '10px Inter, -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(xLabel, padLeft + plotW / 2, height - 1);
+
+      ctx.save();
+      ctx.translate(11, padTop + plotH / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText(yLabel, 0, 0);
+      ctx.restore();
+    }
+
+    // ---------------------------------------------------------
+    // Interpolate state at current time
+    // ---------------------------------------------------------
+    function getStateAtTime(t, sol) {
+      const idx = Math.min(Math.max(Math.floor((t / 30) * (numPoints - 1)), 0), numPoints - 2);
+      const alpha = (t - tEval[idx]) / dt;
+      const x = sol.x[idx] + alpha * (sol.x[idx + 1] - sol.x[idx]);
+      const v = sol.v[idx] + alpha * (sol.v[idx + 1] - sol.v[idx]);
+      const f = sol.f[idx] + alpha * (sol.f[idx + 1] - sol.f[idx]);
+      return { x, v, f };
+    }
+
+    // ---------------------------------------------------------
+    // Draw Dynamic Mechanical Oscillator (Spring + Mass + Damper)
+    // ---------------------------------------------------------
+    function drawMechanicalOscillator(state, tokens) {
+      const canvas = document.getElementById('canvas-mech');
+      const { ctx, width, height } = setupCanvas(canvas);
+
+      ctx.fillStyle = tokens.bg;
+      ctx.fillRect(0, 0, width, height);
+
+      const wallX = 60;
+      const centerY = height / 2 + 10;
+      const floorY = centerY + 30;
+
+      // Draw Wall & Floor with hatching
+      ctx.strokeStyle = tokens.axisLine;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(wallX, 12);
+      ctx.lineTo(wallX, floorY);
+      ctx.lineTo(width - 20, floorY);
+      ctx.stroke();
+
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = tokens.gridLine;
+      for (let y = 16; y <= floorY; y += 10) {
+        ctx.beginPath();
+        ctx.moveTo(wallX, y);
+        ctx.lineTo(wallX - 12, y + 10);
+        ctx.stroke();
+      }
+
+      // Equilibrium center position for the mass
+      const eqX = width / 2;
+      const maxDisplacementPx = 130;
+      const cartX = eqX + Math.max(Math.min(state.x * 32, maxDisplacementPx), -maxDisplacementPx);
+      const cartW = 68;
+      const cartH = 40;
+      const cartTop = centerY - cartH / 2;
+
+      // Equilibrium dashed line
+      ctx.strokeStyle = tokens.gridLine;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(eqX + cartW / 2, 12);
+      ctx.lineTo(eqX + cartW / 2, floorY + 12);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = tokens.tickText;
+      ctx.font = '9px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('x = 0', eqX + cartW / 2, floorY + 11);
+
+      // 1. Draw Spring (coils)
+      const springStartY = centerY - 10;
+      const springLen = cartX - wallX;
+      const numCoils = 14;
+      ctx.strokeStyle = tokens.accent;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(wallX, springStartY);
+      for (let i = 0; i <= numCoils; i++) {
+        const segX = wallX + (i / numCoils) * springLen;
+        const offset = i === 0 || i === numCoils ? 0 : (i % 2 === 1 ? -6 : 6);
+        ctx.lineTo(segX, springStartY + offset);
+      }
+      ctx.lineTo(cartX, springStartY);
+      ctx.stroke();
+
+      // 2. Draw Damper (dashpot / piston cylinder)
+      const damperY = centerY + 12;
+      const cylinderW = Math.min(springLen * 0.55, 65);
+      const pistonX = wallX + (cartX - wallX) * 0.65;
+
+      ctx.strokeStyle = tokens.labelText;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(wallX, damperY);
+      ctx.lineTo(wallX + cylinderW, damperY);
+      ctx.moveTo(wallX + cylinderW, damperY - 5);
+      ctx.lineTo(wallX + 12, damperY - 5);
+      ctx.lineTo(wallX + 12, damperY + 5);
+      ctx.lineTo(wallX + cylinderW, damperY + 5);
+      ctx.stroke();
+
+      ctx.strokeStyle = tokens.ink;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(cartX, damperY);
+      ctx.lineTo(pistonX, damperY);
+      ctx.moveTo(pistonX, damperY - 4);
+      ctx.lineTo(pistonX, damperY + 4);
+      ctx.stroke();
+
+      // 3. Draw Mass Cart (m)
+      ctx.fillStyle = tokens.cardBg;
+      ctx.strokeStyle = tokens.axisLine;
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(cartX, cartTop, cartW, cartH);
+      ctx.strokeRect(cartX, cartTop, cartW, cartH);
+
+      // Cart Wheels
+      ctx.fillStyle = tokens.labelText;
+      ctx.beginPath();
+      ctx.arc(cartX + 14, floorY - 4, 3.5, 0, 2 * Math.PI);
+      ctx.arc(cartX + cartW - 14, floorY - 4, 3.5, 0, 2 * Math.PI);
+      ctx.fill();
+
+      // Cart Labels
+      ctx.fillStyle = tokens.ink;
+      ctx.font = '10px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('m = 1.0', cartX + cartW / 2, cartTop + 16);
+
+      ctx.fillStyle = tokens.accentDeep;
+      ctx.font = '9px "JetBrains Mono", monospace';
+      ctx.fillText(`x: ${state.x >= 0 ? '+' : ''}${state.x.toFixed(2)}`, cartX + cartW / 2, cartTop + 30);
+
+      // 4. Draw Driving Force Arrow Above Cart
+      const forceVal = state.f;
+      if (Math.abs(forceVal) > 0.02) {
+        const arrowLen = forceVal * 28;
+        const arrowStartX = cartX + cartW / 2;
+        const arrowEndX = arrowStartX + arrowLen;
+        const arrowY = cartTop - 8;
+
+        ctx.strokeStyle = tokens.accent;
+        ctx.fillStyle = tokens.accent;
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(arrowStartX, arrowY);
+        ctx.lineTo(arrowEndX, arrowY);
+        ctx.stroke();
+
+        // Arrowhead
+        const headDir = Math.sign(arrowLen);
+        ctx.beginPath();
+        ctx.moveTo(arrowEndX, arrowY);
+        ctx.lineTo(arrowEndX - headDir * 6, arrowY - 3.5);
+        ctx.lineTo(arrowEndX - headDir * 6, arrowY + 3.5);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.font = '9px "JetBrains Mono", monospace';
+        ctx.textAlign = headDir > 0 ? 'left' : 'right';
+        ctx.fillText(`F(t) = ${(forceVal >= 0 ? '+' : '') + forceVal.toFixed(2)}`, arrowEndX + headDir * 5, arrowY - 2);
+      }
+    }
+
+    // ---------------------------------------------------------
+    // Main Plots Rendering (Static Curves + Dynamic Animated State)
+    // ---------------------------------------------------------
+    function renderPlotsOnly() {
+      if (!currentSolution) return;
+      const sol = currentSolution;
+      const tokens = getThemeTokens();
+      const state = getStateAtTime(curTime, sol);
+
+      // Draw Mechanical Animator
+      drawMechanicalOscillator(state, tokens);
+
+      const zeta = parseFloat(document.getElementById('slider-zeta').value);
+      const omega0 = parseFloat(document.getElementById('slider-omega0').value);
+      const F0 = parseFloat(document.getElementById('slider-F0').value);
+      const omega = parseFloat(document.getElementById('slider-omega').value);
+
+      // -------------------------------------------------------
+      // 1. Draw Time Domain Response
+      // -------------------------------------------------------
+      const cTime = document.getElementById('canvas-time');
+      const { ctx: ctxT, width: wT, height: hT } = setupCanvas(cTime);
+      const padT = { left: 42, right: 12, top: 12, bottom: 26 };
+      const plotWT = wT - padT.left - padT.right;
+      const plotHT = hT - padT.top - padT.bottom;
+
+      let maxAbsX = 0;
+      for (let i = 0; i < numPoints; i++) {
+        const absX = Math.abs(sol.x[i]);
+        if (absX > maxAbsX) maxAbsX = absX;
+      }
+      const yMaxT = Math.max(maxAbsX * 1.15, F0 * 1.15, 1.0);
+      const yMinT = -yMaxT;
+
+      drawAxes(ctxT, padT.left, padT.right, padT.top, padT.bottom, wT, hT, 0, 30, yMinT, yMaxT, 'Time t [s]', 'Amplitude x(t)', tokens);
+
+      ctxT.save();
+      ctxT.beginPath();
+      ctxT.rect(padT.left, padT.top, plotWT, plotHT);
+      ctxT.clip();
+
+      // Driving force F(t)/m
+      ctxT.strokeStyle = tokens.drivingColor;
+      ctxT.lineWidth = 1.1;
+      ctxT.setLineDash([3, 3]);
+      ctxT.beginPath();
+      for (let i = 0; i < numPoints; i++) {
+        const px = padT.left + (tEval[i] / 30) * plotWT;
+        const py = padT.top + ((yMaxT - sol.f[i]) / (2 * yMaxT)) * plotHT;
+        if (i === 0) ctxT.moveTo(px, py);
+        else ctxT.lineTo(px, py);
+      }
+      ctxT.stroke();
+      ctxT.setLineDash([]);
+
+      // Displacement x(t)
+      ctxT.strokeStyle = tokens.accent;
+      ctxT.lineWidth = 1.8;
+      ctxT.beginPath();
+      for (let i = 0; i < numPoints; i++) {
+        const px = padT.left + (tEval[i] / 30) * plotWT;
+        const py = padT.top + ((yMaxT - sol.x[i]) / (2 * yMaxT)) * plotHT;
+        if (i === 0) ctxT.moveTo(px, py);
+        else ctxT.lineTo(px, py);
+      }
+      ctxT.stroke();
+
+      // Dynamic Time Scrubber Line & Tracking Dots
+      const curPx = padT.left + (curTime / 30) * plotWT;
+      const curPyX = padT.top + ((yMaxT - state.x) / (2 * yMaxT)) * plotHT;
+
+      ctxT.strokeStyle = tokens.scrubberLine;
+      ctxT.lineWidth = 1.2;
+      ctxT.beginPath();
+      ctxT.moveTo(curPx, padT.top);
+      ctxT.lineTo(curPx, padT.top + plotHT);
+      ctxT.stroke();
+
+      // Tracking dot
+      ctxT.fillStyle = tokens.accent;
+      ctxT.beginPath();
+      ctxT.arc(curPx, curPyX, 4.5, 0, 2 * Math.PI);
+      ctxT.fill();
+      ctxT.strokeStyle = tokens.cardBg;
+      ctxT.lineWidth = 1.5;
+      ctxT.stroke();
+
+      ctxT.restore();
+
+      // -------------------------------------------------------
+      // 2. Draw Phase Space Portrait (x vs v)
+      // -------------------------------------------------------
+      const cPhase = document.getElementById('canvas-phase');
+      const { ctx: ctxP, width: wP, height: hP } = setupCanvas(cPhase);
+      const padP = { left: 42, right: 12, top: 12, bottom: 26 };
+      const plotWP = wP - padP.left - padP.right;
+      const plotHP = hP - padP.top - padP.bottom;
+
+      let maxAbsV = 0;
+      for (let i = 0; i < numPoints; i++) {
+        const absV = Math.abs(sol.v[i]);
+        if (absV > maxAbsV) maxAbsV = absV;
+      }
+      const xLimP = Math.max(maxAbsX * 1.15, 1.0);
+      const vLimP = Math.max(maxAbsV * 1.15, 1.0);
+
+      drawAxes(ctxP, padP.left, padP.right, padP.top, padP.bottom, wP, hP, -xLimP, xLimP, -vLimP, vLimP, 'Displacement x', 'Velocity v = dx/dt', tokens);
+
+      ctxP.save();
+      ctxP.beginPath();
+      ctxP.rect(padP.left, padP.top, plotWP, plotHP);
+      ctxP.clip();
+
+      ctxP.strokeStyle = tokens.trajectoryColor;
+      ctxP.lineWidth = 1.5;
+      ctxP.beginPath();
+      for (let i = 0; i < numPoints; i++) {
+        const px = padP.left + ((sol.x[i] - (-xLimP)) / (2 * xLimP)) * plotWP;
+        const py = padP.top + ((vLimP - sol.v[i]) / (2 * vLimP)) * plotHP;
+        if (i === 0) ctxP.moveTo(px, py);
+        else ctxP.lineTo(px, py);
+      }
+      ctxP.stroke();
+
+      // Starting point
+      const startPx = padP.left + ((sol.x[0] - (-xLimP)) / (2 * xLimP)) * plotWP;
+      const startPy = padP.top + ((vLimP - sol.v[0]) / (2 * vLimP)) * plotHP;
+      ctxP.fillStyle = tokens.accent;
+      ctxP.beginPath();
+      ctxP.arc(startPx, startPy, 3.5, 0, 2 * Math.PI);
+      ctxP.fill();
+
+      // Dynamic Current Phase State Bead
+      const curPxPhase = padP.left + ((state.x - (-xLimP)) / (2 * xLimP)) * plotWP;
+      const curPyPhase = padP.top + ((vLimP - state.v) / (2 * vLimP)) * plotHP;
+
+      ctxP.fillStyle = tokens.ink;
+      ctxP.beginPath();
+      ctxP.arc(curPxPhase, curPyPhase, 5, 0, 2 * Math.PI);
+      ctxP.fill();
+      ctxP.strokeStyle = tokens.accent;
+      ctxP.lineWidth = 1.5;
+      ctxP.stroke();
+
+      ctxP.restore();
+
+      // -------------------------------------------------------
+      // 3. Draw Resonance Frequency Response
+      // -------------------------------------------------------
+      const cRes = document.getElementById('canvas-res');
+      const { ctx: ctxR, width: wR, height: hR } = setupCanvas(cRes);
+      const padR = { left: 42, right: 12, top: 12, bottom: 26 };
+      const plotWR = wR - padR.left - padR.right;
+      const plotHR = hR - padR.top - padR.bottom;
+
+      const numOmegaPoints = 500;
+      const wMin = 0.1;
+      const wMax = 6.0;
+      let maxA = 0;
+      const aVals = new Float64Array(numOmegaPoints);
+      const wVals = new Float64Array(numOmegaPoints);
+
+      for (let i = 0; i < numOmegaPoints; i++) {
+        const w = wMin + (i / (numOmegaPoints - 1)) * (wMax - wMin);
+        wVals[i] = w;
+        const a = computeResonanceAmplitude(w, zeta, omega0, F0);
+        aVals[i] = a;
+        if (a > maxA) maxA = a;
+      }
+      const yMaxR = Math.max(maxA * 1.15, 1.0);
+      const currAmp = computeResonanceAmplitude(omega, zeta, omega0, F0);
+
+      drawAxes(ctxR, padR.left, padR.right, padR.top, padR.bottom, wR, hR, wMin, wMax, 0, yMaxR, 'Driving Frequency \u03c9 [rad/s]', 'Steady Amplitude A(\u03c9)', tokens);
+
+      ctxR.save();
+      ctxR.beginPath();
+      ctxR.rect(padR.left, padR.top, plotWR, plotHR);
+      ctxR.clip();
+
+      ctxR.strokeStyle = tokens.accent;
+      ctxR.lineWidth = 2.0;
+      ctxR.beginPath();
+      for (let i = 0; i < numOmegaPoints; i++) {
+        const px = padR.left + ((wVals[i] - wMin) / (wMax - wMin)) * plotWR;
+        const py = padR.top + ((yMaxR - aVals[i]) / yMaxR) * plotHR;
+        if (i === 0) ctxR.moveTo(px, py);
+        else ctxR.lineTo(px, py);
+      }
+      ctxR.stroke();
+
+      const curPxRes = padR.left + ((omega - wMin) / (wMax - wMin)) * plotWR;
+      const curPyRes = padR.top + ((yMaxR - currAmp) / yMaxR) * plotHR;
+
+      ctxR.strokeStyle = tokens.drivingColor;
+      ctxR.lineWidth = 1;
+      ctxR.setLineDash([3, 3]);
+      ctxR.beginPath();
+      ctxR.moveTo(curPxRes, padR.top + plotHR);
+      ctxR.lineTo(curPxRes, curPyRes);
+      ctxR.stroke();
+      ctxR.setLineDash([]);
+
+      ctxR.fillStyle = tokens.ink;
+      ctxR.beginPath();
+      ctxR.arc(curPxRes, curPyRes, 5.5, 0, 2 * Math.PI);
+      ctxR.fill();
+      ctxR.strokeStyle = tokens.cardBg;
+      ctxR.lineWidth = 1.5;
+      ctxR.stroke();
+
+      ctxR.restore();
+    }
+
+    // ---------------------------------------------------------
+    // Full Render (Parameters change -> Solve ODE -> Update Metrics -> Render Plots)
+    // ---------------------------------------------------------
+    function render() {
+      const zeta = parseFloat(document.getElementById('slider-zeta').value);
+      const omega0 = parseFloat(document.getElementById('slider-omega0').value);
+      const F0 = parseFloat(document.getElementById('slider-F0').value);
+      const omega = parseFloat(document.getElementById('slider-omega').value);
+
+      document.getElementById('val-zeta').textContent = zeta.toFixed(2);
+      document.getElementById('val-omega0').textContent = omega0.toFixed(2);
+      document.getElementById('val-F0').textContent = F0.toFixed(2);
+      document.getElementById('val-omega').textContent = omega.toFixed(2);
+
+      // Solve ODE
+      currentSolution = solveRK4(zeta, omega0, F0, omega);
+
+      // Render Dynamic LaTeX Metrics via KaTeX
+      let regimeText = '\\text{Underdamped } (\\zeta < 1)';
+      if (zeta === 0) regimeText = '\\text{Undamped } (\\zeta = 0)';
+      else if (Math.abs(zeta - 1.0) < 0.02) regimeText = '\\text{Critically Damped } (\\zeta = 1)';
+      else if (zeta > 1.0) regimeText = '\\text{Overdamped } (\\zeta > 1)';
+      tex(regimeText, 'metric-regime');
+
+      const qTex = zeta > 0 ? `Q = \\frac{1}{2\\zeta} = ${(1 / (2 * zeta)).toFixed(2)}` : 'Q = \\infty';
+      tex(qTex, 'metric-q');
+
+      const wresTex = zeta < 0.7071
+        ? `\\omega_{\\text{res}} = \\omega_0\\sqrt{1 - 2\\zeta^2} = ${(omega0 * Math.sqrt(1 - 2 * zeta * zeta)).toFixed(2)}\\text{ rad/s}`
+        : '\\omega_{\\text{res}}: \\text{No Peak (Over-Damped)}';
+      tex(wresTex, 'metric-wres');
+
+      const currAmp = computeResonanceAmplitude(omega, zeta, omega0, F0);
+      tex(`A(\\omega) = ${currAmp.toFixed(2)}`, 'metric-amp');
+
+      renderPlotsOnly();
+    }
+
+    // ---------------------------------------------------------
+    // Animation Loop (requestAnimationFrame)
+    // ---------------------------------------------------------
+    function animLoop(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const deltaSec = (timestamp - lastTimestamp) / 1000;
+      lastTimestamp = timestamp;
+
+      if (isPlaying) {
+        curTime += deltaSec * animSpeed;
+        if (curTime > 30) {
+          curTime = 0; // loop
+        }
+        scrubberT.value = curTime.toFixed(2);
+        valTBadge.textContent = `t = ${curTime.toFixed(2)} s`;
+        renderPlotsOnly();
+      }
+
+      requestAnimationFrame(animLoop);
+    }
+
+    function applyPreset(zeta, omega0, F0, omega, btn) {
+      document.getElementById('slider-zeta').value = zeta;
+      document.getElementById('slider-omega0').value = omega0;
+      document.getElementById('slider-F0').value = F0;
+      document.getElementById('slider-omega').value = omega;
+
+      document.querySelectorAll('.sim-presets .sim-btn').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+
+      render();
+    }
+
+    // Attach slider event listeners
+    ['slider-zeta', 'slider-omega0', 'slider-F0', 'slider-omega'].forEach(id => {
+      document.getElementById(id).addEventListener('input', () => {
+        document.querySelectorAll('.sim-presets .sim-btn').forEach(b => b.classList.remove('active'));
+        render();
+      });
+    });
+
+    window.addEventListener('resize', renderPlotsOnly);
+    window.addEventListener('DOMContentLoaded', () => {
+      initStaticMath();
+      setAnimSpeed(1.0);
+      render();
+      requestAnimationFrame(animLoop);
+    });
+  </script>
+</body>
+</html>
