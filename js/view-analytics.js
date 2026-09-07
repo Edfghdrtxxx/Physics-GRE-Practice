@@ -338,6 +338,82 @@ PGRE.views.analytics = (function () {
     return html;
   }
 
+  /* ——— Views-A: entry motion ———
+     countUpText: tweens the first number in a plain-text element up to its
+     current value (prefix/suffix preserved, e.g. "1,234" or "85%"). Elements
+     with child markup are left untouched. */
+  function countUpText(el, duration) {
+    if (!el || !(PGRE.motion && PGRE.motion.countUp)) return;
+    if (el.children.length === 1 && el.firstElementChild.classList.contains('stat-unit')) {
+      var textNode = el.childNodes[0];
+      if (textNode && textNode.nodeType === 3) {
+        var tm = textNode.textContent.trim().match(/^([^\d-]*)([\d,]+(?:\.\d+)?)(.*)$/);
+        if (tm) {
+          var tPrefix = tm[1], tSuffix = tm[3];
+          var tDec = (tm[2].split('.')[1] || '').length;
+          var tTo = parseFloat(tm[2].replace(/,/g, ''));
+          if (!isNaN(tTo)) {
+            PGRE.motion.countUp({
+              set textContent(val) { textNode.textContent = val; },
+              get textContent() { return textNode.textContent; }
+            }, tTo, {
+              duration: duration,
+              decimals: tDec,
+              format: function (v) {
+                return tPrefix + v.toLocaleString('en-US', {
+                  minimumFractionDigits: tDec,
+                  maximumFractionDigits: tDec
+                }) + tSuffix;
+              }
+            });
+            return;
+          }
+        }
+      }
+    }
+    if (el.children.length > 0) return;
+    var m = el.textContent.trim().match(/^([^\d-]*)([\d,]+(?:\.\d+)?)(.*)$/);
+    if (!m) return;
+    var prefix = m[1], suffix = m[3];
+    var decimals = (m[2].split('.')[1] || '').length;
+    var to = parseFloat(m[2].replace(/,/g, ''));
+    if (isNaN(to)) return;
+    PGRE.motion.countUp(el, to, {
+      duration: duration,
+      decimals: decimals,
+      format: function (v) {
+        return prefix + v.toLocaleString('en-US', {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals
+        }) + suffix;
+      }
+    });
+  }
+
+  function mount() {
+    if (!PGRE.motion || PGRE.motion.reduced) return;
+    // headline tiles count up
+    document.querySelectorAll('.stat-row-4 .stat-value').forEach(function (el) {
+      countUpText(el, 700);
+    });
+    document.querySelectorAll('.an-focus-pts').forEach(function (el) {
+      countUpText(el, 700);
+    });
+    // meters run from 0 to their value on first paint
+    document.querySelectorAll('.meter-fill').forEach(function (f) {
+      var pct = parseFloat(f.style.width);
+      if (!isNaN(pct)) PGRE.motion.animateMeter(f, pct);
+    });
+    // heatmap cells cascade in — capped so 84 cells never take seconds
+    var heat = document.querySelector('.an-heat-cols');
+    if (heat) {
+      Array.prototype.forEach.call(heat.children, function (c) {
+        c.classList.add('stagger-in');
+      });
+      PGRE.motion.stagger(heat, { step: 8, max: 20 });
+    }
+  }
+
   return {
     render: function () {
       var ui = PGRE.ui, s = PGRE.store.state;
@@ -393,6 +469,7 @@ PGRE.views.analytics = (function () {
         timeDistCard(agg.timed, target) +
         heatmapCard(agg.byDay) +
         examsCard(s.exams || []);
-    }
+    },
+    mount: mount
   };
 })();

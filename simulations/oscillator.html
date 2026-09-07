@@ -485,13 +485,13 @@
           <div class="sim-speed-control">
             <span id="label-speed-tex" class="sim-speed-label"></span>
             <input type="range" id="slider-speed" min="0.1" max="4.0" step="0.05" value="1.0" title="Adjust animation playback speed">
-            <span id="val-speed" class="sim-speed-badge">1.00x</span>
+            <span id="val-speed" class="sim-speed-badge"><span id="val-speed-num">1.00</span><span id="val-speed-times"></span></span>
             <div class="sim-speed-presets">
-              <button id="btn-spd-025" class="sim-speed-btn" type="button" onclick="setAnimSpeed(0.25)">0.25x</button>
-              <button id="btn-spd-05" class="sim-speed-btn" type="button" onclick="setAnimSpeed(0.5)">0.5x</button>
-              <button id="btn-spd-10" class="sim-speed-btn active" type="button" onclick="setAnimSpeed(1.0)">1.0x</button>
-              <button id="btn-spd-20" class="sim-speed-btn" type="button" onclick="setAnimSpeed(2.0)">2.0x</button>
-              <button id="btn-spd-40" class="sim-speed-btn" type="button" onclick="setAnimSpeed(4.0)">4.0x</button>
+              <button id="btn-spd-025" class="sim-speed-btn" type="button" onclick="setAnimSpeed(0.25)"><span id="spd-tex-025"></span></button>
+              <button id="btn-spd-05" class="sim-speed-btn" type="button" onclick="setAnimSpeed(0.5)"><span id="spd-tex-05"></span></button>
+              <button id="btn-spd-10" class="sim-speed-btn active" type="button" onclick="setAnimSpeed(1.0)"><span id="spd-tex-10"></span></button>
+              <button id="btn-spd-20" class="sim-speed-btn" type="button" onclick="setAnimSpeed(2.0)"><span id="spd-tex-20"></span></button>
+              <button id="btn-spd-40" class="sim-speed-btn" type="button" onclick="setAnimSpeed(4.0)"><span id="spd-tex-40"></span></button>
             </div>
           </div>
 
@@ -499,7 +499,7 @@
           <div class="sim-time-scrubber">
             <span id="label-time-tex"></span>
             <input type="range" id="scrubber-t" min="0" max="30" step="0.02" value="0">
-            <span id="val-t" class="sim-time-badge">t = 0.00 s</span>
+            <span id="val-t" class="sim-time-badge"><span id="val-t-tex"></span>&nbsp;<span id="val-t-num">0.00</span>&nbsp;<span id="val-t-unit"></span></span>
           </div>
         </div>
       </div>
@@ -642,8 +642,16 @@
       tex('\\ddot{x}(t) + 2\\zeta\\omega_0 \\dot{x}(t) + \\omega_0^2 x(t) = \\frac{F_0}{m} \\cos(\\omega t)', 'sim-math-header');
       tex('m\\ddot{x} + c\\dot{x} + kx = F(t)', 'mech-formula-tag');
       tex('\\text{Speed:}', 'label-speed-tex');
-      tex('t:', 'label-time-tex');
+      tex('\\times', 'val-speed-times');
+      tex('0.25\\times', 'spd-tex-025');
+      tex('0.5\\times', 'spd-tex-05');
+      tex('1.0\\times', 'spd-tex-10');
+      tex('2.0\\times', 'spd-tex-20');
+      tex('4.0\\times', 'spd-tex-40');
+      tex('t =', 'val-t-tex');
+      tex('\\mathrm{s}', 'val-t-unit');
       tex('\\text{Regime:}', 'chip-regime-label');
+      tex('t:', 'label-time-tex');
 
       // Legends
       tex('x(t)\\text{ [Displacement]}', 'leg-x');
@@ -659,6 +667,93 @@
       tex('\\text{Driving Force } F_0/m\\text{ (m/s}^2\\text{)}', 'param-label-F0');
       tex('\\text{Driving Freq } \\omega\\text{ (rad/s)}', 'param-label-omega');
     }
+
+    // ---------------------------------------------------------
+    // KaTeX-on-canvas: rasterize LaTeX labels once, cache, drawImage.
+    // Keeps every canvas label true LaTeX while staying standalone/offline.
+    // ---------------------------------------------------------
+    let katexCssPromise = null;
+    function getKatexCss() {
+      if (!katexCssPromise) {
+        katexCssPromise = fetch('../vendor/katex/katex.min.css').then(r => r.text()).catch(() => '');
+      }
+      return katexCssPromise;
+    }
+
+    const texSpriteCache = new Map();
+    function texSprite(texStr, opts) {
+      opts = opts || {};
+      const color = opts.color || '#141413';
+      const fontPx = opts.fontPx || 10;
+      const key = texStr + '|' + color + '|' + fontPx;
+      let entry = texSpriteCache.get(key);
+      if (entry) return entry;
+      entry = { img: null, w: 0, h: 0, ready: false };
+      texSpriteCache.set(key, entry);
+      getKatexCss().then(css => {
+        if (!window.katex) return;
+        const holder = document.createElement('div');
+        holder.style.position = 'absolute';
+        holder.style.left = '-9999px';
+        holder.style.top = '0';
+        holder.style.fontSize = fontPx + 'px';
+        holder.style.color = color;
+        document.body.appendChild(holder);
+        katex.render(texStr, holder, { throwOnError: false });
+        const w = Math.ceil(holder.offsetWidth) + 2;
+        const h = Math.ceil(holder.offsetHeight) + 2;
+        const html = holder.innerHTML;
+        document.body.removeChild(holder);
+        const scale = 2; // supersample so sprites stay crisp on HiDPI canvases
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + (w * scale) + '" height="' + (h * scale) + '">' +
+          '<style>' + css + '</style>' +
+          '<foreignObject width="100%" height="100%">' +
+          '<div xmlns="http://www.w3.org/1999/xhtml" style="font-size:' + (fontPx * scale) + 'px;color:' + color + ';">' + html + '</div>' +
+          '</foreignObject></svg>';
+        const img = new Image();
+        img.onload = () => {
+          entry.ready = true;
+          entry.w = w;
+          entry.h = h;
+          // Repaint once loaded so paused sims pick the label up too.
+          if (typeof renderPlotsOnly === 'function') renderPlotsOnly();
+        };
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+        entry.img = img;
+        entry.w = w;
+        entry.h = h;
+      });
+      return entry;
+    }
+
+    // Draws a cached LaTeX sprite at (x, y). opts: align left|center|right,
+    // valign baseline|middle|top, rotate (radians, about the anchor point).
+    // Returns the sprite width (0 while the sprite is still rasterizing).
+    function drawTex(ctx, texStr, x, y, opts) {
+      opts = opts || {};
+      const entry = texSprite(texStr, opts);
+      if (!entry.ready || !entry.img) return 0;
+      const w = entry.w, h = entry.h;
+      let dx = 0, dy = 0;
+      const align = opts.align || 'left';
+      if (align === 'center') dx = -w / 2;
+      else if (align === 'right') dx = -w;
+      const valign = opts.valign || 'baseline';
+      if (valign === 'middle') dy = -h / 2;
+      else if (valign === 'top') dy = 0;
+      else dy = -h * 0.8; // approximate alphabetic baseline
+      if (opts.rotate) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(opts.rotate);
+        ctx.drawImage(entry.img, dx, dy, w, h);
+        ctx.restore();
+      } else {
+        ctx.drawImage(entry.img, x + dx, y + dy, w, h);
+      }
+      return w;
+    }
+
 
     // ---------------------------------------------------------
     // Theme Management
@@ -756,14 +851,18 @@
     const btnPlay = document.getElementById('btn-play');
     const btnReset = document.getElementById('btn-reset');
     const scrubberT = document.getElementById('scrubber-t');
-    const valTBadge = document.getElementById('val-t');
     const sliderSpeed = document.getElementById('slider-speed');
-    const valSpeedBadge = document.getElementById('val-speed');
+    const valSpeedNum = document.getElementById('val-speed-num');
+    const valTNum = document.getElementById('val-t-num');
+
+    function updateTimeBadge() {
+      valTNum.textContent = curTime.toFixed(2);
+    }
 
     function setAnimSpeed(speed) {
       animSpeed = Math.max(0.05, Math.min(5.0, speed));
       sliderSpeed.value = animSpeed.toFixed(2);
-      valSpeedBadge.textContent = `${animSpeed.toFixed(2)}x`;
+      valSpeedNum.textContent = animSpeed.toFixed(2);
 
       const presets = [
         { id: 'btn-spd-025', val: 0.25 },
@@ -791,13 +890,13 @@
     btnReset.addEventListener('click', () => {
       curTime = 0.0;
       scrubberT.value = '0';
-      valTBadge.textContent = 't = 0.00 s';
+      updateTimeBadge();
       render();
     });
 
     scrubberT.addEventListener('input', (e) => {
       curTime = parseFloat(e.target.value);
-      valTBadge.textContent = `t = ${curTime.toFixed(2)} s`;
+      updateTimeBadge();
       renderPlotsOnly();
     });
 
@@ -814,7 +913,7 @@
       const ratio = Math.max(0, Math.min(1, clickX / plotW));
       curTime = ratio * 30;
       scrubberT.value = curTime.toFixed(2);
-      valTBadge.textContent = `t = ${curTime.toFixed(2)} s`;
+      updateTimeBadge();
       renderPlotsOnly();
     }
 
@@ -848,13 +947,13 @@
         e.preventDefault();
         curTime = Math.min(30, curTime + 0.25);
         scrubberT.value = curTime.toFixed(2);
-        valTBadge.textContent = `t = ${curTime.toFixed(2)} s`;
+        updateTimeBadge();
         renderPlotsOnly();
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         curTime = Math.max(0, curTime - 0.25);
         scrubberT.value = curTime.toFixed(2);
-        valTBadge.textContent = `t = ${curTime.toFixed(2)} s`;
+        updateTimeBadge();
         renderPlotsOnly();
       }
     });
@@ -956,16 +1055,9 @@
       ctx.lineWidth = 1;
       ctx.strokeRect(padLeft, padTop, plotW, plotH);
 
-      ctx.fillStyle = tokens.labelText;
-      ctx.font = '10px Inter, -apple-system, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(xLabel, padLeft + plotW / 2, height - 1);
+      drawTex(ctx, xLabel, padLeft + plotW / 2, height - 1, { align: 'center', valign: 'baseline', color: tokens.labelText, fontPx: 10 });
 
-      ctx.save();
-      ctx.translate(11, padTop + plotH / 2);
-      ctx.rotate(-Math.PI / 2);
-      ctx.fillText(yLabel, 0, 0);
-      ctx.restore();
+      drawTex(ctx, yLabel, 11, padTop + plotH / 2, { align: 'center', valign: 'middle', rotate: -Math.PI / 2, color: tokens.labelText, fontPx: 10 });
     }
 
     // ---------------------------------------------------------
@@ -1029,10 +1121,7 @@
       ctx.stroke();
       ctx.setLineDash([]);
 
-      ctx.fillStyle = tokens.tickText;
-      ctx.font = '9px "JetBrains Mono", monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('x = 0', eqX + cartW / 2, floorY + 11);
+      drawTex(ctx, 'x = 0', eqX + cartW / 2, floorY + 11, { align: 'center', valign: 'baseline', color: tokens.tickText, fontPx: 9 });
 
       // 1. Draw Spring (coils)
       const springStartY = centerY - 10;
@@ -1090,14 +1179,13 @@
       ctx.fill();
 
       // Cart Labels
-      ctx.fillStyle = tokens.ink;
-      ctx.font = '10px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('m = 1.0', cartX + cartW / 2, cartTop + 16);
+      drawTex(ctx, 'm = 1.0', cartX + cartW / 2, cartTop + 16, { align: 'center', valign: 'baseline', color: tokens.ink, fontPx: 10 });
 
       ctx.fillStyle = tokens.accentDeep;
       ctx.font = '9px "JetBrains Mono", monospace';
-      ctx.fillText(`x: ${state.x >= 0 ? '+' : ''}${state.x.toFixed(2)}`, cartX + cartW / 2, cartTop + 30);
+      ctx.textAlign = 'left';
+      drawTex(ctx, 'x =', cartX + cartW / 2 - 2, cartTop + 30, { align: 'right', valign: 'baseline', color: tokens.accentDeep, fontPx: 9 });
+      ctx.fillText(`${state.x >= 0 ? '+' : ''}${state.x.toFixed(2)}`, cartX + cartW / 2 + 2, cartTop + 30);
 
       // 4. Draw Driving Force Arrow Above Cart
       const forceVal = state.f;
@@ -1125,8 +1213,13 @@
         ctx.fill();
 
         ctx.font = '9px "JetBrains Mono", monospace';
-        ctx.textAlign = headDir > 0 ? 'left' : 'right';
-        ctx.fillText(`F(t) = ${(forceVal >= 0 ? '+' : '') + forceVal.toFixed(2)}`, arrowEndX + headDir * 5, arrowY - 2);
+        const fNum = `${forceVal >= 0 ? '+' : ''}${forceVal.toFixed(2)}`;
+        const fEntry = texSprite('F(t) =', { color: tokens.accent, fontPx: 9 });
+        const fStartX = headDir > 0 ? arrowEndX + 5 : arrowEndX - 5 - (fEntry.w + 3 + ctx.measureText(fNum).width);
+        drawTex(ctx, 'F(t) =', fStartX, arrowY - 2, { align: 'left', valign: 'baseline', color: tokens.accent, fontPx: 9 });
+        ctx.fillStyle = tokens.accent;
+        ctx.textAlign = 'left';
+        ctx.fillText(fNum, fStartX + fEntry.w + 3, arrowY - 2);
       }
     }
 
@@ -1164,7 +1257,7 @@
       const yMaxT = Math.max(maxAbsX * 1.15, F0 * 1.15, 1.0);
       const yMinT = -yMaxT;
 
-      drawAxes(ctxT, padT.left, padT.right, padT.top, padT.bottom, wT, hT, 0, 30, yMinT, yMaxT, 'Time t [s]', 'Amplitude x(t)', tokens);
+      drawAxes(ctxT, padT.left, padT.right, padT.top, padT.bottom, wT, hT, 0, 30, yMinT, yMaxT, 't (s)', 'x(t) (m)', tokens);
 
       ctxT.save();
       ctxT.beginPath();
@@ -1236,7 +1329,7 @@
       const xLimP = Math.max(maxAbsX * 1.15, 1.0);
       const vLimP = Math.max(maxAbsV * 1.15, 1.0);
 
-      drawAxes(ctxP, padP.left, padP.right, padP.top, padP.bottom, wP, hP, -xLimP, xLimP, -vLimP, vLimP, 'Displacement x', 'Velocity v = dx/dt', tokens);
+      drawAxes(ctxP, padP.left, padP.right, padP.top, padP.bottom, wP, hP, -xLimP, xLimP, -vLimP, vLimP, 'x (m)', 'v = \\dot{x} (m/s)', tokens);
 
       ctxP.save();
       ctxP.beginPath();
@@ -1302,7 +1395,7 @@
       const yMaxR = Math.max(maxA * 1.15, 1.0);
       const currAmp = computeResonanceAmplitude(omega, zeta, omega0, F0);
 
-      drawAxes(ctxR, padR.left, padR.right, padR.top, padR.bottom, wR, hR, wMin, wMax, 0, yMaxR, 'Driving Frequency \u03c9 [rad/s]', 'Steady Amplitude A(\u03c9)', tokens);
+      drawAxes(ctxR, padR.left, padR.right, padR.top, padR.bottom, wR, hR, wMin, wMax, 0, yMaxR, '\\omega (rad/s)', 'A(\\omega) (m)', tokens);
 
       ctxR.save();
       ctxR.beginPath();
@@ -1395,7 +1488,7 @@
           curTime = 0; // loop
         }
         scrubberT.value = curTime.toFixed(2);
-        valTBadge.textContent = `t = ${curTime.toFixed(2)} s`;
+        updateTimeBadge();
         renderPlotsOnly();
       }
 

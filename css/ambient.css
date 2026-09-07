@@ -1,0 +1,30 @@
+/* Ambient particle layer (js/ambient-fx.js) — a fixed, pointer-transparent
+   canvas behind the whole shell. The canvas is the first child of <body> at
+   z-index 0; the sidebar and main column stack above it.
+
+   Note: #sidebar is position:sticky in style.css (already a positioned
+   element, so z-index applies directly) — re-declaring position:relative
+   here would break the sticky rail, so only the z-index is set. #main is
+   static in style.css and gets position:relative here. #topbar keeps its
+   own sticky z-index:10 inside #main's stacking context. */
+.ambient-fx {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* explicit CSS size: the canvas ATTRIBUTE size is clientSize × devicePixelRatio
+     (for crispness), so without this a retina display would render the canvas
+     element at its attribute size, i.e. double the viewport */
+  width: 100%;
+  height: 100%;
+}
+#main { position: relative; z-index: 1; }
+#sidebar { z-index: 1; }
+
+/* During a timed exam the field calms down (MotionCore also calls
+   setIntensity('calm')); the extra opacity fade keeps it unobtrusive. */
+body.exam-fullscreen .ambient-fx { opacity: .35; }
+
+@media print {
+  .ambient-fx { display: none; }
+}

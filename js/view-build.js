@@ -2,8 +2,9 @@
    difficulty and status (unseen / previously missed / slowest / bookmarked),
    with an optional "include sample-exam questions" source toggle and a live
    match-count preview. Start writes sessionStorage['pgre-quiz-config'] =
-   { ids, label } and routes to #/practice/custom, where view-practice consumes
-   it. Deep link #/build/topic-<id> pre-selects a topic. */
+   { ids, label, criteria } and routes to #/practice/custom, where view-practice
+   consumes it (criteria lets the summary's replay resample a fresh draw).
+   Deep link #/build/topic-<id> pre-selects a topic. */
 window.PGRE = window.PGRE || {};
 PGRE.views = PGRE.views || {};
 
@@ -37,7 +38,12 @@ PGRE.views.build = (function () {
     var s = PGRE.store.state;
     var seen = {}, missed = {}, bookmarked = {};
     for (var qid in s.questions) if (s.questions[qid] && s.questions[qid].attempts > 0) seen[qid] = true;
-    for (var mid in s.mistakes) missed[mid] = true;
+    // archived mistake-book entries stay in the book but no longer count as
+    // 'Previously missed' — archiving is the user saying "done with this one"
+    for (var mid in s.mistakes) {
+      var mk = s.mistakes[mid];
+      if (mk && !mk.archivedAt) missed[mid] = true;
+    }
     for (var bid in s.bookmarks) bookmarked[bid] = true;
 
     // slowest: average answered ms per question; membership = at/above the median
@@ -74,18 +80,19 @@ PGRE.views.build = (function () {
     return false;
   }
 
-  function matching() {
+  function matching(view) {
+    view = view || sel;
     // the include-exam toggle means the BOOK's sample exams only; intact
     // released ETS exams never enter practice (AGENTS.md spoiler rule)
-    var pool = PGRE.allQuestions(sel.includeExam ? { includeExam: true } : {})
+    var pool = PGRE.allQuestions(view.includeExam ? { includeExam: true } : {})
       .filter(function (q) { return q.src !== 'ets-exam'; });
-    var topicKeys = Object.keys(sel.topics);
-    var diffKeys = Object.keys(sel.diffs);
-    var statusKeys = Object.keys(sel.statuses);
+    var topicKeys = Object.keys(view.topics);
+    var diffKeys = Object.keys(view.diffs);
+    var statusKeys = Object.keys(view.statuses);
     var ctx = statusKeys.length ? statusContext() : null;
     return pool.filter(function (q) {
-      if (topicKeys.length && !sel.topics[q.topic]) return false;
-      if (diffKeys.length && !sel.diffs[String(q.difficulty)]) return false;
+      if (topicKeys.length && !view.topics[q.topic]) return false;
+      if (diffKeys.length && !view.diffs[String(q.difficulty)]) return false;
       if (ctx && !matchesStatus(q, statusKeys, ctx)) return false;
       return true;
     });
@@ -140,10 +147,32 @@ PGRE.views.build = (function () {
   function startQuiz(count) {
     var ids = shuffle(matching().map(function (q) { return q.id; })).slice(0, count);
     if (!ids.length) return;
-    var cfg = { ids: ids, label: buildLabel(ids.length) };
+    var cfg = { ids: ids, label: buildLabel(ids.length), criteria: criteriaSnapshot() };
     try { sessionStorage.setItem('pgre-quiz-config', JSON.stringify(cfg)); }
     catch (e) { PGRE.toast('Could not start the set (storage blocked).', 'error'); return; }
     location.hash = '#/practice/custom';
+  }
+
+  /* Replay support: a criteria-built quiz stores a snapshot of its filters
+     alongside the drawn ids, so "Run this set again" in the practice summary
+     can resample a fresh draw from the same criteria instead of replaying the
+     exact ids. Explicitly ID-based sets (e.g. a question handed over from
+     #/notes) carry no criteria and keep exact-id replay. */
+  function criteriaSnapshot() {
+    return {
+      topics: Object.keys(sel.topics),
+      diffs: Object.keys(sel.diffs),
+      statuses: Object.keys(sel.statuses),
+      includeExam: !!sel.includeExam
+    };
+  }
+
+  function criteriaView(c) {
+    var view = { topics: {}, diffs: {}, statuses: {}, includeExam: !!c.includeExam };
+    (c.topics || []).forEach(function (t) { if (PGRE.topicById(t)) view.topics[t] = true; });
+    (c.diffs || []).forEach(function (d) { view.diffs[String(d)] = true; });
+    (c.statuses || []).forEach(function (st) { view.statuses[st] = true; });
+    return view;
   }
 
   /* ——— Chip groups ——— */
@@ -203,6 +232,12 @@ PGRE.views.build = (function () {
 
   return {
     render: render,
+    /* Fresh id draw from a saved criteria snapshot — view-practice's
+       "Draw a fresh set" replay of a criteria-built quiz calls this. */
+    resample: function (criteria, count) {
+      return shuffle(matching(criteriaView(criteria)).map(function (q) { return q.id; }))
+        .slice(0, count);
+    },
     mount: function (params) {
       resetSel();
 

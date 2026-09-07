@@ -3,8 +3,9 @@
 
    Feature-wave additions (proposals #3/#4/#6/#14):
    - #3 Custom quiz: #/practice/custom consumes sessionStorage['pgre-quiz-config']
-     ({ ids, label }) written by the builder (js/view-build.js) and runs it as a
-     labelled session.
+     ({ ids, label, criteria? }) written by the builder (js/view-build.js) and runs
+     it as a labelled session. A criteria-built quiz stores its filter snapshot so
+     the summary's replay can resample a fresh draw; ID-based sets replay exactly.
    - #4 Pace trainer: a live per-question timer chip (state.settings.paceTrainer)
      against the target pace (state.settings.paceTargetSec), with over/under-pace
      marking in the feedback block.
@@ -18,7 +19,7 @@ PGRE.views = PGRE.views || {};
 PGRE.views.practice = (function () {
   var LETTERS = ['A', 'B', 'C', 'D', 'E'];
   // { topicId, qs, i, correct, xpEarned, answers[], qStart, sid, label, custom,
-  //   stage: 'question'|'feedback'|'summary', tagged }
+  //   criteria, stage: 'question'|'feedback'|'summary', tagged }
   var session = null;
   var paceTimer = null;   // module-scoped so it survives a session reset
   var keyBound = false;   // the document keydown listener is installed once
@@ -259,16 +260,26 @@ PGRE.views.practice = (function () {
   }
 
   /* ——— Custom quiz (#3): consume the builder's handoff ——— */
-  function startCustom() {
+  function startCustom(resample) {
     var raw = null;
     try { raw = sessionStorage.getItem('pgre-quiz-config'); } catch (e) { raw = null; }
     var cfg = null;
     if (raw) { try { cfg = JSON.parse(raw); } catch (e2) { cfg = null; } }
     if (!cfg || !cfg.ids || !cfg.ids.length) { renderNoCustom(); return; }
     var qs = [];
-    cfg.ids.forEach(function (id) { var q = PGRE.questionById(id); if (q) qs.push(q); });
+    // Replay ("Draw a fresh set") of a criteria-built quiz resamples from the
+    // original criteria against the current pool; mounting #/practice/custom
+    // or replaying an ID-based set (no criteria) reuses the exact ids.
+    if (resample && cfg.criteria && PGRE.views.build && PGRE.views.build.resample) {
+      PGRE.views.build.resample(cfg.criteria, cfg.ids.length).forEach(function (id) {
+        var q = PGRE.questionById(id); if (q) qs.push(q);
+      });
+    } else {
+      cfg.ids.forEach(function (id) { var q = PGRE.questionById(id); if (q) qs.push(q); });
+    }
     if (!qs.length) { renderNoCustom(); return; }
-    beginPractice(shuffle(qs), { topicId: 'custom', label: cfg.label || 'Custom quiz', custom: true });
+    beginPractice(shuffle(qs), { topicId: 'custom', label: cfg.label || 'Custom quiz', custom: true,
+                                 criteria: cfg.criteria || null });
   }
 
   function renderNoCustom() {
@@ -285,6 +296,7 @@ PGRE.views.practice = (function () {
     var topicId = opts.topicId || 'all';
     session = { topicId: topicId, qs: qs, i: 0, correct: 0, xpEarned: 0, answers: [],
                 qStart: Date.now(), label: opts.label || null, custom: !!opts.custom,
+                criteria: opts.criteria || null,
                 filter: opts.filter || null, stage: 'question', assess: null,
                 sid: PGRE.gamify.beginSession(topicId, 'practice', qs.length) };
     renderQuestion();
@@ -324,6 +336,10 @@ PGRE.views.practice = (function () {
     html += '<div id="feedback"></div></div>';
     el().innerHTML = html;
     PGRE.typesetMath(el());
+    if (window.PGRE && PGRE.motion && PGRE.motion.animateMeter) {
+      var mf = el().querySelector('.meter-thin .meter-fill');
+      if (mf) PGRE.motion.animateMeter(mf, 100 * session.i / session.qs.length);
+    }
     window.scrollTo(0, 0); // in-place swap: route()'s reset doesn't run here
     session.qStart = Date.now();
     startPaceTimer();
@@ -359,7 +375,7 @@ PGRE.views.practice = (function () {
 
     var fb = document.getElementById('feedback');
     fb.innerHTML =
-      '<div class="feedback ' + (isCorrect ? 'feedback-good' : 'feedback-bad') + '">' +
+      '<div class="feedback reveal-in ' + (isCorrect ? 'feedback-good' : 'feedback-bad') + '">' +
         '<span class="fb-icon">' + (isCorrect ? '✓' : '✗') + '</span>' +
         '<strong>' + (isCorrect ? 'Correct' : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
         '<span class="fb-xp">+' + xp + ' XP</span>' +
@@ -374,6 +390,10 @@ PGRE.views.practice = (function () {
     PGRE.typesetMath(fb);
     session.assess = PGRE.assess.bind(fb, q, isCorrect);
     bindNotes(fb, q);
+    if (window.PGRE && PGRE.motion && PGRE.motion.countUp) {
+      var xpEl = fb.querySelector('.fb-xp');
+      if (xpEl) PGRE.motion.countUp(xpEl, xp, { duration: 600, format: function (n) { return '+' + Math.round(n) + ' XP'; } });
+    }
     var nb = document.getElementById('next-btn');
     nb.addEventListener('click', next);
     nb.focus();
@@ -420,15 +440,20 @@ PGRE.views.practice = (function () {
     var custom = session.custom;
     var backLink = custom ? '#/build' : (session.topicId === 'all' ? '#/' : '#/topic/' + session.topicId);
     html += '<div class="btn-row">' +
-      '<button class="btn btn-primary" id="again-btn">' + (custom ? 'Run this set again' : 'Practice again') + '</button>' +
+      '<button class="btn btn-primary" id="again-btn">' +
+        (custom ? (session.criteria ? 'Draw a fresh set' : 'Run this set again') : 'Practice again') + '</button>' +
       '<a class="btn btn-ghost" href="' + backLink + '">Done</a>' +
     '</div></div>';
     var topicId = session.topicId, filter = session.filter;
     el().innerHTML = html;
     PGRE.typesetMath(el());
+    if (window.PGRE && PGRE.motion && PGRE.motion.countUp) {
+      var pctEl = el().querySelector('.summary-pct');
+      if (pctEl) PGRE.motion.countUp(pctEl, pct, { duration: 900, format: function (n) { return Math.round(n) + '%'; } });
+    }
     document.getElementById('again-btn').addEventListener('click', function () {
       if (Date.now() - lastRenderAt < 300) return; // Finish double-click guard
-      if (custom) startCustom();
+      if (custom) startCustom(true);
       else renderConfig(topicId, filter);
     });
   }

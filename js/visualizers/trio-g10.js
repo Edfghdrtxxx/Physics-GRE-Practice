@@ -35,7 +35,14 @@
   var SANS = '11px Inter, -apple-system, sans-serif';
   var MONO = '11px "JetBrains Mono", ui-monospace, monospace';
 
+  function syncStageTheme() {
+    var t = PGRE.vizStageTheme ? PGRE.vizStageTheme() : null;
+    if (!t) return;
+    CREAM = t.bg; PANEL = t.panel; LINE = t.line; INK = t.ink; MUTED = t.muted; GRID = t.gridMid;
+  }
+
   function fillStage(ctx, width, height) {
+    syncStageTheme();
     ctx.fillStyle = (CV && CV.colors && CV.colors.bg) || CREAM;
     ctx.fillRect(0, 0, width, height);
   }
@@ -47,6 +54,7 @@
 
   PGRE.visualizers['cpgf-5.27'] = {
     id: 'cpgf-5.27',
+    topic: 'qm',
     title: 'Free Particle Quantum Wave & Energy: $\\psi(x) = e^{\\pm ikx}, \\; E = \\hbar^2 k^2/(2m)$',
     formulaLatex: '\\psi(x) = e^{\\pm ikx}, \\qquad E = \\frac{\\hbar^2 k^2}{2m} = \\hbar \\omega',
     physicalStory: `For a free quantum particle ($V(x) = 0$), the time-independent Schrödinger equation yields complex plane-wave energy eigenstates $\\psi(x) = e^{\\pm ikx}$. The probability density $|\\psi(x)|^2 = 1$ is uniform throughout all space, reflecting absolute spatial delocalization in exchange for exact de Broglie momentum $p = \\hbar k$. The quantum dispersion relation $\\omega(k) = \\frac{\\hbar k^2}{2m}$ is quadratic in wavenumber $k$, creating a fundamental quantum phenomenon: the phase velocity $v_p = \\frac{\\omega}{k} = \\frac{\\hbar k}{2m} = \\frac{1}{2} v_{\\text{particle}}$ travels at exactly HALF the speed of the classical particle and group velocity $v_g = \\frac{d\\omega}{dk} = \\frac{\\hbar k}{m} = v_{\\text{particle}}$.`,
@@ -120,91 +128,26 @@
     ],
 
     parameters: [
-      { id: 'mode', name: 'Wave Mode', type: 'select', options: ['plane', 'packet', 'standing'], default: 'packet' },
-      { id: 'k', name: 'Wavenumber $k$', min: 1.0, max: 6.0, step: 0.2, default: 3.0, unit: 'rad/m' },
-      { id: 'speed', name: 'Time Speed', min: 0.2, max: 2.0, step: 0.1, default: 1.0, unit: 'x' }
+      { id: 'mode', label: 'Wave Mode', type: 'select', options: [
+        { value: 'plane', label: 'Plane wave $e^{i(kx-\\omega t)}$' },
+        { value: 'packet', label: 'Dispersive packet ($v_g$ vs $v_p$)' },
+        { value: 'standing', label: 'Standing wave $\\cos(kx)$' }
+      ], default: 'packet' },
+      { id: 'k', label: 'Wavenumber $k$', min: 1.0, max: 6.0, step: 0.2, default: 3.0, unit: 'rad/m' },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
 
     init(container, state, redraw) {
-      createControlStyles();
-      container.innerHTML = '';
-
-      const panel = document.createElement('div');
-      panel.className = 'pgre-control-panel';
-
-      // Mode selector
-      const mRow = document.createElement('div');
-      mRow.className = 'pgre-control-row';
-      mRow.innerHTML = `<span class="pgre-control-label">Wave Superposition:</span>`;
-      const btnGroup = document.createElement('div');
-      btnGroup.className = 'pgre-btn-group';
-
-      const modes = [
-        { id: 'plane', label: 'Plane Wave $e^{i(kx-\\omega t)}$' },
-        { id: 'packet', label: 'Dispersive Wavepacket ($v_g$ vs $v_p$)' },
-        { id: 'standing', label: 'Standing Wave $\\cos(kx)$' }
-      ];
-
-      modes.forEach(m => {
-        const btn = document.createElement('button');
-        btn.className = `pgre-btn ${(state.mode || 'packet') === m.id ? 'active' : ''}`;
-        btn.textContent = m.label;
-        btn.addEventListener('click', () => {
-          state.mode = m.id;
-          btnGroup.querySelectorAll('.pgre-btn').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          redraw();
-        });
-        btnGroup.appendChild(btn);
-      });
-      mRow.appendChild(btnGroup);
-      panel.appendChild(mRow);
-
-      // k slider
-      const kRow = document.createElement('div');
-      kRow.className = 'pgre-control-row';
-      kRow.innerHTML = `
-        <span class="pgre-control-label">Wavenumber $k$:</span>
-        <input type="range" class="pgre-slider" min="1.0" max="6.0" step="0.2" value="${state.k || 3.0}">
-        <span class="pgre-control-value">${(state.k || 3.0).toFixed(1)}</span>
-      `;
-      const kSlider = kRow.querySelector('input');
-      const kVal = kRow.querySelector('.pgre-control-value');
-      kSlider.addEventListener('input', (e) => {
-        state.k = parseFloat(e.target.value);
-        kVal.textContent = state.k.toFixed(1);
-        redraw();
-      });
-      panel.appendChild(kRow);
-
-      // Speed slider
-      const sRow = document.createElement('div');
-      sRow.className = 'pgre-control-row';
-      sRow.innerHTML = `
-        <span class="pgre-control-label">Time Evolution Speed:</span>
-        <input type="range" class="pgre-slider" min="0.2" max="2.0" step="0.1" value="${state.speed || 1.0}">
-        <span class="pgre-control-value">${(state.speed || 1.0).toFixed(1)}x</span>
-      `;
-      const sSlider = sRow.querySelector('input');
-      const sVal = sRow.querySelector('.pgre-control-value');
-      sSlider.addEventListener('input', (e) => {
-        state.speed = parseFloat(e.target.value);
-        sVal.textContent = state.speed.toFixed(1) + 'x';
-        redraw();
-      });
-      panel.appendChild(sRow);
-
-      container.appendChild(panel);
-
       if (state._animTime === undefined) state._animTime = 0;
     },
 
     draw(ctx, width, height, state, dt) {
       const mode = state.mode || 'packet';
       const k = state.k || 3.0;
-      const speed = state.speed || 1.0;
+      let simSpeed = parseFloat(state.simSpeed);
+      if (isNaN(simSpeed)) simSpeed = 1.0;
 
-      state._animTime = (state._animTime || 0) + (dt || 0.016) * speed;
+      state._animTime = (state._animTime || 0) + (dt || 0.016) * simSpeed;
       const t = state._animTime;
 
       const omega = 0.5 * k * k;
@@ -262,6 +205,22 @@
         return x + 20 + tw + 16;
       }
 
+      function keyDot(x, y, color, label) {
+        ctx.save();
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x + 8, y, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = INK;
+        ctx.font = SANS;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, x + 18, y);
+        const tw = ctx.measureText ? ctx.measureText(label).width : label.length * 6;
+        ctx.restore();
+        return x + 18 + tw + 16;
+      }
+
       if (mode === 'plane') {
         ctx.strokeStyle = CORAL;
         ctx.lineWidth = 2.4;
@@ -298,9 +257,9 @@
 
         let kx = plotX + 4;
         const ky = plotY + 10;
-        kx = keyItem(kx, ky, CORAL, false, 'Re ψ');
-        kx = keyItem(kx, ky, TEAL, true, 'Im ψ');
-        keyItem(kx, ky, GOLD, false, '|ψ|² = 1');
+        kx = keyItem(kx, ky, CORAL, false, 'Re psi');
+        kx = keyItem(kx, ky, TEAL, true, 'Im psi');
+        keyItem(kx, ky, GOLD, false, '|psi|^2 = 1');
       } else if (mode === 'standing') {
         ctx.strokeStyle = 'rgba(212, 160, 23, 0.55)';
         ctx.lineWidth = 1.5;
@@ -338,8 +297,9 @@
 
         let kx = plotX + 4;
         const ky = plotY + 10;
-        kx = keyItem(kx, ky, CORAL, false, 'Standing Wave Profile');
-        keyItem(kx, ky, GOLD, false, 'Nodes of |ψ|²');
+        kx = keyItem(kx, ky, CORAL, false, 'Standing wave');
+        kx = keyItem(kx, ky, GOLD, false, '|psi|^2');
+        keyDot(kx, ky, GOLD, 'nodes');
       } else {
         const sigma = 1.2;
         const timeScale = 0.25;
@@ -409,23 +369,26 @@
         let kx = plotX + 4;
         const ky = plotY + 10;
         ctx.save();
+        ctx.fillStyle = 'rgba(93, 184, 166, 0.40)';
+        ctx.beginPath();
+        ctx.moveTo(kx, ky + 6);
+        ctx.lineTo(kx + 9, ky - 6);
+        ctx.lineTo(kx + 18, ky + 6);
+        ctx.closePath();
+        ctx.fill();
         ctx.fillStyle = GOLD;
         ctx.beginPath();
-        ctx.arc(kx + 4, ky, 3.5, 0, Math.PI * 2);
+        ctx.arc(kx + 9, ky - 6, 3.2, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = INK;
         ctx.font = SANS;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText('Envelope', kx + 12, ky);
-        const tw = ctx.measureText ? ctx.measureText('Envelope').width : 60;
-        kx = kx + 12 + tw + 18;
-        ctx.fillStyle = TEAL;
-        ctx.beginPath();
-        ctx.arc(kx + 4, ky, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = INK;
-        ctx.fillText('Ripples', kx + 12, ky);
+        ctx.fillText('envelope / vg', kx + 22, ky);
+        const twEnv = ctx.measureText ? ctx.measureText('envelope / vg').width : 80;
+        kx = kx + 22 + twEnv + 14;
+        kx = keyItem(kx, ky, CORAL, false, 'phase ripples');
+        keyDot(kx, ky, TEAL, 'phase crest / vp');
         ctx.restore();
       }
 
@@ -477,14 +440,33 @@
 
       ctx.restore();
 
-      vizLegend('Free-particle wave', [
+      var legendRows = [
         { label: 'Mode', value: mode },
         { label: '$k$', value: '$' + k.toFixed(1) + '\\text{ rad/m}$' },
         { label: '$E = \\hbar^2 k^2/(2m)$', value: '$' + omega.toFixed(2) + '$' },
         { label: '$v_p = \\omega/k$', value: '$' + vp.toFixed(2) + '$' },
         { label: '$v_g = d\\omega/dk$', value: '$' + vg.toFixed(2) + '$' },
         { label: '$v_g / v_p$', value: '$2$' }
-      ]);
+      ];
+      if (mode === 'packet') {
+        legendRows.push(
+          { label: 'Teal fill + gold peak', value: 'envelope / $v_g$' },
+          { label: 'Coral stroke', value: 'phase ripples' },
+          { label: 'Teal track bead', value: 'phase crest / $v_p$' }
+        );
+      } else if (mode === 'standing') {
+        legendRows.push(
+          { label: 'Gold curve', value: '$|\\psi|^2$' },
+          { label: 'Gold dots', value: 'nodes' }
+        );
+      } else {
+        legendRows.push(
+          { label: 'Coral', value: '$\\mathrm{Re}\\,\\psi$' },
+          { label: 'Teal dashed', value: '$\\mathrm{Im}\\,\\psi$' },
+          { label: 'Gold', value: '$|\\psi|^2 = 1$' }
+        );
+      }
+      vizLegend('Free-particle wave', legendRows);
     },
 
     challenge: {
@@ -503,6 +485,7 @@
 
   PGRE.visualizers['cpgf-6.18'] = {
     id: 'cpgf-6.18',
+    topic: 'sr',
     title: 'Relativistic Kinetic Energy: $T = (\\gamma - 1)mc^2$',
     formulaLatex: 'T = E - mc^2 = (\\gamma - 1)mc^2, \\qquad \\gamma = \\frac{1}{\\sqrt{1 - v^2/c^2}}',
     physicalStory: `In special relativity, accelerating a particle with constant force does not produce infinite linear velocity because its relativistic inertia increases asymptotically as $v \\to c$. Total relativistic energy is $E = \\gamma mc^2 = \\sqrt{p^2 c^2 + m^2 c^4}$. Kinetic energy $T$ is defined as the work required to accelerate the particle from rest to speed $v$, which equals total energy minus rest energy: $T = E - mc^2 = (\\gamma - 1)mc^2$. In the non-relativistic limit $v \\ll c$, Taylor expanding $\\gamma$ recovers classical Newtonian kinetic energy $\\frac{1}{2}mv^2$ plus higher-order corrections. As $\\beta = v/c \\to 1$, $T \\to \\infty$, establishing the speed of light $c$ as an impassable cosmic speed limit for all massive bodies.`,
@@ -576,64 +559,13 @@
     ],
 
     parameters: [
-      { id: 'beta', name: 'Velocity Ratio $\\beta = v/c$', min: 0.0, max: 0.99, step: 0.01, default: 0.80, unit: 'c' },
-      { id: 'particle', name: 'Particle Type', type: 'select', options: ['electron', 'proton', 'muon'], default: 'electron' }
+      { id: 'beta', label: 'Velocity Ratio $\\beta = v/c$', min: 0.0, max: 0.99, step: 0.01, default: 0.80, unit: 'c' },
+      { id: 'particle', label: 'Particle Type', type: 'select', options: [
+        { value: 'electron', label: '$e^-\\ (0.511\\,\\mathrm{MeV})$' },
+        { value: 'muon', label: '$\\mu^-\\ (105.7\\,\\mathrm{MeV})$' },
+        { value: 'proton', label: '$p\\ (938.3\\,\\mathrm{MeV})$' }
+      ], default: 'electron' }
     ],
-
-    init(container, state, redraw) {
-      createControlStyles();
-      container.innerHTML = '';
-
-      const panel = document.createElement('div');
-      panel.className = 'pgre-control-panel';
-
-      // Beta slider
-      const bRow = document.createElement('div');
-      bRow.className = 'pgre-control-row';
-      bRow.innerHTML = `
-        <span class="pgre-control-label">Particle Velocity $\\beta = v/c$:</span>
-        <input type="range" class="pgre-slider" min="0.0" max="0.99" step="0.01" value="${state.beta !== undefined ? state.beta : 0.80}">
-        <span class="pgre-control-value">${(state.beta !== undefined ? state.beta : 0.80).toFixed(2)} c</span>
-      `;
-      const bSlider = bRow.querySelector('input');
-      const bVal = bRow.querySelector('.pgre-control-value');
-      bSlider.addEventListener('input', (e) => {
-        state.beta = parseFloat(e.target.value);
-        bVal.textContent = state.beta.toFixed(2) + ' c';
-        redraw();
-      });
-      panel.appendChild(bRow);
-
-      // Particle selection buttons
-      const pRow = document.createElement('div');
-      pRow.className = 'pgre-control-row';
-      pRow.innerHTML = `<span class="pgre-control-label">Target Particle:</span>`;
-      const btnGroup = document.createElement('div');
-      btnGroup.className = 'pgre-btn-group';
-
-      const particles = [
-        { id: 'electron', label: 'Electron (0.511 MeV)' },
-        { id: 'muon', label: 'Muon (105.7 MeV)' },
-        { id: 'proton', label: 'Proton (938.3 MeV)' }
-      ];
-
-      particles.forEach(p => {
-        const btn = document.createElement('button');
-        btn.className = `pgre-btn ${(state.particle || 'electron') === p.id ? 'active' : ''}`;
-        btn.textContent = p.label;
-        btn.addEventListener('click', () => {
-          state.particle = p.id;
-          btnGroup.querySelectorAll('.pgre-btn').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          redraw();
-        });
-        btnGroup.appendChild(btn);
-      });
-      pRow.appendChild(btnGroup);
-      panel.appendChild(pRow);
-
-      container.appendChild(panel);
-    },
 
     draw(ctx, width, height, state, dt) {
       const beta = state.beta !== undefined ? state.beta : 0.80;
@@ -647,7 +579,7 @@
       const T_rel = (gamma - 1) * restMassMeV;
       const T_class = 0.5 * beta * beta * restMassMeV;
       const pc_MeV = Math.sqrt(Math.max(0, T_rel * (T_rel + 2 * restMassMeV)));
-      const errPct = ((T_rel - T_class) / Math.max(0.001, T_rel)) * 100;
+      const newtonRelErr = T_class > 1e-9 ? ((T_rel - T_class) / T_class) * 100 : 0;
 
       fillStage(ctx, width, height);
       ctx.save();
@@ -689,7 +621,7 @@
         ctx.moveTo(originX, gy);
         ctx.lineTo(originX + plotW, gy);
         ctx.stroke();
-        ctx.fillText(tVal.toFixed(1), originX - 6, gy);
+        ctx.fillText(tVal.toFixed(2), originX - 6, gy);
       }
 
       const cX = mapB(1);
@@ -720,7 +652,7 @@
       ctx.font = SANS;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
-      ctx.fillText('T / mc²', originX + 8, originY - plotH - 4);
+      ctx.fillText('T / mc^2', originX + 8, originY - plotH - 4);
       ctx.textAlign = 'right';
       ctx.textBaseline = 'top';
       ctx.fillText('β = v/c', originX + plotW - 10, originY + 20);
@@ -758,7 +690,7 @@
 
       ctx.save();
       ctx.setLineDash([3, 3]);
-      ctx.strokeStyle = 'rgba(20, 20, 19, 0.28)';
+      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.28);
       ctx.lineWidth = 1;
       const curX = mapB(Math.min(beta, 1));
       const curY = mapT(gamma - 1);
@@ -839,13 +771,14 @@
 
       vizLegend('Relativistic kinetic energy', [
         { label: 'Particle', value: particle },
+        { label: 'Plot', value: '$T/mc^2$ vs $\\beta$' },
         { label: '$\\beta = v/c$', value: '$' + beta.toFixed(2) + '$' },
         { label: '$\\gamma$', value: '$' + gamma.toFixed(3) + '$' },
         { label: '$E_0 = mc^2$', value: '$' + restMassMeV.toFixed(3) + '\\text{ MeV}$' },
         { label: '$T = (\\gamma - 1)mc^2$', value: '$' + T_rel.toFixed(3) + '\\text{ MeV}$' },
-        { label: '$T_{\\text{Newton}}$', value: '$' + T_class.toFixed(3) + '\\text{ MeV}$' },
+        { label: '$T_N = \\frac{1}{2}mv^2$', value: '$' + T_class.toFixed(3) + '\\text{ MeV}$' },
         { label: '$pc$', value: '$' + pc_MeV.toFixed(3) + '\\text{ MeV}$' },
-        { label: 'Error vs Newton', value: '$' + errPct.toFixed(1) + '\\%$' }
+        { label: 'Newton relative error $(T-T_N)/T_N$', value: '$' + newtonRelErr.toFixed(1) + '\\%$' }
       ]);
     },
 
@@ -865,6 +798,7 @@
 
   PGRE.visualizers['cpgf-7.17'] = {
     id: 'cpgf-7.17',
+    topic: 'lb',
     title: 'Radioactive Decay Law: $N(t) = N_0 e^{-t/\\tau}$',
     formulaLatex: 'N(t) = N_0 e^{-t/\\tau} = N_0 e^{-\\lambda t} = N_0 \\left(\\frac{1}{2}\\right)^{t/t_{1/2}}',
     physicalStory: `Radioactive decay is a memoryless Poisson stochastic process where every unstable parent nucleus possesses a fixed transition probability per unit time $\\lambda$ of spontaneously decaying into a daughter nucleus, regardless of its previous age. For a large macroscopic ensemble $N_0$, the statistical aggregate follows a smooth exponential curve $N(t) = N_0 e^{-\\lambda t} = N_0 e^{-t/\\tau}$. The mean lifetime $\\tau = 1/\\lambda$ represents the average survival duration of a nucleus before decay (when $N(\\tau) = N_0/e \\approx 36.8\\% N_0$). The half-life $t_{1/2} = \\tau \\ln 2 \\approx 0.693 \\tau$ is the time elapsed when exactly half the original sample has decayed.`,
@@ -938,92 +872,28 @@
     ],
 
     parameters: [
-      { id: 'tHalf', name: 'Half-Life $t_{1/2}$', min: 2.0, max: 15.0, step: 0.5, default: 5.0, unit: 's' },
-      { id: 'decayType', name: 'Decay Particle', type: 'select', options: ['alpha', 'beta', 'gamma'], default: 'alpha' },
-      { id: 'playing', name: 'Simulation Active', type: 'boolean', default: true }
+      { id: 'tHalf', label: 'Half-Life $t_{1/2}$', min: 2.0, max: 15.0, step: 0.5, default: 5.0, unit: 's' },
+      { id: 'decayType', label: 'Decay Particle', type: 'select', options: [
+        { value: 'alpha', label: 'Alpha ($\\alpha$)' },
+        { value: 'beta', label: 'Beta ($\\beta^-$)' },
+        { value: 'gamma', label: 'Gamma ($\\gamma$)' }
+      ], default: 'alpha' },
+      { id: 'playing', label: 'Simulation Active', type: 'boolean', default: true },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' },
+      { id: 'reseed', label: 'Reset sample', type: 'boolean', default: false }
     ],
 
     init(container, state, redraw) {
-      createControlStyles();
-      container.innerHTML = '';
-
-      const panel = document.createElement('div');
-      panel.className = 'pgre-control-panel';
-
-      // Half-life slider
-      const thRow = document.createElement('div');
-      thRow.className = 'pgre-control-row';
-      thRow.innerHTML = `
-        <span class="pgre-control-label">Half-Life $t_{1/2}$:</span>
-        <input type="range" class="pgre-slider" min="2.0" max="15.0" step="0.5" value="${state.tHalf || 5.0}">
-        <span class="pgre-control-value">${(state.tHalf || 5.0).toFixed(1)} s</span>
-      `;
-      const thSlider = thRow.querySelector('input');
-      const thVal = thRow.querySelector('.pgre-control-value');
-      thSlider.addEventListener('input', (e) => {
-        state.tHalf = parseFloat(e.target.value);
-        thVal.textContent = state.tHalf.toFixed(1) + ' s';
-        redraw();
-      });
-      panel.appendChild(thRow);
-
-      // Decay Mode selector
-      const dRow = document.createElement('div');
-      dRow.className = 'pgre-control-row';
-      dRow.innerHTML = `<span class="pgre-control-label">Radiation Mode:</span>`;
-      const btnGroup = document.createElement('div');
-      btnGroup.className = 'pgre-btn-group';
-
-      const modes = [
-        { id: 'alpha', label: 'Alpha ($\\alpha$ cluster)' },
-        { id: 'beta', label: 'Beta ($\\beta^-$ electron)' },
-        { id: 'gamma', label: 'Gamma ($\\gamma$ photon)' }
-      ];
-
-      modes.forEach(m => {
-        const btn = document.createElement('button');
-        btn.className = `pgre-btn ${(state.decayType || 'alpha') === m.id ? 'active' : ''}`;
-        btn.textContent = m.label;
-        btn.addEventListener('click', () => {
-          state.decayType = m.id;
-          btnGroup.querySelectorAll('.pgre-btn').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          redraw();
-        });
-        btnGroup.appendChild(btn);
-      });
-      dRow.appendChild(btnGroup);
-      panel.appendChild(dRow);
-
-      // Simulation Play / Reset Controls
-      const ctlRow = document.createElement('div');
-      ctlRow.className = 'pgre-control-row';
-      ctlRow.innerHTML = `
-        <span class="pgre-control-label">Simulation Control:</span>
-        <div class="pgre-btn-group">
-          <button class="pgre-btn accent" id="pgre-decay-reset">Reset Atoms</button>
-          <button class="pgre-btn" id="pgre-decay-toggle">${state.playing !== false ? 'Pause' : 'Play'}</button>
-        </div>
-      `;
-      const resetBtn = ctlRow.querySelector('#pgre-decay-reset');
-      const toggleBtn = ctlRow.querySelector('#pgre-decay-toggle');
-
-      resetBtn.addEventListener('click', () => {
-        state._simTime = 0;
-        initAtomLattice(state);
-        redraw();
-      });
-
-      toggleBtn.addEventListener('click', () => {
-        state.playing = state.playing === false ? true : false;
-        toggleBtn.textContent = state.playing ? 'Pause' : 'Play';
-        redraw();
-      });
-      panel.appendChild(ctlRow);
-
-      container.appendChild(panel);
-
       initAtomLattice(state);
+      state._simTime = 0;
+    },
+
+    onParamChange: function (id, val, state) {
+      if (!state) return;
+      if (id === 'tHalf' || id === 'decayType' || id === 'reseed') {
+        initAtomLattice(state);
+        state._simTime = 0;
+      }
     },
 
     draw(ctx, width, height, state, dt) {
@@ -1032,14 +902,16 @@
       const lambda = 1 / tau;
       const isPlaying = state.playing !== false;
       const decayType = state.decayType || 'alpha';
+      let simSpeed = parseFloat(state.simSpeed);
+      if (isNaN(simSpeed)) simSpeed = 1.0;
 
       if (!state._atoms) initAtomLattice(state);
       if (!state._ejections) state._ejections = [];
 
       if (isPlaying) {
-        state._simTime = (state._simTime || 0) + (dt || 0.016);
-        const simDt = dt || 0.016;
-        const decayProbPerStep = 1 - Math.exp(-lambda * simDt);
+        const step = (dt || 0.016) * simSpeed;
+        state._simTime = (state._simTime || 0) + step;
+        const decayProbPerStep = 1 - Math.exp(-lambda * step);
 
         state._atoms.forEach(atom => {
           if (!atom.decayed && Math.random() < decayProbPerStep) {
@@ -1057,6 +929,11 @@
             });
           }
         });
+
+        state._ejections.forEach(p => {
+          p.life -= step * 1.5;
+        });
+        state._ejections = state._ejections.filter(p => p.life > 0);
       }
       const curTime = state._simTime || 0;
 
@@ -1120,7 +997,7 @@
           ctx.moveTo(tx, originY);
           ctx.lineTo(tx, originY - plotH);
           ctx.stroke();
-          halfLabels.push({ x: tx, text: (mult === 1 ? 't½' : (mult + ' t½')) });
+          halfLabels.push({ x: tx, text: (mult === 1 ? 'half-life' : (mult + ' half-lives')) });
         }
       });
 
@@ -1128,17 +1005,19 @@
       ctx.textBaseline = 'top';
       ctx.font = SANS;
       ctx.fillStyle = MUTED;
+      const tauX = mapT(tau);
+      const tauY = mapN(totalAtoms / Math.E);
+      const tauLabelW = ctx.measureText ? ctx.measureText('tau').width : 20;
       let lastRight = originX;
       halfLabels.forEach(lab => {
         const tw = ctx.measureText ? ctx.measureText(lab.text).width : 24;
-        if (lab.x - tw / 2 > lastRight + 4 && lab.x + tw / 2 < originX + plotW) {
+        const overlapsTau = Math.abs(lab.x - tauX) < (tw + tauLabelW) / 2 + 8;
+        if (lab.x - tw / 2 > lastRight + 4 && lab.x + tw / 2 < originX + plotW && !overlapsTau) {
           ctx.fillText(lab.text, lab.x, originY + 6);
           lastRight = lab.x + tw / 2;
         }
       });
 
-      const tauX = mapT(tau);
-      const tauY = mapN(totalAtoms / Math.E);
       if (tauX <= originX + plotW) {
         ctx.strokeStyle = TEAL;
         ctx.setLineDash([3, 3]);
@@ -1149,6 +1028,13 @@
         ctx.lineTo(originX, tauY);
         ctx.stroke();
         ctx.setLineDash([]);
+        ctx.fillStyle = TEAL;
+        ctx.font = SANS;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        if (tauX - tauLabelW / 2 > originX && tauX + tauLabelW / 2 < originX + plotW) {
+          ctx.fillText('tau', tauX, originY + 6);
+        }
       }
 
       ctx.strokeStyle = AXIS;
@@ -1253,9 +1139,7 @@
         ctx.fill();
       });
 
-      state._ejections = state._ejections.filter(p => p.life > 0);
       state._ejections.forEach(p => {
-        p.life -= (dt || 0.016) * 1.5;
         const px = atomLeft + p.x * atomW + p.vx * (1 - p.life) * 0.5;
         const py = atomTop + p.y * atomH + p.vy * (1 - p.life) * 0.5;
         ctx.fillStyle = p.type === 'gamma' ? GOLD : (p.type === 'alpha' ? ROSE : TEAL);
@@ -1271,6 +1155,7 @@
         { label: '$t$', value: '$' + curTime.toFixed(2) + '\\text{ s}$' },
         { label: '$t_{1/2}$', value: '$' + tHalf.toFixed(1) + '\\text{ s}$' },
         { label: '$\\tau = t_{1/2} / \\ln 2$', value: '$' + tau.toFixed(2) + '\\text{ s}$' },
+        { label: 'Teal drop on $t$-axis', value: '$\\tau$' },
         { label: '$N_{\\text{parent}}$', value: '$' + survivingCount + ' / ' + totalAtoms + '$' },
         { label: '$N_{\\text{theory}}$', value: '$' + curTheoryN.toFixed(1) + '$' },
         { label: 'Activity $\\lambda N$', value: '$' + simActivity.toFixed(1) + '\\text{ Bq}$' },

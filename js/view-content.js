@@ -226,6 +226,7 @@ PGRE.views.library = (function () {
           '<button class="btn btn-ghost" id="export-btn">Export progress</button>' +
           '<button class="btn btn-ghost" id="import-progress-btn">Restore from backup…</button>' +
           '<input type="file" id="progress-input" accept=".json" hidden>' +
+          '<button class="btn btn-ghost" id="reset-formulas-btn">Reset formula cards</button>' +
           '<button class="btn btn-danger-ghost" id="reset-btn">Reset all progress</button>' +
         '</div>' +
       '</div>';
@@ -279,6 +280,15 @@ PGRE.views.library = (function () {
         };
         r.readAsText(pInput.files[0]);
         pInput.value = '';
+      });
+
+      var rfBtn = document.getElementById('reset-formulas-btn');
+      if (rfBtn) rfBtn.addEventListener('click', function () {
+        if (confirm('Reset all formula flashcards to scratch? Exam scores and practice question attempts will be kept.')) {
+          PGRE.store.resetFormulaCards();
+          if (PGRE.refreshNavBadges) PGRE.refreshNavBadges();
+          PGRE.toast('Formula cards reset to new.', 'info');
+        }
       });
 
       document.getElementById('reset-btn').addEventListener('click', function () {

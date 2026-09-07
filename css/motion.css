@@ -1,0 +1,200 @@
+/* ——— Motion tokens & effects ———
+   Sits on top of style.css. Cream ground, one coral accent — motion stays
+   restrained: fades, small rises, no shadows or glows. */
+
+:root {
+  --dur-fast: 120ms;
+  --dur: 220ms;
+  --dur-slow: 420ms;
+  --ease-out: cubic-bezier(.2, .7, .2, 1);
+  --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
+}
+
+/* ——— Top loading bar ——— */
+.motion-loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  z-index: 30;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.motion-loader-done {
+  transition: width var(--dur-fast) var(--ease-out),
+              opacity var(--dur) var(--ease-out);
+}
+.motion-loader-hide {
+  opacity: 0;
+}
+
+/* ——— View-enter ——— */
+#view.view-enter {
+  animation: view-enter var(--dur) var(--ease-out) both;
+}
+@keyframes view-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ——— Staggered children ——— */
+.stagger-in {
+  opacity: 0;
+  animation: stagger-in var(--dur) var(--ease-out) both;
+}
+@keyframes stagger-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ——— Button micro-interaction ——— */
+.btn {
+  transition: transform var(--dur-fast) var(--ease-out),
+              background-color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out);
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ——— Reduced motion: collapse everything ——— */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 1ms;
+    --dur: 1ms;
+    --dur-slow: 1ms;
+  }
+  #view.view-enter,
+  .stagger-in {
+    animation: none;
+  }
+  .stagger-in {
+    opacity: 1;
+  }
+  .btn:active {
+    transform: none;
+  }
+  .motion-loader {
+    transition: none;
+  }
+}
+
+/* == views-a == */
+/* Views-A: unlock pulse on achievement toast or card — background tint pulse, no scale/glow/shadow */
+.toast-unlocked,
+.ach-card.unlocked-pulse {
+  animation: unlock-pulse var(--dur-slow) var(--ease-out) both;
+}
+@keyframes unlock-pulse {
+  0%   { background-color: color-mix(in srgb, var(--accent) 18%, transparent); }
+  100% { background-color: transparent; }
+}
+
+/* Views-A: brief coral highlight on a just-checked plan task row, tint fading over --dur */
+.task-just-done {
+  animation: task-highlight var(--dur) var(--ease-out) both;
+}
+@keyframes task-highlight {
+  from { background-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+  to   { background-color: transparent; }
+}
+
+/* Views-A: analytics SVG bar entrance animation on first paint */
+.an-bar {
+  animation: an-bar-fade var(--dur-slow) var(--ease-out) both;
+}
+@keyframes an-bar-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-unlocked,
+  .ach-card.unlocked-pulse,
+  .task-just-done,
+  .an-bar {
+    animation: none !important;
+  }
+}
+
+/* == views-b == */
+
+/* ——— Skeleton loading bars (formulas study) ——— */
+.skel-bar {
+  height: 14px;
+  border-radius: 7px;
+  background: var(--panel);
+  margin: 14px 0;
+  animation: skel-pulse 1.4s var(--ease-out) infinite;
+}
+@keyframes skel-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* ——— Answer reveal: fade + 4px rise ——— */
+.reveal-in {
+  animation: reveal-in var(--dur) var(--ease-out) both;
+}
+@keyframes reveal-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ——— Choice tints: correct / wrong ——— */
+.choice {
+  transition: background-color var(--dur) var(--ease-out),
+              border-color var(--dur) var(--ease-out);
+}
+.choice.is-answer {
+  background-color: color-mix(in srgb, var(--good) 14%, transparent);
+  border-color: var(--good);
+}
+.choice.is-wrong {
+  background-color: color-mix(in srgb, var(--bad) 12%, transparent);
+  border-color: var(--bad);
+}
+
+/* ——— Grade button chosen tint (applied instantly, no delay) ——— */
+.grade-btn.chosen {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+}
+
+/* ——— Exam: thin progress meter + amber timer tick ——— */
+.exam-progress-meter {
+  width: 120px;
+  min-width: 80px;
+}
+.timer-tick .exam-timer-clock {
+  animation: timer-pulse 1s var(--ease-out) infinite;
+}
+@keyframes timer-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* ——— Flashmodes: matched pair fade-out ——— */
+.flash-tile.matched-out {
+  animation: matched-out var(--dur-slow) var(--ease-out) both;
+}
+@keyframes matched-out {
+  from { opacity: 1; }
+  to   { opacity: 0.3; }
+}
+
+/* ——— Reduced motion: static everything ——— */
+@media (prefers-reduced-motion: reduce) {
+  .skel-bar { animation: none; }
+  .reveal-in { animation: none; }
+  .timer-tick .exam-timer-clock { animation: none; }
+  .flash-tile.matched-out { animation: none; opacity: 0.3; }
+}

@@ -82,7 +82,19 @@ PGRE.views.plan = (function () {
   function wire() {
     document.querySelectorAll('#plan-root input[data-task]').forEach(function (cb) {
       cb.addEventListener('change', function () {
-        PGRE.gamify.toggleTask(cb.getAttribute('data-task'), parseInt(cb.getAttribute('data-xp'), 10));
+        var taskId = cb.getAttribute('data-task');
+        var taskXp = parseInt(cb.getAttribute('data-xp'), 10);
+        var weekDetails = cb.closest('details[data-week]');
+        var weekId = weekDetails ? weekDetails.getAttribute('data-week') : null;
+
+        // Capture previous widths of hero and affected week meters before re-render
+        var prevWeekFill = weekDetails ? weekDetails.querySelector('summary .meter-fill') : null;
+        var prevWeekWidth = prevWeekFill ? prevWeekFill.style.width : null;
+        var prevHeroFill = document.querySelector('#plan-root .hero .meter-fill');
+        var prevHeroWidth = prevHeroFill ? prevHeroFill.style.width : null;
+
+        PGRE.gamify.toggleTask(taskId, taskXp);
+
         // re-render, preserving which <details> are open
         var open = {};
         document.querySelectorAll('#plan-root details[data-week]').forEach(function (d) {
@@ -94,13 +106,90 @@ PGRE.views.plan = (function () {
           var id = d.getAttribute('data-week');
           if (id in open) d.open = open[id];
         });
+        PGRE.typesetMath(root);
         wire();
+
+        // Views-A: smoothly glide affected meters from previous to new value, and flash row
+        if (PGRE.motion && !PGRE.motion.reduced) {
+          var newHeroFill = document.querySelector('#plan-root .hero .meter-fill');
+          var newWeekDetails = weekId ? document.querySelector('#plan-root details[data-week="' + weekId + '"]') : null;
+          var newWeekFill = newWeekDetails ? newWeekDetails.querySelector('summary .meter-fill') : null;
+
+          if (prevHeroWidth && newHeroFill) {
+            var targetHeroWidth = newHeroFill.style.width;
+            newHeroFill.style.transition = 'none';
+            newHeroFill.style.width = prevHeroWidth;
+            requestAnimationFrame(function () {
+              requestAnimationFrame(function () {
+                if (newHeroFill) {
+                  newHeroFill.style.transition = '';
+                  newHeroFill.style.width = targetHeroWidth;
+                }
+              });
+            });
+          }
+
+          if (prevWeekWidth && newWeekFill) {
+            var targetWeekWidth = newWeekFill.style.width;
+            newWeekFill.style.transition = 'none';
+            newWeekFill.style.width = prevWeekWidth;
+            requestAnimationFrame(function () {
+              requestAnimationFrame(function () {
+                if (newWeekFill) {
+                  newWeekFill.style.transition = '';
+                  newWeekFill.style.width = targetWeekWidth;
+                }
+              });
+            });
+          }
+
+          var input = document.querySelector(
+            '#plan-root input[data-task="' + taskId + '"]');
+          if (input && input.checked) {
+            var row = input.closest('li.task');
+            if (row) {
+              row.classList.add('task-just-done');
+              setTimeout(function () { row.classList.remove('task-just-done'); }, 300);
+            }
+          }
+        }
       });
+    });
+  }
+
+  /* Views-A: run all plan meters (hero + weeks) from 0 to their value on initial paint. */
+  function animateMeters() {
+    if (!(PGRE.motion && PGRE.motion.animateMeter)) return;
+    document.querySelectorAll('#plan-root .meter-fill').forEach(function (f) {
+      var pct = parseFloat(f.style.width);
+      if (!isNaN(pct)) PGRE.motion.animateMeter(f, pct);
     });
   }
 
   return {
     render: function () { return '<div id="plan-root">' + body() + '</div>'; },
-    mount: function () { wire(); }
+    mount: function () {
+      PGRE.typesetMath(document.getElementById('plan-root'));
+      wire();
+      if (PGRE.motion && !PGRE.motion.reduced) {
+        var cd = document.querySelector('#plan-root .countdown-num');
+        if (cd && /^\d+$/.test(cd.textContent.trim())) {
+          PGRE.motion.countUp(cd, parseInt(cd.textContent, 10), { duration: 700 });
+        }
+        var note = document.querySelector('#plan-root .hero-xp-note');
+        if (note && PGRE.motion.countUp) {
+          var nm = note.textContent.trim().match(/^(\d+)\s*\/\s*(\d+)(.*)$/);
+          if (nm) {
+            var targetDone = parseInt(nm[1], 10);
+            var totalStr = nm[2] + nm[3];
+            PGRE.motion.countUp(note, targetDone, {
+              duration: 700,
+              format: function (v) { return Math.round(v) + ' / ' + totalStr; }
+            });
+          }
+        }
+        animateMeters();
+      }
+    }
   };
 })();

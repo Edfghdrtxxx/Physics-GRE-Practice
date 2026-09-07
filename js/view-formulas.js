@@ -28,14 +28,14 @@ PGRE.views.formulas = (function () {
   var browseTab = 'learned'; // Browse sub-tab: 'learned' | 'upcoming'
   var memStatsOpen = false;  // F10: Memory stats card starts collapsed each mount
   var ROUND_SIZE = 10;   // F11: grade presses per round (every press counts)
-  // ITEM 3: Mastered is a 5th action beside Again/Hard/Good/Easy — a fixed
-  // (exam-cap clamped) 20-day interval that graduates the card immediately.
+  // Classic Anki SM-2: four grades. (A legacy 'mastered' value may still
+  // appear in cardReviews / lastGrade from older sessions; history chips
+  // keep rendering it. Key 5 no longer grades.)
   var GRADES = [
-    { key: 'again',    label: 'Again',    hint: '1' },
-    { key: 'hard',     label: 'Hard',     hint: '2' },
-    { key: 'good',     label: 'Good',     hint: '3' },
-    { key: 'easy',     label: 'Easy',     hint: '4' },
-    { key: 'mastered', label: 'Mastered', hint: '5' }
+    { key: 'again', label: 'Again', hint: '1' },
+    { key: 'hard',  label: 'Hard',  hint: '2' },
+    { key: 'good',  label: 'Good',  hint: '3' },
+    { key: 'easy',  label: 'Easy',  hint: '4' }
   ];
   // F8: generic reconstruction prompts — used by "Rebuild hints" (pre-flip) and
   // the post-Again interstitial. Deriving beats re-reading.
@@ -139,7 +139,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20260804b';
+      s.src = 'js/flashmodes.js?v=20260906b';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -172,12 +172,16 @@ PGRE.views.formulas = (function () {
   function renderShell() {
     var empty = !deck.length;
     var tabs = [['study', 'Study'], ['match', 'Match'], ['type', 'Type'],
-                ['quiz', 'Quiz'], ['cloze', 'Cloze'], ['visual', 'Visualizer Lab'], ['search', 'Search']];
-    var html = '<div class="flash-tabs" role="tablist">';
+                ['quiz', 'Quiz'], ['cloze', 'Cloze'], ['visual', 'Lab'], ['search', 'Search']];
+    var html = '<div class="flash-tabs-bar"><div class="flash-tabs" role="tablist">';
     tabs.forEach(function (t) {
       var dis = empty && t[0] !== 'study';
+      var extra = '';
+      if (t[0] === 'visual') {
+        extra = ' title="Interactive Formula Visualizer Laboratory" aria-label="Visualizer Lab"';
+      }
       html += '<button class="flash-tab' + (mode === t[0] ? ' active' : '') + '" role="tab"' +
-        ' data-mode="' + t[0] + '"' + (dis ? ' disabled' : '') + '>' + t[1] + '</button>';
+        ' data-mode="' + t[0] + '"' + (dis ? ' disabled' : '') + extra + '>' + t[1] + '</button>';
     });
     html += '</div>';
     if (empty) {
@@ -187,6 +191,7 @@ PGRE.views.formulas = (function () {
       html += '<div class="flash-print-row">' +
         '<button class="btn btn-ghost btn-sm" id="print-formulas">Print formula sheet</button></div>';
     }
+    html += '</div>';
     html += '<div id="flash-body"></div>';
     root().innerHTML = html;
     root().querySelectorAll('.flash-tab').forEach(function (b) {
@@ -339,6 +344,36 @@ PGRE.views.formulas = (function () {
     if (PGRE.nav) PGRE.nav.setTrail([{ label: 'Visualizer Lab' }]);
     var filterTopic = 'all';
 
+    function formatThumbFormula(formula) {
+      if (!formula) return '';
+      var latex = String(formula).trim();
+      if (!latex.startsWith('$$') && !latex.startsWith('$') && !latex.startsWith('\\(') && !latex.startsWith('\\[')) {
+        latex = '$$' + latex + '$$';
+      }
+      return latex;
+    }
+
+    function formatThumbStory(text, maxLen) {
+      if (!text) return '';
+      var clean = String(text).trim().replace(/\s+/g, ' ');
+      var tokenRegex = /(\$\$[\s\S]*?\$\$|\$[^$]*?\$|\*\*[^*]+?\*\*|[^\s$*]+|\s+)/g;
+      var match;
+      var result = '';
+      var limit = maxLen || 135;
+      while ((match = tokenRegex.exec(clean)) !== null) {
+        var token = match[0];
+        if (result.length + token.length > limit && result.length >= 60) {
+          break;
+        }
+        result += token;
+      }
+      result = result.trim();
+      if (result.length < clean.length) {
+        result = result.replace(/[,;:\s]+$/, '') + '...';
+      }
+      return result.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+    }
+
     function renderLabContent() {
       var allVizIds = Object.keys((window.PGRE && window.PGRE.visualizers) || {}).filter(function (k) {
         return k.startsWith('cpgf-');
@@ -382,15 +417,20 @@ PGRE.views.formulas = (function () {
         var v = item.viz, c = item.card;
         var tObj = PGRE.topicById(c.topic);
         var tName = tObj ? tObj.name : c.topic.toUpperCase();
-        var shortStory = v.physicalStory ? (v.physicalStory.slice(0, 130) + '...') : (c.front || '');
+        var rawStory = (v && v.physicalStory) || (c && c.front) || '';
+        var shortStory = formatThumbStory(rawStory, 135);
+        var rawFormula = (v && v.formulaLatex) || (c && c.back) || '';
+        var formulaLatex = formatThumbFormula(rawFormula);
+        var titleText = (v && v.title) || (c && c.name) || '';
+
         html += '<div class="viz-thumb-card" data-viz-id="' + item.id + '">' +
           '<div class="viz-thumb-head">' +
             '<span class="viz-inline-badge">' + tName + '</span>' +
             '<span class="viz-thumb-eq">' + (c.eq ? ('Eq ' + c.eq) : item.id) + '</span>' +
           '</div>' +
-          '<div class="viz-thumb-title">' + PGRE.ui.esc(v.title || c.name || '') + '</div>' +
-          '<div class="viz-thumb-formula">' + (v.formulaLatex || c.back) + '</div>' +
-          '<div class="viz-thumb-desc">' + PGRE.ui.esc(shortStory) + '</div>' +
+          '<div class="viz-thumb-title">' + PGRE.ui.esc(titleText) + '</div>' +
+          '<div class="viz-thumb-formula">' + formulaLatex + '</div>' +
+          '<div class="viz-thumb-desc">' + shortStory + '</div>' +
           '<button class="btn btn-primary btn-sm" style="margin-top:auto;">Open Simulation</button>' +
         '</div>';
       });
@@ -432,7 +472,7 @@ PGRE.views.formulas = (function () {
     var html = '<div class="card"><h1>Formula recall</h1>' +
       '<p class="muted">Flip cards the way vocabulary apps do it: see the prompt, recall the ' +
       'formula, flip, then grade yourself — <strong>Again / Hard / Good / Easy</strong> sets ' +
-      'when the card returns. Each day serves a fixed batch of reviews plus a few new cards. ' +
+      'when the card returns. Each day <strong>you pick</strong> which cards to recall. ' +
       'The tabs above add <strong>Match</strong>, <strong>Type</strong> and <strong>Quiz</strong> ' +
       'drills over the same deck.</p></div>';
 
@@ -465,7 +505,7 @@ PGRE.views.formulas = (function () {
     var T = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
     var M = srs.formulaDayRemaining(deck).length;
     var reviewsN = batch.reviewIds.length, newN = batch.newIds.length;
-    var S = Math.max(0, T - reviewsN);        // open + filled new-card slots
+    var pickedN = reviewsN + newN;            // the batch is fully user-curated
     var postponed = srs.formulaDayPostponed(deck);
 
     html += '<div class="stat-row stat-row-4">' +
@@ -479,11 +519,11 @@ PGRE.views.formulas = (function () {
     if (srs.finalPassActive()) {
       var days = srs.daysUntil(PGRE.store.state.settings.examDate);
       var learnedN = deck.filter(function (c) { return srs.cardState(c.id); }).length;
-      var perDay = Math.ceil(learnedN / days);
       html += '<div class="card final-pass-banner"><strong>Final pass</strong> — ' +
         learnedN + ' learned formula' + (learnedN === 1 ? '' : 's') + ', ' +
-        days + ' day' + (days === 1 ? '' : 's') + ' left ' +
-        '<span class="muted">(aim for ' + perDay + '/day)</span></div>';
+        days + ' day' + (days === 1 ? '' : 's') + ' left. ' +
+        '<span class="muted">Pick due cards into today’s batch so every formula ' +
+        'gets one more look before exam day.</span></div>';
     }
 
     // ——— Leech nudge (F2) — cards that keep slipping despite reviews ———
@@ -512,34 +552,40 @@ PGRE.views.formulas = (function () {
     html += '<div class="exam-day-row"><span class="exam-day-label">Exam day</span>' +
       '<input type="date" id="exam-date" class="exam-date-input" value="' +
       ui.esc(PGRE.store.state.settings.examDate || '') + '"></div>';
+    // Interval-cap switch: exam-capped Anki (default) vs uncapped classic Anki.
+    // Does not rewrite cards already scheduled — only the next grade and the
+    // numbers on the buttons. Missing key (pre-migrate) reads as ON.
+    var capOn = PGRE.store.state.settings.formulaExamCap !== false;
+    html += '<div class="direction-row"><span class="exam-day-label">Intervals</span>' +
+      '<button class="btn btn-ghost btn-sm" id="exam-cap-toggle">' +
+      (capOn ? 'Capped to exam day' : 'Classic Anki (uncapped)') + '</button></div>';
     // F5: Study direction toggle. false = Prompt → Formula (recall the equation);
     // true = Formula → Prompt (name it / say when it applies). Persists + re-renders.
     var reverse = !!PGRE.store.state.settings.formulaReverse;
     html += '<div class="direction-row"><span class="exam-day-label">Direction</span>' +
       '<button class="btn btn-ghost btn-sm" id="dir-toggle">' +
       (reverse ? 'Formula → Prompt' : 'Prompt → Formula') + '</button></div>';
+    html += '<div class="direction-row"><span class="exam-day-label">Card progress</span>' +
+      '<button class="btn btn-ghost btn-sm" id="reset-cards-btn">Reset card progress</button></div>';
 
-    var comp = reviewsN + ' review' + (reviewsN === 1 ? '' : 's') + ' + ' +
-      newN + ' new today.';
-    if (postponed > 0) {
-      comp += ' ' + postponed + ' more review' + (postponed === 1 ? '' : 's') +
-        ' wait' + (postponed === 1 ? 's' : '') + ' for tomorrow.';
-    }
-    if (S === 0 && fresh.length > 0) {
-      comp += ' ' + fresh.length + ' formula' + (fresh.length === 1 ? '' : 's') +
-        ' not yet introduced — raise the daily target to start them.';
+    var comp = pickedN
+      ? reviewsN + ' review' + (reviewsN === 1 ? '' : 's') + ' + ' +
+        newN + ' new picked for today.'
+      : 'Nothing picked yet — choose today’s cards below.';
+    if (pickedN && postponed > 0) {
+      comp += ' ' + postponed + ' more review' + (postponed === 1 ? ' is' : 's are') +
+        ' due but not picked.';
     }
     html += '<p class="muted comp-line">' + comp + '</p>';
     if (batch.softIds && batch.softIds.length) {
       var nSoft = batch.softIds.length;
       html += '<p class="muted soft-pin-note">' + nSoft + ' card' +
         (nSoft === 1 ? '' : 's') +
-        ' pinned from Search (may exceed your daily target).</p>';
+        ' added from Search before their due date (kept until studied).</p>';
     }
 
-    // ITEM 2: a Study session left mid-flight earlier today (any source, leech
-    // drills included) offers Resume as the primary action; the fresh "Study N
-    // remaining" path only governs when no saved session exists.
+    // Primary action: resume a mid-flight session, study what remains of the
+    // picked batch, or — when the batch is empty or done — point at the picker.
     var resumeCards = rehydrateSavedStudy();
     if (resumeCards) {
       html += '<div class="btn-row"><button class="btn btn-primary" id="resume-btn">' +
@@ -548,20 +594,13 @@ PGRE.views.formulas = (function () {
       html += '<div class="btn-row"><button class="btn btn-primary" id="study-btn">Study ' +
         M + ' remaining</button>';
     } else {
-      html += '<h3 class="caught-up">You’re all caught up</h3>' +
-        '<p class="muted">Today’s batch is done — the next cards return on their schedule.</p>' +
+      html += '<h3 class="caught-up">' + (pickedN ? 'You’re all caught up' : 'Nothing picked yet') + '</h3>' +
+        '<p class="muted">' + (pickedN
+          ? 'Today’s picks are done — the next cards return on their schedule.'
+          : 'Pick the formulas you want to recall today — nothing is chosen for you.') + '</p>' +
         '<div class="btn-row">';
     }
-    var unlockedNew = batch.newIds.filter(function (id) {
-      return !srs.studiedToday(srs.cardState(id));
-    }).length;
-    if (S > 0) {
-      html += '<button class="btn btn-ghost" id="pick-btn">Choose today’s new cards</button>' +
-        '<button class="btn btn-ghost" id="reroll-btn">Re-roll random picks</button>';
-      if (unlockedNew > 0) {
-        html += '<button class="btn btn-ghost" id="clear-new-btn">Skip new cards</button>';
-      }
-    }
+    html += '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button>';
     html += '</div></div>';
 
     // ——— Memory stats (F10) — collapsed by default ———
@@ -604,18 +643,15 @@ PGRE.views.formulas = (function () {
       PGRE.store.save();
       renderHome();
     });
+    var ect = document.getElementById('exam-cap-toggle');
+    if (ect) ect.addEventListener('click', function () {
+      var s = PGRE.store.state.settings;
+      s.formulaExamCap = s.formulaExamCap === false;
+      PGRE.store.save();
+      renderHome();
+    });
     var pb = document.getElementById('pick-btn');
     if (pb) pb.addEventListener('click', renderPicker);
-    var rb = document.getElementById('reroll-btn');
-    if (rb) rb.addEventListener('click', function () {
-      PGRE.srs.rerollFormulaNewPicks(deck);
-      renderHome();
-    });
-    var cnb = document.getElementById('clear-new-btn');
-    if (cnb) cnb.addEventListener('click', function () {
-      PGRE.srs.clearFormulaNewPicks(deck);
-      renderHome();
-    });
     // F2: drill the leeches — a normal-grading session independent of the daily
     // batch (these cards may already be studied today; they still surface here).
     // Put-away cards are excluded: a shelved card is very often also a leech,
@@ -632,6 +668,14 @@ PGRE.views.formulas = (function () {
       PGRE.store.state.settings.formulaReverse = !PGRE.store.state.settings.formulaReverse;
       PGRE.store.save();
       renderHome();
+    });
+    var rcb = document.getElementById('reset-cards-btn');
+    if (rcb) rcb.addEventListener('click', function () {
+      if (confirm('Reset all formula flashcard intervals and progress so you can recall them from scratch? Your question bank and exam scores will not be affected.')) {
+        PGRE.store.resetFormulaCards();
+        renderHome();
+        if (PGRE.toast) PGRE.toast('All formula cards have been reset to new.', 'info');
+      }
     });
     // F10: collapse/expand Memory stats (built lazily on first open).
     var mt = document.getElementById('mem-stats-toggle');
@@ -737,7 +781,6 @@ PGRE.views.formulas = (function () {
       if (next === cur) return;
       PGRE.store.state.settings.formulaDailyTarget = next;
       PGRE.store.save();
-      PGRE.srs.formulaDay(deck);   // reconcile the batch to the new target
       renderHome();
     }
     var dec = document.getElementById('target-dec');
@@ -780,7 +823,10 @@ PGRE.views.formulas = (function () {
         if (inBatch[c.id]) chips += '<span class="due-chip today-chip">today</span>';
         html += '<div class="browse-row" data-cardid="' + ui.esc(c.id) + '">' +
           '<span class="deck-name">' + ui.esc(cardName(c)) + '</span>' +
-          '<span class="browse-chips">' + chips + '</span></div>' +
+          '<span class="browse-chips">' + chips + '</span>' +
+          '<button type="button" class="btn btn-ghost btn-sm browse-batch-btn" ' +
+            'data-bid="' + ui.esc(c.id) + '" data-batch="' + (inBatch[c.id] ? 'rm' : 'add') + '">' +
+            (inBatch[c.id] ? '− today' : '+ today') + '</button></div>' +
           '<div class="browse-peek" data-peek="' + ui.esc(c.id) + '" hidden></div>';
       });
       html += '</div>';
@@ -811,7 +857,10 @@ PGRE.views.formulas = (function () {
         if (inBatch[c.id]) chips += '<span class="due-chip today-chip">today</span>';
         html += '<div class="browse-row" data-cardid="' + ui.esc(c.id) + '">' +
           '<span class="deck-name">' + ui.esc(cardName(c)) + '</span>' +
-          '<span class="browse-chips">' + chips + '</span></div>' +
+          '<span class="browse-chips">' + chips + '</span>' +
+          '<button type="button" class="btn btn-ghost btn-sm browse-batch-btn" ' +
+            'data-bid="' + ui.esc(c.id) + '" data-batch="' + (inBatch[c.id] ? 'rm' : 'add') + '">' +
+            (inBatch[c.id] ? '− today' : '+ today') + '</button></div>' +
           '<div class="browse-peek" data-peek="' + ui.esc(c.id) + '" hidden></div>';
       });
       html += '</div>';
@@ -822,6 +871,28 @@ PGRE.views.formulas = (function () {
         'Every card has been introduced. Nice work.') + '</p>';
     }
     return html;
+  }
+
+  /* "+ today" / "− today" chip on each browse row: add/remove the card from
+     the picked batch in place. Re-renders the list so chips and button labels
+     stay truthful. */
+  function wireBatchToggle(box) {
+    box.querySelectorAll('.browse-batch-btn').forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();          // never toggle the row's peek
+        var bid = b.getAttribute('data-bid');
+        if (b.getAttribute('data-batch') === 'rm') {
+          PGRE.srs.removeFormulaDaySoft(deck, [bid]);
+        } else {
+          PGRE.srs.addFormulaDaySoft(deck, [bid]);
+        }
+        box.innerHTML = browseBodyHTML();
+        PGRE.typesetMath(box);
+        wirePeek(box);
+        wireBatchToggle(box);
+        if (PGRE.refreshNavBadges) PGRE.refreshNavBadges();
+      });
+    });
   }
 
   function wireBrowse() {
@@ -838,9 +909,11 @@ PGRE.views.formulas = (function () {
         box.innerHTML = browseBodyHTML();
         PGRE.typesetMath(box);   // deck names/tags can carry $…$ — typeset the swapped-in list
         wirePeek(box);
+        wireBatchToggle(box);
       });
     });
     wirePeek(box);
+    wireBatchToggle(box);
   }
 
   /* Read-only memorizing-history strip from cardReviews + current due.
@@ -938,10 +1011,9 @@ PGRE.views.formulas = (function () {
   }
 
   /* Restore ("un-put-away") control inside a browse peek. Draws nothing for a
-     card that isn’t suspended. Restoring only clears the flag — the daily batch
-     reconciler decides on its own whether the card rejoins today or waits for
-     its scheduled due date. Updates the row in place so the open peek and the
-     scroll position survive. */
+     card that isn’t suspended. Restoring only clears the flag — the card never
+     re-enters the batch on its own; the user picks it (picker or "+ today").
+     Updates the row in place so the open peek and the scroll position survive. */
   function wireRestore(section, id, row) {
     if (!section) return;
     if (!PGRE.srs.isSuspended(id)) { section.innerHTML = ''; return; }
@@ -953,18 +1025,8 @@ PGRE.views.formulas = (function () {
       PGRE.store.save();
       var chip = row.querySelector('.suspended-chip');
       if (chip && chip.parentNode) chip.parentNode.removeChild(chip);
-      // Reconcile before reporting, so the message states what actually happened
-      // rather than assuming: a restored card rejoins today only if it is due and
-      // the batch has an open slot — otherwise it waits for its scheduled date.
-      var batch = PGRE.srs.formulaDay(deck);
-      var today = batch.reviewIds.concat(batch.newIds).indexOf(id) !== -1;
-      var chips = row.querySelector('.browse-chips');
-      if (today && chips && !row.querySelector('.today-chip')) {
-        chips.insertAdjacentHTML('beforeend', '<span class="due-chip today-chip">today</span>');
-      }
-      section.innerHTML = '<p class="peek-suspend-note">' + (today ?
-        'Restored — it’s back in today’s batch.' :
-        'Restored — it returns on its next scheduled day.') + '</p>';
+      section.innerHTML = '<p class="peek-suspend-note">Restored — add it to today’s ' +
+        'batch with “+ today” or the picker if you want it now.</p>';
     });
   }
 
@@ -1013,57 +1075,71 @@ PGRE.views.formulas = (function () {
      but guard the quote/backslash cases regardless). */
   function cssAttr(s) { return String(s).replace(/["\\]/g, '\\$&'); }
 
-  /* ——— New-card picker: topic-grouped checklist, capped at the open slots ——— */
+  /* ——— Daily picker: due reviews first, then upcoming, then new ———
+     The only surface that composes a batch from scratch; browse chips and
+     search Add edit the same batch one card at a time. No cap: the daily
+     target is a soft suggestion shown live in the count line. */
   function renderPicker() {
-    if (PGRE.nav) PGRE.nav.setTrail(['Choose new cards']);   // BUNDLE G
+    if (PGRE.nav) PGRE.nav.setTrail(['Pick today’s cards']);   // BUNDLE G
     var ui = PGRE.ui, srs = PGRE.srs;
     var batch = srs.formulaDay(deck);
     var T = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
-    var S = Math.max(0, T - batch.reviewIds.length);
-    var newSet = {};
-    batch.newIds.forEach(function (id) { newSet[id] = 1; });
+    var inBatch = {};
+    batch.reviewIds.concat(batch.newIds).forEach(function (id) { inBatch[id] = 1; });
 
-    var html = '<div class="card"><h2>Choose today’s new cards</h2>' +
-      '<p class="muted">Pick which never-studied formulas fill today’s open slots. ' +
-      'Cards already studied today are locked in.</p>' +
-      '<div class="picker-bar"><span class="picker-count" id="picker-count"></span>' +
+    var html = '<div class="card"><h2>Pick today’s cards</h2>' +
+      '<p class="muted">Choose which formulas to recall today — due cards first, ' +
+      'then upcoming and never-studied. Cards already studied today are locked in.</p>' +
+      '<div class="picker-bar"><input type="text" id="picker-filter" ' +
+      'placeholder="Filter by name">' +
+      '<span class="picker-count" id="picker-count"></span>' +
       '<div class="btn-row picker-actions">' +
       '<button class="btn btn-primary" id="picker-save">Save picks</button>' +
       '<button class="btn btn-ghost" id="picker-clear">Clear all</button>' +
       '<button class="btn btn-ghost" id="picker-cancel">Cancel</button></div></div>';
 
-    function rowsFor(cards) {
-      var h = '';
-      cards.forEach(function (c) {
-        var st = srs.cardState(c.id);
-        var locked = newSet[c.id] && srs.studiedToday(st);
-        var checked = !!newSet[c.id];
-        h += '<label class="picker-row' + (locked ? ' is-locked' : '') + '">' +
-          '<input type="checkbox" class="picker-box" value="' + ui.esc(c.id) + '"' +
-            (checked ? ' checked' : '') + (locked ? ' disabled data-locked="1"' : '') + '>' +
-          '<span class="deck-name">' + ui.esc(cardName(c)) + '</span>' +
-          (locked ? '<span class="due-chip today-chip">done today</span>' : '') +
-          '</label>';
-      });
-      return h;
+    function rowHTML(c) {
+      var st = srs.cardState(c.id);
+      var locked = srs.studiedToday(st);
+      var chip;
+      if (!st) {
+        chip = '<span class="due-chip">new</span>';
+      } else {
+        var du = srs.daysUntil(st.due);
+        chip = '<span class="due-chip' + (du <= 0 ? ' due-now' : '') + '">' +
+          (du <= 0 ? 'due now' : 'due in ' + srs.ivlLabel(du)) + '</span>';
+      }
+      if (locked) chip += '<span class="due-chip today-chip">done today</span>';
+      return '<label class="picker-row' + (locked ? ' is-locked' : '') + '">' +
+        '<input type="checkbox" class="picker-box" value="' + ui.esc(c.id) + '"' +
+          (inBatch[c.id] ? ' checked' : '') + (locked ? ' disabled data-locked="1"' : '') + '>' +
+        '<span class="deck-name">' + ui.esc(cardName(c)) + '</span>' + chip + '</label>';
     }
 
-    var any = false;
-    PGRE.TOPICS.forEach(function (t) {
-      var cards = deck.filter(function (c) {
-        var st = srs.cardState(c.id);
-        return c.topic === t.id && (!st || (newSet[c.id] && srs.studiedToday(st)));
+    // Three sections, each topic-grouped: due now, upcoming, never-studied.
+    var today = srs.today();
+    var sections = [
+      { title: 'Due now', test: function (st) { return !!st && st.due <= today; } },
+      { title: 'Upcoming', test: function (st) { return !!st && st.due > today; } },
+      { title: 'New', test: function (st) { return !st; } }
+    ];
+    sections.forEach(function (sec) {
+      var anySec = false, secHTML = '';
+      PGRE.TOPICS.forEach(function (t) {
+        var cards = deck.filter(function (c) {
+          return c.topic === t.id && sec.test(srs.cardState(c.id));
+        });
+        if (!cards.length) return;
+        anySec = true;
+        secHTML += '<div class="picker-topic"><div class="picker-topic-head">' +
+          '<label class="picker-selall"><input type="checkbox" class="picker-selall-box" ' +
+            'data-topic="' + ui.esc(t.id) + '"> ' + ui.monogram(t) + ' ' + ui.esc(t.name) +
+          '</label></div>' + cards.map(rowHTML).join('') + '</div>';
       });
-      if (!cards.length) return;
-      any = true;
-      html += '<div class="picker-topic"><div class="picker-topic-head">' +
-        '<label class="picker-selall"><input type="checkbox" class="picker-selall-box" ' +
-          'data-topic="' + ui.esc(t.id) + '"> ' + ui.monogram(t) + ' ' + ui.esc(t.name) +
-        '</label></div>' + rowsFor(cards) + '</div>';
+      if (anySec) {
+        html += '<h3 class="picker-section">' + sec.title + '</h3>' + secHTML;
+      }
     });
-    if (!any) {
-      html += '<p class="muted">No never-studied cards left to choose.</p>';
-    }
     html += '</div>';
 
     body().innerHTML = html;
@@ -1083,10 +1159,8 @@ PGRE.views.formulas = (function () {
     }
     function refresh() {
       var n = countChecked();
-      var full = n >= S;
-      selectable().forEach(function (b) { b.disabled = full && !b.checked; });
       var cc = document.getElementById('picker-count');
-      if (cc) cc.textContent = n + ' of ' + S + ' new slot' + (S === 1 ? '' : 's');
+      if (cc) cc.textContent = n + ' picked · target ' + T;
     }
     boxes.forEach(function (b) {
       if (b.getAttribute('data-locked')) return;
@@ -1099,16 +1173,22 @@ PGRE.views.formulas = (function () {
           var c = deckById(b.value);
           return c && c.topic === topic;
         });
-        if (sa.checked) {
-          rows.forEach(function (b) {
-            if (b.checked) return;
-            if (countChecked() >= S) return;
-            b.checked = true;
-          });
-        } else {
-          rows.forEach(function (b) { b.checked = false; });
-        }
+        rows.forEach(function (b) { b.checked = sa.checked; });
         refresh();
+      });
+    });
+    // Name filter: hide non-matching rows, then topics with nothing visible.
+    var filter = document.getElementById('picker-filter');
+    if (filter) filter.addEventListener('input', function () {
+      var q = filter.value.trim().toLowerCase();
+      body().querySelectorAll('.picker-row').forEach(function (r) {
+        var name = r.querySelector('.deck-name');
+        r.hidden = !!q && !!name && name.textContent.toLowerCase().indexOf(q) === -1;
+      });
+      body().querySelectorAll('.picker-topic').forEach(function (tp) {
+        var visible = Array.prototype.some.call(
+          tp.querySelectorAll('.picker-row'), function (r) { return !r.hidden; });
+        tp.hidden = !visible;
       });
     });
     refresh();
@@ -1122,7 +1202,7 @@ PGRE.views.formulas = (function () {
     document.getElementById('picker-save').addEventListener('click', function () {
       var ids = [];
       selectable().forEach(function (b) { if (b.checked) ids.push(b.value); });
-      PGRE.srs.setFormulaNewPicks(deck, ids);
+      PGRE.srs.setFormulaDayPicks(deck, ids);
       renderHome();
     });
   }
@@ -1253,7 +1333,7 @@ PGRE.views.formulas = (function () {
       '<div class="practice-meta">' +
         '<span>Card ' + (study.done + 1) + ' · ' + study.queue.length + ' left</span>' +
         (study.history.length ? '<button class="btn btn-ghost btn-sm session-back" id="session-back">' +
-          '← Back <span class="key-hint">←</span></button>' : '') +
+          'Back <span class="key-hint">←</span></button>' : '') +
         undoBtn +
         (t ? '<span class="chip">' + t.name + '</span>' : '') +
         learnChip +
@@ -1273,6 +1353,10 @@ PGRE.views.formulas = (function () {
       '</div></div>';
     body().innerHTML = html;
     PGRE.typesetMath(body());
+    if (window.PGRE && PGRE.motion && PGRE.motion.animateMeter) {
+      var mf = body().querySelector('.meter-thin .meter-fill');
+      if (mf) PGRE.motion.animateMeter(mf, 100 * study.done / (study.done + study.queue.length));
+    }
     study.flipped = false;
     study.peek = null;
     study.overlay = null;
@@ -1368,6 +1452,7 @@ PGRE.views.formulas = (function () {
     var backEl = document.getElementById('fcard-back');
     if (backEl) {
       backEl.hidden = false;
+      backEl.classList.add('reveal-in');   // fade + 4px rise via motion tokens
       if (window.PGRE && window.PGRE.renderInlineVisualizer) {
         window.PGRE.renderInlineVisualizer(c.id, backEl);
       }
@@ -1390,15 +1475,12 @@ PGRE.views.formulas = (function () {
       // F7: a stateless card at step 0 requeues in-session on Hard/Good (a learning
       // step, not a scheduled interval) — show "soon"; Easy commits its real
       // interval, and a step-1 card shows real committed intervals for all grades.
-      // ITEM 3: Mastered always commits its fixed (capped) interval — nextIntervals
-      // has no 'mastered' entry, so read it from srs.masteredInterval directly.
       var lbl;
-      if (g.key === 'mastered') lbl = PGRE.srs.ivlLabel(PGRE.srs.masteredInterval(st));
-      else if (stateless && step === 0 && (g.key === 'hard' || g.key === 'good')) lbl = 'soon';
+      if (stateless && step === 0 && (g.key === 'hard' || g.key === 'good')) lbl = 'soon';
       else lbl = PGRE.srs.ivlLabel(ivls[g.key]);
       html += '<button class="btn grade-btn grade-' + g.key + '" data-grade="' + g.key + '">' +
-        g.label + '<span class="grade-ivl">' + lbl + '</span>' +
-        '<span class="key-hint">' + g.hint + '</span></button>';
+        '<span class="grade-top">' + g.label + ' <span class="key-hint">' + g.hint + '</span></span>' +
+        '<span class="grade-ivl">' + lbl + '</span></button>';
     });
     var box = document.getElementById('fcard-actions');
     box.innerHTML = html;
@@ -1413,6 +1495,8 @@ PGRE.views.formulas = (function () {
     if (study.overlay) return;                  // no grading while an overlay is up
     var c = study.queue[0], id = c.id;
     var stateless = !PGRE.srs.cardState(id);
+    var pressed = document.querySelector('#fcard-actions [data-grade="' + g + '"]');
+    if (pressed) pressed.classList.add('chosen');   // instant tint, no delay — keyboard flow unaffected
     var step = study.steps[id] || 0;
 
     // F1a: snapshot the whole session + card state BEFORE any mutation.
@@ -1422,7 +1506,7 @@ PGRE.views.formulas = (function () {
     var recycled = false;                       // an Again press → post-Again scaffold
 
     if (stateless) {
-      if (g === 'easy' || g === 'mastered') {   // graduate immediately (ITEM 3)
+      if (g === 'easy') {                        // Anki: Easy graduates immediately
         PGRE.srs.gradeCard(id, g);
         delete study.steps[id];
         study.queue.shift();
@@ -1685,7 +1769,8 @@ PGRE.views.formulas = (function () {
     }
     var ui = PGRE.ui, m = INTRO[kind];
     var remaining = PGRE.srs.formulaDayRemaining(deck).length;
-    var metNote = 'Study today’s formulas first — games drill cards you’ve met.';
+    var metNote = 'Nothing picked for today — pick cards in Formula recall first; ' +
+      'games drill only the batch you picked.';
     var html = '<div class="card"><h2>' + m.title + '</h2><p class="muted">' + m.desc + '</p>';
 
     if (kind === 'match') {
@@ -1723,8 +1808,7 @@ PGRE.views.formulas = (function () {
         ui.statTile('Today remaining', ui.fmt(remaining)) +
         ui.statTile('This round', ui.fmt(q.length)) +
       '</div>' +
-      '<p class="muted">' + (remaining ? 'Today’s remaining cards come first.' :
-        (q.length ? 'Drilling cards you’ve already met.' : metNote)) + '</p>';
+      '<p class="muted">' + (q.length ? 'Drawn from today’s picked batch.' : metNote) + '</p>';
       if (kind === 'quiz' && deck.length < 2) {
         html += '<p class="muted">Quiz needs at least two cards to build choices.</p></div>';
         body().innerHTML = html; return;
@@ -1769,7 +1853,7 @@ PGRE.views.formulas = (function () {
   /* ——————————————— Search mode ———————————————
      The box drives js/formula-search.js; the results are rendered as face-down
      flashcards. Search itself is side-effect free (status:today never builds a
-     batch). Explicit Add buttons soft-pin hits into today's formulaDay via
+     batch). Explicit Add buttons add hits into the picked batch via
      srs.addFormulaDaySoft. "Study these N" remains a separate ad-hoc session
      that grades SRS but does not edit the daily batch. */
 
@@ -1944,6 +2028,17 @@ PGRE.views.formulas = (function () {
         searchQ.q = box.value;
         runSearch(true);
         box.focus();
+        return;
+      }
+      // Open visualizer / complete view modal without toggling the card.
+      var modalBtn = e.target.closest('[data-fs-modal]');
+      if (modalBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        var cardId = modalBtn.getAttribute('data-fs-modal');
+        if (cardId && window.PGRE && window.PGRE.openVisualizerModal) {
+          window.PGRE.openVisualizerModal(cardId);
+        }
         return;
       }
       // Soft-add one card into today's batch without flipping the card.
@@ -2130,7 +2225,11 @@ PGRE.views.formulas = (function () {
       '<div class="fs-card-foot">' +
         '<button type="button" class="btn btn-ghost btn-sm fs-flip">' +
           (open ? 'Hide formula' : 'Show formula') + '</button>' +
-        '<span class="fs-card-actions">' + addCtrl + '</span>' +
+        '<span class="fs-card-actions">' +
+          '<button type="button" class="btn btn-ghost btn-sm fs-modal-btn" data-fs-modal="' +
+            ui.esc(c.id) + '">Complete view</button>' +
+          addCtrl +
+        '</span>' +
         '<span class="fs-chips">' + searchChipsHTML(c) + '</span>' +
       '</div>' +
     '</article>';
@@ -2303,8 +2402,7 @@ PGRE.views.formulas = (function () {
         return;
       } else if ((e.key === ' ' || e.key === 'Enter') && !study.flipped) {
         e.preventDefault(); flip();
-      } else if (study.flipped && e.key >= '1' && e.key <= '5') {
-        // ITEM 3: key 5 = Mastered (GRADES now has five entries).
+      } else if (study.flipped && e.key >= '1' && e.key <= '4') {
         e.preventDefault(); grade(GRADES[parseInt(e.key, 10) - 1].key);
       } else if (e.key === 'ArrowLeft' && study.history.length) {
         e.preventDefault(); openPeek();
@@ -2375,12 +2473,25 @@ PGRE.views.formulas = (function () {
       searchShown = SEARCH_PAGE;
       searchOpen = Object.create(null);
       searchLast = null;
+      var r = root();
+      if (r) {
+        r.innerHTML = '<div class="card practice-card fcard-skeleton">' +
+          '<div class="skel-bar" style="width:35%"></div>' +
+          '<div class="skel-bar" style="width:82%"></div>' +
+          '<div class="skel-bar" style="width:64%"></div></div>';
+      }
+      if (window.PGRE && PGRE.motion && PGRE.motion.loader) PGRE.motion.loader.start();
       ensureFlashmodes().then(function () {
         return PGRE.formulaDeck();
       }).then(function (d) {
         deck = d;
+        PGRE.deck = d;
+        PGRE.getFormulaCard = deckById;
         if (root()) { renderShell(); buildPrintSheet(); }
+        if (window.PGRE && PGRE.motion && PGRE.motion.loader) PGRE.motion.loader.done();
       });
-    }
+    },
+    getCard: deckById,
+    getDeck: function () { return deck; }
   };
 })();

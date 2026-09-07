@@ -38,6 +38,35 @@ PGRE.gamify = {
         PGRE.toast('<strong>Level up!</strong> Level ' + after.level + ' — ' + after.title, 'level');
       }
     }
+    // Views-A: if an XP meter is on screen (dashboard hero), glide it and its
+    // note to the new values instead of waiting for the next full re-render.
+    var xpFill = document.querySelector('.meter-xp .meter-fill');
+    if (xpFill) {
+      xpFill.style.width = after.pct + '%';
+      var heroLeft = xpFill.closest('.hero-left');
+      var note = heroLeft ? heroLeft.querySelector('.hero-xp-note') : null;
+      var lvlNum = heroLeft ? heroLeft.querySelector('.hero-level-num') : null;
+      var lvlTitle = heroLeft ? heroLeft.querySelector('.level-title') : null;
+      if (lvlNum) lvlNum.textContent = after.level;
+      if (lvlTitle) lvlTitle.textContent = after.title;
+      if (note) {
+        if (window.PGRE && PGRE.motion && !PGRE.motion.reduced && PGRE.motion.countUp) {
+          var targetInto = after.into;
+          var spanStr = after.span.toLocaleString('en-US');
+          var lvlNextStr = String(after.level + 1);
+          PGRE.motion.countUp(note, targetInto, {
+            duration: 600,
+            format: function (v) {
+              return Math.round(v).toLocaleString('en-US') + ' / ' +
+                spanStr + ' XP to Level ' + lvlNextStr;
+            }
+          });
+        } else {
+          note.textContent = after.into.toLocaleString('en-US') + ' / ' +
+            after.span.toLocaleString('en-US') + ' XP to Level ' + (after.level + 1);
+        }
+      }
+    }
   },
 
   /* Cap on the per-attempt ms persisted into the append-only log: a question
@@ -487,9 +516,18 @@ PGRE.gamify = {
     }
     if (newly.length && window.PGRE.toast) {
       newly.forEach(function (a) {
-        PGRE.toast('<strong>Achievement unlocked</strong><br>' +
+        var el = PGRE.toast('<strong>Achievement unlocked</strong><br>' +
           '<span class="ach-toast-tier tier-' + a.tier + '">' + a.tier + '</span> ' + a.name +
           ' <span class="toast-xp">+' + (PGRE.TIER_XP[a.tier] || 25) + ' XP</span>', 'achievement');
+        // Views-A: short unlock pulse on the toast or card (scale <= 1.03, no glow)
+        if (window.PGRE && PGRE.motion && !PGRE.motion.reduced) {
+          if (el) el.classList.add('toast-unlocked');
+          var card = document.querySelector('.ach-card[data-id="' + a.id + '"]');
+          if (card) {
+            card.classList.remove('locked');
+            card.classList.add('unlocked', 'unlocked-pulse');
+          }
+        }
       });
     }
     return newly;

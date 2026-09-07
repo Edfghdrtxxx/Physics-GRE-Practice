@@ -298,31 +298,18 @@ PGRE.flashmodes = (function () {
 
   /* ——— Queue pickers ——— */
 
-  /* Type/Quiz: today's remaining batch first; if it's empty, drill ONLY cards
-     the user has already met (SRS state), never the full deck — games must not
-     introduce never-studied cards behind the daily cap/picker. Capped. */
+  /* Type/Quiz: ONLY the picked batch's remaining cards — the system never
+     selects cards on its own. An empty batch means an empty round; the intro
+     screen tells the user to pick today's cards. Capped. */
   function pickQueue(deck) {
     var pool = PGRE.srs.formulaDayRemaining(deck);
-    if (!pool.length) {
-      pool = deck.filter(function (c) { return PGRE.srs.cardState(c.id) && !PGRE.srs.isSuspended(c.id); });
-    }
     return shuffle(pool).slice(0, Math.min(SESSION_CAP, pool.length));
   }
 
-  /* Match: up to 6 pairs — today's remaining batch first, then the most recently
-     reviewed studied cards. Never a never-studied card from outside the batch. */
+  /* Match: up to 6 pairs drawn ONLY from the picked batch's remaining cards —
+     never a card the user did not pick. */
   function pickMatchCards(deck) {
-    var remaining = PGRE.srs.formulaDayRemaining(deck), inSet = {};
-    remaining.forEach(function (c) { inSet[c.id] = 1; });
-    var studied = deck.filter(function (c) {
-      return !inSet[c.id] && PGRE.srs.cardState(c.id) && !PGRE.srs.isSuspended(c.id);
-    });
-    studied.sort(function (a, b) {
-      var sa = PGRE.srs.cardState(a.id), sb = PGRE.srs.cardState(b.id);
-      var ta = (sa && sa.lastReviewedAt) || '', tb = (sb && sb.lastReviewedAt) || '';
-      return ta < tb ? 1 : ta > tb ? -1 : 0;
-    });
-    var pool = shuffle(remaining).concat(studied);
+    var pool = shuffle(PGRE.srs.formulaDayRemaining(deck));
     // two equation numbers can share one formula text — identical tiles would
     // force a blind 50/50 pick, so keep only the first card per formula
     var seen = {};
@@ -427,7 +414,7 @@ PGRE.flashmodes = (function () {
         [iA, iB].forEach(function (i) {
           var elm = tile(i);
           elm.classList.remove('selected');
-          elm.classList.add('matched');
+          elm.classList.add('matched', 'matched-out');
           elm.disabled = true;
         });
         st.cleared++;
@@ -542,7 +529,7 @@ PGRE.flashmodes = (function () {
       });
       var box = document.getElementById('flash-reveal');
       box.innerHTML =
-        '<div class="flash-auto ' + (hit ? 'is-hit' : 'is-miss') + '">' +
+        '<div class="flash-auto reveal-in ' + (hit ? 'is-hit' : 'is-miss') + '">' +
           '<span class="fb-icon">' + (hit ? '✓' : '≈') + '</span>' +
           '<span>Auto-check: ' + (hit ? 'matched' : 'no match') + '</span></div>' +
         '<div class="flash-compare">' +
@@ -735,7 +722,7 @@ PGRE.flashmodes = (function () {
       });
       var fb = document.getElementById('flash-fb');
       fb.innerHTML =
-        '<div class="feedback ' + (isCorrect ? 'feedback-good' : 'feedback-bad') + '">' +
+        '<div class="feedback reveal-in ' + (isCorrect ? 'feedback-good' : 'feedback-bad') + '">' +
           '<span class="fb-icon">' + (isCorrect ? '✓' : '✗') + '</span>' +
           '<strong>' + (isCorrect ? 'Correct' : 'Not quite — option ' + (correctIdx + 1)) + '</strong>' +
           // The options themselves stay unnumbered (only the real card has an eq,
@@ -1016,12 +1003,11 @@ PGRE.flashmodes = (function () {
     return null;
   }
 
-  /* Pool: pickQueue's policy (remaining batch first, else already-studied cards —
-     never a never-studied card outside the batch), filtered to cloze-able cards,
-     capped at 12. Filtering stops once 12 are found, bounding the KaTeX probing. */
+  /* Pool: the picked batch's remaining cards only (never a card the user did
+     not pick), filtered to cloze-able cards, capped at 12. Filtering stops
+     once 12 are found, bounding the KaTeX probing. */
   function clozePool(deck) {
     var pool = PGRE.srs.formulaDayRemaining(deck);
-    if (!pool.length) pool = deck.filter(function (c) { return PGRE.srs.cardState(c.id) && !PGRE.srs.isSuspended(c.id); });
     var harvest = clozeHarvest(deck);
     pool = shuffle(pool);
     var out = [];
@@ -1089,7 +1075,7 @@ PGRE.flashmodes = (function () {
         if (i === idx && !isCorrect) b.classList.add('is-wrong');
       });
       var fb = document.getElementById('cloze-fb');
-      fb.innerHTML = '<div class="feedback ' + (isCorrect ? 'feedback-good' : 'feedback-bad') + '">' +
+      fb.innerHTML = '<div class="feedback reveal-in ' + (isCorrect ? 'feedback-good' : 'feedback-bad') + '">' +
         '<span class="fb-icon">' + (isCorrect ? '✓' : '✗') + '</span>' +
         '<strong>' + (isCorrect ? 'Correct' : 'The box holds option ' + (correctIdx + 1)) + '</strong></div>';
       PGRE.typesetMath(fb);

@@ -69,6 +69,30 @@
   body.pgre-printing #view > :not(.print-sheet) { display: none !important; }
   #view:has(.print-sheet) > :not(.print-sheet) { display: none !important; }
 
+  /* ——— Generic page prints (no .print-sheet) ———
+     The two sheets above are purpose-built paper exports. When a user
+     prints any OTHER page (#/practice, #/topic, #/analytics, ...), the
+     interactive-only chrome — buttons, filter rows, selects, inputs,
+     flashcard controls — would otherwise print as borders and grey
+     boxes. Drop it; the page's prose, questions and solutions remain.
+     Answer-content buttons are exempt: question choices are
+     <button class="choice"> (practice, exam, mistakes drill, QOTD,
+     flash modes) and visualizer challenges use <button class="viz-opt-btn">
+     — both must stay visible on paper.
+     Guarded with :not(:has(.print-sheet)) so a future sheet that legally
+     contains a control is never affected (sheets themselves carry none
+     today). When a sheet IS present, the rules above already hide
+     everything outside it. */
+  #view:not(:has(.print-sheet)) .btn,
+  #view:not(:has(.print-sheet)) .filter-row,
+  #view:not(:has(.print-sheet)) .flash-controls,
+  #view:not(:has(.print-sheet)) .flash-tabs,
+  #view:not(:has(.print-sheet)) .hist-select,
+  #view:not(:has(.print-sheet)) button:not(.choice):not(.viz-opt-btn),
+  #view:not(:has(.print-sheet)) select,
+  #view:not(:has(.print-sheet)) input,
+  #view:not(:has(.print-sheet)) textarea { display: none !important; }
+
   .print-sheet {
     display: block !important;
     color: #111111;

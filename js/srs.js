@@ -4,8 +4,10 @@
      entry to step 0 (due tomorrow); a correct solve climbs one rung. Entries
      are PERMANENT — solving never removes one, only schedules it further out;
      removal is the user's manual archive action.
-   - Formula cards: SM-2 style (Anki-flavored) with Again/Hard/Good/Easy
-     grades, an ease factor per card, and day-granularity due dates. */
+   - Formula cards: classic Anki SM-2 with Again/Hard/Good/Easy grades, an
+     ease factor per card, and day-granularity due dates. An optional
+     exam-date cap (settings.formulaExamCap, default on) squeezes long
+     intervals toward exam day without inverting grade order. */
 window.PGRE = window.PGRE || {};
 
 PGRE.srs = {
@@ -169,54 +171,86 @@ PGRE.srs = {
   cardState: function (id) {
     return PGRE.store.state.cards[id] || null;
   },
+  getMnemonic: function (id) {
+    if (!id || !PGRE.store || !PGRE.store.state || !PGRE.store.state.cardNotes) return '';
+    var n = PGRE.store.state.cardNotes[id];
+    return (n && n.text) ? n.text : (typeof n === 'string' ? n : '');
+  },
 
   /* F2 — a leech: a card lapsed so often that more raw reps won't stick; the UI
      nudges the user toward a mnemonic instead. */
   isLeech: function (st) { return !!st && st.lapses >= 8; },
 
-  /* F3 — exam-date interval cap. Whole days until the exam; null when the date
-     is invalid or already past (capping silently disabled). Otherwise the cap is
-     max(1, min(days - 1, ceil(0.2 * days))): a fresh card can't schedule onto or
-     past exam day, and long intervals get squeezed toward a final pass. */
+  /* F3 — exam-date interval cap. Whole days until the exam; null when the user
+     has turned the cap off (settings.formulaExamCap === false), or the date is
+     invalid/past/due within a day. Otherwise the cap is max(1, days - 1):
+     a fresh card can't schedule onto or past exam day. Missing/undefined
+     formulaExamCap means ON (the default), so older saved states stay
+     exam-capped until migrate() backfills the key. */
   examCap: function () {
-    var days = this.daysUntil(PGRE.store.state.settings.examDate);
-    if (!isFinite(days) || days <= 0) return null;
-    return Math.max(1, Math.min(days - 1, Math.ceil(0.2 * days)));
+    var settings = (PGRE.store.state && PGRE.store.state.settings) || {};
+    if (settings.formulaExamCap === false) return null;
+    var days = this.daysUntil(settings.examDate);
+    if (!isFinite(days) || days <= 1) return null;
+    return Math.max(1, days - 1);
   },
-
-  /* F3 — final pass: the last week before the exam. While active EVERY card with
-     state is review-eligible (see _buildFormulaDay/_reconcileFormulaDay and
-     formulaDayRemaining), so all learned formulas get one more look. */
+  /* F3 — final pass: the last week before the exam. Scheduling is unchanged;
+     the formula home shows a banner nudging the user to pick due cards into
+     the batch so every learned formula gets one more look before exam day. */
   finalPassActive: function () {
     var days = this.daysUntil(PGRE.store.state.settings.examDate);
     return isFinite(days) && days > 0 && days <= 7;
   },
 
   /* Candidate next intervals (days) for each grade — used both to schedule
-     and to preview on the grade buttons, so what you see is what you get. */
+     and to preview on the grade buttons, so what you see is what you get.
+     Classic Anki SM-2 (day granularity, no fuzz), matching Anki's
+     passing_nonearly_review_intervals:
+       new cards graduate Hard/Good → 1 day and Easy → 4 days;
+       reviews: Hard = interval×1.2, Good = (interval + daysLate/2)×ease,
+       Easy = (interval + daysLate)×ease×1.3.
+     Anki then floors every passing grade: Hard ≥ current interval + 1,
+     Good ≥ Hard + 1, Easy ≥ Good + 1. (FAQ: "all new intervals except Again
+     are at least one day longer than the previous interval.") The exam cap
+     may still equalize them afterwards. The old "second Good is always 3
+     days" shortcut and the 10-day Easy floor are gone — they inverted
+     Hard > Good after an Easy. */
   nextIntervals: function (st) {
     var out;
     if (!st || !st.reps) {
-      // ITEM 4: Easy schedules 10 days out (was 3). Exam-cap clamping below
-      // still applies, so late in the run this squeezes toward the final pass.
-      out = { again: 0, hard: 1, good: 1, easy: 10 };
+      out = { again: 0, hard: 1, good: 1, easy: 4 };
     } else {
       var ease = st.ease || this.EASE_START;
       var ivl = Math.max(1, st.interval || 1);
-      out = {
-        again: 0,
-        hard: Math.max(1, Math.round(ivl * 1.2)),
-        good: st.reps === 1 ? 3 : Math.max(2, Math.round(ivl * ease)),
-        easy: Math.max(10, Math.round(ivl * ease * 1.3))  // ITEM 4: Easy floor 10 (was 3)
-      };
+      var late = 0;
+      if (st.due) {
+        var until = this.daysUntil(st.due);
+        if (until < 0) late = -until;
+      }
+      var hard = Math.round(ivl * 1.2);
+      if (hard < ivl + 1) hard = ivl + 1;
+      var good = Math.round((ivl + late / 2) * ease);
+      if (good < hard + 1) good = hard + 1;
+      var easy = Math.round((ivl + late) * ease * 1.3);
+      if (easy < good + 1) easy = good + 1;
+      out = { again: 0, hard: hard, good: good, easy: easy };
     }
     // F3: clamp each non-Again interval to the exam cap so the grade-button
     // previews match what gradeCard schedules automatically (Again stays 0).
+    // Backward cascade clamping preserves strict monotonicity (Hard < Good < Easy)
+    // whenever cap >= 3.
     var cap = this.examCap();
     if (cap != null) {
-      out.hard = Math.min(out.hard, cap);
-      out.good = Math.min(out.good, cap);
-      out.easy = Math.min(out.easy, cap);
+      if (cap >= 3) {
+        out.easy = Math.min(out.easy, cap);
+        out.good = Math.min(out.good, out.easy - 1);
+        out.hard = Math.min(out.hard, out.good - 1);
+        if (out.hard < 1) out.hard = 1;
+      } else {
+        out.hard = Math.min(out.hard, cap);
+        out.good = Math.min(out.good, cap);
+        out.easy = Math.min(out.easy, cap);
+      }
     }
     return out;
   },
@@ -333,10 +367,12 @@ PGRE.srs = {
     return deck.filter(function (c) { return !self.cardState(c.id); });
   },
 
-  /* ——— Progressive daily formula batch ———
-     A user-set TOTAL cap (reviews + new combined) per day, instead of every
-     never-studied card counting as due. state.formulaDay holds today's batch;
-     it is (re)built at the day roll and reconciled on every access. */
+  /* ——— User-curated daily formula batch ———
+     Nothing is auto-selected. state.formulaDay starts empty and contains only
+     cards the user explicitly picked (picker dialog, browse chips, search
+     Add). The batch PERSISTS across day rolls: un-studied picks carry over,
+     completed ones are pruned by reconcile. The daily target (clampTarget)
+     is a soft suggestion shown in the UI — never a cap or an auto-fill quota. */
 
   /* Integer clamp of the daily target to [1, 100]; 10 when it isn't a finite
      number. Every batch read routes the raw setting through here so a corrupt
@@ -348,216 +384,85 @@ PGRE.srs = {
     return n < 1 ? 1 : n > 100 ? 100 : n;
   },
 
-  /* Random sample (Fisher–Yates on a copy) of up to n items — no mutation. */
-  _sample: function (arr, n) {
-    if (n <= 0 || !arr.length) return [];
-    var a = arr.slice();
-    for (var i = a.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
-    }
-    return a.slice(0, Math.min(n, a.length));
-  },
-
-  /* F9 — stratified round-robin sample of up to n items across topics: shuffle
-     within each topic, then take one topic-at-a-time in a shuffled topic order
-     each cycle, so a fill spreads across topics instead of clustering. Used for
-     new-card auto-fill and re-roll; _sample stays for other callers. */
-  _sampleSpread: function (cards, n) {
-    if (n <= 0 || !cards.length) return [];
-    var self = this, groups = {};
-    cards.forEach(function (c) {
-      var k = c.topic || '_';
-      (groups[k] = groups[k] || []).push(c);
-    });
-    var keys = Object.keys(groups);
-    keys.forEach(function (k) { groups[k] = self._sample(groups[k], groups[k].length); });
-    var out = [], cap = Math.min(n, cards.length);
-    while (out.length < cap) {
-      var order = self._sample(keys, keys.length), progressed = false;
-      for (var i = 0; i < order.length && out.length < cap; i++) {
-        var g = groups[order[i]];
-        if (g.length) { out.push(g.shift()); progressed = true; }
-      }
-      if (!progressed) break;
-    }
-    return out;
-  },
-
-  _buildFormulaDay: function (deck, T, t) {
-    var self = this;
-    var susp = PGRE.store.state.formulaSuspended || {};
-    var finalPass = this.finalPassActive();
-    var reviews = deck.filter(function (c) {
-      var st = self.cardState(c.id);
-      return st && !susp[c.id] && (finalPass || st.due <= t);
-    });
-    reviews.sort(function (a, b) {
-      var da = self.cardState(a.id).due, db = self.cardState(b.id).due;
-      return da < db ? -1 : da > db ? 1 : 0;
-    });
-    var reviewIds = reviews.slice(0, Math.min(T, reviews.length))
-      .map(function (c) { return c.id; });
-    var slots = Math.max(0, T - reviewIds.length);
-    var never = deck.filter(function (c) { return !self.cardState(c.id) && !susp[c.id]; });
-    var newIds = this._sampleSpread(never, slots).map(function (c) { return c.id; });
-    return { date: t, reviewIds: reviewIds, newIds: newIds };
-  },
-
-  /* In-place reconcile of an existing same-day batch; returns whether anything
-     changed (so the caller only persists on a real edit). */
-  _reconcileFormulaDay: function (batch, deck, byId, T, t) {
+  /* In-place reconcile of the persistent batch; returns whether anything
+     changed (so the caller only persists on a real edit). The batch is fully
+     user-curated: reconcile only prunes — it never adds or re-fills. */
+  _reconcileFormulaDay: function (batch, deck, byId, t) {
     var self = this, changed = false;
     var susp = PGRE.store.state.formulaSuspended || {};
-    var finalPass = this.finalPassActive();   // F3: all learned cards eligible
-    function studied(id) { return self.studiedToday(self.cardState(id)); }
-    // softIds: search "Add to today" pins — survive over-T trims (same day only)
-    var softSet = {};
-    if (batch.softIds && batch.softIds.length) {
-      batch.softIds.forEach(function (id) { softSet[id] = 1; });
-    }
-    function protectedId(id) { return studied(id) || softSet[id]; }
 
-    // (a) drop ids that have left the deck or are suspended
-    var beforeR = batch.reviewIds.length, beforeN = batch.newIds.length;
-    batch.reviewIds = batch.reviewIds.filter(function (id) { return byId[id] && !susp[id]; });
-    batch.newIds = batch.newIds.filter(function (id) { return byId[id] && !susp[id]; });
-    if (batch.reviewIds.length !== beforeR || batch.newIds.length !== beforeN) changed = true;
-
-    // softIds that left the deck or are still suspended no longer protect anything
+    // (a) soft pins that no longer mean anything: card left the deck, is
+    // suspended, or was already studied today (the pin's one job — keeping a
+    // not-yet-due add review-eligible — is done once today's grade is in).
     if (batch.softIds && batch.softIds.length) {
       var beforeS = batch.softIds.length;
-      batch.softIds = batch.softIds.filter(function (id) { return byId[id] && !susp[id]; });
-      if (batch.softIds.length !== beforeS) {
-        changed = true;
-        softSet = {};
-        batch.softIds.forEach(function (id) { softSet[id] = 1; });
-      }
+      batch.softIds = batch.softIds.filter(function (id) {
+        return byId[id] && !susp[id] && !self.studiedToday(self.cardState(id));
+      });
+      if (batch.softIds.length !== beforeS) changed = true;
       if (!batch.softIds.length) delete batch.softIds;
     }
+    var softSet = {};
+    if (batch.softIds) batch.softIds.forEach(function (id) { softSet[id] = 1; });
 
-    var inBatch = {};
-    batch.reviewIds.concat(batch.newIds).forEach(function (id) { inBatch[id] = 1; });
-
-    // (b) rehydrate soft pins orphaned from both lists (mutators that rewrote
-    // newIds without consulting softIds, or similar). Classification matches
-    // addFormulaDaySoft: no state → newIds, has state → reviewIds.
-    if (batch.softIds && batch.softIds.length) {
-      batch.softIds.forEach(function (id) {
-        if (inBatch[id] || !byId[id] || susp[id]) return;
-        if (self.cardState(id)) batch.reviewIds.push(id);
-        else batch.newIds.push(id);
-        inBatch[id] = 1;
-        changed = true;
-      });
+    // (b) drop ids that left the deck or are suspended, and retire completed
+    // picks: a card graded on an EARLIER day whose due is now in the future
+    // has served its turn. Carry-over keeps never-studied picks, due/overdue
+    // reviews, today's again-graded cards (due today) and soft-pinned adds.
+    function drop(id) {
+      if (!byId[id] || susp[id]) return true;
+      var st = self.cardState(id);
+      return !!st && st.due > t && !softSet[id] && !self.studiedToday(st);
     }
-
-    var total = batch.reviewIds.length + batch.newIds.length;
-
-    // (c) over target: trim ONLY non-protected items — new picks from the end
-    // first, then unstudied reviews newest-due first (oldest-due kept). Studied
-    // and soft-pinned items are never trimmed, so the batch may stay above T.
-    if (total > T) {
-      var over = total - T, i;
-      for (i = batch.newIds.length - 1; i >= 0 && over > 0; i--) {
-        if (!protectedId(batch.newIds[i])) {
-          delete inBatch[batch.newIds[i]];
-          batch.newIds.splice(i, 1);
-          over--; changed = true;
-        }
-      }
-      if (over > 0) {
-        var revU = [];
-        batch.reviewIds.forEach(function (id) {
-          if (!protectedId(id)) {
-            var st = self.cardState(id);
-            revU.push({ id: id, due: (st && st.due) || '' });
-          }
-        });
-        revU.sort(function (a, b) { return a.due < b.due ? 1 : a.due > b.due ? -1 : 0; });
-        var drop = {}, dropped = 0;
-        for (i = 0; i < revU.length && over > 0; i++) { drop[revU[i].id] = 1; dropped++; over--; changed = true; }
-        if (dropped) {
-          batch.reviewIds = batch.reviewIds.filter(function (id) {
-            if (drop[id]) { delete inBatch[id]; return false; }
-            return true;
-          });
-        }
-      }
-    }
-
-    total = batch.reviewIds.length + batch.newIds.length;
-
-    // (d) under target: top up — due reviews (oldest first) not already in, then
-    // random never-studied cards. Runs whenever slots and candidates both exist.
-    if (total < T) {
-      var slots = T - total;
-      var dueRev = deck.filter(function (c) {
-        var st = self.cardState(c.id);
-        return st && !susp[c.id] && (finalPass || st.due <= t) && !inBatch[c.id];
-      });
-      dueRev.sort(function (a, b) {
-        var da = self.cardState(a.id).due, db = self.cardState(b.id).due;
-        return da < db ? -1 : da > db ? 1 : 0;
-      });
-      for (var m = 0; m < dueRev.length && slots > 0; m++) {
-        batch.reviewIds.push(dueRev[m].id); inBatch[dueRev[m].id] = 1;
-        slots--; changed = true;
-      }
-      if (slots > 0 && !batch.skipNew) {
-        var never = deck.filter(function (c) { return !self.cardState(c.id) && !susp[c.id] && !inBatch[c.id]; });
-        this._sampleSpread(never, slots).forEach(function (c) {
-          batch.newIds.push(c.id); inBatch[c.id] = 1; changed = true;
-        });
-      }
-    }
+    var beforeR = batch.reviewIds.length, beforeN = batch.newIds.length;
+    batch.reviewIds = batch.reviewIds.filter(function (id) { return !drop(id); });
+    batch.newIds = batch.newIds.filter(function (id) { return !drop(id); });
+    if (batch.reviewIds.length !== beforeR || batch.newIds.length !== beforeN) changed = true;
 
     return changed;
   },
 
-  /* Today's batch { date, reviewIds, newIds, softIds? }, (re)built or reconciled
-     as needed; persisted only when it actually changed. An empty deck returns a
-     transient empty batch WITHOUT persisting — this path also runs from the nav
-     badge before the IndexedDB deck has resolved, and must not stamp an empty
-     batch over a real one. softIds (same-day only) pins search soft-adds so
-     over-T reconcile does not trim them; day roll rebuilds without softIds. */
+  /* The picked batch { date, reviewIds, newIds, softIds? }. Never auto-built:
+     an absent batch becomes an empty one; an existing batch is only reconciled
+     (pruned). Persisted when it changed. An empty deck returns a transient
+     empty batch WITHOUT persisting — this path also runs from the nav badge
+     before the IndexedDB deck has resolved, and must not stamp an empty batch
+     over a real one. softIds pin not-yet-due adds so they stay review-eligible
+     until studied today (see formulaDayRemaining). */
   formulaDay: function (deck) {
     deck = deck || [];
     var s = PGRE.store.state, t = this.today();
-    var T = this.clampTarget(s.settings.formulaDailyTarget);
     if (!deck.length) return { date: t, reviewIds: [], newIds: [] };
 
     var byId = {};
     deck.forEach(function (c) { byId[c.id] = c; });
 
     var batch = s.formulaDay, changed = false;
-    if (!batch || batch.date !== t) {
-      batch = this._buildFormulaDay(deck, T, t);
+    if (!batch) {
+      batch = { date: t, reviewIds: [], newIds: [] };
       s.formulaDay = batch;
       changed = true;
     } else {
-      changed = this._reconcileFormulaDay(batch, deck, byId, T, t);
+      changed = this._reconcileFormulaDay(batch, deck, byId, t);
     }
     if (changed) PGRE.store.save();
     return batch;
   },
 
-  /* Membership check against the already-chosen same-day batch. Does NOT call
-     formulaDay() — search UI uses this and must stay side-effect free until the
-     user explicitly clicks Add (building a batch as a side effect of rendering
-     a chip would quietly lock in today's random new picks). */
+  /* Membership check against the picked batch. Does NOT call formulaDay() —
+     search UI uses this and must stay side-effect free until the user
+     explicitly clicks Add. */
   isInFormulaDay: function (deck, id) {
     var batch = PGRE.store.state.formulaDay;
-    if (!batch || batch.date !== this.today() || !id) return false;
+    if (!batch || !id) return false;
     return batch.reviewIds.indexOf(id) !== -1 || batch.newIds.indexOf(id) !== -1;
   },
 
-  /* Soft-add cards into today's batch, allowed to exceed T.
-     Pins ids in batch.softIds so over-T reconcile does not trim them.
+  /* Add cards into the picked batch (search "Add to today", browse chips).
      Classification: no state → newIds; has state → reviewIds (including
-     not-yet-due — user asked for a topical add); suspended → unsuspend then add;
-     already in batch → ensure softIds pin (idempotent). Does not clear skipNew
-     and does not change setFormulaNewPicks hard-cap semantics.
+     not-yet-due — a deliberate topical add); suspended → unsuspend then add;
+     already in batch → idempotent. Not-yet-due learned adds are pinned in
+     batch.softIds so they stay review-eligible until studied today.
      @returns {{ batch, added: string[], already: string[], skipped: string[] }} */
   addFormulaDaySoft: function (deck, ids) {
     var self = this;
@@ -631,14 +536,14 @@ PGRE.srs = {
     return batch;
   },
 
-  /* Cards from today's batch still owed: never-studied (no state) OR due today
-     OR soft-pinned and not yet studied today (search topical adds may include
-     not-yet-due cards — without this they would sit in the batch but never
+  /* Cards from the picked batch still owed: never-studied (no state), due
+     today or overdue, or soft-pinned not-yet-due adds not yet studied today
+     (without the pin rule a topical add would sit in the batch but never
      surface in Study / the nav badge). An again-graded card (due today) stays
-     remaining across reloads; a good/hard/easy card (due later) is done. */
+     remaining across reloads; a good/hard/easy card (due later) is done and
+     reconcile prunes it. */
   formulaDayRemaining: function (deck) {
     var self = this, t = this.today();
-    var finalPass = this.finalPassActive();
     var batch = this.formulaDay(deck);
     var softSet = {};
     if (batch.softIds) batch.softIds.forEach(function (id) { softSet[id] = 1; });
@@ -649,11 +554,8 @@ PGRE.srs = {
       var c = byId[id];
       if (!c) return;
       var st = self.cardState(id);
-      // F3: in the final pass a learned card stays remaining until studied today,
-      // even with a future due date — without this it would never surface.
-      // Soft pins (search Add to today) use the same "until studied today" rule.
       if (!st || st.due <= t ||
-          ((finalPass || softSet[id]) && !self.studiedToday(st))) out.push(c);
+          (softSet[id] && !self.studiedToday(st))) out.push(c);
     });
     return out;
   },
@@ -677,105 +579,44 @@ PGRE.srs = {
     return Math.max(0, allDue - inBatchDue);
   },
 
-  /* Soft-pinned never-studied ids that belong in newIds for the rest of the day.
-     Rehydrates orphans listed only in softIds. Soft news do NOT consume picker
-     room S and may keep total > T. */
-  _softPinnedNewIds: function (batch, byId) {
+  /* Replace the picked batch wholesale (picker Save): the passed ids become
+     the batch, classified no-state → newIds / has-state → reviewIds. Cards
+     already studied today are locked — they stay in the batch whatever the
+     checkbox said (a grade committed today is not undone by un-picking).
+     Added cards are unsuspended; not-yet-due learned adds are soft-pinned so
+     they surface until studied today. The daily target is advisory — the
+     batch may fall below or rise above it freely.
+     @returns the updated batch */
+  setFormulaDayPicks: function (deck, ids) {
     var self = this;
-    var susp = PGRE.store.state.formulaSuspended || {};
-    var softSet = {};
-    (batch.softIds || []).forEach(function (id) { softSet[id] = 1; });
-    var out = [], seen = {};
-    function consider(id) {
-      if (seen[id] || !softSet[id] || !byId[id] || susp[id] || self.cardState(id)) return;
+    var batch = this.formulaDay(deck);
+    var byId = {};
+    (deck || []).forEach(function (c) { byId[c.id] = c; });
+    var keep = {};
+    batch.reviewIds.concat(batch.newIds).forEach(function (id) {
+      if (byId[id] && self.studiedToday(self.cardState(id))) keep[id] = 1;
+    });
+    var reviewIds = [], newIds = [], softIds = [], seen = {};
+    function add(id) {
+      if (!id || seen[id] || !byId[id]) return;
       seen[id] = 1;
-      out.push(id);
+      if (self.isSuspended(id)) self.unsuspendCard(id);
+      var st = self.cardState(id);
+      if (st) {
+        reviewIds.push(id);
+        if (!keep[id] && st.due > self.today()) softIds.push(id);
+      } else {
+        newIds.push(id);
+      }
     }
-    (batch.newIds || []).forEach(consider);
-    (batch.softIds || []).forEach(consider);
-    return out;
-  },
-
-  /* Replace today's hand-picked new cards: studiedToday members of the current
-     newIds are locked and preserved verbatim (and count toward the tally); the
-     passed ids (never-studied candidates only) fill the remaining open slots.
-     Soft-pinned never-studied cards stay sticky for the day and do not consume S. */
-  setFormulaNewPicks: function (deck, ids) {
-    var self = this;
-    var batch = this.formulaDay(deck);
-    var byId = {};
-    (deck || []).forEach(function (c) { byId[c.id] = c; });
-    var T = this.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
-    var S = Math.max(0, T - batch.reviewIds.length);
-    var softNew = this._softPinnedNewIds(batch, byId);
-    var softNewSet = {};
-    softNew.forEach(function (id) { softNewSet[id] = 1; });
-    var locked = batch.newIds.filter(function (id) {
-      return byId[id] && self.studiedToday(self.cardState(id));
-    });
-    var lockedSet = {};
-    locked.forEach(function (id) { lockedSet[id] = 1; });
-    var picks = [];
-    (ids || []).forEach(function (id) {
-      if (lockedSet[id] || softNewSet[id] || !byId[id] || self.cardState(id) ||
-          picks.indexOf(id) !== -1) return;
-      self.unsuspendCard(id);
-      picks.push(id);
-    });
-    var room = Math.max(0, S - locked.length);
-    // Hard-cap S applies only to non-soft intentional picks (locked + hand-picks).
-    batch.newIds = locked.concat(picks.slice(0, room)).concat(softNew);
+    Object.keys(keep).forEach(add);
+    (ids || []).forEach(add);
+    batch.reviewIds = reviewIds;
+    batch.newIds = newIds;
+    if (softIds.length) batch.softIds = softIds;
+    else delete batch.softIds;
     delete batch.skipNew;
-    PGRE.store.state.formulaDay = batch;
-    PGRE.store.save();
-    return batch;
-  },
-
-  /* Re-roll: keep locked (studiedToday) and soft-pinned never-studied new picks;
-     replace only the non-soft open slots with a fresh random sample. */
-  rerollFormulaNewPicks: function (deck) {
-    var self = this;
-    var batch = this.formulaDay(deck);
-    var byId = {};
-    (deck || []).forEach(function (c) { byId[c.id] = c; });
-    var T = this.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
-    var S = Math.max(0, T - batch.reviewIds.length);
-    var softNew = this._softPinnedNewIds(batch, byId);
-    var softNewSet = {};
-    softNew.forEach(function (id) { softNewSet[id] = 1; });
-    var locked = batch.newIds.filter(function (id) {
-      return byId[id] && self.studiedToday(self.cardState(id));
-    });
-    var lockedSet = {};
-    locked.forEach(function (id) { lockedSet[id] = 1; });
-    var susp = PGRE.store.state.formulaSuspended || {};
-    var never = deck.filter(function (c) {
-      return !self.cardState(c.id) && !susp[c.id] && !lockedSet[c.id] && !softNewSet[c.id];
-    });
-    var room = Math.max(0, S - locked.length);
-    var pick = this._sampleSpread(never, room).map(function (c) { return c.id; });
-    batch.newIds = locked.concat(pick).concat(softNew);
-    delete batch.skipNew;
-    PGRE.store.state.formulaDay = batch;
-    PGRE.store.save();
-    return batch;
-  },
-
-  /* Skip new: drop non-soft unstudied new cards; keep soft-pinned never-studied
-     (sticky for the day) and studiedToday locks. skipNew blocks random top-up. */
-  clearFormulaNewPicks: function (deck) {
-    var self = this;
-    var batch = this.formulaDay(deck);
-    var byId = {};
-    (deck || []).forEach(function (c) { byId[c.id] = c; });
-    var softNew = this._softPinnedNewIds(batch, byId);
-    var locked = batch.newIds.filter(function (id) {
-      return byId[id] && self.studiedToday(self.cardState(id));
-    });
-    batch.newIds = locked.concat(softNew.filter(function (id) {
-      return locked.indexOf(id) === -1;
-    }));
-    batch.skipNew = true;
+    batch.date = this.today();
     PGRE.store.state.formulaDay = batch;
     PGRE.store.save();
     return batch;

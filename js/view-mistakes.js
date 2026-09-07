@@ -7,7 +7,7 @@ PGRE.views = PGRE.views || {};
 
 PGRE.views.mistakes = (function () {
   var LETTERS = ['A', 'B', 'C', 'D', 'E'];
-  var drill = null; // { qs, st, i, skipped, done, sid, qStart } — see startDrill
+  var drill = null; // { qs, st, i, skipped, done, sid, qStart, assess } — see startDrill
   var lastRenderAt = 0; // stamps each drill render so a double-click can't click through
   var keyBound = false; // the document keydown listener is installed once
 
@@ -458,7 +458,7 @@ PGRE.views.mistakes = (function () {
   function feedbackHTML(q, st, fresh) {
     var mk = PGRE.store.state.mistakes[q.id];
     var nextDue = mk && mk.srs ? PGRE.srs.ivlLabel(PGRE.srs.daysUntil(mk.srs.due)) : '';
-    var html = '<div class="feedback ' + (st.correct ? 'feedback-good' : 'feedback-bad') + '">' +
+    var html = '<div class="feedback reveal-in ' + (st.correct ? 'feedback-good' : 'feedback-bad') + '">' +
       '<span class="fb-icon">' + (st.correct ? '✓' : '✗') + '</span>' +
       '<strong>' + (st.correct ? 'Correct — next review in ' + nextDue
                                : 'Incorrect — the answer is ' + LETTERS[q.answer] +
@@ -466,7 +466,7 @@ PGRE.views.mistakes = (function () {
       '<span class="fb-xp">+' + st.xp + ' XP</span>' +
     '</div>';
     if (fresh) {
-      html += PGRE.assess.html(false);
+      html += PGRE.assess.html(PGRE.store.state.settings.keyboard);
     } else {
       // read the assessment off THIS drill's own attempt row (st.row, which
       // PGRE.assess stamps in place) — lastAssess() would happily surface a
@@ -482,7 +482,8 @@ PGRE.views.mistakes = (function () {
         'it replaces this answer. Leave and come back and the question is blank again; ' +
         're-picking the same choice brings this result back.</div>';
     }
-    html += '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>';
+    html += '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
+      distractorBlock(q);
     return html;
   }
 
@@ -551,6 +552,14 @@ PGRE.views.mistakes = (function () {
       '</div>';
     root().innerHTML = html;
     PGRE.typesetMath(root());
+    if (window.PGRE && PGRE.motion && PGRE.motion.animateMeter) {
+      var mf = root().querySelector('.meter-thin .meter-fill');
+      if (mf) PGRE.motion.animateMeter(mf, 100 * done / drill.qs.length);
+    }
+    if (window.PGRE && PGRE.motion && PGRE.motion.countUp) {
+      var xpEl = root().querySelector('.fb-xp');
+      if (xpEl) PGRE.motion.countUp(xpEl, st.xp, { duration: 600, format: function (n) { return '+' + Math.round(n) + ' XP'; } });
+    }
     // in-place swap: route()'s reset doesn't run here. Answering or revealing
     // keeps your place; only actually moving to another question scrolls up.
     if (!opts.fresh && !opts.reveal) window.scrollTo(0, 0);
@@ -561,7 +570,11 @@ PGRE.views.mistakes = (function () {
         drillAnswer(parseInt(b.getAttribute('data-idx'), 10));
       });
     });
-    if (opts.fresh) PGRE.assess.bind(document.getElementById('feedback'), q, st.correct);
+    // the controller is per-render: any later re-render (browse, reveal)
+    // orphans the old chip row, so only a fresh answer leaves live shortcuts
+    drill.assess = opts.fresh
+      ? PGRE.assess.bind(document.getElementById('feedback'), q, st.correct)
+      : null;
 
     document.getElementById('drill-prev').addEventListener('click', function () { goTo(drill.i - 1); });
     document.getElementById('drill-next').addEventListener('click', function () { goTo(drill.i + 1); });
@@ -685,7 +698,8 @@ PGRE.views.mistakes = (function () {
   }
 
   /* ——— Keyboard (same opt-in setting as practice: settings.keyboard) ———
-     A–E / 1–5 answer or re-answer, ← / → browse, S skip, Enter advances. */
+     A–E / 1–5 answer or re-answer, ← / → browse, S skip, Enter advances,
+     K / G / T / F self-assess (only while a fresh result is on screen). */
   function onKey(e) {
     if (!drill || drill.done) return;                       // no drill, or its summary is up
     if (!document.getElementById('mistakes-root')) return;  // not on the mistake-book view
@@ -713,6 +727,14 @@ PGRE.views.mistakes = (function () {
       var nb = document.getElementById('drill-next');
       if (nb && !nb.disabled) nb.click();
       else document.getElementById('drill-finish').click();
+    } else if (drill.assess) {
+      // self-assessment chips, same keys as practice: K knew it, G guessed,
+      // T too slow, F forgot something
+      var a = k.toLowerCase();
+      if (a === 'k') { e.preventDefault(); drill.assess.toggle('sure'); }
+      else if (a === 'g') { e.preventDefault(); drill.assess.toggle('guess'); }
+      else if (a === 't') { e.preventDefault(); drill.assess.toggle('slow'); }
+      else if (a === 'f') { e.preventDefault(); drill.assess.toggle('forgot'); }
     }
   }
 

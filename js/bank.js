@@ -25,8 +25,14 @@ PGRE.allQuestions = function (opts) {
     (list || []).forEach(function (q) {
       if (!q || !q.id || seen[q.id]) return;
       seen[q.id] = true;
-      if (!q.src) q.src = src;
-      out.push(q);
+      // Tag a shallow copy rather than the bank's own object: the merge never
+      // writes back into the static data arrays. A question that already
+      // carries a src passes through by reference, untouched.
+      if (q.src) { out.push(q); return; }
+      var tagged = {};
+      for (var k in q) tagged[k] = q[k];
+      tagged.src = src;
+      out.push(tagged);
     });
   }
   add(PGRE.QUESTIONS, 'preview');

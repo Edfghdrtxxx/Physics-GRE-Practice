@@ -16,18 +16,35 @@
     if (v !== v) v = lo;
     return Math.max(lo, Math.min(hi, v));
   }
+  function numParam(state, key, fallback) {
+    var n = parseFloat(state && state[key]);
+    return isFinite(n) ? n : fallback;
+  }
+  function simDt(state, dt) {
+    var speed = clamp(numParam(state, 'simSpeed', 1.0), 0.2, 3.0);
+    var n = parseFloat(dt);
+    if (!isFinite(n) || n < 0) n = 0.016;
+    if (n > 0.08) n = 0.08;
+    return n * speed;
+  }
+  function collideP(lambda, dt) {
+    if (!(lambda > 0) || !(dt > 0)) return false;
+    var p = 1 - Math.exp(-lambda * dt);
+    if (p > 1) p = 1;
+    return Math.random() < p;
+  }
   function legend(title, rows) {
     if (typeof PGRE.appendVizLegend === 'function') {
       PGRE.appendVizLegend(title, rows || []);
     }
   }
   var C = {
-    bg: (CV && CV.colors && CV.colors.bg) || '#faf9f5',
-    panel: '#f5f0e8',
-    ivory: '#efe9de',
-    line: '#e6dfd8',
-    ink: '#141413',
-    muted: '#6c6a64',
+    get bg() { return PGRE.vizStageTheme().bg; },
+    get panel() { return PGRE.vizStageTheme().panel; },
+    get ivory() { return PGRE.vizStageTheme().ivory; },
+    get line() { return PGRE.vizStageTheme().line; },
+    get ink() { return PGRE.vizStageTheme().ink; },
+    get muted() { return PGRE.vizStageTheme().muted; },
     coral: '#cc785c',
     deep: '#964b32',
     gold: '#d4a017',
@@ -45,7 +62,7 @@
     n = n || 65;
     state.electrons = [];
     for (var i = 0; i < n; i++) {
-      var vth = 120 + Math.random() * 40;
+      var vth = 220 + Math.random() * 80;
       var theta = Math.random() * 2 * Math.PI;
       state.electrons.push({
         x: Math.random() * 400,
@@ -81,6 +98,7 @@
 
   PGRE.visualizers['cpgf-2.70'] = {
     id: "cpgf-2.70",
+    topic: 'em',
     title: "Ohm's Law: $V_R = IR$",
     formulaLatex: "V_R = IR",
     physicalStory: `Macroscopic Ohm's law $V_R = IR$ is the spatial integral of the fundamental microscopic constitutive relation for linear isotropic conductors:
@@ -182,7 +200,8 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       { id: "material", label: "Wire Material", type: "select", options: ["Copper", "Aluminum", "Nichrome", "Carbon", "Superconductor"], default: "Copper" },
       { id: "showTagged", label: "Track tagged electron", type: "toggle", default: true },
       { id: "showPoynting", label: "Energy flow (Poynting $\\mathbf{S}$)", type: "toggle", default: true },
-      { id: "stretch2x", label: "Stretch wire $2\\times$ ($R \\to 4R$)", type: "toggle", default: false }
+      { id: "stretch2x", label: "Stretch wire $2\\times$ ($R \\to 4R$)", type: "toggle", default: false },
+      { id: "simSpeed", label: "Simulation Speed", min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: "x" }
     ],
 
     init: function(container, state, redraw) {
@@ -200,7 +219,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
     },
 
     draw: function(ctx, width, height, state, dt) {
-      dt = dt || 0.016;
+      dt = simDt(state, dt);
       state = state || {};
       state.time = (state.time || 0) + dt;
 
@@ -240,10 +259,13 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       var vLoad = current * effectiveR;
       var vInt = current * Number(state.internalR);
       var power = current * vLoad;
-      var eField = vLoad / 2.0;
-      var driftSpeed = 35.0 * (eField / (effectiveR + 1.0));
-      var thermalAmp = Math.sqrt(state.temperature / 300.0) * 1.5;
       var visI = clamp(current, 0, 18);
+      var nCu = 8.47e28;
+      var eCharge = 1.602e-19;
+      var Awire = 1.0e-6;
+      var vdPhys = current / (nCu * eCharge * Awire);
+      var vthPhys = 1.57e6;
+      var thermalAmp = Math.sqrt(state.temperature / 300.0) * 1.5;
 
       legend("Ohm's law $V = I R$", [
         { label: "$I$", value: "$" + current.toFixed(2) + "\\text{ A}$" },
@@ -254,8 +276,9 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
         { label: "$r$", value: "$" + Number(state.internalR).toFixed(1) + "\\;\\Omega$" }
       ]);
       legend("Drude electrons", [
-        { label: "$v_{\\text{drift}}$", value: "$" + (driftSpeed * 0.003).toFixed(4) + "\\text{ mm/s}$" },
-        { label: "$v_{\\text{thermal}}$", value: "$" + (85 * Math.sqrt(state.temperature / 300)).toFixed(0) + "\\text{ km/s}$" },
+        { label: "$v_{\\mathrm{d}}$", value: "$" + (vdPhys * 1e3).toFixed(4) + "\\text{ mm/s}$" },
+        { label: "$v_{\\mathrm{th}}$", value: "$" + (vthPhys / 1e3).toFixed(0) + "\\text{ km/s}$" },
+        { label: "$v_{\\mathrm{th}}/v_{\\mathrm{d}}$", value: vdPhys > 1e-12 ? "$" + (vthPhys / vdPhys).toExponential(1) + "$" : "—" },
         { label: "Material", value: String(state.material) },
         { label: "$T$", value: "$" + String(state.temperature) + "\\text{ K}$" }
       ]);
@@ -288,7 +311,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
         ctx.fillStyle = C.muted;
         ctx.font = "11px Inter, sans-serif";
         ctx.textAlign = "right";
-        ctx.fillText("electrons drift opposite E", drudeLeft + drudeW - 12, drudeTop + headH / 2);
+        ctx.fillText("thermal motion dominates drift", drudeLeft + drudeW - 12, drudeTop + headH / 2);
       }
 
       ctx.fillStyle = "rgba(204, 120, 92, 0.28)";
@@ -321,7 +344,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       ctx.font = "600 10px Inter, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText("E", drudeLeft + drudeW / 2, eY + 3);
+      ctx.fillText("field", drudeLeft + drudeW / 2, eY + 3);
 
       var ionR = 6;
       var latticeTop = stageTop + 22;
@@ -348,19 +371,24 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       }
 
       if (state.electrons) {
-        var vthMag = 80 * Math.sqrt(state.temperature / 300);
-        var visDrift = clamp(driftSpeed, -80, 80);
+        var vthMag = 260 * Math.sqrt(Math.max(0.15, state.temperature / 300));
+        var isSuper = (state.material === "Superconductor" && state.temperature < 93);
+        var collisionLambda = isSuper ? 0.0 : (10 * (state.temperature / 300));
+        var visVd = isSuper ? 48 : clamp(5 + 1.6 * visI, 4, 14);
+        var visAccel = collisionLambda > 0.2 ? visVd * collisionLambda : 0;
         state.electrons.forEach(function(el, idx) {
-          var isSuper = (state.material === "Superconductor" && state.temperature < 93);
-          var accel = (eField * 60) / (isSuper ? 0.3 : 1.0);
-          el.vx += accel * dt;
-          var collisionRate = isSuper ? 0.0 : (0.03 * (state.temperature / 300));
-          if (Math.random() < collisionRate) {
-            var phi = Math.random() * 2 * Math.PI;
-            el.vx = vthMag * Math.cos(phi);
-            el.vy = vthMag * Math.sin(phi);
+          if (isSuper) {
+            el.vx = visVd;
+            el.vy *= 0.92;
+          } else {
+            el.vx += visAccel * dt;
+            if (collideP(collisionLambda, dt)) {
+              var phi = Math.random() * 2 * Math.PI;
+              el.vx = vthMag * Math.cos(phi);
+              el.vy = vthMag * Math.sin(phi);
+            }
           }
-          el.x += (el.vx + visDrift) * dt;
+          el.x += el.vx * dt;
           el.y += el.vy * dt;
           if (el.x > drudeW - 40) el.x = 22;
           if (el.x < 22) el.x = drudeW - 40;
@@ -452,7 +480,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       ctx.font = "600 11px Inter, sans-serif";
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
-      ctx.fillText("EMF", batX - 16, batY);
+      ctx.fillText("emf", batX - 16, batY);
 
       var resX = loopX + loopW;
       var resY = loopY + loopH / 2;
@@ -525,7 +553,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
         ctx.font = "600 10px Inter, sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
-        ctx.fillText("S", resX, resY - 32);
+        ctx.fillText("energy", resX, resY - 32);
       }
 
       var w1 = loopW;
@@ -571,7 +599,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       ctx.font = "600 11px Inter, sans-serif";
       ctx.textAlign = "left";
       ctx.textBaseline = "bottom";
-      ctx.fillText("V(s) around the loop", graphX + 8, graphY - 4);
+      ctx.fillText("potential around the loop", graphX + 8, graphY - 4);
 
       var base0Y = graphY + graphH - 16;
       var topPad = graphY + 16;
@@ -613,14 +641,22 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       ctx.textAlign = "left";
       ctx.textBaseline = "bottom";
       ctx.fillStyle = C.coral;
-      ctx.fillText("+EMF", p1.x - 8, p1.y - 3);
-      ctx.fillStyle = C.rose;
-      ctx.textBaseline = "top";
-      ctx.fillText("−Ir", p2.x + 4, p2.y + 3);
-      ctx.fillStyle = C.gold;
-      ctx.textAlign = "right";
-      ctx.textBaseline = "bottom";
-      ctx.fillText("−IR", p4.x - 4, Math.min(p4.y, p3.y) - 4);
+      ctx.fillText("+emf", p1.x - 8, Math.max(topPad + 10, p1.y - 3));
+      var stacked = Math.abs(yEmf - yAfterInt) < 10 || vLoad < 0.25;
+      if (!stacked) {
+        ctx.fillStyle = C.rose;
+        ctx.textBaseline = "top";
+        ctx.fillText("-Ir", p2.x + 4, p2.y + 3);
+        ctx.fillStyle = C.gold;
+        ctx.textAlign = "right";
+        ctx.textBaseline = "bottom";
+        ctx.fillText("-IR", p4.x - 4, Math.min(p4.y, p3.y) - 4);
+      } else if (vInt > 0.15) {
+        ctx.fillStyle = C.rose;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        ctx.fillText("-Ir", p2.x + 10, Math.min(base0Y - 4, p2.y + 6));
+      }
 
       ctx.restore();
     },
@@ -647,6 +683,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
 
   PGRE.visualizers['cpgf-4.14'] = {
     id: 'cpgf-4.14',
+    topic: 'th',
     title: 'First Law of Thermodynamics: $\\Delta U = Q - W$',
     formulaLatex: '\\Delta U = Q - W = \\int \\delta Q - \\int P\\,dV',
     physicalStory: `The First Law of Thermodynamics is the macroscopic statement of energy conservation for a closed thermodynamic system. Internal energy $U$ is a state function—dependent only on the equilibrium thermodynamic coordinates (for an ideal gas, $U(T) = n C_V T$). In contrast, heat $Q$ (thermal energy flux across the system boundary driven by a temperature gradient) and work $W$ (mechanical energy transferred via macroscopic boundary displacement, defined in physics as $W = \\int P dV$ done *by* the system) are path-dependent process quantities. Over any thermodynamic transformation, the difference $Q - W$ is invariant and exactly equals $\\Delta U$. Over a complete cyclic process ($\\oint dU = 0$), the net work output equals the net heat absorbed ($W_{\\text{net}} = Q_{\\text{net}}$), which equals the enclosed area on the $P-V$ diagram.`,
@@ -738,7 +775,8 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
         { value: 'monatomic', label: 'Monatomic ($\\gamma = 5/3$)' },
         { value: 'diatomic', label: 'Diatomic ($\\gamma = 7/5$)' }
       ], default: 'monatomic' },
-      { id: 'progress', name: 'Process progress', min: 0, max: 1, step: 0.01, default: 0.7, unit: '' }
+      { id: 'progress', name: 'Process progress', min: 0, max: 1, step: 0.01, default: 0.7, unit: '' },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
 
     init(container, state, redraw) {
@@ -754,6 +792,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       const isMonatomic = (state.gasType || 'monatomic') === 'monatomic';
       const gamma = isMonatomic ? 5/3 : 7/5;
       const f = isMonatomic ? 3 : 5; // degrees of freedom: Cv = (f/2) R
+      var dtEff = simDt(state, dt);
 
       ctx.fillStyle = C.bg;
       ctx.fillRect(0, 0, width, height);
@@ -820,7 +859,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
         }
       } else if (process === 'isochoric') {
         V2 = V1;
-        P2 = P1 * 0.4; // cooling isochoric
+        P2 = P1 * (0.4 + (vRatio - 1.2) * (2.2 - 0.4) / (4.0 - 1.2));
         curV = V1;
         curP = P1 + (P2 - P1) * progress;
         curT = curP * curV;
@@ -840,7 +879,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
         const Th = 4.0;
         const Tc = 2.0;
         const Va = 1.0, Pa = Th / Va;
-        const Vb = 2.0, Pb = Th / Vb;
+        const Vb = Math.min(2.2, Math.max(1.2, vRatio)), Pb = Th / Vb;
         const Vc = Vb * Math.pow(Th / Tc, 1 / (gamma - 1));
         const Pc = Tc / Vc;
         const Vd = Va * Math.pow(Th / Tc, 1 / (gamma - 1));
@@ -948,37 +987,29 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       ctx.font = '600 12px Inter, sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText('P–V diagram', pvL + 10, pvT + 8);
+      ctx.fillText('P-V diagram', pvL + 10, pvT + 8);
 
       ctx.save();
       ctx.beginPath();
-      ctx.rect(pvL + 1, pvT + 24, pvW - 2, pvH - 26);
+      ctx.rect(pvL + 1, pvT + 24, pvW - 2, pvH - 28);
       ctx.clip();
 
       ctx.strokeStyle = C.ivory;
       ctx.lineWidth = 1;
       var maxVGrid = process === 'carnot' ? 6 : 4;
-      ctx.font = '10px JetBrains Mono, monospace';
-      ctx.fillStyle = C.muted;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
       for (var vg = 1; vg <= maxVGrid; vg++) {
         var gx = mapV(vg);
         ctx.beginPath();
         ctx.moveTo(gx, mapP(0));
         ctx.lineTo(gx, mapP(maxP));
         ctx.stroke();
-        ctx.fillText(String(vg), gx, pvOriginY + 4);
       }
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
       for (var pg = 1; pg <= 4; pg++) {
         var gy = mapP(pg);
         ctx.beginPath();
         ctx.moveTo(mapV(0), gy);
         ctx.lineTo(mapV(maxV), gy);
         ctx.stroke();
-        ctx.fillText(String(pg), pvOriginX - 6, gy);
       }
 
       ctx.strokeStyle = 'rgba(212, 160, 23, 0.28)';
@@ -1005,15 +1036,6 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       ctx.lineTo(mapV(0), mapP(0));
       ctx.lineTo(mapV(maxV), mapP(0));
       ctx.stroke();
-
-      ctx.fillStyle = C.muted;
-      ctx.font = '11px Inter, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText('P', mapV(0) + 6, mapP(maxP) + 12);
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText('V', mapV(maxV) - 4, pvOriginY - 4);
 
       if (curvePoints.length > 1) {
         ctx.beginPath();
@@ -1065,6 +1087,27 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       }
       ctx.restore();
 
+      ctx.font = '10px JetBrains Mono, monospace';
+      ctx.fillStyle = C.muted;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      for (var vgTick = 1; vgTick <= (process === 'carnot' ? 6 : 4); vgTick++) {
+        ctx.fillText(String(vgTick), mapV(vgTick), pvOriginY + 4);
+      }
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (var pgTick = 1; pgTick <= 4; pgTick++) {
+        ctx.fillText(String(pgTick), pvOriginX - 6, mapP(pgTick));
+      }
+
+      ctx.fillStyle = C.muted;
+      ctx.font = '11px Inter, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText('P', mapV(0) + 6, mapP(maxP) + 12);
+      ctx.textAlign = 'right';
+      ctx.fillText('V', mapV(maxV) - 4, pvOriginY - 4);
+
       var rightX = splitX + 4;
       var rightW = width - rightX - pad;
       var cylW = Math.min(rightW - 8, 148);
@@ -1094,8 +1137,8 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
         var pSpeed = Math.sqrt(Math.max(0.2, curT)) * 1.5;
         ctx.fillStyle = tempNormalized > 0.55 ? C.gold : C.coral;
         state._particles.forEach(function(p) {
-          p.x += p.vx * pSpeed * 0.01;
-          p.y += p.vy * pSpeed * 0.01;
+          p.x += p.vx * pSpeed * 0.6 * dtEff;
+          p.y += p.vy * pSpeed * 0.6 * dtEff;
           if (p.x < 0) { p.x = 0; p.vx *= -1; }
           if (p.x > 1) { p.x = 1; p.vx *= -1; }
           if (p.y < 0) { p.y = 0; p.vy *= -1; }
@@ -1123,7 +1166,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
         ctx.font = '10px Inter, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('insulated  Q = 0', cylX + cylW / 2, resY + 9);
+        ctx.fillText('insulated', cylX + cylW / 2, resY + 9);
       } else {
         var isHeating = Q_val >= 0;
         ctx.fillStyle = isHeating ? 'rgba(204, 120, 92, 0.28)' : 'rgba(93, 184, 166, 0.28)';
@@ -1147,7 +1190,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       var barItems = [
         { label: 'Q', val: Q_val, color: C.gold, max: 8 },
         { label: 'W', val: W_val, color: C.coral, max: 8 },
-        { label: 'ΔU', val: DeltaU_val, color: C.teal, max: 8 }
+        { label: 'U', val: DeltaU_val, color: C.teal, max: 8 }
       ];
       var barGap = Math.max(28, Math.min(40, (height - pad - meterStartY - 16) / 3));
       barItems.forEach(function(b, idx) {
@@ -1187,6 +1230,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
 
   PGRE.visualizers['cpgf-5.18'] = {
     id: 'cpgf-5.18',
+    topic: 'qm',
     title: 'Heisenberg Uncertainty Principle: $\\sigma_x \\sigma_p \\ge \\hbar/2$',
     formulaLatex: '\\sigma_x \\sigma_p \\ge \\frac{\\hbar}{2}, \\qquad [\\hat{x}, \\hat{p}] = i\\hbar',
     physicalStory: `The Heisenberg uncertainty principle is a mathematical consequence of the non-commutativity of conjugate quantum observables in Hilbert space and the wave nature of matter. Position space $\\psi(x)$ and momentum space $\\tilde{\\psi}(p)$ are connected by the Fourier transform: $\\tilde{\\psi}(p) = \\frac{1}{\\sqrt{2\\pi\\hbar}}\\int_{-\\infty}^\\infty \\psi(x) e^{-ipx/\\hbar} dx$. Squeezing a wavepacket in real space (reducing $\\sigma_x$) forces a wider superposition of spatial frequencies, inherently broadening $\\sigma_p$. The Gaussian wavepacket uniquely achieves the theoretical minimum uncertainty limit $\\sigma_x \\sigma_p = \\hbar/2$. Any non-Gaussian profile or phase chirp strictly increases the uncertainty product beyond $\\hbar/2$.`,
@@ -1317,7 +1361,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
 
       var topY = pad;
       var xRange = Math.max(6.0, 3.2 * sigmaX);
-      var pos = drawPanel(pad, topY, subW, subH, 'ψ(x)  position');
+      var pos = drawPanel(pad, topY, subW, subH, 'Position');
       var yBase1 = pos.bodyTop + (pos.bodyBot - pos.bodyTop) * 0.62;
       var yAmpUp1 = yBase1 - pos.bodyTop - 6;
       var yAmpDown1 = pos.bodyBot - yBase1 - 14;
@@ -1386,10 +1430,10 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       ctx.font = '600 10px Inter, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText('1σ Position Spread', clamp((sxL + sxR) / 2, pad + 24, pad + subW - 24), yBase1 + 3);
+      ctx.fillText('spread', clamp((sxL + sxR) / 2, pad + 24, pad + subW - 24), yBase1 + 3);
 
       var botY = pad + subH + gap;
-      var mom = drawPanel(pad, botY, subW, subH, 'Momentum Distribution |ψ(p)|²');
+      var mom = drawPanel(pad, botY, subW, subH, 'Momentum');
       var pMin = Math.min(-3.0, p0 - 3.5 * sigmaP);
       var pMax = Math.max(12.0, p0 + 3.5 * sigmaP);
       var pSpan = Math.max(1e-6, pMax - pMin);
@@ -1453,7 +1497,7 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       ctx.font = '600 10px Inter, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText('1σ Momentum Spread', clamp((spL + spR) / 2, pad + 24, pad + subW - 24), yBase2 + 3);
+      ctx.fillText('spread', clamp((spL + spR) / 2, pad + 24, pad + subW - 24), yBase2 + 3);
     },
 
     challenge: {
@@ -1495,12 +1539,62 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
       });
     }
   }
+  function cvOverR(gasType, t) {
+    t = Math.max(1, t);
+    if (gasType === 'monatomic') return 1.5;
+    if (gasType === 'solid_dulong') {
+      var theta = 280;
+      var x = t / theta;
+      var x3 = x * x * x;
+      return 3.0 * x3 / (0.08 + x3);
+    }
+    var rotFrac = 1 / (1 + Math.exp(-(Math.log(t) - Math.log(70)) * 2.2));
+    var vibFrac = 1 / (1 + Math.exp(-(Math.log(t) - Math.log(900)) * 2.0));
+    if (gasType === 'diatomic_high') return 1.5 + rotFrac + vibFrac;
+    return 1.5 + rotFrac;
+  }
+  function mayerGapOverR(gasType, cvR) {
+    if (gasType === 'solid_dulong') return 0.10 * (cvR / 3.0);
+    return 1.0;
+  }
+  function drawCrystalBlock(ctx, x, y, w, h, T, expandFrac, t, locked) {
+    ctx.fillStyle = C.ivory;
+    ctx.strokeStyle = locked ? C.teal : C.coral;
+    ctx.lineWidth = 1.6;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x, y, w, h);
+    var cols = 5, rows = 4;
+    var jitter = Math.sqrt(Math.max(0.2, T / 300)) * 2.4;
+    var inset = 12;
+    var spanX = (w - inset * 2) * expandFrac;
+    var spanY = (h - inset * 2) * expandFrac;
+    var ox = x + (w - spanX) / 2;
+    var oy = y + (h - spanY) / 2;
+    var ionR = 5;
+    var r, c, jx, jy, sx, sy;
+    for (r = 0; r < rows; r++) {
+      for (c = 0; c < cols; c++) {
+        jx = Math.sin(t * 18 + r * 2.1 + c * 1.4) * jitter;
+        jy = Math.cos(t * 16 + r * 1.7 + c * 2.2) * jitter;
+        sx = ox + ((c + 0.5) / cols) * spanX + jx;
+        sy = oy + ((r + 0.5) / rows) * spanY + jy;
+        ctx.fillStyle = C.gold;
+        ctx.beginPath();
+        ctx.arc(sx, sy, ionR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = C.deep;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+  }
 
   /* -------------------------------------------------------------------------- */
   /* cpgf-4.32: Heat Capacity at Constant Pressure $C_P = (\partial Q/\partial T)_P$ */
   /* -------------------------------------------------------------------------- */
   PGRE.visualizers['cpgf-4.32'] = {
     id: 'cpgf-4.32',
+    topic: 'th',
     title: 'Heat Capacity at Constant Pressure: $C_P = (\\partial Q/\\partial T)_P$',
     formulaLatex: 'C_P = \\left(\\frac{\\partial Q}{\\partial T}\\right)_P = \\left(\\frac{\\partial H}{\\partial T}\\right)_P = T \\left(\\frac{\\partial S}{\\partial T}\\right)_P',
     physicalStory: `Heat capacity $C \\equiv \\delta Q / dT$ quantifies a thermodynamic system's thermal inertia—the amount of thermal energy required to produce a unit increase in temperature. Because heat $\\delta Q$ is path-dependent, the heat capacity depends crucially on the external constraints maintained during heating.
@@ -1595,7 +1689,7 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
     parameters: [
       { id: 'gasType', name: 'Gas model', type: 'select', options: [
         { value: 'monatomic', label: 'Monatomic (He, Ar): $\\gamma = 5/3$' },
-        { value: 'diatomic_rt', label: 'Diatomic room temp (N₂, O₂): $\\gamma = 7/5$' },
+        { value: 'diatomic_rt', label: 'Diatomic room temp: $\\gamma = 7/5$' },
         { value: 'diatomic_high', label: 'Diatomic high temp (+vib): $\\gamma = 9/7$' },
         { value: 'solid_dulong', label: 'Solid (Dulong-Petit): $C \\approx 3R$' }
       ], default: 'diatomic_rt' },
@@ -1605,7 +1699,8 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
         { value: 'energy_bars', label: 'Energy partitioning ($\\Delta U$ vs $W$)' },
         { value: 'cp_curve', label: '$C(T)$ Quantum staircase' }
       ], default: 'energy_bars' },
-      { id: 'animate', name: 'Particle animation', type: 'toggle', default: true }
+      { id: 'animate', name: 'Particle animation', type: 'toggle', default: true },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
 
     init(container, state, redraw) {
@@ -1616,11 +1711,14 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
 
     draw(ctx, width, height, state, dt) {
       state = state || {};
-      const gasType = state.gasType || 'diatomic_rt';
-      const heatInput = Number(state.heatInput != null ? state.heatInput : 500);
-      const T0 = Number(state.tempK != null ? state.tempK : 300);
-      const rightView = state.rightView || 'energy_bars';
-      const animate = state.animate !== false;
+      var gasType = state.gasType || 'diatomic_rt';
+      var heatInput = Number(state.heatInput != null ? state.heatInput : 500);
+      var T0 = Number(state.tempK != null ? state.tempK : 300);
+      var rightView = state.rightView || 'energy_bars';
+      var animate = state.animate !== false;
+      var dtEff = simDt(state, dt);
+      if (animate) state.time = (state.time || 0) + dtEff;
+      var tAnim = state.time || 0;
 
       ctx.fillStyle = C.bg;
       ctx.fillRect(0, 0, width, height);
@@ -1628,71 +1726,54 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
       if (!state._particlesP) seedGasP432(state);
       if (!state._particlesV) seedGasV432(state);
 
-      const R = 8.314; // J / (mol · K)
-      const n = 1.0;   // 1 mole
+      var R = 8.314;
+      var n = 1.0;
+      var isSolid = gasType === 'solid_dulong';
+      var cvR = cvOverR(gasType, T0);
+      var gapR = mayerGapOverR(gasType, cvR);
+      var Cp_m = (cvR + gapR) * R;
+      var Cv_m = cvR * R;
+      var gamma = Cp_m / Cv_m;
+      var gasLabel = 'Diatomic (room temp)';
+      if (gasType === 'monatomic') gasLabel = 'Monatomic (He, Ar)';
+      else if (gasType === 'diatomic_high') gasLabel = 'Diatomic (vibrations on)';
+      else if (isSolid) gasLabel = 'Solid (Debye / Dulong-Petit)';
 
-      // Degrees of freedom & heat capacities per mole
-      let f = 5;
-      let Cv_m = 2.5 * R;
-      let Cp_m = 3.5 * R;
-      let gamma = 7 / 5;
-      let gasLabel = 'Diatomic (N₂, O₂)';
+      var CP = n * Cp_m;
+      var CV = n * Cv_m;
+      var DeltaT_P = heatInput / CP;
+      var T_P = T0 + DeltaT_P;
+      var W_P = isSolid ? (heatInput * gapR / (cvR + gapR)) : (n * R * DeltaT_P);
+      var DeltaU_P = heatInput - W_P;
+      var vRatio_P = 1 + (DeltaT_P / Math.max(50, T0)) * (isSolid ? 0.12 : 0.75);
+      var DeltaT_V = heatInput / CV;
+      var T_V = T0 + DeltaT_V;
+      var pRatio_V = 1 + (DeltaT_V / Math.max(50, T0)) * 0.75;
 
-      if (gasType === 'monatomic') {
-        f = 3;
-        Cv_m = 1.5 * R;
-        Cp_m = 2.5 * R;
-        gamma = 5 / 3;
-        gasLabel = 'Monatomic (He, Ar)';
-      } else if (gasType === 'diatomic_high') {
-        f = 7;
-        Cv_m = 3.5 * R;
-        Cp_m = 4.5 * R;
-        gamma = 9 / 7;
-        gasLabel = 'Diatomic High-T (+Vib)';
-      } else if (gasType === 'solid_dulong') {
-        f = 6;
-        Cv_m = 3.0 * R;
-        Cp_m = 3.1 * R; // small thermal expansion work
-        gamma = Cp_m / Cv_m;
-        gasLabel = 'Solid (Dulong-Petit)';
-      }
-
-      const CP = n * Cp_m;
-      const CV = n * Cv_m;
-
-      // Thermodynamics response to heat injection ΔQ
-      // 1. Isobaric (P = const): ΔT_P = ΔQ / C_P, W_P = PΔV = n R ΔT_P, ΔU_P = C_V ΔT_P = ΔQ - W_P
-      const DeltaT_P = heatInput / CP;
-      const T_P = T0 + DeltaT_P;
-      const W_P = (gasType === 'solid_dulong') ? (heatInput * (Cp_m - Cv_m) / Cp_m) : (n * R * DeltaT_P);
-      const DeltaU_P = heatInput - W_P;
-      const vRatio_P = 1 + (DeltaT_P / Math.max(50, T0)) * 0.75;
-
-      // 2. Isochoric (V = const): W_V = 0, ΔU_V = ΔQ, ΔT_V = ΔQ / C_V
-      const DeltaT_V = heatInput / CV;
-      const T_V = T0 + DeltaT_V;
-      const W_V = 0;
-      const DeltaU_V = heatInput;
-      const pRatio_V = 1 + (DeltaT_V / Math.max(50, T0)) * 0.75;
-
-      // Off-canvas legend strip (Typeset cleanly with KaTeX)
       legend('Heat capacity $C_P = (\\partial Q/\\partial T)_P$', [
         { label: 'Model', value: gasLabel },
         { label: '$C_P$', value: '$' + (Cp_m / R).toFixed(2) + ' R = ' + Cp_m.toFixed(1) + '\\text{ J/(mol}\\cdot\\text{K)}$' },
         { label: '$C_V$', value: '$' + (Cv_m / R).toFixed(2) + ' R = ' + Cv_m.toFixed(1) + '\\text{ J/(mol}\\cdot\\text{K)}$' },
-        { label: '$C_P - C_V$', value: '$' + ((Cp_m - Cv_m) / R).toFixed(2) + ' R = ' + (Cp_m - Cv_m).toFixed(1) + '\\text{ J/(mol}\\cdot\\text{K)}$' },
+        { label: '$C_P - C_V$', value: '$' + gapR.toFixed(2) + ' R = ' + (Cp_m - Cv_m).toFixed(1) + '\\text{ J/(mol}\\cdot\\text{K)}$' },
         { label: '$\\gamma = C_P/C_V$', value: '$' + gamma.toFixed(3) + '$' }
       ]);
-      legend('Isobaric vs Isochoric response ($\\Delta Q = ' + heatInput.toFixed(0) + '\\text{ J}$)', [
+      var gapRow = isSolid
+        ? { label: '$C_P - C_V = VT\\beta^2/\\kappa_T$', value: '$' + (n * (Cp_m - Cv_m)).toFixed(2) + '\\text{ J/K}$' }
+        : { label: "Mayer $C_P - C_V$", value: '$n R = ' + (n * R).toFixed(2) + '\\text{ J/K}$' };
+      legend('Isobaric vs isochoric ($\\Delta Q = ' + heatInput.toFixed(0) + '\\text{ J}$)', [
         { label: 'Isobaric $\\Delta T_P$', value: '$+' + DeltaT_P.toFixed(1) + '\\text{ K} \\quad (T_P = ' + T_P.toFixed(1) + '\\text{ K})$' },
         { label: 'Isochoric $\\Delta T_V$', value: '$+' + DeltaT_V.toFixed(1) + '\\text{ K} \\quad (T_V = ' + T_V.toFixed(1) + '\\text{ K})$' },
-        { label: 'Isobaric work $W_P$', value: '$+' + W_P.toFixed(1) + '\\text{ J} \\quad (' + ((W_P / heatInput) * 100).toFixed(1) + '\\%)$' },
-        { label: 'Isobaric $\\Delta U_P$', value: '$+' + DeltaU_P.toFixed(1) + '\\text{ J} \\quad (' + ((DeltaU_P / heatInput) * 100).toFixed(1) + '\\%)$' },
-        { label: "Mayer's law $C_P - C_V$", value: '$n R = ' + (n * R).toFixed(2) + '\\text{ J/K}$' },
-        { label: 'Work fraction $W_P/\\Delta Q$', value: '$(\\gamma-1)/\\gamma = ' + ((W_P / heatInput) * 100).toFixed(1) + '\\%$' },
-        { label: 'Thermal fraction $\\Delta U_P/\\Delta Q$', value: '$1/\\gamma = ' + ((DeltaU_P / heatInput) * 100).toFixed(1) + '\\%$' }
+        { label: 'Isobaric work $W_P$', value: '$+' + W_P.toFixed(1) + '\\text{ J}$' },
+        { label: 'Isobaric $\\Delta U_P$', value: '$+' + DeltaU_P.toFixed(1) + '\\text{ J}$' },
+        gapRow
       ]);
+      if (rightView === 'cp_curve') {
+        legend('Heat-capacity curves', [
+          { label: 'Coral', value: '$C_P(T)$' },
+          { label: 'Teal', value: '$C_V(T)$' },
+          { label: 'Gold band', value: isSolid ? '$C_P - C_V \\ll R$' : '$C_P - C_V = R$' }
+        ]);
+      }
 
       var pad = 12;
       var leftW = Math.floor(width * 0.54);
@@ -1700,9 +1781,6 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
       var rightX = pad + leftW + 10;
       var rightW = width - rightX - pad;
 
-      /* ==================================================================== */
-      /* LEFT PANEL: Side-by-Side Dual Cylinder Simulation                   */
-      /* ==================================================================== */
       ctx.fillStyle = C.panel;
       ctx.strokeStyle = C.line;
       ctx.lineWidth = 1;
@@ -1714,96 +1792,149 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
       ctx.font = '600 12px Inter, sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText('Constant Pressure vs Constant Volume', pad + 10, pad + 8);
+      ctx.fillText(isSolid ? 'Lattice: free expansion vs locked volume' : 'Constant pressure vs constant volume', pad + 10, pad + 8);
 
       var subW = Math.floor((leftW - 32) / 2);
-      var cylH = Math.min(136, Math.floor(leftH * 0.40));
+      var cylH = Math.min(136, Math.floor(leftH * 0.48));
       var cylY = pad + 38;
-
-      // ----------------------------------------------------------------------
-      // Chamber 1 (Left): Isobaric (Piston Free to Expand)
-      // ----------------------------------------------------------------------
       var c1X = pad + 10;
-      ctx.fillStyle = C.ivory;
-      ctx.strokeStyle = C.stone;
-      ctx.lineWidth = 1.6;
-      ctx.fillRect(c1X, cylY, subW, cylH);
-      ctx.strokeRect(c1X, cylY, subW, cylH);
+      var c2X = pad + 10 + subW + 12;
 
-      // Label header for chamber 1
       ctx.fillStyle = C.coral;
       ctx.font = '600 11px Inter, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Isobaric (Free Piston)', c1X + subW / 2, cylY - 14);
+      ctx.fillText(isSolid ? 'Isobaric (expands slightly)' : 'Isobaric (free piston)', c1X + subW / 2, cylY - 14);
+      ctx.fillStyle = C.teal;
+      ctx.fillText(isSolid ? 'Isochoric (clamped lattice)' : 'Isochoric (locked volume)', c2X + subW / 2, cylY - 14);
 
-      // Piston height expands under heat
-      var baseGasH = cylH * 0.52;
-      var expandH = baseGasH * clamp(vRatio_P, 1.0, 1.65);
-      var pistonY1 = cylY + cylH - expandH;
-      var gasH1 = cylY + cylH - pistonY1;
+      if (isSolid) {
+        var expP = clamp(vRatio_P, 1.0, 1.18);
+        drawCrystalBlock(ctx, c1X, cylY, subW, cylH, T_P, expP, tAnim, false);
+        drawCrystalBlock(ctx, c2X, cylY, subW, cylH, T_V, 1.0, tAnim, true);
+        ctx.fillStyle = C.deep;
+        ctx.fillRect(c2X - 3, cylY + 8, 8, 6);
+        ctx.fillRect(c2X + subW - 5, cylY + 8, 8, 6);
+        ctx.fillRect(c2X - 3, cylY + cylH - 14, 8, 6);
+        ctx.fillRect(c2X + subW - 5, cylY + cylH - 14, 8, 6);
+      } else {
+        ctx.fillStyle = C.ivory;
+        ctx.strokeStyle = C.stone;
+        ctx.lineWidth = 1.6;
+        ctx.fillRect(c1X, cylY, subW, cylH);
+        ctx.strokeRect(c1X, cylY, subW, cylH);
 
-      // Gas glow in chamber 1
-      var normTP = clamp((T_P - 100) / 700, 0, 1);
-      ctx.fillStyle = 'rgba(' +
-        Math.floor(204 * normTP + 93 * (1 - normTP)) + ', ' +
-        Math.floor(120 * normTP + 184 * (1 - normTP)) + ', ' +
-        Math.floor(92 * normTP + 166 * (1 - normTP)) + ', 0.35)';
-      ctx.fillRect(c1X + 2, pistonY1, subW - 4, gasH1 - 2);
+        var baseGasH = cylH * 0.52;
+        var expandH = baseGasH * clamp(vRatio_P, 1.0, 1.65);
+        var pistonY1 = cylY + cylH - expandH;
+        var gasH1 = cylY + cylH - pistonY1;
 
-      // Animated gas particles (speed ~ sqrt(T))
-      if (state._particlesP && gasH1 > 6) {
-        var spdP = Math.sqrt(Math.max(0.2, T_P / 300)) * (animate ? 1.4 : 0);
-        ctx.fillStyle = normTP > 0.5 ? C.gold : C.coral;
-        state._particlesP.forEach(function(p) {
-          p.x += p.vx * spdP * 0.012;
-          p.y += p.vy * spdP * 0.012;
-          if (p.x < 0) { p.x = 0; p.vx *= -1; }
-          if (p.x > 1) { p.x = 1; p.vx *= -1; }
-          if (p.y < 0) { p.y = 0; p.vy *= -1; }
-          if (p.y > 1) { p.y = 1; p.vy *= -1; }
-          var px = c1X + 4 + p.x * (subW - 8);
-          var py = pistonY1 + 3 + p.y * (gasH1 - 6);
+        var normTP = clamp((T_P - 100) / 700, 0, 1);
+        ctx.fillStyle = 'rgba(' +
+          Math.floor(204 * normTP + 93 * (1 - normTP)) + ', ' +
+          Math.floor(120 * normTP + 184 * (1 - normTP)) + ', ' +
+          Math.floor(92 * normTP + 166 * (1 - normTP)) + ', 0.35)';
+        ctx.fillRect(c1X + 2, pistonY1, subW - 4, gasH1 - 2);
+
+        if (state._particlesP && gasH1 > 6) {
+          var spdP = Math.sqrt(Math.max(0.2, T_P / 300)) * (animate ? 1.4 : 0);
+          ctx.fillStyle = normTP > 0.5 ? C.gold : C.coral;
+          state._particlesP.forEach(function(p) {
+            p.x += p.vx * spdP * 0.75 * dtEff;
+            p.y += p.vy * spdP * 0.75 * dtEff;
+            if (p.x < 0) { p.x = 0; p.vx *= -1; }
+            if (p.x > 1) { p.x = 1; p.vx *= -1; }
+            if (p.y < 0) { p.y = 0; p.vy *= -1; }
+            if (p.y > 1) { p.y = 1; p.vy *= -1; }
+            var px = c1X + 4 + p.x * (subW - 8);
+            var py = pistonY1 + 3 + p.y * (gasH1 - 6);
+            ctx.beginPath();
+            ctx.arc(px, py, 2.2, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
+
+        ctx.fillStyle = C.stone;
+        ctx.fillRect(c1X + 2, pistonY1 - 9, subW - 4, 9);
+        ctx.fillStyle = C.muted;
+        var shaftH1 = Math.max(4, pistonY1 - 9 - (cylY + 4));
+        ctx.fillRect(c1X + subW / 2 - 3, cylY + 4, 6, shaftH1);
+        ctx.fillStyle = C.deep;
+        ctx.fillRect(c1X + subW / 2 - 18, cylY + 2, 36, 8);
+
+        if (W_P > 5) {
+          ctx.strokeStyle = C.coral;
+          ctx.fillStyle = C.coral;
+          ctx.lineWidth = 2;
+          var ax1 = c1X + subW - 10;
+          var ay1Bot = pistonY1 - 12;
+          var ay1Top = Math.max(cylY + 12, ay1Bot - 16);
           ctx.beginPath();
-          ctx.arc(px, py, 2.2, 0, Math.PI * 2);
+          ctx.moveTo(ax1, ay1Bot);
+          ctx.lineTo(ax1, ay1Top);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(ax1, ay1Top);
+          ctx.lineTo(ax1 - 3, ay1Top + 5);
+          ctx.lineTo(ax1 + 3, ay1Top + 5);
           ctx.fill();
-        });
-      }
+        }
 
-      // Piston slab & weight on top
-      ctx.fillStyle = C.stone;
-      ctx.fillRect(c1X + 2, pistonY1 - 9, subW - 4, 9);
-      // Piston shaft & atmospheric load
-      ctx.fillStyle = C.muted;
-      var shaftH1 = Math.max(4, pistonY1 - 9 - (cylY + 4));
-      ctx.fillRect(c1X + subW / 2 - 3, cylY + 4, 6, shaftH1);
-      // Atmospheric pressure weight block
-      ctx.fillStyle = C.deep;
-      ctx.fillRect(c1X + subW / 2 - 18, cylY + 2, 36, 8);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '600 8px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('Piston Load', c1X + subW / 2, cylY + 8);
+        ctx.fillStyle = C.ivory;
+        ctx.strokeStyle = C.stone;
+        ctx.lineWidth = 1.6;
+        ctx.fillRect(c2X, cylY, subW, cylH);
+        ctx.strokeRect(c2X, cylY, subW, cylH);
 
-      // Upward work vector arrow (if expanding)
-      if (W_P > 5) {
-        ctx.strokeStyle = C.coral;
-        ctx.fillStyle = C.coral;
-        ctx.lineWidth = 2;
-        var ax1 = c1X + subW - 10;
-        var ay1Bot = pistonY1 - 12;
-        var ay1Top = Math.max(cylY + 12, ay1Bot - 16);
+        var pistonY2 = cylY + cylH - baseGasH;
+        var gasH2 = cylH - (pistonY2 - cylY);
+        var normTV = clamp((T_V - 100) / 700, 0, 1);
+        ctx.fillStyle = 'rgba(' +
+          Math.floor(204 * normTV + 93 * (1 - normTV)) + ', ' +
+          Math.floor(120 * normTV + 184 * (1 - normTV)) + ', ' +
+          Math.floor(92 * normTV + 166 * (1 - normTV)) + ', 0.45)';
+        ctx.fillRect(c2X + 2, pistonY2, subW - 4, gasH2 - 2);
+
+        if (state._particlesV && gasH2 > 6) {
+          var spdV = Math.sqrt(Math.max(0.2, T_V / 300)) * (animate ? 1.4 : 0);
+          ctx.fillStyle = normTV > 0.5 ? C.gold : C.coral;
+          state._particlesV.forEach(function(p) {
+            p.x += p.vx * spdV * 0.75 * dtEff;
+            p.y += p.vy * spdV * 0.75 * dtEff;
+            if (p.x < 0) { p.x = 0; p.vx *= -1; }
+            if (p.x > 1) { p.x = 1; p.vx *= -1; }
+            if (p.y < 0) { p.y = 0; p.vy *= -1; }
+            if (p.y > 1) { p.y = 1; p.vy *= -1; }
+            var px = c2X + 4 + p.x * (subW - 8);
+            var py = pistonY2 + 3 + p.y * (gasH2 - 6);
+            ctx.beginPath();
+            ctx.arc(px, py, 2.2, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
+
+        ctx.fillStyle = C.stone;
+        ctx.fillRect(c2X + 2, pistonY2 - 9, subW - 4, 9);
+        ctx.fillStyle = C.deep;
+        ctx.fillRect(c2X - 3, pistonY2 - 12, 8, 6);
+        ctx.fillRect(c2X + subW - 5, pistonY2 - 12, 8, 6);
+
+        var gaugeX = c2X + subW - 16;
+        var gaugeY = cylY + cylH - 24;
         ctx.beginPath();
-        ctx.moveTo(ax1, ay1Bot);
-        ctx.lineTo(ax1, ay1Top);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(ax1, ay1Top);
-        ctx.lineTo(ax1 - 3, ay1Top + 5);
-        ctx.lineTo(ax1 + 3, ay1Top + 5);
+        ctx.arc(gaugeX, gaugeY, 9, 0, Math.PI * 2);
+        ctx.fillStyle = C.ivory;
         ctx.fill();
+        ctx.strokeStyle = C.stone;
+        ctx.stroke();
+        var needleAngle = -Math.PI * 0.7 + clamp(pRatio_V - 1, 0, 1) * Math.PI * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(gaugeX, gaugeY);
+        ctx.lineTo(gaugeX + 7 * Math.cos(needleAngle), gaugeY + 7 * Math.sin(needleAngle));
+        ctx.strokeStyle = C.rose;
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
       }
 
-      // Heating coil at bottom of Chamber 1
       var coilY1 = cylY + cylH + 2;
       ctx.fillStyle = 'rgba(204, 120, 92, 0.35)';
       ctx.fillRect(c1X, coilY1, subW, 14);
@@ -1811,161 +1942,26 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
       ctx.font = '600 9px Inter, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('Heater', c1X + subW / 2, coilY1 + 7);
+      ctx.fillText('heater', c1X + subW / 2, coilY1 + 7);
 
-      // Temperature pill 1
-      var pill1Y = coilY1 + 18;
-      ctx.fillStyle = C.ivory;
-      ctx.strokeStyle = C.coral;
-      ctx.lineWidth = 1.2;
-      panelPath(ctx, c1X, pill1Y, subW, 40, 5);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = C.coral;
-      ctx.font = '600 11px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText('Isobaric Temperature', c1X + subW / 2, pill1Y + 4);
-      ctx.fillStyle = C.ink;
-      ctx.font = '600 12px "JetBrains Mono", monospace';
-      ctx.fillText(T_P.toFixed(1) + ' K', c1X + subW / 2, pill1Y + 16);
-      ctx.fillStyle = C.muted;
-      ctx.font = '9px Inter, sans-serif';
-      ctx.fillText('Rise: +' + DeltaT_P.toFixed(1) + ' K', c1X + subW / 2, pill1Y + 28);
-
-      // ----------------------------------------------------------------------
-      // Chamber 2 (Right): Isochoric (Rigid Clamps / Locked)
-      // ----------------------------------------------------------------------
-      var c2X = pad + 10 + subW + 12;
-      ctx.fillStyle = C.ivory;
-      ctx.strokeStyle = C.stone;
-      ctx.lineWidth = 1.6;
-      ctx.fillRect(c2X, cylY, subW, cylH);
-      ctx.strokeRect(c2X, cylY, subW, cylH);
-
-      // Label header for chamber 2
-      ctx.fillStyle = C.teal;
-      ctx.font = '600 11px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('Isochoric (Locked Volume)', c2X + subW / 2, cylY - 14);
-
-      // Piston height is locked at base height
-      var pistonY2 = cylY + cylH - baseGasH;
-      var gasH2 = cylH - (pistonY2 - cylY);
-
-      // Gas glow in chamber 2 (warmer because ΔT_V > ΔT_P!)
-      var normTV = clamp((T_V - 100) / 700, 0, 1);
-      ctx.fillStyle = 'rgba(' +
-        Math.floor(204 * normTV + 93 * (1 - normTV)) + ', ' +
-        Math.floor(120 * normTV + 184 * (1 - normTV)) + ', ' +
-        Math.floor(92 * normTV + 166 * (1 - normTV)) + ', 0.45)';
-      ctx.fillRect(c2X + 2, pistonY2, subW - 4, gasH2 - 2);
-
-      // Animated gas particles in Chamber 2 (faster!)
-      if (state._particlesV && gasH2 > 6) {
-        var spdV = Math.sqrt(Math.max(0.2, T_V / 300)) * (animate ? 1.4 : 0);
-        ctx.fillStyle = normTV > 0.5 ? C.gold : C.coral;
-        state._particlesV.forEach(function(p) {
-          p.x += p.vx * spdV * 0.012;
-          p.y += p.vy * spdV * 0.012;
-          if (p.x < 0) { p.x = 0; p.vx *= -1; }
-          if (p.x > 1) { p.x = 1; p.vx *= -1; }
-          if (p.y < 0) { p.y = 0; p.vy *= -1; }
-          if (p.y > 1) { p.y = 1; p.vy *= -1; }
-          var px = c2X + 4 + p.x * (subW - 8);
-          var py = pistonY2 + 3 + p.y * (gasH2 - 6);
-          ctx.beginPath();
-          ctx.arc(px, py, 2.2, 0, Math.PI * 2);
-          ctx.fill();
-        });
-      }
-
-      // Piston slab & lock clamps
-      ctx.fillStyle = C.stone;
-      ctx.fillRect(c2X + 2, pistonY2 - 9, subW - 4, 9);
-      // Rigid locking pins
-      ctx.fillStyle = C.deep;
-      ctx.fillRect(c2X - 3, pistonY2 - 12, 8, 6);
-      ctx.fillRect(c2X + subW - 5, pistonY2 - 12, 8, 6);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '600 7px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('PIN', c2X + 1, pistonY2 - 7);
-      ctx.fillText('PIN', c2X + subW - 1, pistonY2 - 7);
-
-      // Lock status badge
-      ctx.fillStyle = C.teal;
-      ctx.font = '600 9px Inter, sans-serif';
-      ctx.fillText('LOCKED (Zero Work)', c2X + subW / 2, cylY + 12);
-
-      // Pressure gauge on side of Chamber 2
-      var gaugeX = c2X + subW - 16;
-      var gaugeY = cylY + cylH - 24;
-      ctx.beginPath();
-      ctx.arc(gaugeX, gaugeY, 9, 0, Math.PI * 2);
-      ctx.fillStyle = C.ivory;
-      ctx.fill();
-      ctx.strokeStyle = C.stone;
-      ctx.stroke();
-      // Needle pointing up-right (high P)
-      var needleAngle = -Math.PI * 0.7 + clamp(pRatio_V - 1, 0, 1) * Math.PI * 0.8;
-      ctx.beginPath();
-      ctx.moveTo(gaugeX, gaugeY);
-      ctx.lineTo(gaugeX + 7 * Math.cos(needleAngle), gaugeY + 7 * Math.sin(needleAngle));
-      ctx.strokeStyle = C.rose;
-      ctx.lineWidth = 1.4;
-      ctx.stroke();
-
-      // Heating coil at bottom of Chamber 2 (identical heat input)
-      var coilY2 = cylY + cylH + 2;
       ctx.fillStyle = 'rgba(93, 184, 166, 0.35)';
-      ctx.fillRect(c2X, coilY2, subW, 14);
+      ctx.fillRect(c2X, coilY1, subW, 14);
       ctx.fillStyle = C.teal;
-      ctx.font = '600 9px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('Heater', c2X + subW / 2, coilY2 + 7);
+      ctx.fillText('heater', c2X + subW / 2, coilY1 + 7);
 
-      // Temperature pill 2
-      var pill2Y = coilY2 + 18;
-      ctx.fillStyle = C.ivory;
-      ctx.strokeStyle = C.teal;
-      ctx.lineWidth = 1.2;
-      panelPath(ctx, c2X, pill2Y, subW, 40, 5);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = C.teal;
-      ctx.font = '600 11px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText('Isochoric Temperature', c2X + subW / 2, pill2Y + 4);
-      ctx.fillStyle = C.ink;
-      ctx.font = '600 12px "JetBrains Mono", monospace';
-      ctx.fillText(T_V.toFixed(1) + ' K', c2X + subW / 2, pill2Y + 16);
-      ctx.fillStyle = C.muted;
-      ctx.font = '9px Inter, sans-serif';
-      ctx.fillText('Rise: +' + DeltaT_V.toFixed(1) + ' K', c2X + subW / 2, pill2Y + 28);
-
-      // Bottom Comparison banner across left panel
-      var bannerY = leftH - pad - 18;
+      var bannerY = pad + leftH - 28;
       ctx.fillStyle = C.ivory;
       ctx.strokeStyle = C.line;
       ctx.lineWidth = 1;
-      panelPath(ctx, pad + 10, bannerY, leftW - 20, 26, 4);
+      panelPath(ctx, pad + 10, bannerY, leftW - 20, 22, 4);
       ctx.fill();
       ctx.stroke();
-
       ctx.fillStyle = C.deep;
       ctx.font = '600 10px Inter, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('Equal Heat: Isochoric chamber reaches higher temperature', pad + leftW / 2, bannerY + 13);
+      ctx.fillText('Equal heat: locked chamber ends hotter', pad + leftW / 2, bannerY + 11);
 
-      /* ==================================================================== */
-      /* RIGHT PANEL: Switchable Mode (Energy Bars OR C(T) Quantum Staircase)*/
-      /* ==================================================================== */
       ctx.fillStyle = C.panel;
       ctx.strokeStyle = C.line;
       ctx.lineWidth = 1;
@@ -1974,47 +1970,41 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
       ctx.stroke();
 
       if (rightView === 'energy_bars') {
-        // --- MODE A: ENERGY PARTITIONING BARS ---
         ctx.fillStyle = C.ink;
         ctx.font = '600 12px Inter, sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
-        ctx.fillText('Energy Partitioning', rightX + 10, pad + 8);
+        ctx.fillText('Energy partitioning', rightX + 10, pad + 8);
 
         ctx.fillStyle = C.muted;
         ctx.font = '10px Inter, sans-serif';
-        ctx.fillText('First Law: Heat into internal energy vs work', rightX + 10, pad + 24);
+        ctx.fillText('Heat into internal energy vs work', rightX + 10, pad + 24);
 
         var barPanelY = pad + 44;
         var barPanelW = rightW - 20;
-
-        // Section 1: Isobaric Bars
-        ctx.fillStyle = C.coral;
-        ctx.font = '600 11px Inter, sans-serif';
-        ctx.fillText('Isobaric Partitioning', rightX + 10, barPanelY);
-
         var qP_w = Math.floor(barPanelW * 0.95);
         var barH = 12;
 
-        // Q bar (Total heat added)
+        ctx.fillStyle = C.coral;
+        ctx.font = '600 11px Inter, sans-serif';
+        ctx.fillText('Isobaric', rightX + 10, barPanelY);
+
         var by1 = barPanelY + 16;
         ctx.fillStyle = C.muted;
         ctx.font = '9px Inter, sans-serif';
-        ctx.fillText('Total Heat Input (100%)', rightX + 10, by1);
+        ctx.fillText('Heat in', rightX + 10, by1);
         ctx.fillStyle = C.gold;
         ctx.fillRect(rightX + 10, by1 + 12, qP_w, barH);
 
-        // Partition split: ΔU and W
         var by2 = by1 + 30;
         var fracU_P = clamp(DeltaU_P / heatInput, 0, 1);
-        var fracW_P = clamp(W_P / heatInput, 0, 1);
         var wU_P = Math.floor(qP_w * fracU_P);
         var wW_P = qP_w - wU_P;
 
         ctx.fillStyle = C.muted;
-        ctx.fillText('Thermal Energy (' + (fracU_P * 100).toFixed(0) + '%)', rightX + 10, by2);
+        ctx.fillText('Thermal', rightX + 10, by2);
         ctx.textAlign = 'right';
-        ctx.fillText('Work (' + (fracW_P * 100).toFixed(0) + '%)', rightX + 10 + qP_w, by2);
+        ctx.fillText('Work', rightX + 10 + qP_w, by2);
         ctx.textAlign = 'left';
 
         ctx.fillStyle = C.teal;
@@ -2022,64 +2012,34 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
         ctx.fillStyle = C.coral;
         ctx.fillRect(rightX + 10 + wU_P, by2 + 12, wW_P, barH);
 
-        // Section 2: Isochoric Bars
         var barPanel2Y = by2 + 38;
         ctx.fillStyle = C.teal;
         ctx.font = '600 11px Inter, sans-serif';
-        ctx.fillText('Isochoric Partitioning', rightX + 10, barPanel2Y);
+        ctx.fillText('Isochoric', rightX + 10, barPanel2Y);
 
         var by3 = barPanel2Y + 16;
         ctx.fillStyle = C.muted;
         ctx.font = '9px Inter, sans-serif';
-        ctx.fillText('Total Heat Input (100%)', rightX + 10, by3);
+        ctx.fillText('Heat in', rightX + 10, by3);
         ctx.fillStyle = C.gold;
         ctx.fillRect(rightX + 10, by3 + 12, qP_w, barH);
 
         var by4 = by3 + 30;
         ctx.fillStyle = C.muted;
-        ctx.fillText('Thermal Energy (100% — Zero Work)', rightX + 10, by4);
+        ctx.fillText('Thermal (no expansion work)', rightX + 10, by4);
         ctx.fillStyle = C.teal;
         ctx.fillRect(rightX + 10, by4 + 12, qP_w, barH);
-
-        // Section 3: Summary Mathematical Proportions Box
-        var sumBoxY = by4 + 34;
-        var sumBoxH = leftH - (sumBoxY - pad) - 10;
-        if (sumBoxH > 45) {
-          ctx.fillStyle = C.ivory;
-          ctx.strokeStyle = C.line;
-          ctx.lineWidth = 1;
-          panelPath(ctx, rightX + 10, sumBoxY, barPanelW, sumBoxH, 6);
-          ctx.fill();
-          ctx.stroke();
-
-          ctx.fillStyle = C.ink;
-          ctx.font = '600 10px Inter, sans-serif';
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'top';
-          ctx.fillText("Key Thermodynamic Insights", rightX + 18, sumBoxY + 8);
-
-          ctx.fillStyle = C.muted;
-          ctx.font = '9px Inter, sans-serif';
-          ctx.fillText('• Isobaric work siphons energy: smaller temperature rise', rightX + 18, sumBoxY + 22);
-          ctx.fillText('• Isochoric locks volume: all heat fuels internal energy', rightX + 18, sumBoxY + 36);
-          if (sumBoxH > 64) {
-            ctx.fillText('• Consequence: Heat capacity C_P > C_V for all matter', rightX + 18, sumBoxY + 50);
-          }
-        }
-
       } else {
-        // --- MODE B: C(T) QUANTUM STAIRCASE CURVE ---
         ctx.fillStyle = C.ink;
         ctx.font = '600 12px Inter, sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
-        ctx.fillText('Heat Capacity vs Temperature', rightX + 10, pad + 8);
+        ctx.fillText('Heat capacity vs temperature', rightX + 10, pad + 8);
 
         ctx.fillStyle = C.muted;
         ctx.font = '10px Inter, sans-serif';
-        ctx.fillText('Degree-of-freedom activation vs temperature', rightX + 10, pad + 24);
+        ctx.fillText(isSolid ? 'Debye rise to Dulong-Petit' : (gasType === 'monatomic' ? 'Equipartition (translation only)' : 'Degree-of-freedom freeze-out'), rightX + 10, pad + 24);
 
-        // Coordinate axes for log10(T) from T=10K to T=2000K
         var plotX = rightX + 34;
         var plotY = pad + 44;
         var plotW = rightW - 48;
@@ -2090,9 +2050,9 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
         ctx.strokeStyle = C.line;
         ctx.strokeRect(plotX, plotY, plotW, plotH);
 
-        var minLogT = 1.0; // 10 K
-        var maxLogT = 3.3; // ~2000 K
-        var maxC = 5.5;    // in units of R
+        var minLogT = 1.0;
+        var maxLogT = 3.3;
+        var maxC = isSolid ? 3.6 : (gasType === 'monatomic' ? 3.2 : 5.5);
 
         function mapT_X(t) {
           var logVal = Math.log10(Math.max(10, t));
@@ -2102,7 +2062,6 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
           return plotY + plotH - (cR / maxC) * plotH;
         }
 
-        // Horizontal gridlines for C/R = 1.5, 2.5, 3.5, 4.5
         ctx.strokeStyle = 'rgba(230, 223, 216, 0.7)';
         ctx.lineWidth = 1;
         ctx.fillStyle = C.muted;
@@ -2110,16 +2069,16 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
 
-        [1.5, 2.5, 3.5, 4.5].forEach(function(val) {
+        var gridC = isSolid ? [1.0, 2.0, 3.0] : (gasType === 'monatomic' ? [1.5, 2.5] : [1.5, 2.5, 3.5, 4.5]);
+        gridC.forEach(function(val) {
           var gy = mapC_Y(val);
           ctx.beginPath();
           ctx.moveTo(plotX, gy);
           ctx.lineTo(plotX + plotW, gy);
           ctx.stroke();
-          ctx.fillText(val.toFixed(1) + ' R', plotX - 4, gy);
+          ctx.fillText(val.toFixed(1), plotX - 4, gy);
         });
 
-        // Vertical gridlines for T = 50K, 300K, 1000K
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         [50, 300, 1000].forEach(function(tVal) {
@@ -2128,100 +2087,79 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
           ctx.moveTo(gx, plotY);
           ctx.lineTo(gx, plotY + plotH);
           ctx.stroke();
-          ctx.fillText(tVal >= 1000 ? (tVal/1000) + 'k' : String(tVal), gx, plotY + plotH + 4);
+          ctx.fillText(tVal >= 1000 ? (tVal / 1000) + 'k' : String(tVal), gx, plotY + plotH + 4);
         });
 
-        // Axis label for temperature
-        ctx.fillStyle = C.muted;
-        ctx.font = '9px Inter, sans-serif';
-        ctx.textAlign = 'right';
-        ctx.fillText('T (K)', plotX + plotW, plotY + plotH + 4);
-
-        // Quantum freeze-out model function:
-        function calcCvModel(t) {
-          var rotFrac = 1 / (1 + Math.exp(-(Math.log(t) - Math.log(70)) * 2.2));
-          var vibFrac = 1 / (1 + Math.exp(-(Math.log(t) - Math.log(900)) * 2.0));
-          return 1.5 + 1.0 * rotFrac + 1.0 * vibFrac;
-        }
-
-        // Plot Shaded Gap between C_P(T) and C_V(T) (Width = 1.0 R)
         var numCurvePts = 60;
         ctx.beginPath();
-        for (var i = 0; i <= numCurvePts; i++) {
-          var logT = minLogT + (maxLogT - minLogT) * (i / numCurvePts);
-          var t = Math.pow(10, logT);
-          var cvVal = calcCvModel(t);
-          var cpVal = cvVal + 1.0;
-          var x = plotX + (i / numCurvePts) * plotW;
-          var y = mapC_Y(cpVal);
+        var i, logT, t, cvVal, cpVal, x, y;
+        for (i = 0; i <= numCurvePts; i++) {
+          logT = minLogT + (maxLogT - minLogT) * (i / numCurvePts);
+          t = Math.pow(10, logT);
+          cvVal = cvOverR(gasType, t);
+          cpVal = cvVal + mayerGapOverR(gasType, cvVal);
+          x = plotX + (i / numCurvePts) * plotW;
+          y = mapC_Y(cpVal);
           if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
-        for (var i = numCurvePts; i >= 0; i--) {
-          var logT = minLogT + (maxLogT - minLogT) * (i / numCurvePts);
-          var t = Math.pow(10, logT);
-          var cvVal = calcCvModel(t);
-          var x = plotX + (i / numCurvePts) * plotW;
-          var y = mapC_Y(cvVal);
+        for (i = numCurvePts; i >= 0; i--) {
+          logT = minLogT + (maxLogT - minLogT) * (i / numCurvePts);
+          t = Math.pow(10, logT);
+          cvVal = cvOverR(gasType, t);
+          x = plotX + (i / numCurvePts) * plotW;
+          y = mapC_Y(cvVal);
           ctx.lineTo(x, y);
         }
         ctx.closePath();
         ctx.fillStyle = 'rgba(212, 160, 23, 0.16)';
         ctx.fill();
 
-        // Plot C_P(T) curve (Coral)
         ctx.strokeStyle = C.coral;
         ctx.lineWidth = 2.2;
         ctx.beginPath();
-        for (var i = 0; i <= numCurvePts; i++) {
-          var logT = minLogT + (maxLogT - minLogT) * (i / numCurvePts);
-          var t = Math.pow(10, logT);
-          var cpVal = calcCvModel(t) + 1.0;
-          var x = plotX + (i / numCurvePts) * plotW;
-          var y = mapC_Y(cpVal);
+        for (i = 0; i <= numCurvePts; i++) {
+          logT = minLogT + (maxLogT - minLogT) * (i / numCurvePts);
+          t = Math.pow(10, logT);
+          cvVal = cvOverR(gasType, t);
+          cpVal = cvVal + mayerGapOverR(gasType, cvVal);
+          x = plotX + (i / numCurvePts) * plotW;
+          y = mapC_Y(cpVal);
           if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
 
-        // Plot C_V(T) curve (Teal)
         ctx.strokeStyle = C.teal;
         ctx.lineWidth = 2.2;
         ctx.beginPath();
-        for (var i = 0; i <= numCurvePts; i++) {
-          var logT = minLogT + (maxLogT - minLogT) * (i / numCurvePts);
-          var t = Math.pow(10, logT);
-          var cvVal = calcCvModel(t);
-          var x = plotX + (i / numCurvePts) * plotW;
-          var y = mapC_Y(cvVal);
+        for (i = 0; i <= numCurvePts; i++) {
+          logT = minLogT + (maxLogT - minLogT) * (i / numCurvePts);
+          t = Math.pow(10, logT);
+          cvVal = cvOverR(gasType, t);
+          x = plotX + (i / numCurvePts) * plotW;
+          y = mapC_Y(cvVal);
           if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
 
-        // Regime annotations at top of plot
         ctx.fillStyle = C.stone;
         ctx.font = '8px Inter, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Translational (f=3)', mapT_X(25), plotY + 10);
-        ctx.fillText('Rotational (f=5)', mapT_X(300), plotY + 10);
-        ctx.fillText('Vibrational (f=7)', mapT_X(1400), plotY + 10);
+        if (gasType === 'monatomic') {
+          ctx.fillText('translation only', mapT_X(300), plotY + 10);
+        } else if (isSolid) {
+          ctx.fillText('low T', mapT_X(50), plotY + 10);
+          ctx.fillText('Dulong-Petit', mapT_X(800), plotY + 10);
+        } else if (gasType === 'diatomic_high') {
+          ctx.fillText('trans', mapT_X(25), plotY + 10);
+          ctx.fillText('rotation', mapT_X(300), plotY + 10);
+          ctx.fillText('vibration', mapT_X(1400), plotY + 10);
+        } else {
+          ctx.fillText('trans', mapT_X(25), plotY + 10);
+          ctx.fillText('rotation', mapT_X(300), plotY + 10);
+        }
 
-        // Labels on curves
-        ctx.fillStyle = C.coral;
-        ctx.font = '600 10px Inter, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText('C_P(T)', plotX + plotW - 36, mapC_Y(4.6) - 4);
-
-        ctx.fillStyle = C.teal;
-        ctx.fillText('C_V(T)', plotX + plotW - 36, mapC_Y(3.4) + 12);
-
-        // Gap label
-        ctx.fillStyle = C.gold;
-        ctx.font = '600 9px Inter, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('Mayer Gap: R', plotX + plotW * 0.45, mapC_Y(3.0));
-
-        // Current operating point marker
-        var curCvR = calcCvModel(T0);
-        var curCpR = curCvR + 1.0;
+        var curCvR = cvOverR(gasType, T0);
+        var curCpR = curCvR + mayerGapOverR(gasType, curCvR);
         var opX = mapT_X(T0);
         var opYp = mapC_Y(curCpR);
         var opYv = mapC_Y(curCvR);
@@ -2234,16 +2172,14 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Operating point dot on C_P
         ctx.fillStyle = C.coral;
-        ctx.strokeStyle = '#ffffff';
+        ctx.strokeStyle = C.bg;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.arc(opX, opYp, 4.5, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
-        // Operating point dot on C_V
         ctx.fillStyle = C.teal;
         ctx.beginPath();
         ctx.arc(opX, opYv, 4.5, 0, Math.PI * 2);
@@ -2251,7 +2187,6 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
         ctx.stroke();
       }
     },
-
     challenge: {
       question: "A cylinder contains $2.0\\text{ moles}$ of an ideal diatomic gas at room temperature ($C_V = \\frac{5}{2}R, \\; C_P = \\frac{7}{2}R$). An electric heating element supplies $\\Delta Q = 700\\text{ J}$ of heat to the gas under constant atmospheric pressure ($P = 1.0\\text{ atm}$). How much mechanical work $W$ is done by the gas on the surroundings, and what is the increase in internal energy $\\Delta U$?",
       options: [

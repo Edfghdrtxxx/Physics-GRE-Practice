@@ -15,6 +15,7 @@ PGRE.views.notes = (function () {
   var state;                 // { filter, topic, text }
   var saveTimers;            // qid -> debounce timeout id
   var searchTimer;           // text-filter debounce (matches view-search's 200 ms)
+  var drillIds = [];         // qids in the current filter that may enter a drill
 
   function root() { return document.getElementById('notes-root'); }
   function listEl() { return document.getElementById('nb-list'); }
@@ -75,6 +76,7 @@ PGRE.views.notes = (function () {
         '<select class="hist-select nb-topic" id="nb-topic" aria-label="Filter by topic">' + opts + '</select>' +
         '<input class="nb-search" id="nb-search" type="search" ' +
           'placeholder="Filter by text…" aria-label="Filter by text" value="' + ui.esc(state.text) + '">' +
+        '<button class="btn btn-ghost btn-sm" id="nb-drill-all" hidden></button>' +
       '</div></div>';
   }
 
@@ -97,6 +99,10 @@ PGRE.views.notes = (function () {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(function () { state.text = srch.value; renderList(); }, 200);
     });
+    var drillAll = document.getElementById('nb-drill-all');
+    if (drillAll) drillAll.addEventListener('click', function () {
+      if (drillIds.length) startDrill(drillIds);
+    });
   }
 
   /* ——— The list (re-rendered on filter change / bookmark toggle) ——— */
@@ -104,6 +110,14 @@ PGRE.views.notes = (function () {
     var el = listEl();
     if (!el) return;
     var entries = PGRE.notes.list({ filter: state.filter, topic: state.topic, text: state.text });
+    // Batch-drill set: everything in the current filter that may enter a
+    // practice drill. Exam questions (sample + released ETS) may be bookmarked
+    // but never drill (spoiler rule); orphans have no bank question to drill.
+    var ids = [];
+    entries.forEach(function (e) {
+      if (e.q && e.q.src !== 'cpg-exam' && e.q.src !== 'ets-exam') ids.push(e.qid);
+    });
+    updateDrillButton(ids);
     if (!entries.length) {
       var kind = state.filter === 'bookmarks' ? 'bookmarks' : state.filter === 'notes' ? 'notes' : 'entries';
       el.innerHTML = '<div class="card nb-nomatch"><p class="muted">No ' + kind +
@@ -151,8 +165,12 @@ PGRE.views.notes = (function () {
         '<div class="solution"><div class="solution-label">Solution</div>' + e.q.sol + '</div>' +
         '</details>';
 
-      chips = '<div class="nb-chips">' +
-        '<a class="chip nb-chip" href="#/practice/custom" data-drill="' + ui.esc(e.qid) + '">Drill this question →</a>';
+      chips = '<div class="nb-chips">';
+      // exam questions (sample + released ETS) stay out of practice drills
+      // (spoiler rule) — no drill chip, the mistake-book link still applies
+      if (e.q.src !== 'cpg-exam' && e.q.src !== 'ets-exam') {
+        chips += '<a class="chip nb-chip" href="#/practice/custom" data-drill="' + ui.esc(e.qid) + '">Drill this question →</a>';
+      }
       if (PGRE.store.state.mistakes[e.qid]) {
         chips += '<a class="chip nb-chip" href="#/mistakes">In your mistake book →</a>';
       }
@@ -210,7 +228,7 @@ PGRE.views.notes = (function () {
       var drill = card.querySelector('[data-drill]');
       if (drill) drill.addEventListener('click', function (ev) {
         ev.preventDefault();
-        startDrill(drill.getAttribute('data-drill'));
+        startDrill([drill.getAttribute('data-drill')]);
       });
     });
   }
@@ -288,13 +306,25 @@ PGRE.views.notes = (function () {
     else renderList();
   }
 
-  /* Single-question drill: hand a config to the practice view via sessionStorage
-     and route to #/practice/custom (the practice view picks up the ids). */
-  function startDrill(qid) {
+  /* Drill handoff: hand a config to the practice view via sessionStorage and
+     route to #/practice/custom (the practice view picks up the ids). Used for
+     a single question and for the filtered batch (see updateDrillButton). */
+  function startDrill(ids) {
     try {
-      sessionStorage.setItem('pgre-quiz-config', JSON.stringify({ ids: [qid], label: 'From notes' }));
+      sessionStorage.setItem('pgre-quiz-config', JSON.stringify({ ids: ids, label: 'From notes' }));
     } catch (e) { /* private mode: fall through to the route anyway */ }
     location.hash = '#/practice/custom';
+  }
+
+  /* Keep the filter bar's batch-drill button in sync with the current filter.
+     Called from renderList with the drillable ids (exam-src questions and
+     orphans excluded). */
+  function updateDrillButton(ids) {
+    drillIds = ids || [];
+    var b = document.getElementById('nb-drill-all');
+    if (!b) return;
+    b.hidden = !drillIds.length;
+    b.textContent = 'Drill these ' + drillIds.length + ' →';
   }
 
   return {

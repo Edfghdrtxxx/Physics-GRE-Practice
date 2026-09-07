@@ -650,19 +650,18 @@ PGRE.formulaSearch = (function () {
     var topic = opts.topic || q.topic;
     var status = opts.status || q.status;
 
-    /* status:today reads the batch that has ALREADY been chosen — it never calls
-       srs.formulaDay(), which builds and PERSISTS one when today has none yet.
-       Deciding today's random new-card picks as a side effect of ticking a search
-       filter would be the search box quietly making a study decision. When no
-       batch exists yet the filter matches nothing and says why. */
+    /* status:today reads the batch that has ALREADY been picked — it never calls
+       srs.formulaDay(). Rendering a filter must never mutate the store. The
+       batch persists across day rolls (un-studied picks carry over), so any
+       saved batch counts; only a truly absent batch matches nothing. */
     var batchSet = null, notice = null;
     if ((STATUS_ALIAS[status] || status) === 'today') {
       var saved = PGRE.store.state.formulaDay;
       batchSet = dict();
-      if (saved && saved.date === PGRE.srs.today()) {
+      if (saved) {
         saved.reviewIds.concat(saved.newIds).forEach(function (id) { batchSet[id] = 1; });
       } else {
-        notice = 'Today’s batch hasn’t been drawn yet — open the Study tab once and it will fill in here.';
+        notice = 'No cards picked yet — pick today’s batch in Formula recall.';
       }
     }
 

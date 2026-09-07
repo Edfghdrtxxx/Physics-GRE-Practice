@@ -56,7 +56,11 @@
   width: 100%;
 }
 
-/* Canvas Wrapper — cream teaching stage (site tokens, never the dark sci-fi floor) */
+/* Canvas Wrapper — teaching stage. Follows the theme via --bg (#faf9f5 light,
+   #181715 dark): the canvas routines paint PGRE.vizStageTheme().bg, which
+   reads the same values (light #faf9f5 / dark #181715), so the wrapper and
+   the bitmap always match — no cream frame around a dark canvas, and no
+   light-on-light gap in light mode. */
 .viz-canvas-wrapper {
   background: var(--bg, #faf9f5);
   border: 1px solid var(--line, #e6dfd8);
@@ -217,6 +221,7 @@
 
 .viz-param-select:focus {
   border-color: var(--accent, #cc785c);
+  box-shadow: 0 0 0 3px rgba(204, 120, 92, .15);
 }
 
 .viz-toggle-btn {
@@ -306,6 +311,7 @@
   border: 1px solid var(--line, #e6dfd8);
   border-radius: 10px;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .viz-info-nav {
@@ -392,6 +398,11 @@
   font-size: 0.88rem;
   margin-bottom: 0.3rem;
 }
+.viz-limit-cond {
+  color: var(--ink-2, #6c6a64);
+  font-weight: 400;
+  margin-left: 0.35rem;
+}
 
 .viz-limit-math {
   margin: 0.3rem 0;
@@ -406,8 +417,8 @@
 }
 
 .viz-trap-card {
-  background: rgba(204, 120, 92, 0.08);
-  border: 1px solid rgba(204, 120, 92, 0.25);
+  background: color-mix(in srgb, var(--accent, #cc785c) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, #cc785c) 25%, transparent);
   border-left: 3px solid var(--accent, #cc785c);
   border-radius: 6px;
   padding: 0.75rem 0.95rem;
@@ -474,16 +485,16 @@
 }
 
 .viz-opt-btn.viz-correct {
-  background: rgba(46, 125, 50, 0.12) !important;
-  border-color: #2e7d32 !important;
-  color: #1b5e20 !important;
+  background: var(--good-tint, #e9ede5);
+  border-color: var(--good, #3a7248);
+  color: var(--good, #3a7248);
   font-weight: 700;
 }
 
 .viz-opt-btn.viz-incorrect {
-  background: rgba(198, 40, 40, 0.1) !important;
-  border-color: #c62828 !important;
-  color: #b71c1c !important;
+  background: var(--bad-tint, #f5e8e4);
+  border-color: var(--bad, #bd3d3d);
+  color: var(--bad, #bd3d3d);
 }
 
 .viz-challenge-expl {
@@ -504,7 +515,7 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(15, 18, 24, 0.8);
+  background: var(--scrim, rgba(20, 20, 19, 0.6));
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   z-index: 9999;
@@ -576,6 +587,98 @@
 .viz-close-btn:hover {
   background: var(--ivory, #efe9de);
   color: var(--ink, #141413);
+}
+
+.viz-header-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.viz-header-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--ink, #141413);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.viz-eq-badge {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.75rem;
+  font-weight: 400;  /* JetBrains Mono is vendored at 400 only — heavier weights faux-bold */
+  padding: 0.15rem 0.55rem;
+  border-radius: 4px;
+  background: var(--surface, #faf9f5);
+  color: var(--ink-2, #6c6a64);
+  border: 1px solid var(--line, #e6dfd8);
+  letter-spacing: 0.02em;
+}
+
+/* Comprehensive Formula Detail Modal */
+.viz-detail-window {
+  max-width: 760px;
+}
+
+.viz-detail-body {
+  gap: 1.1rem;
+}
+
+.viz-card-detail-section {
+  background: var(--panel, #f5f0e8);
+  border: 1px solid var(--line, #e6dfd8);
+  border-radius: 10px;
+  padding: 1.1rem 1.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.viz-detail-section-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-2, #6c6a64);
+}
+
+.viz-detail-content {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--ink, #141413);
+}
+
+.viz-detail-prompt {
+  font-size: 1.02rem;
+  font-weight: 500;
+}
+
+.viz-detail-note {
+  color: var(--ink-2, #6c6a64);
+  font-size: 0.92rem;
+}
+
+.viz-detail-mnemonic {
+  background: var(--surface, #faf9f5);
+  border-left: 3px solid var(--accent, #cc785c);
+  padding: 0.65rem 0.95rem;
+  border-radius: 0 6px 6px 0;
+  font-family: var(--sans, Inter, sans-serif);
+  font-size: 0.92rem;
+  color: var(--ink, #141413);
+}
+
+.viz-status-notice {
+  background: var(--ivory, #efe9de);
+  border: 1px solid var(--line, #e6dfd8);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  color: var(--ink-2, #6c6a64);
+  text-align: center;
+  font-style: italic;
 }
 
 /* Standalone Visualizer Lab View */
@@ -682,6 +785,9 @@
   overflow-x: auto;
   border: 1px solid var(--line, #e6dfd8);
 }
+.viz-thumb-formula .katex-display {
+  margin: 0.2rem 0;
+}
 
 .viz-thumb-desc {
   font-size: 0.8rem;
@@ -690,59 +796,37 @@
   flex: 1;
 }
 
-/* Dark Mode Extensions — canvases stay cream (user chose cream teaching pictures) */
-body.theme-dark .viz-canvas-wrapper,
-[data-theme="dark"] .viz-canvas-wrapper {
-  background: var(--bg, #faf9f5);
-  border-color: var(--line, #e6dfd8);
+/* Dark mode needs NO overrides here: every rule above colours itself
+   from the style.css tokens (--bg, --panel, --surface, --ink, --line,
+   --good/-tint, --bad/-tint, --scrim), which [data-theme="dark"]
+   redefines — including the canvas wrapper, whose var(--bg) background
+   tracks the same light/dark values the canvas routines paint via
+   PGRE.vizStageTheme(). The former body.theme-dark selectors were dead
+   (app.js sets documentElement.dataset.theme) and have been removed. */
+
+/* ——— Responsive ———
+   Breakpoints mirror style.css (860 / 640 / 480). Below 860 the canvas
+   stage shrinks from its 380px desktop min-height and the modal chrome
+   tightens; below 640 the lab grid collapses to one column so the
+   310px minmax track can never overflow a 320px viewport. */
+@media (max-width: 860px) {
+  .viz-canvas-wrapper { min-height: 300px; }
+  .viz-lab-container { padding: 1rem; }
+  .viz-modal-backdrop { padding: 1rem; }
+  .viz-modal-header { padding: 0.9rem 1rem; }
+  .viz-modal-body { padding: 1rem; gap: 1rem; }
+  .viz-tab-pane { padding: 0.9rem 1rem; }
 }
 
-body.theme-dark .viz-legend-strip,
-[data-theme="dark"] .viz-legend-strip {
-  background: var(--panel);
-  border-color: var(--line);
-  color: var(--ink);
+@media (max-width: 640px) {
+  .viz-cards-grid { grid-template-columns: 1fr; }
+  .viz-canvas-wrapper { min-height: 260px; }
+  .viz-modal-backdrop { padding: 0.6rem; }
+  .viz-inline-container { margin-top: 1rem; padding-top: 1rem; gap: 1rem; }
 }
 
-body.theme-dark .viz-param-select,
-[data-theme="dark"] .viz-param-select {
-  background: var(--surface);
-  border-color: var(--line);
-  color: var(--ink);
-}
-
-body.theme-dark .viz-toggle-btn,
-[data-theme="dark"] .viz-toggle-btn {
-  background: var(--surface);
-  border-color: var(--line);
-  color: var(--ink);
-}
-
-body.theme-dark .viz-toggle-btn.active,
-[data-theme="dark"] .viz-toggle-btn.active {
-  background: var(--ivory);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-body.theme-dark .viz-step-math,
-[data-theme="dark"] .viz-step-math,
-body.theme-dark .viz-limit-item,
-[data-theme="dark"] .viz-limit-item {
-  background: var(--surface);
-  border-color: var(--line);
-}
-
-body.theme-dark .viz-opt-btn.viz-correct,
-[data-theme="dark"] .viz-opt-btn.viz-correct {
-  background: rgba(46, 204, 113, 0.15) !important;
-  border-color: #2ecc71 !important;
-  color: #2ecc71 !important;
-}
-
-body.theme-dark .viz-opt-btn.viz-incorrect,
-[data-theme="dark"] .viz-opt-btn.viz-incorrect {
-  background: rgba(231, 76, 60, 0.15) !important;
-  border-color: #e74c3c !important;
-  color: #e74c3c !important;
+@media (max-width: 480px) {
+  .viz-canvas-wrapper { min-height: 220px; }
+  .viz-modal-window { max-height: 96vh; }
+  .viz-info-tab-btn { padding: 0.55rem 0.8rem; font-size: 0.78rem; }
 }

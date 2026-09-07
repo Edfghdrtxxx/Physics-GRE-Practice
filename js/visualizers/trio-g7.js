@@ -31,12 +31,19 @@
   var FONT = '11px Inter, -apple-system, sans-serif';
   var FONT_SM = '10px Inter, -apple-system, sans-serif';
 
+  function syncStageTheme() {
+    var t = PGRE.vizStageTheme ? PGRE.vizStageTheme() : null;
+    if (!t) return;
+    INK = t.ink; MUTED = t.muted; CREAM = t.bg; LINE = t.line;
+  }
+
   function creamStage(ctx, width, height) {
+    syncStageTheme();
     var bg = (CV && CV.colors && CV.colors.bg) || CREAM;
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, width, height);
     ctx.save();
-    ctx.strokeStyle = (CV && CV.colors && CV.colors.grid) || 'rgba(20, 20, 19, 0.06)';
+    ctx.strokeStyle = (CV && CV.colors && CV.colors.grid) || PGRE.vizStageTheme().inkFade(0.06);
     ctx.lineWidth = 1;
     ctx.beginPath();
     var step = 40;
@@ -66,7 +73,50 @@
 
   function finiteDt(dt) {
     if (typeof dt !== 'number' || !isFinite(dt) || dt < 0) return 0;
-    return Math.min(dt, 0.05);
+    // Cap RAW frame dt (tab-hitch guard) before simSpeed, so 3x actually triples the dynamics.
+    return Math.min(dt, 0.04);
+  }
+
+  function simSpeedOf(state) {
+    var s = (state && typeof state.simSpeed === 'number') ? state.simSpeed : 1.0;
+    if (!isFinite(s)) s = 1.0;
+    return Math.max(0.2, Math.min(3.0, s));
+  }
+
+  function scaledDt(dt, state) {
+    return finiteDt(dt) * simSpeedOf(state);
+  }
+
+  function radialJacobiH(m, r, rDot, omega, kSpr) {
+    return 0.5 * m * rDot * rDot + 0.5 * (kSpr - m * omega * omega) * r * r;
+  }
+
+  // Exact step of r̈ = α r. Conserves Jacobi H between wall collisions.
+  function stepRadialExact(r, rDot, alpha, dt) {
+    if (!(dt > 0) || !isFinite(r) || !isFinite(rDot)) return { r: r, rDot: rDot };
+    if (!isFinite(alpha) || Math.abs(alpha) < 1e-14) {
+      return { r: r + rDot * dt, rDot: rDot };
+    }
+    if (alpha < 0) {
+      var W = Math.sqrt(-alpha);
+      var c = Math.cos(W * dt);
+      var s = Math.sin(W * dt);
+      return {
+        r: r * c + (rDot / W) * s,
+        rDot: -r * W * s + rDot * c
+      };
+    }
+    var L = Math.sqrt(alpha);
+    var ch = Math.cosh(L * dt);
+    var sh = Math.sinh(L * dt);
+    return {
+      r: r * ch + (rDot / L) * sh,
+      rDot: r * L * sh + rDot * ch
+    };
+  }
+
+  function mathNum(v, d) {
+    return '$' + fmt(v, d) + '$';
   }
 
   function boxOf(x0, y0, x1, y1) {
@@ -92,7 +142,7 @@
 
   function frameBox(ctx, box) {
     ctx.save();
-    ctx.strokeStyle = 'rgba(20, 20, 19, 0.12)';
+    ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.12);
     ctx.lineWidth = 1;
     ctx.strokeRect(box.x0 + 0.5, box.y0 + 0.5, box.w - 1, box.h - 1);
     ctx.restore();
@@ -119,7 +169,7 @@
     if (ax + tw > canvasW - 4) ax = Math.max(4, canvasW - 4 - tw);
     if (ay < 2) ay = 2;
     if (ay + th > canvasH - 2) ay = Math.max(2, canvasH - 2 - th);
-    ctx.fillStyle = 'rgba(250, 249, 245, 0.92)';
+    ctx.fillStyle = PGRE.vizStageTheme().chipFade(0.92);
     ctx.fillRect(ax - 3, ay - 1, tw + 6, th + 2);
     var dx = ax;
     if (align === 'center') dx = ax + tw / 2;
@@ -136,7 +186,7 @@
   function drawPlotAxes(ctx, box, originX, originY, xLabel, yLabel, canvasW, canvasH) {
     ctx.save();
     clipBox(ctx, box);
-    ctx.strokeStyle = 'rgba(20, 20, 19, 0.32)';
+    ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.32);
     ctx.lineWidth = 1.2;
     ctx.lineCap = 'round';
     if (originY >= box.y0 && originY <= box.y1) {
@@ -173,7 +223,7 @@
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(250, 249, 245, 0.95)';
+    ctx.strokeStyle = PGRE.vizStageTheme().chipFade(0.95);
     ctx.lineWidth = 1.4;
     ctx.stroke();
     ctx.restore();
@@ -243,7 +293,8 @@
 
   PGRE.visualizers['cpgf-1.31'] = {
     id: 'cpgf-1.31',
-    title: 'Hamiltonian & The Legendre Transform: H(p, q) = Σ p_i q̇_i - L',
+    topic: 'cm',
+    title: 'Hamiltonian & The Legendre Transform: $H(q, p, t) = \\sum_i p_i \\dot{q}_i - L$',
     formulaLatex: 'H(q, p, t) = \\sum_i p_i \\dot{q}_i - L(q, \\dot{q}, t)',
     physicalStory: `
 The Legendre transformation is the mathematical duality converting Lagrangian mechanics on tangent bundle $(q, \\dot{q})$ into Hamiltonian mechanics on phase space $(q, p)$. 
@@ -264,15 +315,15 @@ Geometrically, the slope of $L(\\dot{q})$ at velocity $\\dot{q}$ is the canonica
       { condition: 'Quartic Kinetic Term ($L = \\frac{1}{4}\\alpha\\dot{q}^4$)', result: '$p = \\alpha\\dot{q}^3 \\implies H = \\frac{3}{4}\\alpha^{-1/3}p^{4/3}$', description: 'Dual exponent scaling via conjugate Young-Fenchel exponents ($1/4 + 3/4 = 1$).' }
     ],
     greTraps: [
-      { trap: 'Failure to Invert Velocities', explanation: 'A Hamiltonian expression MUST NOT contain any velocity $\\dot{q}$ terms! You must invert $p = \\partial L/\\partial \\dot{q}$ to express $\\dot{q} = \\dot{q}(p)$ and substitute throughout.' },
-      { trap: 'Sign of Tangent Intercept', explanation: 'The tangent line to $L(\\dot{q})$ at $\\dot{q}$ has equation $y = p \\xi - H(p)$. The y-intercept is $-H$, NOT $+H$.' }
+      { trap: 'Failure to Invert Velocities', warning: 'A Hamiltonian expression MUST NOT contain any velocity $\\dot{q}$ terms! You must invert $p = \\partial L/\\partial \\dot{q}$ to express $\\dot{q} = \\dot{q}(p)$ and substitute throughout.' },
+      { trap: 'Sign of Tangent Intercept', warning: 'The tangent line to $L(\\dot{q})$ at $\\dot{q}$ has equation $y = p \\xi - H(p)$. The y-intercept is $-H$, NOT $+H$.' }
     ],
     parameters: [
-      { id: 'qdot', label: 'Velocity (q̇)', type: 'range', min: -3, max: 3, step: 0.1, value: 1.5, default: 1.5, format: v => v.toFixed(1) },
-      { id: 'model', label: 'Kinetic Model', type: 'select', value: 'classical', default: 'classical', options: [
-        { value: 'classical', label: 'Classical: L = ½m q̇²' },
-        { value: 'relativistic', label: 'Relativistic: L = -mc²√(1-β²)' },
-        { value: 'quartic', label: 'Nonlinear: L = ¼α q̇⁴' }
+      { id: 'qdot', label: 'Velocity $\\dot{q}$', type: 'range', min: -3, max: 3, step: 0.1, value: 1.5, default: 1.5, format: v => v.toFixed(1) },
+      { id: 'model', label: 'Kinetic model', type: 'select', value: 'classical', default: 'classical', options: [
+        { value: 'classical', label: 'Classical $L = \\frac{1}{2}m\\dot{q}^2$' },
+        { value: 'relativistic', label: 'Relativistic $L = -mc^2\\sqrt{1-\\dot{q}^2/c^2}$' },
+        { value: 'quartic', label: 'Nonlinear $L = \\frac{1}{4}\\alpha\\dot{q}^4$' }
       ]}
     ],
     init(container, state, redraw) {
@@ -281,19 +332,6 @@ Geometrically, the slope of $L(\\dot{q})$ at velocity $\\dot{q}$ is the canonica
         state.model = 'classical';
       }
 
-      const controls = [
-        { id: 'qdot', label: 'Velocity q̇', type: 'range', min: -3, max: 3, step: 0.05, value: state.qdot, format: v => v.toFixed(2) },
-        { id: 'model', label: 'System Model', type: 'select', value: state.model, options: [
-          { value: 'classical', label: 'Classical (L = ½m v²)' },
-          { value: 'relativistic', label: 'Relativistic (L = -mc²√(1-v²/c²))' },
-          { value: 'quartic', label: 'Nonlinear Quartic (L = ¼α v⁴)' }
-        ]}
-      ];
-
-      U.createControlUI(container, controls, (id, val) => {
-        state[id] = val;
-        redraw();
-      });
     },
     draw(ctx, width, height, state, dt) {
       creamStage(ctx, width, height);
@@ -306,13 +344,18 @@ Geometrically, the slope of $L(\\dot{q})$ at velocity $\\dot{q}$ is the canonica
 
       var m = 1.0;
       var c = 3.5;
+      var vmaxRel = 0.95 * c;
+
+      if (model === 'relativistic' && Math.abs(curV) > vmaxRel) {
+        curV = (curV < 0 ? -1 : 1) * vmaxRel;
+      }
 
       var getL = function (v) {
         if (model === 'classical') return 0.5 * m * v * v;
         if (model === 'relativistic') {
-          var beta = Math.min(0.92, Math.abs(v) / c);
-          var s = Math.sqrt(Math.max(1e-6, 1 - beta * beta));
-          return -m * c * c * s + m * c * c;
+          var beta2 = (v * v) / (c * c);
+          if (!(beta2 < 1)) return NaN;
+          return -m * c * c * Math.sqrt(Math.max(0, 1 - beta2));
         }
         return 0.25 * m * Math.pow(v, 4);
       };
@@ -320,8 +363,7 @@ Geometrically, the slope of $L(\\dot{q})$ at velocity $\\dot{q}$ is the canonica
       var getP = function (v) {
         if (model === 'classical') return m * v;
         if (model === 'relativistic') {
-          var betaR = Math.min(0.92, Math.abs(v) / c);
-          var sR = Math.sqrt(Math.max(1e-6, 1 - betaR * betaR));
+          var sR = Math.sqrt(Math.max(1e-12, 1 - (v * v) / (c * c)));
           return (m * v) / sR;
         }
         return m * Math.pow(v, 3);
@@ -329,7 +371,7 @@ Geometrically, the slope of $L(\\dot{q})$ at velocity $\\dot{q}$ is the canonica
 
       var pts = [];
       for (var v = -3.2; v <= 3.2; v += 0.04) {
-        if (model === 'relativistic' && Math.abs(v) >= c * 0.93) continue;
+        if (model === 'relativistic' && Math.abs(v) >= vmaxRel) continue;
         var Lv = getL(v);
         var pv = getP(v);
         var Hv = pv * v - Lv;
@@ -343,6 +385,7 @@ Geometrically, the slope of $L(\\dot{q})$ at velocity $\\dot{q}$ is the canonica
       if (!isFinite(curL)) curL = 0;
       if (!isFinite(curP)) curP = 0;
       if (!isFinite(curH)) curH = 0;
+      var Hdisp = Math.sqrt(curP * curP * c * c + m * m * c * c * c * c);
 
       var splitX = Math.floor(width * 0.52);
       var left = boxOf(28, 16, splitX - 10, height - 16);
@@ -370,7 +413,10 @@ Geometrically, the slope of $L(\\dot{q})$ at velocity $\\dot{q}$ is the canonica
       ctx.save();
       clipBox(ctx, left);
 
-      // Vertical teaching bar at q-dot: L (coral) stacked with H (gold) so L+H = p q-dot
+      // Vertical teaching bar at q-dot: L (coral) and H (gold) so L+H = p q-dot.
+      // When L and -H sit on opposite sides of 0 (classical), stack from the axis.
+      // When both are negative (true relativistic L), place H from L down to -H
+      // so the gold bar does not paint over coral.
       if (Math.abs(curV) > 0.08) {
         var xBar = Lmap.x(curV);
         var yZero = Lmap.y(0);
@@ -380,7 +426,11 @@ Geometrically, the slope of $L(\\dot{q})$ at velocity $\\dot{q}$ is the canonica
         ctx.fillStyle = 'rgba(204, 120, 92, 0.22)';
         ctx.fillRect(xBar - barW / 2, Math.min(yZero, yL), barW, Math.abs(yL - yZero));
         ctx.fillStyle = 'rgba(212, 160, 23, 0.28)';
-        ctx.fillRect(xBar - barW / 2, Math.min(yZero, yNegH), barW, Math.abs(yNegH - yZero));
+        if (curL >= 0 && -curH <= 0) {
+          ctx.fillRect(xBar - barW / 2, Math.min(yZero, yNegH), barW, Math.abs(yNegH - yZero));
+        } else {
+          ctx.fillRect(xBar - barW / 2, Math.min(yL, yNegH), barW, Math.abs(yNegH - yL));
+        }
       }
 
       ctx.strokeStyle = CORAL;
@@ -469,25 +519,29 @@ Geometrically, the slope of $L(\\dot{q})$ at velocity $\\dot{q}$ is the canonica
         creamText(ctx, 'H', dualX + 10, dualY - 10, width, height, { color: TEAL, font: FONT });
       }
 
-      var modelLabel = 'Classical  L = 1/2 m v^2';
-      if (model === 'relativistic') modelLabel = 'Relativistic  L = -mc^2 sqrt(1-v^2/c^2)';
-      if (model === 'quartic') modelLabel = 'Nonlinear  L = 1/4 a v^4';
+      var modelLabel = 'Classical $L = \\frac{1}{2}m\\dot{q}^2$';
+      if (model === 'relativistic') modelLabel = 'Relativistic $L = -mc^2\\sqrt{1-\\dot{q}^2/c^2}$';
+      if (model === 'quartic') modelLabel = 'Nonlinear $L = \\frac{1}{4}\\alpha\\dot{q}^4$';
 
-      vizLegend('Legendre transform  H = p q-dot - L', [
+      var legendRows31 = [
         { label: 'model', value: modelLabel },
-        { label: 'q-dot', value: fmt(curV) },
-        { label: 'L', value: fmt(curL) },
-        { label: 'p = dL/d(q-dot)', value: fmt(curP) },
-        { label: 'H', value: fmt(curH) },
-        { label: 'p q-dot', value: fmt(curP * curV) },
-        { label: 'L + H', value: fmt(curL + curH) },
-        { label: 'intercept', value: 'y = -H = ' + fmt(-curH) }
-      ]);
+        { label: '$\\dot{q}$', value: mathNum(curV) },
+        { label: '$L$', value: mathNum(curL) },
+        { label: '$p = \\partial L/\\partial\\dot{q}$', value: mathNum(curP) },
+        { label: '$H = p\\dot{q}-L$', value: mathNum(curH) },
+        { label: '$p\\dot{q}$', value: mathNum(curP * curV) },
+        { label: '$L+H$', value: mathNum(curL + curH) },
+        { label: 'intercept', value: '$y=-H=' + fmt(-curH) + '$' }
+      ];
+      if (model === 'relativistic') {
+        legendRows31.push({ label: '$\\sqrt{p^2 c^2 + m^2 c^4}$', value: mathNum(Hdisp) });
+      }
+      vizLegend('Legendre transform  $H = p\\dot{q} - L$', legendRows31);
     },
     challenge: {
       question: "For a 1D system with Lagrangian L = ¼ α q̇⁴ - ½ k q², where α is a positive constant, what is the correct Hamiltonian H(q, p)?",
       options: [
-        "A) H = ¾ (p⁴ / α)^{1/3} + ½ k q²",
+        "A) H = ¾ (p / α)^{4/3} + ½ k q²",
         "B) H = ¾ α^{-1/3} p^{4/3} + ½ k q²",
         "C) H = ¼ α^{-1/3} p^{4/3} + ½ k q²",
         "D) H = p² / (2α) + ½ k q²",
@@ -500,7 +554,8 @@ Geometrically, the slope of $L(\\dot{q})$ at velocity $\\dot{q}$ is the canonica
 
   PGRE.visualizers['cpgf-1.32'] = {
     id: 'cpgf-1.32',
-    title: 'Hamiltonian as Total Energy & Conservation Criteria: H = T + U',
+    topic: 'cm',
+    title: 'Hamiltonian as Total Energy & Conservation Criteria: $H = T + U$',
     formulaLatex: 'H = T + U \\iff \\begin{cases} \\mathbf{r} = \\mathbf{r}(q) \\text{ (time-independent coordinate transformation)} \\\\ U = U(q) \\text{ (velocity-independent potential)} \\end{cases}',
     physicalStory: `
 A widespread GRE misconception is that the Hamiltonian is *always* total energy ($E = T + U$) and *always* conserved ($dH/dt = 0$). In reality, these are two completely independent properties:
@@ -521,40 +576,42 @@ For a bead on a rotating wire with constant angular speed $\\omega$, the transfo
     limitingCases: [
       { condition: 'Stationary Coordinate System', result: '$T = T_2 \\implies H = T + U = E$', description: 'Hamiltonian equals total mechanical energy.' },
       { condition: 'Uniformly Rotating System ($\\omega = \\text{const}$)', result: '$H = T_2 - T_0 + U = E - m\\omega^2 r^2$', description: '$H$ is conserved ($dH/dt = 0$) while total energy $E$ is not conserved.' },
-      { condition: 'Time-Varying Potential $U(q, t)$', result: '$H = E$, but $dH/dt = \\partial U/\\partial t \\neq 0$', description: '$H$ equals total energy, but energy is not conserved.' }
+      { condition: 'Time-Varying Potential $U(q, t)$', result: 'H = E \\quad (dH/dt = \\partial U/\\partial t \\neq 0)', description: '$H$ equals total energy, but energy is not conserved.' }
     ],
     greTraps: [
-      { trap: 'Assuming H = E Always', explanation: 'In moving reference frames (rotating turntables, moving ramps), $H = T_2 - T_0 + U \\neq T + U$.' },
-      { trap: 'Confusing Energy Conservation with H Conservation', explanation: 'A system can have conserved $H$ even when mechanical energy $E$ changes due to external constraint forces doing work.' }
+      { trap: 'Assuming H = E Always', warning: 'In moving reference frames (rotating turntables, moving ramps), $H = T_2 - T_0 + U \\neq T + U$.' },
+      { trap: 'Confusing Energy Conservation with H Conservation', warning: 'A system can have conserved $H$ even when mechanical energy $E$ changes due to external constraint forces doing work.' }
     ],
     parameters: [
-      { id: 'omega', label: 'Rotation Speed (ω)', type: 'range', min: 0, max: 4.5, step: 0.1, value: 2.5, default: 2.5, format: v => `${v.toFixed(1)} rad/s` },
-      { id: 'k', label: 'Spring Constant (k)', type: 'range', min: 2, max: 20, step: 0.5, value: 10.0, default: 10.0, format: v => `${v.toFixed(1)} N/m` }
+      { id: 'omega', label: 'Rotation speed $\\omega$', type: 'range', min: 0, max: 4.5, step: 0.1, value: 2.5, default: 2.5, unit: 'rad/s', format: v => `${v.toFixed(1)} rad/s` },
+      { id: 'k', label: 'Spring constant $k$', type: 'range', min: 2, max: 20, step: 0.5, value: 10.0, default: 10.0, unit: 'N/m', format: v => `${v.toFixed(1)} N/m` },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, value: 1.0, default: 1.0, unit: 'x' },
+      { id: 'perturb', label: 'Perturb bead', type: 'boolean', default: false }
     ],
     init(container, state, redraw) {
       state.omega = (typeof state.omega === 'number' && isFinite(state.omega)) ? state.omega : 2.5;
       state.k = (typeof state.k === 'number' && isFinite(state.k)) ? state.k : 10.0;
+      state.simSpeed = simSpeedOf(state);
       if (typeof state.r !== 'number' || !isFinite(state.r)) state.r = 0.8;
       if (typeof state.rDot !== 'number' || !isFinite(state.rDot)) state.rDot = 0;
       if (typeof state.phi !== 'number' || !isFinite(state.phi)) state.phi = 0;
       if (typeof state.t !== 'number' || !isFinite(state.t)) state.t = 0;
       if (!Array.isArray(state.history)) state.history = [];
-
-      const controls = [
-        { id: 'omega', label: 'Rotation ω', type: 'range', min: 0, max: 4.5, step: 0.1, value: state.omega, format: v => `${v.toFixed(1)} rad/s` },
-        { id: 'k', label: 'Spring k', type: 'range', min: 2, max: 20, step: 0.5, value: state.k, format: v => `${v.toFixed(1)} N/m` },
-        { id: 'kick', label: 'Displace Bead', type: 'button', text: 'Perturb Bead (+0.3 m)', onClick: () => { state.r += 0.3; } }
-      ];
-
-      U.createControlUI(container, controls, (id, val) => {
-        state[id] = val;
-        redraw();
-      });
+    },
+    onParamChange: function (id, val, state) {
+      if (!state) return;
+      if (id === 'omega' || id === 'k') {
+        state.history = [];
+        state.t = 0;
+      }
+      if (id === 'perturb') {
+        state.r = ((typeof state.r === 'number' && isFinite(state.r)) ? state.r : 0.8) + 0.3;
+      }
     },
     draw(ctx, width, height, state, dt) {
       creamStage(ctx, width, height);
       state = state || {};
-      dt = finiteDt(dt);
+      dt = scaledDt(dt, state);
 
       var m = 1.0;
       var omega = (typeof state.omega === 'number' && isFinite(state.omega)) ? state.omega : 2.5;
@@ -564,16 +621,31 @@ For a bead on a rotating wire with constant angular speed $\\omega$, the transfo
       if (typeof state.phi !== 'number' || !isFinite(state.phi)) state.phi = 0;
       if (typeof state.t !== 'number' || !isFinite(state.t)) state.t = 0;
       if (!Array.isArray(state.history)) state.history = [];
+      if (state._histOmega !== omega || state._histK !== kSpr) {
+        state.history = [];
+        state.t = 0;
+        state._histOmega = omega;
+        state._histK = kSpr;
+      }
 
-      var subSteps = 12;
-      var subDt = Math.min(dt, 0.04) / subSteps;
+      var R_WALL = 1.6;
+      var alphaR = omega * omega - kSpr / m;
+      var subSteps = 8;
+      var subDt = dt / subSteps;
       for (var s = 0; s < subSteps; s++) {
-        var accel = (omega * omega - kSpr / m) * state.r;
-        state.rDot += accel * subDt;
-        state.r += state.rDot * subDt;
-        if (Math.abs(state.r) > 1.6) {
-          state.r = Math.sign(state.r) * 1.6;
-          state.rDot = -state.rDot;
+        var Hkeep = radialJacobiH(m, state.r, state.rDot, omega, kSpr);
+        var nxt = stepRadialExact(state.r, state.rDot, alphaR, subDt);
+        if (Math.abs(nxt.r) > R_WALL) {
+          var rWall = (nxt.r >= 0 ? 1 : -1) * R_WALL;
+          state.r = rWall;
+          var Vwall = 0.5 * (kSpr - m * omega * omega) * rWall * rWall;
+          var rDotSq = (2 / m) * (Hkeep - Vwall);
+          var bounceSgn = nxt.rDot >= 0 ? -1 : 1;
+          state.rDot = bounceSgn * Math.sqrt(Math.max(0, rDotSq));
+          state._wallHit = true;
+        } else {
+          state.r = nxt.r;
+          state.rDot = nxt.rDot;
         }
       }
       if (!isFinite(state.r) || !isFinite(state.rDot)) {
@@ -644,6 +716,27 @@ For a bead on a rotating wire with constant angular speed $\\omega$, the transfo
 
       disk(ctx, cx, cy, 5, INK);
       disk(ctx, bx, by, 7, CORAL);
+
+      // Rotation cue: small ω arc at the hub so the left pane is a rotating rod.
+      ctx.save();
+      ctx.strokeStyle = MUTED;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 16, state.phi, state.phi + 1.15);
+      ctx.stroke();
+      var ax = cx + Math.cos(state.phi + 1.15) * 16;
+      var ay = cy + Math.sin(state.phi + 1.15) * 16;
+      var ang = state.phi + 1.15 + Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - Math.cos(ang) * 5 - Math.cos(state.phi + 1.15) * 3,
+                 ay - Math.sin(ang) * 5 - Math.sin(state.phi + 1.15) * 3);
+      ctx.lineTo(ax + Math.cos(ang) * 5 - Math.cos(state.phi + 1.15) * 3,
+                 ay + Math.sin(ang) * 5 - Math.sin(state.phi + 1.15) * 3);
+      ctx.closePath();
+      ctx.fillStyle = MUTED;
+      ctx.fill();
+      ctx.restore();
       ctx.restore();
 
       frameBox(ctx, right);
@@ -661,7 +754,7 @@ For a bead on a rotating wire with constant angular speed $\\omega$, the transfo
 
       ctx.save();
       clipBox(ctx, right);
-      ctx.strokeStyle = 'rgba(20, 20, 19, 0.18)';
+      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.18);
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(right.x0 + 4, Emap.y(0));
@@ -714,14 +807,16 @@ For a bead on a rotating wire with constant angular speed $\\omega$, the transfo
         creamText(ctx, 'H', lastX, yHline, width, height, { align: 'right', color: TEAL, font: FONT });
       }
 
-      vizLegend('H = T2 - T0 + U  vs  E = T + U', [
-        { label: 'E = T + U', value: fmt(E_total) },
-        { label: 'H = T2 - T0 + U', value: fmt(H_val) },
-        { label: 'T2 (radial KE)', value: fmt(T2) },
-        { label: 'T0 (frame KE)', value: fmt(T0) },
-        { label: 'U', value: fmt(Uval) },
-        { label: 'r', value: fmt(state.r) },
-        { label: 'conservation', value: 'dH/dt = 0 because dL/dt explicit = 0; H != E because T0 != 0' }
+      var heq = Math.abs(T0) < 1e-4;
+      vizLegend('$H = T_2 - T_0 + U$ vs $E = T + U$', [
+        { label: '$E = T + U$', value: mathNum(E_total) },
+        { label: '$H = T_2 - T_0 + U$', value: mathNum(H_val) },
+        { label: '$T_2$', value: mathNum(T2) },
+        { label: '$T_0$', value: mathNum(T0) },
+        { label: '$U$', value: mathNum(Uval) },
+        { label: '$r$', value: mathNum(state.r) },
+        { label: '$H$ vs $E$', value: heq ? '$H = E$ ($T_0 = 0$)' : '$H \\neq E$ ($T_0 \\neq 0$)' },
+        { label: 'conservation', value: '$\\partial L/\\partial t = 0 \\Rightarrow dH/dt = 0$' }
       ]);
     },
     challenge: {
@@ -740,6 +835,7 @@ For a bead on a rotating wire with constant angular speed $\\omega$, the transfo
 
   PGRE.visualizers['cpgf-1.33'] = {
     id: 'cpgf-1.33',
+    topic: 'cm',
     title: 'Hamilton\'s Canonical Equations & Phase Space Flow',
     formulaLatex: '\\dot{q}_i = \\frac{\\partial H}{\\partial p_i}, \\qquad \\dot{p}_i = -\\frac{\\partial H}{\\partial q_i}',
     physicalStory: `
@@ -759,11 +855,11 @@ Any phase volume $\\iint dq \\, dp$ behaves like an incompressible fluid.
     limitingCases: [
       { condition: 'Harmonic Oscillator ($H = \\frac{p^2}{2m} + \\frac{1}{2}kq^2$)', result: '$\\dot{q} = p/m, \\quad \\dot{p} = -kq$', description: 'Elliptical phase orbits with constant area $\\pi A B = 2\\pi E / \\omega$.' },
       { condition: 'Free Particle ($H = \\frac{p^2}{2m}$)', result: '$\\dot{q} = p/m, \\quad \\dot{p} = 0$', description: 'Straight horizontal flow lines in phase space.' },
-      { condition: 'Nonlinear Pendulum', result: 'Separatrix at $E = 2mgl$', description: 'Divides closed libration orbits from circulating rotation orbits.' }
+      { condition: 'Nonlinear Pendulum (Separatrix)', result: 'E = 2mgl', description: 'Divides closed libration orbits from circulating rotation orbits.' }
     ],
     greTraps: [
-      { trap: 'Phase Trajectory Intersections', explanation: 'Phase trajectories for autonomous systems NEVER cross or intersect each other (uniqueness theorem of 1st-order ODEs).' },
-      { trap: 'Sign in Momentum Equation', explanation: 'Remember that $\\dot{p} = -\\partial H/\\partial q$ carries a negative sign, reflecting that generalized force is the negative gradient of potential.' }
+      { trap: 'Phase Trajectory Intersections', warning: 'Phase trajectories for autonomous systems NEVER cross or intersect each other (uniqueness theorem of 1st-order ODEs).' },
+      { trap: 'Sign in Momentum Equation', warning: 'Remember that $\\dot{p} = -\\partial H/\\partial q$ carries a negative sign, reflecting that generalized force is the negative gradient of potential.' }
     ],
     parameters: [
       { id: 'system', label: 'Phase System', type: 'select', value: 'pendulum', default: 'pendulum', options: [
@@ -771,40 +867,22 @@ Any phase volume $\\iint dq \\, dp$ behaves like an incompressible fluid.
         { value: 'pendulum', label: 'Nonlinear Pendulum (with Separatrix)' },
         { value: 'doublewell', label: 'Double Well Potential' }
       ]},
-      { id: 'swarm', label: 'Liouville Swarm', type: 'toggle', value: true, default: true, onText: 'Swarm Active', offText: 'Single Particle' }
+      { id: 'swarm', label: 'Liouville Swarm', type: 'toggle', value: true, default: true, onText: 'Swarm Active', offText: 'Single Particle' },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, value: 1.0, default: 1.0, unit: 'x' },
+      { id: 'resetCloud', label: 'Reset cloud', type: 'boolean', default: false }
     ],
     init(container, state, redraw) {
       if (state.system !== 'sho' && state.system !== 'pendulum' && state.system !== 'doublewell') {
         state.system = 'pendulum';
       }
       state.swarm = state.swarm === false || state.swarm === 0 || state.swarm === 'false' ? false : true;
+      state.simSpeed = simSpeedOf(state);
       var probe0 = defaultHamiltonProbe(state.system);
       if (typeof state.q !== 'number' || !isFinite(state.q)) state.q = probe0.q;
       if (typeof state.p !== 'number' || !isFinite(state.p)) state.p = probe0.p;
       if (!Array.isArray(state.trail)) state.trail = [];
       seedHamiltonSwarm(state);
 
-      const controls = [
-        { id: 'system', label: 'System', type: 'select', value: state.system, options: [
-          { value: 'sho', label: 'Harmonic Oscillator' },
-          { value: 'pendulum', label: 'Nonlinear Pendulum' },
-          { value: 'doublewell', label: 'Double Well' }
-        ]},
-        { id: 'swarm', label: 'Liouville Ensemble', type: 'toggle', value: state.swarm },
-        { id: 'resetSwarm', label: 'Reset Swarm', type: 'button', text: 'Reset Cloud', onClick: function () { seedHamiltonSwarm(state); } }
-      ];
-
-      U.createControlUI(container, controls, (id, val) => {
-        state[id] = val;
-        if (id === 'system') {
-          seedHamiltonSwarm(state);
-          var probe = defaultHamiltonProbe(state.system);
-          state.q = probe.q;
-          state.p = probe.p;
-          state.trail = [];
-        }
-        redraw();
-      });
     },
     onParamChange: function (id, val, state) {
       if (!state) return;
@@ -816,11 +894,13 @@ Any phase volume $\\iint dq \\, dp$ behaves like an incompressible fluid.
         state.p = probe.p;
         state.trail = [];
       }
+      if (id === 'swarm' && val) seedHamiltonSwarm(state);
+      if (id === 'resetCloud') seedHamiltonSwarm(state);
     },
     draw(ctx, width, height, state, dt) {
       creamStage(ctx, width, height);
       state = state || {};
-      dt = finiteDt(dt);
+      dt = scaledDt(dt, state);
 
       if (state.system !== 'sho' && state.system !== 'pendulum' && state.system !== 'doublewell') {
         state.system = 'pendulum';
@@ -850,8 +930,11 @@ Any phase volume $\\iint dq \\, dp$ behaves like an incompressible fluid.
       var stage = boxOf(16, 14, width - 16, height - 14);
       var qLo = -3.3;
       var qHi = 3.3;
-      var pLo = -2.7;
-      var pHi = 2.7;
+      // Pendulum separatrix peaks at p = ±2√(m g l) = ±2√3 ≈ ±3.46.
+      // Keep those peaks inside the frame so the eye through (±π, 0) is real,
+      // not a clip-box polygon.
+      var pLo = state.system === 'pendulum' ? -3.85 : -2.7;
+      var pHi = state.system === 'pendulum' ? 3.85 : 2.7;
       var Pmap = mapper(stage, qLo, qHi, pLo, pHi);
       var cx = Pmap.x(0);
       var cy = Pmap.y(0);
@@ -863,16 +946,17 @@ Any phase volume $\\iint dq \\, dp$ behaves like an incompressible fluid.
 
       var stepQ = 0.55;
       var stepP = 0.55;
-      for (var qg = -3.2; qg <= 3.2; qg += stepQ) {
-        for (var pg = -2.55; pg <= 2.55; pg += stepP) {
+      for (var qg = qLo + 0.2; qg <= qHi - 0.2; qg += stepQ) {
+        for (var pg = pLo + 0.2; pg <= pHi - 0.2; pg += stepP) {
           var dq = getDq(qg, pg);
           var dp = getDp(qg, pg);
           var len = Math.hypot(dq, dp);
-          if (len < 0.02) continue;
+          if (len < 0.12) continue;
+          if (Math.hypot(qg, pg) < 0.42) continue;
           var sx = Pmap.x(qg);
           var sy = Pmap.y(pg);
           var angle = Math.atan2(-dp * (stage.h / (pHi - pLo)), dq * (stage.w / (qHi - qLo)));
-          var arrowLen = Math.min(14, 4 + len * 3.2);
+          var arrowLen = Math.min(12, 3.5 + len * 2.8);
           var ex = sx + Math.cos(angle) * arrowLen;
           var ey = sy + Math.sin(angle) * arrowLen;
           if (U && typeof U.drawVector === 'function') {
@@ -889,14 +973,17 @@ Any phase volume $\\iint dq \\, dp$ behaves like an incompressible fluid.
       }
 
       if (state.system === 'pendulum') {
+        // True separatrix: H = p²/(2m) + mgl(1−cos q) = 2 mgl
+        // with mgl = 3 ⇒ p = ±2√3 cos(q/2) on q ∈ [−π, π], peaks at (0, ±2√3).
+        var pSepAmp = 2 * Math.sqrt(3.0);
         ctx.strokeStyle = ROSE;
-        ctx.globalAlpha = 0.7;
-        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.78;
+        ctx.lineWidth = 1.6;
         ctx.setLineDash([5, 4]);
         ctx.beginPath();
         var sepStart = false;
-        for (var qs = -Math.PI; qs <= Math.PI; qs += 0.04) {
-          var pSep = 2 * Math.sqrt(3.0) * Math.cos(qs * 0.5);
+        for (var qs = -Math.PI; qs <= Math.PI; qs += 0.02) {
+          var pSep = pSepAmp * Math.cos(qs * 0.5);
           var sxx = Pmap.x(qs);
           var sy1 = Pmap.y(pSep);
           if (!sepStart) { ctx.moveTo(sxx, sy1); sepStart = true; }
@@ -905,8 +992,8 @@ Any phase volume $\\iint dq \\, dp$ behaves like an incompressible fluid.
         ctx.stroke();
         ctx.beginPath();
         sepStart = false;
-        for (var qs2 = -Math.PI; qs2 <= Math.PI; qs2 += 0.04) {
-          var pSep2 = -2 * Math.sqrt(3.0) * Math.cos(qs2 * 0.5);
+        for (var qs2 = -Math.PI; qs2 <= Math.PI; qs2 += 0.02) {
+          var pSep2 = -pSepAmp * Math.cos(qs2 * 0.5);
           var sx2 = Pmap.x(qs2);
           var sy2 = Pmap.y(pSep2);
           if (!sepStart) { ctx.moveTo(sx2, sy2); sepStart = true; }
@@ -918,19 +1005,24 @@ Any phase volume $\\iint dq \\, dp$ behaves like an incompressible fluid.
       }
 
       var subSteps = 6;
-      var subDt = Math.min(dt, 0.04) / subSteps;
+      var subDt = dt / subSteps;
+
+      var stepHamilton = function (pt, h) {
+        // Symplectic Euler: p then q so Liouville area is not eaten by explicit Euler.
+        pt.p += getDp(pt.q, pt.p) * h;
+        pt.q += getDq(pt.q, pt.p) * h;
+        if (state.system === 'pendulum') {
+          while (pt.q > Math.PI) pt.q -= 2 * Math.PI;
+          while (pt.q < -Math.PI) pt.q += 2 * Math.PI;
+        }
+      };
 
       if (swarmOn && state.particles) {
         ctx.fillStyle = 'rgba(212, 160, 23, 0.72)';
         for (var pi = 0; pi < state.particles.length; pi++) {
           var pt = state.particles[pi];
           for (var ss = 0; ss < subSteps; ss++) {
-            pt.q += getDq(pt.q, pt.p) * subDt;
-            pt.p += getDp(pt.q, pt.p) * subDt;
-            if (state.system === 'pendulum') {
-              while (pt.q > Math.PI) pt.q -= 2 * Math.PI;
-              while (pt.q < -Math.PI) pt.q += 2 * Math.PI;
-            }
+            stepHamilton(pt, subDt);
           }
           if (!isFinite(pt.q) || !isFinite(pt.p)) continue;
           var psx = Pmap.x(pt.q);
@@ -943,12 +1035,7 @@ Any phase volume $\\iint dq \\, dp$ behaves like an incompressible fluid.
       }
 
       for (var sp = 0; sp < subSteps; sp++) {
-        state.q += getDq(state.q, state.p) * subDt;
-        state.p += getDp(state.q, state.p) * subDt;
-        if (state.system === 'pendulum') {
-          while (state.q > Math.PI) state.q -= 2 * Math.PI;
-          while (state.q < -Math.PI) state.q += 2 * Math.PI;
-        }
+        stepHamilton(state, subDt);
       }
       if (!isFinite(state.q) || !isFinite(state.p)) {
         var reset = defaultHamiltonProbe(state.system);
@@ -989,15 +1076,15 @@ Any phase volume $\\iint dq \\, dp$ behaves like an incompressible fluid.
       var pdotNow = getDp(state.q, state.p);
       var legendRows = [
         { label: 'system', value: sysLabel },
-        { label: 'q', value: fmt(state.q) },
-        { label: 'p', value: fmt(state.p) },
-        { label: 'q-dot = dH/dp', value: fmt(qdotNow) },
-        { label: 'p-dot = -dH/dq', value: fmt(pdotNow) },
-        { label: 'H', value: fmt(getH(state.q, state.p)) },
-        { label: 'Liouville', value: 'div v = d(q-dot)/dq + d(p-dot)/dp = 0' }
+        { label: '$q$', value: mathNum(state.q) },
+        { label: '$p$', value: mathNum(state.p) },
+        { label: '$\\dot{q} = \\partial H/\\partial p$', value: mathNum(qdotNow) },
+        { label: '$\\dot{p} = -\\partial H/\\partial q$', value: mathNum(pdotNow) },
+        { label: '$H$', value: mathNum(getH(state.q, state.p)) },
+        { label: 'Liouville', value: '$\\nabla\\cdot(\\dot{q},\\dot{p}) = 0$' }
       ];
       if (state.system === 'pendulum') {
-        legendRows.push({ label: 'dashed', value: 'separatrix  E = 2 m g l' });
+        legendRows.push({ label: 'dashed', value: 'separatrix $E = 2mgl$' });
       }
       vizLegend("Hamilton's equations  (phase flow)", legendRows);
     },

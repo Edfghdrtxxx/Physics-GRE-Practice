@@ -23,7 +23,7 @@ function checkRepoStructure() {
     'README.md',
     'content',
     'css',
-    'docs',
+    '20_docs',
     'fonts',
     'index.html',
     'js',

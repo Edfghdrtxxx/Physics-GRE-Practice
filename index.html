@@ -8,12 +8,20 @@
   <!-- ?v= is a cache-buster: bump it whenever these files change so browsers
        can never serve a stale copy -->
   <link rel="stylesheet" href="css/fonts.css?v=20260725c">
-  <link rel="stylesheet" href="css/style.css?v=20260804b">
-  <link rel="stylesheet" href="css/visualizer.css?v=20260824a">
-  <link rel="stylesheet" href="css/print.css?v=20260725c" media="print">
+  <link rel="stylesheet" href="css/style.css?v=20260901a">
+  <link rel="stylesheet" href="css/visualizer.css?v=20260901a">
+  <link rel="stylesheet" href="css/print.css?v=20260901a">
+  <link rel="stylesheet" href="css/ambient.css?v=20260906a">
+  <link rel="stylesheet" href="css/motion.css?v=20260906a">
   <link rel="stylesheet" href="vendor/katex/katex.min.css">
 </head>
 <body>
+  <!-- Keyboard bypass (WCAG 2.4.1): visually hidden until focused; see
+       .skip-link in css/style.css. #main carries tabindex="-1" so the
+       target is focusable. The href is kept for semantics, but activation is
+       intercepted in PGRE.boot (js/app.js): preventDefault + focus(#main), so
+       "#main" never reaches the hash router (it would remount the dashboard). -->
+  <a class="skip-link" href="#main">Skip to content</a>
   <aside id="sidebar">
     <div class="brand">
       <div class="brand-name">Physics <span class="accent">GRE</span></div>
@@ -25,7 +33,7 @@
     </div>
   </aside>
 
-  <main id="main">
+  <main id="main" tabindex="-1">
     <div id="topbar">
       <div class="topbar-inner">
         <button id="sidebar-toggle" class="topbar-arrow" type="button"
@@ -62,10 +70,14 @@
 
   <div id="toasts"></div>
 
-  <!-- vendored libraries (fully offline) -->
+  <!-- vendored libraries (fully offline). Load order is a contract:
+       marked -> katex -> auto-render, all SYNCHRONOUS like every script
+       below, so by the time js/app.js boots (DOMContentLoaded) and first
+       calls PGRE.typesetMath, window.renderMathInElement always exists.
+       auto-render.min.js depends on the katex global from the line above. -->
   <script src="vendor/marked.min.js"></script>
-  <script defer src="vendor/katex/katex.min.js"></script>
-  <script defer src="vendor/katex/contrib/auto-render.min.js"></script>
+  <script src="vendor/katex/katex.min.js"></script>
+  <script src="vendor/katex/contrib/auto-render.min.js"></script>
 
   <!-- data -->
   <script src="js/data-topics.js"></script>
@@ -79,12 +91,12 @@
   <script src="content/bank/cpg-questions.js"></script>
   <script src="content/bank/cpg-exams.js"></script>
   <script src="content/bank/cpg-formulas.js"></script>
-  <script src="content/bank/ets-exams.js"></script>  <!-- released ETS exams (gitignored — ETS copyright) -->
+  <script src="content/bank/ets-exams.js?v=20260901a"></script>  <!-- released ETS exams (gitignored — ETS copyright) -->
 
   <!-- engine -->
-  <script src="js/store.js"></script>
-  <script src="js/srs.js?v=20260730a"></script>
-  <script src="js/bank.js"></script>
+  <script src="js/store.js?v=20260831b"></script>
+  <script src="js/srs.js?v=20260831b"></script>
+  <script src="js/bank.js?v=20260901a"></script>
   <script src="js/study-time.js"></script>
   <script src="js/timer.js"></script>
   <script src="js/focus-sound.js?v=20260804a"></script>  <!-- focus-timer selectable SFX -->
@@ -94,36 +106,39 @@
   <script src="js/formula-checkin.js?v=20260804a"></script>  <!-- formula-recall daily check-in -->
 
   <!-- views -->
-  <script src="js/view-dashboard.js"></script>
+  <script src="js/view-dashboard.js?v=20260901a"></script>
   <script src="js/view-topic.js"></script>
-  <script src="js/view-practice.js"></script>
+  <script src="js/view-practice.js?v=20260901a"></script>
   <script src="js/view-history.js"></script>
   <script src="js/view-analytics.js"></script>
-  <script src="js/view-build.js"></script>
+  <script src="js/view-build.js?v=20260901a"></script>
   <script src="js/view-search.js"></script>
-  <script src="js/view-notes.js"></script>
-  <script src="js/view-mistakes.js"></script>
-  <script src="js/view-formulas.js?v=20260804b"></script>
+  <script src="js/view-notes.js?v=20260901a"></script>
+  <script src="js/view-mistakes.js?v=20260901a"></script>
+  <script src="js/view-formulas.js?v=20260831b"></script>
   <script src="js/view-focus.js?v=20260804a"></script>        <!-- F5 focus page -->
   <script src="js/view-study-time.js"></script>   <!-- dedicated study-time page -->
   <script src="js/view-achievements.js"></script>
-  <script src="js/view-plan.js"></script>
+  <script src="js/view-plan.js?v=20260901a"></script>
   <script src="js/view-content.js"></script>
   <script src="js/exam-engine.js"></script>
-  <script src="js/view-exam.js"></script>
-  <script src="js/visualizer-engine.js?v=20260824a"></script>
-  <script src="js/visualizers/trio-g1.js?v=20260824a"></script>
-  <script src="js/visualizers/trio-g2.js?v=20260824a"></script>
-  <script src="js/visualizers/trio-g3.js?v=20260824a"></script>
-  <script src="js/visualizers/trio-g4.js?v=20260824a"></script>
-  <script src="js/visualizers/trio-g5.js?v=20260824a"></script>
-  <script src="js/visualizers/trio-g6.js?v=20260824a"></script>
-  <script src="js/visualizers/trio-g7.js?v=20260824a"></script>
-  <script src="js/visualizers/trio-g8.js?v=20260824a"></script>
-  <script src="js/visualizers/trio-g9.js?v=20260824a"></script>
-  <script src="js/visualizers/trio-g10.js?v=20260824a"></script>
+  <script src="js/view-exam.js?v=20260901a"></script>
+  <script src="js/visualizer-engine.js?v=20260901a"></script>
+  <script src="js/visualizers/trio-g1.js?v=20260901a"></script>
+  <script src="js/visualizers/trio-g2.js?v=20260901a"></script>
+  <script src="js/visualizers/trio-g3.js?v=20260901a"></script>
+  <script src="js/visualizers/trio-g4.js?v=20260901a"></script>
+  <script src="js/visualizers/trio-g5.js?v=20260901a"></script>
+  <script src="js/visualizers/trio-g6.js?v=20260901a"></script>
+  <script src="js/visualizers/trio-g7.js?v=20260901a"></script>
+  <script src="js/visualizers/trio-g8.js?v=20260901a"></script>
+  <script src="js/visualizers/trio-g9.js?v=20260901a"></script>
+  <script src="js/visualizers/trio-g10.js?v=20260901a"></script>
 
   <!-- shell -->
-  <script src="js/app.js?v=20260725b"></script>
+  <script src="js/app.js?v=20260906a"></script>
+  <!-- motion & ambient effects: loaded after app.js but still parsed before DOMContentLoaded fires, so PGRE.ambient/motion exist before PGRE.boot runs -->
+  <script src="js/ambient-fx.js?v=20260906a"></script>
+  <script src="js/motion.js?v=20260906a"></script>
 </body>
 </html>

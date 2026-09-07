@@ -63,6 +63,10 @@ PGRE.store = {
                   // exam date (F3) — drives the interval cap + final pass; literal
                   // mirrors PGRE.EXAM_DATE (js/data-topics.js)
                   examDate: '2026-10-28',
+                  // F3 — when true (default), nextIntervals clamps Hard/Good/Easy
+                  // to examCap(); when false, classic uncapped Anki SM-2. Does not
+                  // rewrite cards already scheduled; migrate() backfills true.
+                  formulaExamCap: true,
                   // F5 — formula Study direction: false = Prompt → Formula (recall
                   // the equation); true = Formula → Prompt (name/state it)
                   formulaReverse: false,
@@ -156,6 +160,13 @@ PGRE.store = {
       this.migrate();
       this.rollDay();
     }
+    // ankiReset2026 — one-time migration resetting formula card states to scratch
+    if (!this.state.migrations || typeof this.state.migrations !== 'object') this.state.migrations = {};
+    if (!this.state.migrations.ankiReset2026) {
+      this.resetFormulaCards();
+      this.state.migrations.ankiReset2026 = new Date().toISOString();
+      this.save();
+    }
     // ITEM 5 — one-time Easy-interval recompute. Runs AFTER the try/catch so it
     // never trips the corruption-recovery path, and after migrate() has
     // backfilled settings.examDate. PGRE.srs is fully loaded before boot calls
@@ -207,6 +218,17 @@ PGRE.store = {
 
   reset: function () {
     this.state = this.defaults();
+    this.save();
+  },
+
+  resetFormulaCards: function () {
+    if (!this.state) return;
+    this.state.cards = {};
+    this.state.cardReviews = [];
+    this.state.formulaDay = null;
+    this.state.formulaStudy = null;
+    this.state.formulaSuspended = {};
+    if (this.state.migrations) delete this.state.migrations.easy10;
     this.save();
   },
 
@@ -304,6 +326,13 @@ PGRE.store = {
     } catch (e) {
       this.state = prev;
       throw e;
+    }
+    // ankiReset2026 — one-time migration resetting formula card states to scratch
+    if (!this.state.migrations || typeof this.state.migrations !== 'object') this.state.migrations = {};
+    if (!this.state.migrations.ankiReset2026) {
+      this.resetFormulaCards();
+      this.state.migrations.ankiReset2026 = new Date().toISOString();
+      this.save();
     }
     // ITEM 5 — run the one-time Easy-interval recompute on the imported state too,
     // mirroring load(). A restored pre-build backup may still carry stale Easy

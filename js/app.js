@@ -176,9 +176,17 @@ PGRE.formulaTextHTML = function (text) {
     part = part.replace(/\b([A-Za-z])(_(?:[A-Za-z0-9]+|\{[^}]+\})|\^(?:[A-Za-z0-9]+|\{[^}]+\}))(\/\d+)?\b/g,
       function (_, base, decoration, frac) { return mathToken(base + decoration + (frac || '')); });
     // These are common standalone physics variables; omit prose words such as a,
-    // an, and I so the formula-card prompt remains readable.
+    // an, and I so the formula-card prompt remains readable. Sentence-initial
+    // 'A' (article) and 'I' (pronoun) followed by a lowercase word are prose —
+    // "A particle with charge q…", "I still forget…" — while a variable in the
+    // same slot is followed by math: an operator, a unit, another symbol.
     part = part.replace(/\b([A-Z]|[txyzvwrmEgFBpq])\b/g,
-      function (_, symbol) { return mathToken(symbol); });
+      function (m, symbol, offset, str) {
+        if ((symbol === 'A' || symbol === 'I') &&
+            (offset === 0 || /(?:[.!?…,;:]|\n)\s*$/.test(str.slice(0, offset))) &&
+            /^\s+[a-z]/.test(str.slice(offset + 1))) return m;
+        return mathToken(symbol);
+      });
     // Bodies are parked bare so they nest cleanly; the delimiters go on last.
     return part.replace(HELD_REF,
       function (m, i) { return i in held ? '$' + held[i] + '$' : m; });
@@ -197,24 +205,27 @@ PGRE.formulaTextHTML = function (text) {
     return codeDepth ? part : plain(part);
   }).join('');
 };
-
 /* Book-style equation number on a formula card's answer: KaTeX's own \tag puts
    "(2.1)" in the display block's right margin, so no CSS positioning is needed.
    Returns a COPY — never write this back onto the card or the deck file, since
    js/flashmodes.js builds distractors, match keys and cloze offsets out of the
    raw c.back (normText, stripLegend, perturbLatex, clozeParts) and would read
    the tag as part of the formula. \tag is display-only and cannot be doubled,
-   so anything that isn't a single leading $$…$$ block passes through untouched. */
+   so anything that isn't a single leading $$…$$ block (leading whitespace
+   tolerated) passes through untouched. */
 PGRE.formulaBackTagged = function (back, eq) {
   if (!back || !eq) return back || '';
   var s = String(back);
-  if (s.indexOf('$$') !== 0) return s;      // inline math: \tag would be a ParseError
-  var end = s.indexOf('$$', 2);
+  var lead = /^\s*/.exec(s)[0].length;
+  if (s.slice(lead).indexOf('$$') !== 0) return s;   // inline math: \tag would be a ParseError
+  var end = s.indexOf('$$', lead + 2);
   if (end < 0) return s;                    // unterminated block — leave it alone
-  var body = s.slice(2, end);
+  var body = s.slice(lead + 2, end);
   if (/\\tag\b/.test(body)) return s;       // "Multiple \tag" is also a ParseError
-  // KaTeX supplies the parentheses itself, so the bare number goes in.
-  return '$$' + body + '\\tag{' + String(eq).replace(/[{}\\$]/g, '') + '}' + s.slice(end);
+  // KaTeX supplies the parentheses itself, so the bare number goes in. Leading
+  // whitespace before the $$ is preserved, not eaten.
+  return s.slice(0, lead) + '$$' + body +
+    '\\tag{' + String(eq).replace(/[{}\\$]/g, '') + '}' + s.slice(end);
 };
 
 /* ——— Toasts ——— */
@@ -286,7 +297,7 @@ PGRE.assess = (function () {
       var note = row.querySelector('#assess-note');
       if (note) {
         note.textContent = luckyFiled
-          ? '⚑ filed as a lucky guess in your mistake book'
+          ? 'filed as a lucky guess in your mistake book'
           : 'pick any that apply';
       }
     }
@@ -490,6 +501,10 @@ PGRE.route = function () {
   var main = document.getElementById('view');
   if (!v) { main.innerHTML = '<p>Unknown view.</p>'; return; }
 
+  PGRE.motion && PGRE.motion.loader.start();
+  PGRE.ambient && PGRE.ambient.setIntensity &&
+    PGRE.ambient.setIntensity(hash.indexOf('exam/run') === 0 ? 'calm' : 'normal');
+
   PGRE.store.rollDay();
   PGRE.nav.route(view, params);   // base breadcrumb trail before the view mounts
   main.innerHTML = v.render(params);
@@ -498,6 +513,21 @@ PGRE.route = function () {
   window.scrollTo(0, 0);
   PGRE.setActiveNav(view, params);
   PGRE.refreshNavBadges();
+
+  // View-enter animation + staggered card grids after mount.
+  PGRE.motion && PGRE.motion.viewEnter && PGRE.motion.viewEnter(main);
+  ['topic-grid', 'stat-row', 'two-col', 'ach-grid'].forEach(function (cls) {
+    var grid = main.querySelector('.' + cls);
+    if (grid) {
+      Array.prototype.forEach.call(grid.children, function (c) {
+        c.classList.add('stagger-in');
+      });
+      PGRE.motion && PGRE.motion.stagger(grid);
+    }
+  });
+  requestAnimationFrame(function () {
+    PGRE.motion && PGRE.motion.loader.done();
+  });
 };
 
 /* Due counts on the sidebar (mistakes are synchronous; the formula deck
@@ -509,7 +539,7 @@ PGRE.refreshNavBadges = function () {
   PGRE.formulaDeck().then(function (deck) {
     var n = PGRE.srs.formulaDayRemaining(deck).length;
     var el2 = document.getElementById('nav-form-due');
-    if (el2) { el2.textContent = n + ' due'; el2.hidden = n === 0; }
+    if (el2) { el2.textContent = n + ' left'; el2.hidden = n === 0; }
   });
 };
 
@@ -607,6 +637,17 @@ PGRE.boot = function () {
   var tbFwd = document.getElementById('topbar-fwd');
   if (tbBack) tbBack.addEventListener('click', function () { history.back(); });
   if (tbFwd) tbFwd.addEventListener('click', function () { history.forward(); });
+  // Skip link: its href="#main" must never reach the hash router — PGRE.route
+  // strips /^#\/?/ and would read "main" as an unknown view, remounting the
+  // dashboard and destroying any in-progress session. Intercept activation
+  // (the click event fires for mouse AND keyboard Enter) and move focus to
+  // #main (tabindex="-1") without touching location.hash.
+  var skipLink = document.querySelector('a.skip-link');
+  if (skipLink) skipLink.addEventListener('click', function (e) {
+    e.preventDefault();
+    var target = document.getElementById('main');
+    if (target) target.focus();
+  });
   window.addEventListener('hashchange', PGRE.route);
   PGRE.route();                 // first paint never waits on IndexedDB
   PGRE.contentDB.open();        // warm the connection in the background

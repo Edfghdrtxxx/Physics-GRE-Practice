@@ -29,7 +29,14 @@
   var PANEL = '#f5f0e8';
   var LINE = '#e6dfd8';
 
+  function syncStageTheme() {
+    var t = PGRE.vizStageTheme ? PGRE.vizStageTheme() : null;
+    if (!t) return;
+    INK = t.ink; MUTED = t.muted; CREAM = t.bg; PANEL = t.panel; LINE = t.line;
+  }
+
   function fillCream(ctx, width, height) {
+    syncStageTheme();
     ctx.fillStyle = CREAM;
     ctx.fillRect(0, 0, width, height);
   }
@@ -78,7 +85,7 @@
     var tx = bx;
     if (align === 'center') tx = bx + tw / 2;
     else if (align === 'right') tx = bx + tw;
-    ctx.fillStyle = 'rgba(250, 249, 245, 0.94)';
+    ctx.fillStyle = PGRE.vizStageTheme().chipFade(0.94);
     ctx.fillRect(bx - pad, by - th / 2 - 2, tw + pad * 2, th + 4);
     ctx.fillStyle = color;
     ctx.fillText(text, tx, by);
@@ -142,8 +149,12 @@
           y = pA.y + (pB.y - pA.y) * u;
         }
       } else if (pathType === 'curved') {
-        x = pA.x + (pB.x - pA.x) * s;
-        y = pA.y + (pB.y - pA.y) * s + Math.sin(s * Math.PI) * 1.0;
+        var dxp = pB.x - pA.x;
+        var dyp = pB.y - pA.y;
+        var plen = Math.hypot(dxp, dyp) || 1;
+        var bump = 4 * 0.85 * s * (1 - s);
+        x = pA.x + dxp * s + bump * (-dyp / plen);
+        y = pA.y + dyp * s + bump * (dxp / plen);
       } else {
         x = pA.x + (pB.x - pA.x) * s;
         y = pA.y + (pB.y - pA.y) * s;
@@ -155,7 +166,8 @@
 
   PGRE.visualizers['cpgf-1.9'] = {
     id: 'cpgf-1.9',
-    title: 'Potential Energy Difference: ΔU = -∫ F · dl',
+    topic: 'cm',
+    title: 'Potential Energy Difference: $\\Delta U = -\\int \\mathbf{F} \\cdot d\\mathbf{l}$',
     formulaLatex: '\\Delta U = U(b) - U(a) = -\\int_a^b \\mathbf{F} \\cdot d\\mathbf{l}',
     physicalStory: `
 Potential energy difference $\\Delta U$ is defined as the negative of the work done by internal conservative forces during displacement from state $a$ to state $b$.
@@ -170,25 +182,27 @@ The negative sign is physically crucial: when a force does positive work (accele
       "5. GRE Integration Shortcut: Break diagonal 2D path $(x_a, y_a) \\to (x_b, y_b)$ into two axis-aligned segments: $\\Delta U = -\\int_{x_a}^{x_b} F_x(x, y_a) dx - \\int_{y_a}^{y_b} F_y(x_b, y) dy$."
     ],
     limitingCases: [
-      { condition: 'Uniform Gravity ($\\mathbf{F} = -mg\\hat{\\mathbf{z}}$)', result: '$\\Delta U = mg(z_b - z_a) = mg\\Delta z$', description: 'Gravitational potential energy near Earth.' },
-      { condition: 'Linear Hooke Spring ($\\mathbf{F} = -kx\\hat{\\mathbf{x}}$)', result: '$\\Delta U = \\frac{1}{2}k(x_b^2 - x_a^2)$', description: 'Elastic spring potential energy.' },
-      { condition: 'Coulomb / Gravitational Inverse-Square', result: '$\\Delta U = -k(1/r_b - 1/r_a)$', description: 'Reference $U(\\infty) = 0$ yields $U(r) = -k/r$.' }
+      { condition: 'Uniform Gravity ($\\mathbf{F} = -mg\\hat{\\mathbf{z}}$)', result: '\\Delta U = mg(z_b - z_a) = mg\\Delta z', description: 'Gravitational potential energy near Earth.' },
+      { condition: 'Linear Hooke Spring ($\\mathbf{F} = -kx\\hat{\\mathbf{x}}$)', result: '\\Delta U = \\frac{1}{2}k(x_b^2 - x_a^2)', description: 'Elastic spring potential energy.' },
+      { condition: 'Gravity (attractive $1/r^2$)', result: '\\Delta U = -GMm\\left(\\frac{1}{r_b} - \\frac{1}{r_a}\\right)', description: 'With $U(\\infty)=0$, $U(r)=-GMm/r$. Attractive; energy is negative.' },
+      { condition: 'Coulomb (like charges)', result: '\\Delta U = +kQq\\left(\\frac{1}{r_b} - \\frac{1}{r_a}\\right)', description: 'Same-sign charges: $U(r)=+kQq/r$ (repulsive). Opposite signs recover the attractive $-k|Qq|/r$ form; that is not the Coulomb self-energy of like charges.' }
     ],
     greTraps: [
-      { trap: 'Sign Confusion Between Internal vs External Work', explanation: '$W_{\\text{field}} = -\\Delta U$, whereas external work against the field is $W_{\\text{ext}} = +\\Delta U$.' },
-      { trap: 'Evaluating Along Complex Curved Paths', explanation: 'Never parameterize a difficult curve when $\\nabla \\times \\mathbf{F} = 0$. Integrate along straight coordinate axes instead!' }
+      { trap: 'Sign Confusion Between Internal vs External Work', warning: '$W_{\\text{field}} = -\\Delta U$, whereas external work against the field is $W_{\\text{ext}} = +\\Delta U$.' },
+      { trap: 'Evaluating Along Complex Curved Paths', warning: 'Never parameterize a difficult curve when $\\nabla \\times \\mathbf{F} = 0$. Integrate along straight coordinate axes instead!' }
     ],
     parameters: [
       { id: 'landscape', label: 'Potential Well', type: 'select', value: 'saddle', default: 'saddle', options: [
-        { value: 'harmonic', label: 'Harmonic Bowl: U = ½k(x² + y²)' },
-        { value: 'saddle', label: 'Saddle Surface: U = c(x² - y²)' },
-        { value: 'doublewell', label: 'Double Well: U = a(x²-1)² + b y²' }
+        { value: 'harmonic', label: 'Harmonic Bowl: $U = \\frac{1}{2}k(x^2 + y^2)$' },
+        { value: 'saddle', label: 'Saddle Surface: $U = c(x^2 - y^2)$' },
+        { value: 'doublewell', label: 'Double Well: $U = a(x^2 - 1)^2 + b y^2$' }
       ]},
       { id: 'pathType', label: 'Integration Path', type: 'select', value: 'manhattan', default: 'manhattan', options: [
         { value: 'direct', label: 'Path 1: Direct Diagonal Line' },
         { value: 'manhattan', label: 'Path 2: Manhattan (GRE Axis-Aligned)' },
         { value: 'curved', label: 'Path 3: Parabolic Arc' }
-      ]}
+      ]},
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     init(container, state, redraw) {
       state.landscape = state.landscape || 'saddle';
@@ -196,10 +210,13 @@ The negative sign is physically crucial: when a force does positive work (accele
       state.pA = state.pA || { x: -1.5, y: -1.0 };
       state.pB = state.pB || { x: 1.5, y: 1.0 };
       state.t = state.t || 0;
+      if (state.simSpeed == null || isNaN(state.simSpeed)) state.simSpeed = 1.0;
     },
     draw(ctx, width, height, state, dt) {
       state = state || {};
-      dt = dt || 0;
+      dt = (dt == null || isNaN(dt)) ? 0 : dt;
+      var speed = parseFloat(state.simSpeed);
+      if (isNaN(speed)) speed = 1.0;
       state.landscape = state.landscape || 'saddle';
       state.pathType = state.pathType || 'manhattan';
       state.pA = state.pA || { x: -1.5, y: -1.0 };
@@ -306,7 +323,7 @@ The negative sign is physically crucial: when a force does positive work (accele
         W += ff.fx * (pts[i].x - pts[i - 1].x) + ff.fy * (pts[i].y - pts[i - 1].y);
       }
 
-      state.t = (state.t || 0) + dt * 0.22;
+      state.t = (state.t || 0) + dt * speed * 0.22;
       if (state.t > 1) state.t -= 1;
       var beadIdx = Math.min(pts.length - 1, Math.max(0, Math.round(state.t * (pts.length - 1))));
       var bead = pts[beadIdx];
@@ -353,33 +370,34 @@ The negative sign is physically crucial: when a force does positive work (accele
 
       var landName = state.landscape === 'harmonic' ? 'harmonic bowl' : (state.landscape === 'saddle' ? 'saddle' : 'double well');
       var pathName = pathType === 'manhattan' ? 'Manhattan (axis-aligned)' : (pathType === 'curved' ? 'parabolic arc' : 'direct line');
-      appendLegend('ΔU = −∫ F · dl', [
+      appendLegend('$\\Delta U = -\\int \\mathbf{F} \\cdot d\\mathbf{l}$', [
         { label: 'Landscape', value: landName },
         { label: 'Path', value: pathName },
-        { label: 'U(A)', value: uA.toFixed(2) + ' J' },
-        { label: 'U(B)', value: uB.toFixed(2) + ' J' },
-        { label: 'ΔU = U(B) − U(A)', value: deltaU.toFixed(2) + ' J' },
-        { label: 'W_field = ∫ F · dl', value: W.toFixed(2) + ' J' },
-        { label: 'Check', value: 'ΔU ≈ −W on every path' }
+        { label: '$U(A)$', value: uA.toFixed(2) + ' J' },
+        { label: '$U(B)$', value: uB.toFixed(2) + ' J' },
+        { label: '$\\Delta U = U(B) - U(A)$', value: deltaU.toFixed(2) + ' J' },
+        { label: '$W_{\\mathrm{field}} = \\int \\mathbf{F} \\cdot d\\mathbf{l}$', value: W.toFixed(2) + ' J' },
+        { label: 'Check', value: '$\\Delta U \\approx -W$ on every path' }
       ]);
     },
     challenge: {
-      question: "A 2D conservative force field is given by F = (2xy³ + 3) î + (3x²y² - 4y) ĵ. What is the potential energy function U(x, y) assuming reference U(0,0) = 0?",
+      question: "A 2D conservative force field is given by $\\mathbf{F} = (2xy^3 + 3)\\,\\hat{\\mathbf{i}} + (3x^2 y^2 - 4y)\\,\\hat{\\mathbf{j}}$. What is the potential energy function $U(x, y)$ assuming reference $U(0,0) = 0$?",
       options: [
-        "A) U(x, y) = -(x² y³ + 3x - 2y²)",
-        "B) U(x, y) = x² y³ + 3x - 2y²",
-        "C) U(x, y) = -(2x² y³ + 3x - 4y²)",
-        "D) U(x, y) = -(x² y³ + 3x + 2y²)",
+        "A) $U(x, y) = -(x^2 y^3 + 3x - 2y^2)$",
+        "B) $U(x, y) = x^2 y^3 + 3x - 2y^2$",
+        "C) $U(x, y) = -(2x^2 y^3 + 3x - 4y^2)$",
+        "D) $U(x, y) = -(x^2 y^3 + 3x + 2y^2)$",
         "E) Potential energy cannot be defined because the field has non-zero curl."
       ],
       correct: 0,
-      explanation: "Using F = -∇U: -∂U/∂x = 2xy³ + 3 ⇒ U(x,y) = -(x²y³ + 3x) + g(y). Differentiating with respect to y gives -∂U/∂y = 3x²y² - g'(y) = 3x²y² - 4y ⇒ g'(y) = 4y ⇒ g(y) = 2y² + C. Setting U(0,0) = 0 yields C = 0, so U(x,y) = -(x²y³ + 3x - 2y²)."
+      explanation: "Using $\\mathbf{F} = -\\nabla U$: $-\\partial U/\\partial x = 2xy^3 + 3 \\Rightarrow U(x,y) = -(x^2 y^3 + 3x) + g(y)$. Differentiating with respect to $y$ gives $-\\partial U/\\partial y = 3x^2 y^2 - g'(y) = 3x^2 y^2 - 4y \\Rightarrow g'(y) = 4y \\Rightarrow g(y) = 2y^2 + C$. Setting $U(0,0) = 0$ yields $C = 0$, so $U(x,y) = -(x^2 y^3 + 3x - 2y^2)$."
     }
   };
 
   PGRE.visualizers['cpgf-2.4'] = {
     id: "cpgf-2.4",
-    title: "Electric Field from Potential Gradient: E = -∇V",
+    topic: 'em',
+    title: 'Electric Field from Potential Gradient: $\\mathbf{E} = -\\nabla V$',
     formulaLatex: "\\mathbf{E} = -\\nabla V",
     physicalStory: `In electrostatics, the Coulomb force is conservative: the line integral around any closed loop vanishes identically ($\\oint \\mathbf{E}\\cdot d\\mathbf{l} = 0$), which by Stokes' theorem is equivalent to $\\nabla \\times \\mathbf{E} = 0$. By Helmholtz's theorem and the Poincaré lemma, any curl-free vector field can be expressed without loss of generality as the gradient of a single-valued scalar potential: $\\mathbf{E} = -\\nabla V$.
 
@@ -449,20 +467,20 @@ Geometrically, the equipotential surfaces $V(\\mathbf{r}) = \\text{const}$ form 
 
     greTraps: [
       {
-        trap: "Assuming E = 0 implies V = 0 (or V = 0 implies E = 0)",
-        explanation: "Midway between two equal +Q charges, E = 0 by symmetry, but V = 2kQ/d ≠ 0. Midway between +Q and -Q, V = 0, but E = 2kQ/(d/2)² x̂ ≠ 0! E measures the spatial slope (derivative) of V, not its absolute value."
+        trap: "Assuming $E = 0$ implies $V = 0$ (or $V = 0$ implies $E = 0$)",
+        warning: "Midway between two equal $+Q$ charges, $\\mathbf{E} = 0$ by symmetry, but $V = 2kQ/d \\neq 0$. Midway between $+Q$ and $-Q$, $V = 0$, but $\\mathbf{E} \\neq 0$. $\\mathbf{E}$ measures the spatial slope of $V$, not its absolute value."
       },
       {
         trap: "Forgetting the Negative Sign in Vector Components",
-        explanation: "If potential increases along the +x axis (∂V/∂x > 0), the electric field component E_x = -∂V/∂x is NEGATIVE (points in the -x direction, towards lower potential)."
+        warning: "If potential increases along the $+x$ axis ($\\partial V/\\partial x > 0$), the electric field component $E_x = -\\partial V/\\partial x$ is negative (points in the $-x$ direction, towards lower potential)."
       },
       {
         trap: "Equipotential Contour Spacing vs Field Magnitude",
-        explanation: "On PGRE topographic potential maps, where contour lines are packed closest together, the gradient is steepest and |E| is largest. Field lines must NEVER cross each other."
+        warning: "On PGRE topographic potential maps, where contour lines are packed closest together, the gradient is steepest and $|\\mathbf{E}|$ is largest. Field lines must never cross each other."
       },
       {
         trap: "Gauge Invariance and Reference Point Freedom",
-        explanation: "Adding any arbitrary constant C to V(r) leaves E = -∇(V + C) = -∇V completely unchanged. Only potential differences ΔV produce physical forces."
+        warning: "Adding any arbitrary constant $C$ to $V(\\mathbf{r})$ leaves $\\mathbf{E} = -\\nabla(V + C) = -\\nabla V$ completely unchanged. Only potential differences $\\Delta V$ produce physical forces."
       }
     ],
 
@@ -475,12 +493,13 @@ Geometrically, the equipotential surfaces $V(\\mathbf{r}) = \\text{const}$ form 
         { value: "quadrupole", label: "Quadrupole (+ - + -)" },
         { value: "capacitor", label: "Parallel-plate capacitor" }
       ]},
-      { id: "chargeMag", label: "Charge Magnitude (q)", type: "range", min: 0.5, max: 3.0, step: 0.1, default: 1.0 },
+      { id: "chargeMag", label: "Charge Magnitude ($q$)", type: "range", min: 0.5, max: 3.0, step: 0.1, default: 1.0 },
       { id: "showEquipotentials", label: "Equipotential Contours", type: "toggle", default: true },
-      { id: "showVectors", label: "E-Field Vectors (-∇V)", type: "toggle", default: true },
-      { id: "showStreamlines", label: "Field Streamlines", type: "toggle", default: true },
-      { id: "showHeatmap", label: "Potential Heatmap", type: "toggle", default: true },
-      { id: "showProfile", label: "1D Potential/Field Profile", type: "toggle", default: true }
+      { id: "showVectors", label: "E-Field Vectors ($-\\nabla V$)", type: "toggle", default: true },
+      { id: "showStreamlines", label: "Field Streamlines", type: "toggle", default: false },
+      { id: "showHeatmap", label: "Potential Heatmap", type: "toggle", default: false },
+      { id: "showProfile", label: "1D Potential/Field Profile", type: "toggle", default: true },
+      { id: "simSpeed", label: "Simulation Speed", min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: "x" }
     ],
 
     init: function(container, state, redraw) {
@@ -488,9 +507,10 @@ Geometrically, the equipotential surfaces $V(\\mathbf{r}) = \\text{const}$ form 
       state.chargeMag = state.chargeMag !== undefined ? state.chargeMag : 1.0;
       state.showEquipotentials = state.showEquipotentials !== undefined ? state.showEquipotentials : true;
       state.showVectors = state.showVectors !== undefined ? state.showVectors : true;
-      state.showStreamlines = state.showStreamlines !== undefined ? state.showStreamlines : true;
-      state.showHeatmap = state.showHeatmap !== undefined ? state.showHeatmap : true;
+      state.showStreamlines = state.showStreamlines !== undefined ? state.showStreamlines : false;
+      state.showHeatmap = state.showHeatmap !== undefined ? state.showHeatmap : false;
       state.showProfile = state.showProfile !== undefined ? state.showProfile : true;
+      if (state.simSpeed == null || isNaN(state.simSpeed)) state.simSpeed = 1.0;
       state.charges = state.charges || [];
       state.testCharge = state.testCharge || { x: 0.0, y: -0.35, q: 1.0, active: true };
       state.isDragging = null;
@@ -512,17 +532,18 @@ Geometrically, the equipotential surfaces $V(\\mathbf{r}) = \\text{const}$ form 
     },
 
     draw: function(ctx, width, height, state, dt) {
-      dt = dt || 0.016;
+      dt = (dt == null || isNaN(dt)) ? 0 : dt;
       state = state || {};
-      state.time = (state.time || 0) + dt;
+      var speed = parseFloat(state.simSpeed);
+      if (isNaN(speed)) speed = 1.0;
 
       // Ensure state defaults
       state.preset = state.preset || "dipole";
       state.chargeMag = state.chargeMag !== undefined ? state.chargeMag : 1.0;
       state.showEquipotentials = state.showEquipotentials !== undefined ? state.showEquipotentials : true;
       state.showVectors = state.showVectors !== undefined ? state.showVectors : true;
-      state.showStreamlines = state.showStreamlines !== undefined ? state.showStreamlines : true;
-      state.showHeatmap = state.showHeatmap !== undefined ? state.showHeatmap : true;
+      state.showStreamlines = state.showStreamlines !== undefined ? state.showStreamlines : false;
+      state.showHeatmap = state.showHeatmap !== undefined ? state.showHeatmap : false;
       state.showProfile = state.showProfile !== undefined ? state.showProfile : true;
       state.testCharge = state.testCharge || { x: 0.0, y: -0.35, q: 1.0, active: true };
 
@@ -674,7 +695,7 @@ Geometrically, the equipotential surfaces $V(\\mathbf{r}) = \\text{const}$ form 
       if (state.showStreamlines && state.particles) {
         ctx.save();
         state.particles.forEach(p => {
-          p.age += dt * 30;
+          p.age += dt * speed * 30;
           if (p.age > p.maxAge || Math.abs(p.x) > 1.2 || Math.abs(p.y) > 1.2) {
             p.x = (Math.random() - 0.5) * 1.6;
             p.y = (Math.random() - 0.5) * 1.6;
@@ -686,8 +707,8 @@ Geometrically, the equipotential surfaces $V(\\mathbf{r}) = \\text{const}$ form 
           const ex = res.ex, ey = res.ey, mag = res.mag;
           if (mag > 0.05) {
             const vSpeed = 0.4 / Math.pow(mag + 0.5, 0.4);
-            p.x += (ex / (mag + 0.01)) * vSpeed * dt;
-            p.y += (ey / (mag + 0.01)) * vSpeed * dt;
+            p.x += (ex / (mag + 0.01)) * vSpeed * dt * speed;
+            p.y += (ey / (mag + 0.01)) * vSpeed * dt * speed;
           }
 
           const screenPos = toScreen(p.x, p.y);
@@ -796,15 +817,15 @@ Geometrically, the equipotential surfaces $V(\\mathbf{r}) = \\text{const}$ form 
         ctx.restore();
 
         var legendRows = [
-          { label: 'V(r)', value: vAtProbe.toFixed(2) + ' V' },
-          { label: '|E|', value: mag.toFixed(2) + ' N/C' },
+          { label: '$V(\\mathbf{r})$', value: vAtProbe.toFixed(2) + ' V' },
+          { label: '$|\\mathbf{E}|$', value: mag.toFixed(2) + ' N/C' },
           { label: 'angle', value: (Math.atan2(ey, ex) * 180 / Math.PI).toFixed(1) + ' deg' },
-          { label: 'Geometry', value: 'E downhill, perpendicular to the equipotential' }
+          { label: 'Geometry', value: '$\\mathbf{E}$ downhill, perpendicular to the equipotential' }
         ];
         if (state.showProfile) {
-          legendRows.push({ label: 'Slice', value: 'V(x) teal, E_x gold at y = ' + tp.y.toFixed(2) });
+          legendRows.push({ label: 'Slice', value: '$V(x)$ teal, $E_x$ gold at y = ' + tp.y.toFixed(2) });
         }
-        appendLegend('E = −∇V at probe', legendRows);
+        appendLegend('$\\mathbf{E} = -\\nabla V$ at probe', legendRows);
       }
 
       // 7. Bottom 1D Cross-Section Graph: V(x) and E_x(x) = -dV/dx
@@ -827,7 +848,7 @@ Geometrically, the equipotential surfaces $V(\\mathbf{r}) = \\text{const}$ form 
         inkLabel(ctx, 'E_x', pLeft + 40, pTop + 12, { color: GOLD, align: 'left', width: width, height: height, font: 'bold 11px sans-serif' });
 
         const midY = pTop + pHeight / 2 + 6;
-        ctx.strokeStyle = "#e6dfd8";
+        ctx.strokeStyle = LINE;
         ctx.setLineDash([2, 2]);
         ctx.beginPath();
         ctx.moveTo(pLeft + 5, midY);
@@ -971,30 +992,29 @@ Geometrically, the equipotential surfaces $V(\\mathbf{r}) = \\text{const}$ form 
     },
 
     challenge: {
-      question: "An electrostatic scalar potential in a three-dimensional region of space is given by the function V(x, y, z) = 2x² - 3y² + 4z. What is the electric field vector E at the point (1, -2, 3), and how much work is required by an external agent to move a test charge q = +2 C at constant speed from (0, 0, 0) to (1, -2, 3)?",
+      question: "An electrostatic scalar potential in a three-dimensional region of space is given by $V(x, y, z) = 2x^2 - 3y^2 + 4z$. What is the electric field $\\mathbf{E}$ at the point $(1, -2, 3)$, and how much work is required by an external agent to move a test charge $q = +2\\,\\mathrm{C}$ at constant speed from $(0, 0, 0)$ to $(1, -2, 3)$?",
       options: [
-        "E = -4x̂ - 12ŷ - 4ẑ;  W_ext = +12 J",
-        "E = -4x̂ - 12ŷ - 4ẑ;  W_ext = +4 J",
-        "E = 4x̂ + 12ŷ + 4ẑ;   W_ext = +24 J",
-        "E = -4x̂ - 12ŷ - 4ẑ;  W_ext = -24 J",
-        "E = 4x̂ + 12ŷ + 4ẑ;   W_ext = -4 J"
+        "$\\mathbf{E} = -4\\hat{\\mathbf{x}} - 12\\hat{\\mathbf{y}} - 4\\hat{\\mathbf{z}}$;  $W_{\\mathrm{ext}} = +12\\,\\mathrm{J}$",
+        "$\\mathbf{E} = -4\\hat{\\mathbf{x}} - 12\\hat{\\mathbf{y}} - 4\\hat{\\mathbf{z}}$;  $W_{\\mathrm{ext}} = +4\\,\\mathrm{J}$",
+        "$\\mathbf{E} = 4\\hat{\\mathbf{x}} + 12\\hat{\\mathbf{y}} + 4\\hat{\\mathbf{z}}$;   $W_{\\mathrm{ext}} = +24\\,\\mathrm{J}$",
+        "$\\mathbf{E} = -4\\hat{\\mathbf{x}} - 12\\hat{\\mathbf{y}} - 4\\hat{\\mathbf{z}}$;  $W_{\\mathrm{ext}} = -24\\,\\mathrm{J}$",
+        "$\\mathbf{E} = 4\\hat{\\mathbf{x}} + 12\\hat{\\mathbf{y}} + 4\\hat{\\mathbf{z}}$;   $W_{\\mathrm{ext}} = -4\\,\\mathrm{J}$"
       ],
       correct: 1,
-      explanation: "Step 1: Compute the electric field via E = -∇V:\n" +
-        "E_x = -∂V/∂x = -4x  ==> At (1, -2, 3), E_x = -4(1) = -4\n" +
-        "E_y = -∂V/∂y = -(-6y) = +6y  ==> At (1, -2, 3), E_y = 6(-2) = -12\n" +
-        "E_z = -∂V/∂z = -4  ==> At (1, -2, 3), E_z = -4\n" +
-        "Thus, E = -4x̂ - 12ŷ - 4ẑ.\n\n" +
-        "Step 2: Compute the external work W_ext = q ΔV = q [V(1, -2, 3) - V(0, 0, 0)]:\n" +
-        "V(1, -2, 3) = 2(1)² - 3(-2)² + 4(3) = 2 - 12 + 12 = +2 V.\n" +
-        "V(0, 0, 0) = 0 V.\n" +
-        "Therefore, W_ext = q(V_final - V_initial) = (+2 C) * (2 V - 0 V) = +4 J.\n" +
-        "Option 2 correctly gives E = -4x̂ - 12ŷ - 4ẑ and W_ext = +4 J!"
+      explanation: "Step 1: Compute the electric field via $\\mathbf{E} = -\\nabla V$:\n" +
+        "$E_x = -\\partial V/\\partial x = -4x$ at $(1, -2, 3)$ gives $E_x = -4$.\n" +
+        "$E_y = -\\partial V/\\partial y = +6y$ at $(1, -2, 3)$ gives $E_y = -12$.\n" +
+        "$E_z = -\\partial V/\\partial z = -4$.\n" +
+        "Thus $\\mathbf{E} = -4\\hat{\\mathbf{x}} - 12\\hat{\\mathbf{y}} - 4\\hat{\\mathbf{z}}$.\n\n" +
+        "Step 2: External work $W_{\\mathrm{ext}} = q\\,\\Delta V = q[V(1,-2,3) - V(0,0,0)]$:\n" +
+        "$V(1,-2,3) = 2(1)^2 - 3(-2)^2 + 4(3) = 2 - 12 + 12 = +2\\,\\mathrm{V}$.\n" +
+        "$V(0,0,0) = 0$. Therefore $W_{\\mathrm{ext}} = (+2\\,\\mathrm{C})(2\\,\\mathrm{V}) = +4\\,\\mathrm{J}$."
     }
   };
 
   PGRE.visualizers['cpgf-2.8'] = {
     id: "cpgf-2.8",
+    topic: 'em',
     title: "Poisson Integral for Electric Potential",
     formulaLatex: "V(\\mathbf{r}) = \\frac{1}{4\\pi\\epsilon_0} \\int \\frac{\\rho(\\mathbf{r'})}{|\\mathbf{r} - \\mathbf{r'}|} d^3\\mathbf{r'}",
     physicalStory: `The Poisson integral represents the fundamental Green's function solution to Poisson's equation $\\nabla^2 V = -\\rho / \\epsilon_0$ subject to the Dirichlet boundary condition that the potential vanishes at infinity ($V \\to 0$ as $r \\to \\infty$).
@@ -1067,20 +1087,20 @@ Furthermore, expanding the Poisson kernel $|\\mathbf{r} - \\mathbf{r'}|^{-1}$ in
 
     greTraps: [
       {
-        trap: "Integrating Vector E vs Scalar V",
-        explanation: "Never attempt to integrate Coulomb's vector field E = k ∫ (dq/r²) r̂ directly when computing fields of symmetric bodies unless forced. Always calculate scalar V(r) = k ∫ (dq/r) first, then differentiate E = -∇V."
+        trap: "Integrating Vector $\\mathbf{E}$ vs Scalar $V$",
+        warning: "Never attempt to integrate Coulomb's vector field $\\mathbf{E} = k \\int (dq/r^2)\\,\\hat{\\mathbf{r}}$ directly when computing fields of symmetric bodies unless forced. Always calculate scalar $V(\\mathbf{r}) = k \\int (dq/r)$ first, then differentiate $\\mathbf{E} = -\\nabla V$."
       },
       {
-        trap: "Continuity of V vs Discontinuity of E Across Surface Charge",
-        explanation: "The electric potential V(r) is ALWAYS continuous across any surface charge layer sigma. However, the normal electric field component jumps abruptly by ΔE_perp = σ / ε0, corresponding to a sharp kink in V."
+        trap: "Continuity of $V$ vs Discontinuity of $\\mathbf{E}$ Across Surface Charge",
+        warning: "The electric potential $V(\\mathbf{r})$ is always continuous across any surface charge layer $\\sigma$. However, the normal electric field component jumps by $\\Delta E_\\perp = \\sigma / \\epsilon_0$, corresponding to a sharp kink in $V$."
       },
       {
         trap: "Electrostatic Self-Energy and Double Counting",
-        explanation: "The work required to assemble a continuous charge distribution is W = (1/2) ∫ ρ V d³r. The prefactor of 1/2 is crucial to avoid double-counting pairwise interactions! For a uniform solid sphere, W = (3/5) Q² / (4πε0 R)."
+        warning: "The work required to assemble a continuous charge distribution is $W = \\frac{1}{2}\\int \\rho V\\, d^3r$. The prefactor of $1/2$ avoids double-counting pairwise interactions. For a uniform solid sphere, $W = \\frac{3}{5} Q^2 / (4\\pi\\epsilon_0 R)$."
       },
       {
         trap: "Origin Dependence of Dipole Moment",
-        explanation: "The electric dipole moment p = ∫ r' ρ(r') d³r' is origin-independent IF AND ONLY IF the net total charge Q_tot = 0. If Q_tot ≠ 0, shifting origin by a changes dipole moment: p' = p - Q_tot a."
+        warning: "The electric dipole moment $\\mathbf{p} = \\int \\mathbf{r}' \\rho(\\mathbf{r}') d^3r'$ is origin-independent if and only if the net total charge $Q_{\\mathrm{tot}} = 0$. If $Q_{\\mathrm{tot}} \\neq 0$, shifting origin by $\\mathbf{a}$ changes the dipole: $\\mathbf{p}' = \\mathbf{p} - Q_{\\mathrm{tot}}\\mathbf{a}$."
       }
     ],
 
@@ -1097,8 +1117,8 @@ Furthermore, expanding the Poisson kernel $|\\mathbf{r} - \\mathbf{r'}|^{-1}$ in
         { value: "3d_surface", label: "3D potential surface" },
         { value: "1d_falloff", label: "1D radial profile" }
       ]},
-      { id: "radius", label: "Dimension (R / L)", type: "range", min: 0.15, max: 0.65, step: 0.02, default: 0.35 },
-      { id: "totalCharge", label: "Total Charge (Q)", type: "range", min: 0.2, max: 3.0, step: 0.1, default: 1.0 },
+      { id: "radius", label: "Dimension ($R$ / $L$)", type: "range", min: 0.15, max: 0.65, step: 0.02, default: 0.35 },
+      { id: "totalCharge", label: "Total Charge ($Q$)", type: "range", min: 0.2, max: 3.0, step: 0.1, default: 1.0 },
       { id: "rotX", label: "3D Tilt Angle", type: "range", min: 20, max: 80, step: 2, default: 55 },
       { id: "rotZ", label: "3D Azimuth Angle", type: "range", min: -180, max: 180, step: 5, default: 35 }
     ],
@@ -1115,9 +1135,7 @@ Furthermore, expanding the Poisson kernel $|\\mathbf{r} - \\mathbf{r'}|^{-1}$ in
     },
 
     draw: function(ctx, width, height, state, dt) {
-      dt = dt || 0.016;
       state = state || {};
-      state.time = (state.time || 0) + dt;
 
       state.geometry = state.geometry || "sphere_solid";
       state.viewMode = state.viewMode || "2d_contour";
@@ -1224,6 +1242,17 @@ Furthermore, expanding the Poisson kernel $|\\mathbf{r} - \\mathbf{r'}|^{-1}$ in
 
         const mag = Math.sqrt(ex * ex + ey * ey);
         return { v: v, ex: ex, ey: ey, mag: mag, r: r };
+      }
+
+      function calcAxisVandE(z) {
+        var kQ = 28.0 * Q;
+        var d = Math.sqrt(R * R + z * z + 1e-12);
+        if (geo === "ring") {
+          return { v: kQ / d, mag: Math.abs(kQ * z) / (d * d * d) };
+        }
+        var two = (2 * kQ) / (R * R + 1e-12);
+        var absZ = Math.abs(z);
+        return { v: two * (d - absZ), mag: two * (1 - absZ / d) };
       }
 
       // ==========================================
@@ -1361,12 +1390,13 @@ Furthermore, expanding the Poisson kernel $|\\mathbf{r} - \\mathbf{r'}|^{-1}$ in
           ctx.restore();
 
           var geoLabel = geo === "sphere_solid" ? "solid sphere" : (geo === "sphere_shell" ? "spherical shell" : (geo === "ring" ? "ring" : (geo === "disk" ? "disk" : "line segment")));
-          appendLegend('Poisson integral for V', [
+          appendLegend('Poisson integral for $V$', [
             { label: 'Source', value: geoLabel },
-            { label: 'r', value: r.toFixed(3) + (r < R ? ' (inside)' : ' (outside)') },
-            { label: 'V(r)', value: v.toFixed(2) + ' V' },
-            { label: '|E|', value: mag.toFixed(2) + ' N/C' },
-            { label: 'Coulomb 1/r', value: (28.0 * Q / Math.max(0.01, r)).toFixed(2) + ' V' }
+            { label: '$r$', value: r.toFixed(3) + (r < R ? ' (inside)' : ' (outside)') },
+            { label: '$V(r)$', value: v.toFixed(2) + ' V' },
+            { label: '$|\\mathbf{E}|$', value: mag.toFixed(2) + ' N/C' },
+            { label: 'Coulomb $kQ/r$ (matches outside / far field)', value: (28.0 * Q / Math.max(0.01, r)).toFixed(2) + ' V' },
+            { label: '3D tilt', value: 'unused in this view' }
           ]);
         }
       }
@@ -1400,7 +1430,7 @@ Furthermore, expanding the Poisson kernel $|\\mathbf{r} - \\mathbf{r'}|^{-1}$ in
           };
         }
 
-        ctx.strokeStyle = "#efe9de";
+        ctx.strokeStyle = PGRE.vizStageTheme().ivory;
         ctx.lineWidth = 1;
         for (let i = -gridN / 2; i <= gridN / 2; i += 4) {
           const u = (i / (gridN / 2)) * bound;
@@ -1450,7 +1480,7 @@ Furthermore, expanding the Poisson kernel $|\\mathbf{r} - \\mathbf{r'}|^{-1}$ in
 
         quads.forEach(q => {
           ctx.fillStyle = creamPotentialColor(q.v, 50, 0.72);
-          ctx.strokeStyle = "rgba(20, 20, 19, 0.08)";
+          ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.08);
           ctx.lineWidth = 0.8;
           ctx.beginPath();
           ctx.moveTo(q.p00.x, q.p00.y);
@@ -1463,9 +1493,9 @@ Furthermore, expanding the Poisson kernel $|\\mathbf{r} - \\mathbf{r'}|^{-1}$ in
         });
 
         var geoLabel3 = geo === "sphere_solid" ? "solid sphere" : (geo === "sphere_shell" ? "spherical shell" : (geo === "ring" ? "ring" : (geo === "disk" ? "disk" : "line segment")));
-        appendLegend('3D potential landscape V(x, y)', [
+        appendLegend('3D potential landscape $V(x, y)$', [
           { label: 'Source', value: geoLabel3 },
-          { label: 'Elevation', value: 'z = V(r)' },
+          { label: 'Elevation', value: '$z = V(r)$' },
           { label: 'Drag', value: 'rotate the surface' }
         ]);
 
@@ -1504,45 +1534,51 @@ Furthermore, expanding the Poisson kernel $|\\mathbf{r} - \\mathbf{r'}|^{-1}$ in
         ctx.fillStyle = MUTED;
         ctx.font = "11px sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("r", pLeft + pW / 2, pBottom + 28);
+        var useAxis = (geo === "ring" || geo === "disk");
+        ctx.fillText(useAxis ? "z" : "r", pLeft + pW / 2, pBottom + 28);
 
         const maxR = 1.2;
-        const maxV = (28.0 * Q) / (geo === "sphere_solid" ? R * 0.6 : R);
-        const maxE = (28.0 * Q) / (R * R);
+        const N = 200;
+        const raw = [];
+        var i1d;
+        var maxV = 1e-6;
+        var maxE = 1e-6;
+        for (i1d = 1; i1d <= N; i1d++) {
+          var coord = (i1d / N) * maxR;
+          var res1d = useAxis ? calcAxisVandE(coord) : calcVandE(coord, 0);
+          var v1 = res1d.v;
+          var mag1 = res1d.mag;
+          if (v1 > maxV) maxV = v1;
+          if (mag1 > maxE) maxE = mag1;
+          raw.push({ coord: coord, v: v1, mag: mag1, vCoulomb: (28.0 * Q) / coord });
+        }
 
         const vPoints = [];
         const ePoints = [];
         const coulombPoints = [];
-        const N = 200;
+        raw.forEach(function(s) {
+          var sx = pLeft + (s.coord / maxR) * pW;
+          vPoints.push({ sx: sx, sy: pBottom - clamp(s.v / maxV, 0, 1) * (pH - 30) });
+          ePoints.push({ sx: sx, sy: pBottom - clamp(s.mag / maxE, 0, 1) * (pH - 30) });
+          coulombPoints.push({ sx: sx, sy: pBottom - clamp(s.vCoulomb / maxV, 0, 1) * (pH - 30) });
+        });
 
-        for (let i = 1; i <= N; i++) {
-          const r = (i / N) * maxR;
-          const res = calcVandE(r, 0);
-          const v = res.v, mag = res.mag;
-          const sx = pLeft + (r / maxR) * pW;
-          const syV = pBottom - clamp(v / maxV, 0, 1) * (pH - 30);
-          const syE = pBottom - clamp(mag / maxE, 0, 1) * (pH - 30);
+        var showRadialBoundary = (geo === "sphere_solid" || geo === "sphere_shell");
+        if (showRadialBoundary) {
+          const boundarySx = pLeft + (R / maxR) * pW;
+          ctx.strokeStyle = CORAL;
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(boundarySx, pTop);
+          ctx.lineTo(boundarySx, pBottom);
+          ctx.stroke();
+          ctx.setLineDash([]);
 
-          vPoints.push({ sx: sx, sy: syV });
-          ePoints.push({ sx: sx, sy: syE });
-
-          const vCoulomb = (28.0 * Q) / r;
-          coulombPoints.push({ sx: sx, sy: pBottom - clamp(vCoulomb / maxV, 0, 1) * (pH - 30) });
+          var rLabelX = boundarySx + 8;
+          if (rLabelX > pRight - 50) rLabelX = boundarySx - 8;
+          inkLabel(ctx, 'r = R', rLabelX, pTop + 16, { color: CORAL, align: rLabelX < boundarySx ? 'right' : 'left', width: width, height: height, font: 'bold 11px sans-serif' });
         }
-
-        const boundarySx = pLeft + (R / maxR) * pW;
-        ctx.strokeStyle = CORAL;
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(boundarySx, pTop);
-        ctx.lineTo(boundarySx, pBottom);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        var rLabelX = boundarySx + 8;
-        if (rLabelX > pRight - 50) rLabelX = boundarySx - 8;
-        inkLabel(ctx, 'r = R', rLabelX, pTop + 16, { color: CORAL, align: rLabelX < boundarySx ? 'right' : 'left', width: width, height: height, font: 'bold 11px sans-serif' });
 
         ctx.strokeStyle = MUTED;
         ctx.lineWidth = 1.2;
@@ -1574,13 +1610,17 @@ Furthermore, expanding the Poisson kernel $|\\mathbf{r} - \\mathbf{r'}|^{-1}$ in
         ctx.stroke();
 
         var geoLabel1 = geo === "sphere_solid" ? "solid sphere" : (geo === "sphere_shell" ? "spherical shell" : (geo === "ring" ? "ring" : (geo === "disk" ? "disk" : "line segment")));
-        appendLegend('Radial V(r) and |E(r)|', [
+        var legend1d = [
           { label: 'Source', value: geoLabel1 },
-          { label: 'V(r)', value: 'teal' },
-          { label: '|E(r)|', value: 'gold' },
-          { label: 'Dashed', value: 'Coulomb 1/r (outside match)' },
-          { label: 'r = R', value: R.toFixed(2) }
-        ]);
+          { label: 'Cut', value: useAxis ? 'along the axis (not in-plane)' : 'in-plane radial' },
+          { label: '$V$', value: 'teal' },
+          { label: '$|\\mathbf{E}|$', value: 'gold' },
+          { label: 'Scales', value: '$V$ and $|\\mathbf{E}|$ independently scaled' },
+          { label: 'Dashed', value: 'Coulomb $kQ/r$ (outside / far-field match)' },
+          { label: '$R$', value: R.toFixed(2) },
+          { label: '3D tilt', value: 'unused in this view' }
+        ];
+        appendLegend(useAxis ? 'Axial $V(z)$ and $|\\mathbf{E}(z)|$' : 'Radial $V(r)$ and $|\\mathbf{E}(r)|$', legend1d);
 
         ctx.restore();
       }
@@ -1655,21 +1695,733 @@ Furthermore, expanding the Poisson kernel $|\\mathbf{r} - \\mathbf{r'}|^{-1}$ in
     },
 
     challenge: {
-      question: "A solid insulating sphere of radius R carries a total positive charge Q distributed uniformly throughout its volume. What is the ratio of the electric potential at the exact center of the sphere V(r = 0) to the electric potential at the surface of the sphere V(r = R), with the reference potential set at infinity V(∞) = 0?",
+      question: "A solid insulating sphere of radius $R$ carries a total positive charge $Q$ distributed uniformly throughout its volume. What is the ratio of the electric potential at the exact center of the sphere $V(r = 0)$ to the electric potential at the surface of the sphere $V(r = R)$, with the reference potential set at infinity $V(\\infty) = 0$?",
       options: [
-        "V(0) / V(R) = 1.0 (Potential is uniform throughout)",
-        "V(0) / V(R) = 1.5 (3/2)",
-        "V(0) / V(R) = 2.0 (Twice the surface potential)",
-        "V(0) / V(R) = 0.5 (Half the surface potential)",
-        "V(0) / V(R) = 4/3"
+        "$V(0) / V(R) = 1.0$ (Potential is uniform throughout)",
+        "$V(0) / V(R) = 1.5$ ($3/2$)",
+        "$V(0) / V(R) = 2.0$ (Twice the surface potential)",
+        "$V(0) / V(R) = 0.5$ (Half the surface potential)",
+        "$V(0) / V(R) = 4/3$"
       ],
       correct: 1,
-      explanation: "By integrating the Poisson kernel or using V(0) = -∫_{∞}^0 E(r) dr:\n" +
-        "1. Outside (r ≥ R): E(r) = kQ/r², so V(R) = -∫_{∞}^R (kQ/r²) dr = kQ/R.\n" +
-        "2. Inside (r < R): Gauss's law gives E(r) = kQ r / R³.\n" +
-        "3. Center potential:\n" +
-        "   V(0) = V(R) - ∫_R^0 E_in(r) dr = kQ/R + ∫_0^R (kQ r / R³) dr = kQ/R + kQ/(2R) = (3/2) kQ/R = 1.5 V(R).\n" +
-        "Thus, the central potential is exactly 1.5 times (3/2) the surface potential!"
+      explanation: "By integrating the Poisson kernel or using $V(0) = -\\int_{\\infty}^{0} E(r)\\, dr$:\n" +
+        "1. Outside ($r \\ge R$): $E(r) = kQ/r^2$, so $V(R) = -\\int_{\\infty}^{R} (kQ/r^2)\\, dr = kQ/R$.\n" +
+        "2. Inside ($r < R$): Gauss's law gives $E(r) = kQ r / R^3$.\n" +
+        "3. Center potential: $V(0) = V(R) - \\int_R^0 E_{\\mathrm{in}}(r)\\, dr = kQ/R + \\int_0^R (kQ r / R^3)\\, dr = kQ/R + kQ/(2R) = (3/2) kQ/R = 1.5\\, V(R)$.\n" +
+        "Thus the central potential is exactly $3/2$ times the surface potential."
+    }
+  };
+
+  /* -------------------------------------------------------------------------- */
+  /* cpgf-2.33: Magnetic Boundary Condition $B_{\mathrm{out}}^\perp - B_{\mathrm{in}}^\perp = 0$ */
+  /* -------------------------------------------------------------------------- */
+  PGRE.visualizers['cpgf-2.33'] = {
+    id: 'cpgf-2.33',
+    topic: 'em',
+    title: 'Magnetic Boundary Condition: Normal Component $B_{\\mathrm{out}}^\\perp - B_{\\mathrm{in}}^\\perp = 0$',
+    formulaLatex: 'B_{\\mathrm{out}}^\\perp - B_{\\mathrm{in}}^\\perp = 0 \\iff \\oint_{\\mathcal{S}} \\mathbf{B} \\cdot d\\mathbf{a} = 0',
+    physicalStory: `Maxwell's second equation, Gauss's law for magnetism $\\nabla \\cdot \\mathbf{B} = 0$, embodies the fundamental experimental observation that isolated magnetic monopoles do not exist in classical electrodynamics. Every magnetic field line forms an unbroken, continuous loop without beginning or ending on magnetic charge.
+
+When applied to a thin Gaussian pillbox (a cylinder of infinitesimal thickness $h \\to 0$ and cross-sectional cap area $\\Delta A$) straddling the interface between two media, the net outward magnetic flux must vanish identically:
+$$\\oint_{\\mathcal{S}} \\mathbf{B} \\cdot d\\mathbf{a} = \\left(\\mathbf{B}_{\\mathrm{out}} \\cdot \\hat{\\mathbf{n}} - \\mathbf{B}_{\\mathrm{in}} \\cdot \\hat{\\mathbf{n}}\\right)\\Delta A + \\Phi_{\\mathrm{rim}} = 0$$
+
+As the pillbox height shrinks to zero ($h \\to 0$), the lateral rim area vanishes ($2\\pi r h \\to 0$), ensuring that $\\Phi_{\\mathrm{rim}} \\to 0$ even in the presence of localized surface currents. Evaluating the cap integrals yields the universal magnetostatic boundary condition:
+$$B_{\\mathrm{out}}^\\perp = B_{\\mathrm{in}}^\\perp \\quad \\iff \\quad B_{\\mathrm{out}}^\\perp - B_{\\mathrm{in}}^\\perp = 0$$
+
+Crucially, the perpendicular component $B^\\perp$ is strictly continuous across all physical boundaries, regardless of changes in magnetic permeability $\\mu$ or the presence of a dense surface current sheet $\\mathbf{K}$. While a surface current creates a sharp jump in the tangential component $\\mathbf{B}_{\\mathrm{out}}^\\parallel - \\mathbf{B}_{\\mathrm{in}}^\\parallel = \\mu_0 (\\mathbf{K} \\times \\hat{\\mathbf{n}})$, the normal component $B^\\perp$ never experiences a discontinuity.`,
+
+    derivationSteps: [
+      {
+        step: 1,
+        title: "Differential Gauss's Law for Magnetism",
+        latex: "\\nabla \\cdot \\mathbf{B} = 0",
+        description: "Because magnetic monopoles have never been observed, magnetic field lines are divergence-free everywhere in space."
+      },
+      {
+        step: 2,
+        title: "Divergence Theorem over a Gaussian Pillbox",
+        latex: "\\int_{\\mathcal{V}} (\\nabla \\cdot \\mathbf{B})\\, d^3\\mathbf{r} = \\oint_{\\mathcal{S}} \\mathbf{B} \\cdot d\\mathbf{a} = 0",
+        description: "Construct a Gaussian pillbox of cross-sectional area $\\Delta A$ and height $h$ straddling the interface between Medium 1 (in) and Medium 2 (out)."
+      },
+      {
+        step: 3,
+        title: "Flux Decomposition Across Caps and Rim",
+        latex: "\\oint_{\\mathcal{S}} \\mathbf{B} \\cdot d\\mathbf{a} = \\int_{\\mathrm{top}} \\mathbf{B} \\cdot \\hat{\\mathbf{n}}\\, da - \\int_{\\mathrm{bottom}} \\mathbf{B} \\cdot \\hat{\\mathbf{n}}\\, da + \\int_{\\mathrm{rim}} \\mathbf{B} \\cdot d\\mathbf{a} = 0",
+        description: "The outward unit normal on the top cap is $+\\hat{\\mathbf{n}}$, while on the bottom cap it is $-\\hat{\\mathbf{n}}$, pointing into Medium 1."
+      },
+      {
+        step: 4,
+        title: "Vanishing Rim Limit as Height $h \\to 0$",
+        latex: "\\lim_{h \\to 0} \\left|\\int_{\\mathrm{rim}} \\mathbf{B} \\cdot d\\mathbf{a}\\right| \\le |\\mathbf{B}|_{\\max} (2\\pi r h) = 0",
+        description: "Shrinking the pillbox height to zero while keeping the cap area $\\Delta A$ fixed forces the lateral mantle flux to vanish identically."
+      },
+      {
+        step: 5,
+        title: "Universal Normal Continuity Across the Boundary",
+        latex: "(B_{\\mathrm{out}}^\\perp - B_{\\mathrm{in}}^\\perp)\\,\\Delta A = 0 \\implies B_{\\mathrm{out}}^\\perp - B_{\\mathrm{in}}^\\perp = 0",
+        description: "Dividing by cap area $\\Delta A$ demonstrates that the perpendicular component of $\\mathbf{B}$ is universally continuous across any interface."
+      }
+    ],
+
+    limitingCases: [
+      {
+        name: "Non-Magnetic Boundary",
+        condition: "\\mu_1 = \\mu_2, \\; \\mathbf{K} = \\mathbf{0}",
+        formula: "\\mathbf{B}_{\\mathrm{out}} = \\mathbf{B}_{\\mathrm{in}}",
+        description: "Both normal and tangential components match identically across the boundary; field lines pass straight through without deflection."
+      },
+      {
+        name: "Normal Incidence",
+        condition: "\\mathbf{B} \\parallel \\hat{\\mathbf{n}} \\; (B^\\parallel = 0)",
+        formula: "B_{\\mathrm{out}} = B_{\\mathrm{in}} = B^\\perp",
+        description: "When field lines strike the interface perpendicularly, the entire field is normal. Because $B^\\perp$ is continuous, the field is identical on both sides regardless of $\\mu$."
+      },
+      {
+        name: "Grazing Incidence",
+        condition: "\\mathbf{B} \\perp \\hat{\\mathbf{n}} \\; (B^\\perp = 0)",
+        formula: "B_{\\mathrm{out}}^\\perp = B_{\\mathrm{in}}^\\perp = 0",
+        description: "When field lines run strictly parallel to the boundary, the normal component vanishes on both sides. Field magnitude is governed by $H_1^\\parallel = H_2^\\parallel$."
+      },
+      {
+        name: "High-Permeability Ferromagnetic Interface",
+        condition: "\\mu_2 / \\mu_1 \\to \\infty \\; (\\text{e.g. soft iron})",
+        formula: "\\frac{\\tan\\theta_2}{\\tan\\theta_1} = \\frac{\\mu_2}{\\mu_1} \\to \\infty \\implies \\theta_2 \\to 90^\\circ",
+        description: "Field lines inside ferromagnetic material are refracted to run almost parallel to the boundary (magnetic shielding). Exiting into air, lines emerge nearly normal ($\\theta \\approx 0$)."
+      },
+      {
+        name: "Superconducting Boundary (Meissner Effect)",
+        condition: "\\mathbf{B}_{\\mathrm{in}} = \\mathbf{0} \\; (\\text{Type-I superconductor})",
+        formula: "B_{\\mathrm{out}}^\\perp = 0 \\implies \\mathbf{B}_{\\mathrm{out}} \\parallel \\text{surface}",
+        description: "Because magnetic fields are expelled from the bulk ($\\mathbf{B}_{\\mathrm{in}} = \\mathbf{0}$), normal continuity forces $B_{\\mathrm{out}}^\\perp = 0$. Outside a superconductor, $\\mathbf{B}$ is purely tangential."
+      }
+    ],
+
+    greTraps: [
+      {
+        trap: "Confusing Normal with Tangential Discontinuity from Surface Current $\\mathbf{K}$",
+        warning: "A surface current sheet $\\mathbf{K}$ produces a discontinuity ONLY in the tangential component $\\mathbf{B}_{\\mathrm{out}}^\\parallel - \\mathbf{B}_{\\mathrm{in}}^\\parallel = \\mu_0 (\\mathbf{K} \\times \\hat{\\mathbf{n}})$. The normal component $B^\\perp$ is universally continuous ($B_{\\mathrm{out}}^\\perp = B_{\\mathrm{in}}^\\perp$), regardless of $\\mathbf{K}$."
+      },
+      {
+        trap: "Swapping Electrostatic and Magnetostatic Boundary Jump Rules",
+        warning: "Remember the reciprocal mnemonic: in electrostatics, $E^\\parallel$ is continuous while $E^\\perp$ jumps by $\\sigma/\\epsilon_0$. In magnetostatics, $B^\\perp$ is continuous while $B^\\parallel$ jumps by $\\mu_0 K$. Normal $B$ mirrors parallel $E$."
+      },
+      {
+        trap: "Assuming $H^\\perp$ is Continuous Across Media of Different Permeability",
+        warning: "While $B^\\perp$ is universally continuous, the auxiliary magnetic field $H^\\perp = B^\\perp / \\mu$ is NOT continuous across a material interface with $\\mu_1 \\neq \\mu_2$. In fact, $H_2^\\perp / H_1^\\perp = \\mu_1 / \\mu_2$. Conversely, $H^\\parallel$ is continuous when $K_f = 0$."
+      },
+      {
+        trap: "Magnetic Shielding and Field Line Direction at Iron Boundaries",
+        warning: "Because $\\mu_{\\mathrm{iron}} \\sim 10^3 \\mu_0$, field lines entering or exiting ferromagnetic material into air bend sharply to emerge almost perpendicular to the iron surface, exactly analogous to electric field lines on a conductor."
+      }
+    ],
+
+    parameters: [
+      { id: "viewMode", label: "Visualizer Mode", type: "select", default: "pillbox", options: [
+        { value: "pillbox", label: "Gaussian pillbox flux balance" },
+        { value: "refraction", label: "Field line refraction ($\\mu_1$ vs $\\mu_2$)" },
+        { value: "current_sheet", label: "Surface current sheet ($\\mathbf{K}$)" },
+        { value: "comparison", label: "EM comparison ($B^\\perp$ vs $E^\\perp$)" }
+      ]},
+      { id: "bField", label: "Incident Field ($|\\mathbf{B}_1|$)", type: "range", min: 1.0, max: 5.0, step: 0.5, default: 3.0, unit: "T" },
+      { id: "thetaIn", label: "Incident Angle ($\\theta_1$)", type: "range", min: 0, max: 75, step: 5, default: 35, unit: "°" },
+      { id: "muRatio", label: "Permeability Ratio ($\\mu_2 / \\mu_1$)", type: "range", min: 0.2, max: 5.0, step: 0.2, default: 2.4, unit: "x" },
+      { id: "surfaceK", label: "Surface Current ($K$)", type: "range", min: -3.0, max: 3.0, step: 0.5, default: 0.0, unit: "kA/m" },
+      { id: "pillboxHeight", label: "Pillbox Height ($h$)", type: "range", min: 0.05, max: 0.60, step: 0.05, default: 0.30, unit: "h₀" },
+      { id: "showComponents", label: "Resolve Vector Components", type: "toggle", default: true },
+      { id: "simSpeed", label: "Simulation Speed", min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: "x" }
+    ],
+
+    init: function(container, state, redraw) {
+      state.viewMode = state.viewMode || "pillbox";
+      state.bField = state.bField != null ? Number(state.bField) : 3.0;
+      state.thetaIn = state.thetaIn != null ? Number(state.thetaIn) : 35;
+      state.muRatio = state.muRatio != null ? Number(state.muRatio) : 2.4;
+      state.surfaceK = state.surfaceK != null ? Number(state.surfaceK) : 0.0;
+      state.pillboxHeight = state.pillboxHeight != null ? Number(state.pillboxHeight) : 0.30;
+      state.showComponents = state.showComponents !== undefined ? !!state.showComponents : true;
+      state.simSpeed = state.simSpeed != null ? Number(state.simSpeed) : 1.0;
+      state.animTime = 0;
+    },
+
+    draw: function(ctx, width, height, state, dt) {
+      state = state || {};
+      state.viewMode = state.viewMode || "pillbox";
+      var bField = state.bField != null ? Number(state.bField) : 3.0;
+      var thetaInDeg = state.thetaIn != null ? Number(state.thetaIn) : 35;
+      var muRatio = state.muRatio != null ? Number(state.muRatio) : 2.4;
+      var surfaceK = state.surfaceK != null ? Number(state.surfaceK) : 0.0;
+      var pbHeightParam = state.pillboxHeight != null ? Number(state.pillboxHeight) : 0.30;
+      var showComponents = state.showComponents !== undefined ? !!state.showComponents : true;
+      var speed = Number(state.simSpeed);
+      if (!isFinite(speed) || speed < 0.2) speed = 1.0;
+      if (speed > 3.0) speed = 3.0;
+
+      state.animTime = (state.animTime || 0) + (dt || 0.016) * speed;
+      var t = state.animTime;
+
+      fillCream(ctx, width, height);
+
+      var thetaInRad = (thetaInDeg * Math.PI) / 180;
+      var B1_perp = bField * Math.cos(thetaInRad);
+      var B1_par = bField * Math.sin(thetaInRad);
+      var B2_perp = B1_perp; // universally continuous!
+      var B2_par = B1_par * muRatio + surfaceK * 0.4;
+      var B2_mag = Math.hypot(B2_perp, B2_par);
+      var thetaOutRad = Math.atan2(Math.abs(B2_par), Math.max(1e-4, B2_perp));
+      var thetaOutDeg = (thetaOutRad * 180) / Math.PI;
+      var rimFlux = (bField * 0.5 * pbHeightParam * Math.sin(thetaInRad));
+
+      // Off-canvas telemetry strip
+      appendLegend('Normal boundary matching ($B^\\perp$)', [
+        { label: '$B_{\\mathrm{in}}^\\perp$', value: '$' + B1_perp.toFixed(2) + '\\;\\mathrm{T}$' },
+        { label: '$B_{\\mathrm{out}}^\\perp$', value: '$' + B2_perp.toFixed(2) + '\\;\\mathrm{T}$' },
+        { label: '$\\Delta B^\\perp = B_{\\mathrm{out}}^\\perp - B_{\\mathrm{in}}^\\perp$', value: '$0.00\\;\\mathrm{T}$ (strictly continuous)' }
+      ]);
+
+      appendLegend('Tangential boundary matching ($B^\\parallel$)', [
+        { label: '$B_{\\mathrm{in}}^\\parallel$', value: '$' + B1_par.toFixed(2) + '\\;\\mathrm{T}$' },
+        { label: '$B_{\\mathrm{out}}^\\parallel$', value: '$' + B2_par.toFixed(2) + '\\;\\mathrm{T}$' },
+        { label: '$\\Delta B^\\parallel = B_{\\mathrm{out}}^\\parallel - B_{\\mathrm{in}}^\\parallel$', value: '$' + (B2_par - B1_par).toFixed(2) + '\\;\\mathrm{T}$' }
+      ]);
+
+      appendLegend('Pillbox flux & refraction angles', [
+        { label: '$\\Phi_{\\mathrm{top}} = +B_{\\mathrm{out}}^\\perp \\Delta A$', value: '$+' + (B2_perp * 1.0).toFixed(2) + '\\;\\mathrm{Wb}$' },
+        { label: '$\\Phi_{\\mathrm{bottom}} = -B_{\\mathrm{in}}^\\perp \\Delta A$', value: '$-' + (B1_perp * 1.0).toFixed(2) + '\\;\\mathrm{Wb}$' },
+        { label: '$\\Phi_{\\mathrm{rim}} \\propto 2\\pi r h$', value: '$' + rimFlux.toFixed(2) + '\\;\\mathrm{Wb} \\to 0$' },
+        { label: '$\\Phi_{\\mathrm{net}} = \\oint \\mathbf{B} \\cdot d\\mathbf{a}$', value: '$0.00\\;\\mathrm{Wb}$' },
+        { label: '$\\theta_1$ (incident)', value: '$' + thetaInDeg.toFixed(1) + '^\\circ$' },
+        { label: '$\\theta_2$ (refracted)', value: '$' + thetaOutDeg.toFixed(1) + '^\\circ$' }
+      ]);
+
+      var mode = state.viewMode;
+
+      if (mode === 'pillbox') {
+        drawPillboxMode(ctx, width, height, B1_perp, B1_par, B2_perp, B2_par, bField, pbHeightParam, showComponents, t);
+      } else if (mode === 'refraction') {
+        drawRefractionMode(ctx, width, height, thetaInRad, thetaOutRad, muRatio, B1_perp, B1_par, B2_par, showComponents, t);
+      } else if (mode === 'current_sheet') {
+        drawCurrentSheetMode(ctx, width, height, B1_perp, B1_par, B2_perp, B2_par, surfaceK, showComponents, t);
+      } else if (mode === 'comparison') {
+        drawComparisonMode(ctx, width, height, B1_perp, t);
+      }
+
+      function drawPillboxMode(ctx, w, h, bInPerp, bInPar, bOutPerp, bOutPar, bMag, pbHFrac, withComp, time) {
+        var ifaceY = Math.round(h * 0.50);
+        var cx = Math.round(w * 0.38);
+        var rx = Math.max(90, Math.min(175, Math.round(w * 0.17)));
+        var ry = Math.max(16, Math.min(30, Math.round(rx * 0.18)));
+        var hHalf = Math.max(14, Math.min(55, Math.round(pbHFrac * h * 0.20)));
+        // Medium backgrounds
+        ctx.fillStyle = PANEL;
+        ctx.fillRect(0, ifaceY, w, h - ifaceY);
+
+        // Interface divider line
+        ctx.strokeStyle = LINE;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, ifaceY);
+        ctx.lineTo(w, ifaceY);
+        ctx.stroke();
+
+        // Medium labels
+        inkLabel(ctx, "Medium 2: Out (z > 0, μ₂)", 24, ifaceY - 26, { color: MUTED, width: w, height: h });
+        inkLabel(ctx, "Medium 1: In (z < 0, μ₁)", 24, ifaceY + 26, { color: MUTED, width: w, height: h });
+
+        // Pillbox caps
+        var yTop = ifaceY - hHalf;
+        var yBot = ifaceY + hHalf;
+
+        // Lower cylinder body (dashed back/side)
+        ctx.save();
+        ctx.fillStyle = 'rgba(204, 120, 92, 0.08)';
+        ctx.beginPath();
+        ctx.ellipse(cx, yBot, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = MUTED;
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.restore();
+
+        // Lateral sides of pillbox
+        ctx.save();
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(cx - rx, yTop);
+        ctx.lineTo(cx - rx, yBot);
+        ctx.moveTo(cx + rx, yTop);
+        ctx.lineTo(cx + rx, yBot);
+        ctx.stroke();
+        ctx.restore();
+
+        // Top cylinder cap
+        ctx.save();
+        ctx.fillStyle = 'rgba(93, 184, 166, 0.18)';
+        ctx.beginPath();
+        ctx.ellipse(cx, yTop, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+        ctx.restore();
+
+        // Normal unit vector n-hat at boundary
+        drawSiteArrow(ctx, cx - rx - 35, ifaceY, cx - rx - 35, ifaceY - 42, INK, 2.2);
+        inkLabel(ctx, "n̂", cx - rx - 35, ifaceY - 50, { align: 'center', color: INK, width: w, height: h });
+        // Area normal vectors on caps
+        var daX = cx + Math.round(rx * 0.52);
+        drawSiteArrow(ctx, daX, yTop, daX, yTop - 30, INK, 1.8);
+        inkLabel(ctx, "+da_top = +n̂ da", daX + 6, yTop - 24, { align: 'left', font: '11px sans-serif', color: MUTED, width: w, height: h });
+
+        drawSiteArrow(ctx, daX, yBot, daX, yBot + 30, INK, 1.8);
+        inkLabel(ctx, "+da_bot = −n̂ da", daX + 6, yBot + 24, { align: 'left', font: '11px sans-serif', color: MUTED, width: w, height: h });
+
+        // Animated continuous flux lines traversing through pillbox
+        ctx.save();
+        var lineXOffsets = [-0.6, -0.25, 0.1, 0.45];
+        ctx.strokeStyle = 'rgba(212, 160, 23, 0.35)';
+        ctx.lineWidth = 1.4;
+        for (var i = 0; i < lineXOffsets.length; i++) {
+          var lx = cx + lineXOffsets[i] * rx;
+          ctx.beginPath();
+          ctx.moveTo(lx - 20, yBot + 40);
+          ctx.lineTo(lx, yBot);
+          ctx.lineTo(lx, yTop);
+          ctx.lineTo(lx + 25, yTop - 40);
+          ctx.stroke();
+
+          // Animated tracer dot
+          var frac = ((time * 0.75 + i * 0.25) % 1.0);
+          var dotY = (yBot + 40) - frac * ((yBot + 40) - (yTop - 40));
+          var dotX = lx;
+          if (dotY > yBot) dotX = (lx - 20) + (lx - (lx - 20)) * ((yBot + 40 - dotY) / 40);
+          else if (dotY < yTop) dotX = lx + 25 * ((yTop - dotY) / 40);
+          ctx.fillStyle = GOLD;
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+        // Field vectors
+        var vScale = Math.max(18, Math.min(32, Math.round(h * 0.048)));
+        var vPerpLen = Math.max(18, bInPerp * vScale);
+        var vInParLen = bInPar * vScale;
+        var vOutParLen = bOutPar * vScale;
+
+        var inAnchorX = cx - 28;
+        var inAnchorY = yBot;
+        var inStartX = inAnchorX - vInParLen;
+        var inStartY = inAnchorY + vPerpLen;
+
+        var outAnchorX = cx - 28;
+        var outAnchorY = yTop;
+        var outEndX = outAnchorX + vOutParLen;
+        var outEndY = outAnchorY - vPerpLen;
+
+        // Incoming vector B_in
+        drawSiteArrow(ctx, inStartX, inStartY, inAnchorX, inAnchorY, GOLD, 2.8);
+        inkLabel(ctx, "B_in", (inStartX + inAnchorX) / 2 - 14, (inStartY + inAnchorY) / 2, { align: 'right', font: 'bold 12px sans-serif', color: GOLD, width: w, height: h });
+
+        // Outgoing vector B_out
+        drawSiteArrow(ctx, outAnchorX, outAnchorY, outEndX, outEndY, GOLD, 2.8);
+        inkLabel(ctx, "B_out", (outAnchorX + outEndX) / 2 + 14, (outAnchorY + outEndY) / 2, { align: 'left', font: 'bold 12px sans-serif', color: GOLD, width: w, height: h });
+
+        if (withComp) {
+          // Components of B_in
+          // Normal component (coral)
+          drawSiteArrow(ctx, inAnchorX - 16, inAnchorY + vPerpLen, inAnchorX - 16, inAnchorY, CORAL, 2.2);
+          inkLabel(ctx, "B_in^⊥", inAnchorX - 22, inAnchorY + vPerpLen * 0.5, { align: 'right', color: CORAL, width: w, height: h });
+
+          // Tangential component (teal)
+          drawSiteArrow(ctx, inStartX, inAnchorY + vPerpLen, inAnchorX - 16, inAnchorY + vPerpLen, TEAL, 2.0);
+          inkLabel(ctx, "B_in^∥", (inStartX + inAnchorX) * 0.5 - 10, inAnchorY + vPerpLen + 14, { align: 'center', color: TEAL, width: w, height: h });
+
+          // Components of B_out
+          // Normal component (coral)
+          drawSiteArrow(ctx, outAnchorX - 16, outAnchorY, outAnchorX - 16, outAnchorY - vPerpLen, CORAL, 2.2);
+          inkLabel(ctx, "B_out^⊥", outAnchorX - 22, outAnchorY - vPerpLen * 0.5, { align: 'right', color: CORAL, width: w, height: h });
+
+          // Tangential component (teal)
+          drawSiteArrow(ctx, outAnchorX - 16, outAnchorY - vPerpLen, outEndX, outAnchorY - vPerpLen, TEAL, 2.0);
+          inkLabel(ctx, "B_out^∥", (outAnchorX + outEndX) * 0.5, outAnchorY - vPerpLen - 12, { align: 'center', color: TEAL, width: w, height: h });
+        }
+        // Equality indicator bracket / banner on right side
+        var eqX = cx + rx + Math.max(20, Math.round(w * 0.03));
+        ctx.save();
+        ctx.strokeStyle = CORAL;
+        ctx.lineWidth = 1.6;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(inAnchorX - 16, inAnchorY);
+        ctx.lineTo(eqX, inAnchorY);
+        ctx.moveTo(outAnchorX - 16, outAnchorY - vPerpLen);
+        ctx.lineTo(eqX, outAnchorY - vPerpLen);
+        ctx.stroke();
+        ctx.restore();
+
+        // Vertical bracket showing identical normal height
+        ctx.save();
+        ctx.strokeStyle = CORAL;
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.moveTo(eqX + 4, outAnchorY - vPerpLen);
+        ctx.lineTo(eqX + 12, outAnchorY - vPerpLen);
+        ctx.lineTo(eqX + 12, inAnchorY);
+        ctx.lineTo(eqX + 4, inAnchorY);
+        ctx.stroke();
+        ctx.restore();
+
+        inkLabel(ctx, "B_out^⊥ − B_in^⊥ = 0", eqX + 18, (outAnchorY - vPerpLen + inAnchorY) * 0.5 - 10, { align: 'left', font: 'bold 13px sans-serif', color: CORAL, width: w, height: h });
+        inkLabel(ctx, "Strictly continuous across boundary", eqX + 18, (outAnchorY - vPerpLen + inAnchorY) * 0.5 + 10, { align: 'left', font: '11px sans-serif', color: MUTED, width: w, height: h });
+        // Pillbox height label showing h -> 0
+        ctx.save();
+        ctx.strokeStyle = MUTED;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(cx - rx - 10, yTop);
+        ctx.lineTo(cx - rx - 16, yTop);
+        ctx.lineTo(cx - rx - 16, yBot);
+        ctx.lineTo(cx - rx - 10, yBot);
+        ctx.stroke();
+        ctx.restore();
+        inkLabel(ctx, "h → 0", cx - rx - 24, ifaceY, { align: 'right', font: '11px sans-serif', color: MUTED, width: w, height: h });
+      }
+
+      function drawRefractionMode(ctx, w, h, thInRad, thOutRad, muR, bPerp, bInPar, bOutPar, withComp, time) {
+        var ifaceY = Math.round(h * 0.52);
+
+        // Medium backgrounds
+        ctx.fillStyle = PANEL;
+        ctx.fillRect(0, ifaceY, w, h - ifaceY);
+
+        // Interface divider
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, ifaceY);
+        ctx.lineTo(w, ifaceY);
+        ctx.stroke();
+
+        inkLabel(ctx, "Medium 2: μ₂ = " + muR.toFixed(1) + " μ₁", 20, ifaceY - 26, { color: MUTED, width: w, height: h });
+        inkLabel(ctx, "Medium 1: μ₁", 20, ifaceY + 26, { color: MUTED, width: w, height: h });
+
+        // Refraction law formula banner
+        inkLabel(ctx, "tan θ₁ / tan θ₂ = μ₁ / μ₂   (B^⊥ continuous)", w - 20, 24, { align: 'right', font: 'bold 12px sans-serif', color: CORAL, width: w, height: h });
+
+        // 6 parallel refracted lines across the interface
+        var numLines = 6;
+        var spacing = Math.round(w / (numLines + 1));
+        var armLenIn = Math.round(Math.min(h * 0.40, 220));
+        var armLenOut = Math.round(Math.min(h * 0.40, 220));
+        for (var i = 1; i <= numLines; i++) {
+          var ix = i * spacing;
+          var xIn = ix - armLenIn * Math.sin(thInRad);
+          var yIn = ifaceY + armLenIn * Math.cos(thInRad);
+          var xOut = ix + armLenOut * Math.sin(thOutRad);
+          var yOut = ifaceY - armLenOut * Math.cos(thOutRad);
+
+          // Incident ray
+          ctx.strokeStyle = 'rgba(212, 160, 23, 0.45)';
+          ctx.lineWidth = 2.0;
+          ctx.beginPath();
+          ctx.moveTo(xIn, yIn);
+          ctx.lineTo(ix, ifaceY);
+          ctx.lineTo(xOut, yOut);
+          ctx.stroke();
+
+          // Animated bead
+          var segProgress = (time * 0.6 + i * 0.18) % 1.0;
+          var bx, by;
+          if (segProgress < 0.5) {
+            var u = segProgress / 0.5;
+            bx = xIn + (ix - xIn) * u;
+            by = yIn + (ifaceY - yIn) * u;
+          } else {
+            var u = (segProgress - 0.5) / 0.5;
+            bx = ix + (xOut - ix) * u;
+            by = ifaceY + (yOut - ifaceY) * u;
+          }
+          ctx.fillStyle = GOLD;
+          ctx.beginPath();
+          ctx.arc(bx, by, 3.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Center line highlight & normal angle arcs
+        var midIdx = Math.round(numLines / 2);
+        var midX = midIdx * spacing;
+
+        // Normal axis (dashed)
+        ctx.save();
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(midX, ifaceY - 85);
+        ctx.lineTo(midX, ifaceY + 85);
+        ctx.stroke();
+        ctx.restore();
+
+        // Normal unit vector n-hat
+        drawSiteArrow(ctx, midX, ifaceY, midX, ifaceY - 45, INK, 2.0);
+        inkLabel(ctx, "n̂", midX + 8, ifaceY - 46, { align: 'left', color: INK, width: w, height: h });
+
+        // Angle arc theta_1
+        ctx.save();
+        ctx.strokeStyle = MUTED;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(midX, ifaceY, 36, Math.PI / 2, Math.PI / 2 + thInRad);
+        ctx.stroke();
+        ctx.restore();
+        inkLabel(ctx, "θ₁ = " + ((thInRad * 180) / Math.PI).toFixed(0) + "°", midX - 28, ifaceY + 44, { align: 'right', font: '11px sans-serif', color: MUTED, width: w, height: h });
+
+        // Angle arc theta_2
+        ctx.save();
+        ctx.strokeStyle = MUTED;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(midX, ifaceY, 36, -Math.PI / 2, -Math.PI / 2 + thOutRad);
+        ctx.stroke();
+        ctx.restore();
+        inkLabel(ctx, "θ₂ = " + ((thOutRad * 180) / Math.PI).toFixed(0) + "°", midX + 28, ifaceY - 44, { align: 'left', font: '11px sans-serif', color: MUTED, width: w, height: h });
+
+        if (withComp) {
+          // Vector triangle offset slightly to the right so it never collides with angle arc
+          var compScale = Math.max(16, Math.min(28, Math.round(h * 0.042)));
+          var pyLen = bPerp * compScale;
+          var pxInLen = bInPar * compScale;
+          var pxOutLen = bOutPar * compScale;
+          var vRefX = midX + Math.max(50, Math.round(w * 0.08));
+
+          // Lower vector components
+          drawSiteArrow(ctx, vRefX, ifaceY + pyLen, vRefX, ifaceY, CORAL, 2.4);
+          inkLabel(ctx, "B_in^⊥", vRefX - 8, ifaceY + pyLen * 0.5, { align: 'right', color: CORAL, width: w, height: h });
+
+          drawSiteArrow(ctx, vRefX - pxInLen, ifaceY + pyLen, vRefX, ifaceY + pyLen, TEAL, 2.0);
+          inkLabel(ctx, "B_in^∥", vRefX - pxInLen * 0.5, ifaceY + pyLen + 14, { align: 'center', color: TEAL, width: w, height: h });
+
+          // Upper vector components
+          drawSiteArrow(ctx, vRefX, ifaceY, vRefX, ifaceY - pyLen, CORAL, 2.4);
+          inkLabel(ctx, "B_out^⊥", vRefX - 8, ifaceY - pyLen * 0.5, { align: 'right', color: CORAL, width: w, height: h });
+
+          drawSiteArrow(ctx, vRefX, ifaceY - pyLen, vRefX + pxOutLen, ifaceY - pyLen, TEAL, 2.0);
+          inkLabel(ctx, "B_out^∥", vRefX + pxOutLen * 0.5, ifaceY - pyLen - 12, { align: 'center', color: TEAL, width: w, height: h });
+        }
+      }
+
+      function drawCurrentSheetMode(ctx, w, h, bInPerp, bInPar, bOutPerp, bOutPar, surfK, withComp, time) {
+        var ifaceY = Math.round(h * 0.52);
+        var cx = Math.round(w * 0.46);
+
+        // Backgrounds
+        ctx.fillStyle = PANEL;
+        ctx.fillRect(0, ifaceY, w, h - ifaceY);
+
+        // Boundary line
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(0, ifaceY);
+        ctx.lineTo(w, ifaceY);
+        ctx.stroke();
+
+        // Surface current indicators along the boundary line
+        var numMarkers = 9;
+        var startM = 40;
+        var endM = w - 40;
+        var stepM = (endM - startM) / (numMarkers - 1);
+
+        for (var m = 0; m < numMarkers; m++) {
+          var mx = startM + m * stepM;
+          ctx.save();
+          ctx.fillStyle = CREAM;
+          ctx.strokeStyle = GOLD;
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.arc(mx, ifaceY, 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = GOLD;
+          if (surfK >= 0) {
+            // Out of page (dot)
+            ctx.beginPath();
+            ctx.arc(mx, ifaceY, 2.8, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            // Into page (cross)
+            ctx.strokeStyle = GOLD;
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(mx - 4, ifaceY - 4);
+            ctx.lineTo(mx + 4, ifaceY + 4);
+            ctx.moveTo(mx + 4, ifaceY - 4);
+            ctx.lineTo(mx - 4, ifaceY + 4);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        inkLabel(ctx, "Surface current density K = " + surfK.toFixed(1) + " kA/m " + (surfK >= 0 ? "(⊙ out)" : "(⊗ in)"), 24, ifaceY - 26, { color: GOLD, width: w, height: h });
+        inkLabel(ctx, "B_out^∥ − B_in^∥ = μ₀ (K × n̂)", w - 24, ifaceY - 26, { align: 'right', color: TEAL, width: w, height: h });
+
+        // Key teaching callout: normal component has ZERO jump from K
+        inkLabel(ctx, "B_out^⊥ − B_in^⊥ = 0   (No discontinuity from K!)", w * 0.5, 30, { align: 'center', font: 'bold 13px sans-serif', color: CORAL, width: w, height: h });
+
+        // Vectors at center
+        var scale = Math.max(22, Math.min(42, Math.round(h * 0.058)));
+        var py = bInPerp * scale;
+        var pxIn = bInPar * scale;
+        var pxOut = bOutPar * scale;
+
+        // B_in vector
+        drawSiteArrow(ctx, cx - pxIn, ifaceY + py, cx, ifaceY, GOLD, 2.8);
+        inkLabel(ctx, "B_in", cx - pxIn * 0.5 - 16, ifaceY + py * 0.5, { align: 'right', font: 'bold 12px sans-serif', color: GOLD, width: w, height: h });
+
+        // B_out vector
+        drawSiteArrow(ctx, cx, ifaceY, cx + pxOut, ifaceY - py, GOLD, 2.8);
+        inkLabel(ctx, "B_out", cx + pxOut * 0.5 + 16, ifaceY - py * 0.5, { align: 'left', font: 'bold 12px sans-serif', color: GOLD, width: w, height: h });
+
+        if (withComp) {
+          // Normal components: identical height
+          drawSiteArrow(ctx, cx - 22, ifaceY + py, cx - 22, ifaceY, CORAL, 2.4);
+          inkLabel(ctx, "B_in^⊥", cx - 30, ifaceY + py * 0.5, { align: 'right', color: CORAL, width: w, height: h });
+
+          drawSiteArrow(ctx, cx - 22, ifaceY, cx - 22, ifaceY - py, CORAL, 2.4);
+          inkLabel(ctx, "B_out^⊥", cx - 30, ifaceY - py * 0.5, { align: 'right', color: CORAL, width: w, height: h });
+
+          // Tangential jump
+          drawSiteArrow(ctx, cx - pxIn, ifaceY + py, cx - 22, ifaceY + py, TEAL, 2.0);
+          inkLabel(ctx, "B_in^∥", (cx - pxIn + cx - 22) * 0.5, ifaceY + py + 14, { align: 'center', color: TEAL, width: w, height: h });
+
+          drawSiteArrow(ctx, cx - 22, ifaceY - py, cx + pxOut, ifaceY - py, TEAL, 2.0);
+          inkLabel(ctx, "B_out^∥", (cx - 22 + cx + pxOut) * 0.5, ifaceY - py - 14, { align: 'center', color: TEAL, width: w, height: h });
+        }
+      }
+
+      function drawComparisonMode(ctx, w, h, bPerp, time) {
+        var midX = Math.round(w * 0.5);
+        var ifaceY = Math.round(h * 0.55);
+
+        // Vertical divider
+        ctx.strokeStyle = LINE;
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(midX, 20);
+        ctx.lineTo(midX, h - 20);
+        ctx.stroke();
+
+        var leftW = midX;
+        var rightW = w - midX;
+        var rightCx = midX + rightW * 0.5;
+        var leftCx = leftW * 0.5;
+
+        // --- Left Panel: Magnetostatics ---
+        ctx.fillStyle = PANEL;
+        ctx.fillRect(0, ifaceY, leftW - 8, h - ifaceY);
+
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(12, ifaceY);
+        ctx.lineTo(leftW - 12, ifaceY);
+        ctx.stroke();
+
+        inkLabel(ctx, "Magnetostatics: ∇ · B = 0", leftCx, 36, { align: 'center', font: 'bold 13px sans-serif', color: CORAL, width: w, height: h });
+        inkLabel(ctx, "B_out^⊥ − B_in^⊥ = 0", leftCx, 62, { align: 'center', font: 'bold 14px sans-serif', color: CORAL, width: w, height: h });
+        inkLabel(ctx, "No magnetic monopoles → continuous flux", leftCx, 86, { align: 'center', font: '11px sans-serif', color: MUTED, width: w, height: h });
+
+        // Pillbox on left
+        var pbLw = Math.max(75, Math.min(130, Math.round(leftW * 0.28)));
+        var pbLh = Math.max(30, Math.min(60, Math.round(h * 0.085)));
+        ctx.fillStyle = 'rgba(204, 120, 92, 0.08)';
+        ctx.fillRect(leftCx - pbLw * 0.5, ifaceY - pbLh, pbLw, pbLh * 2);
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 1.6;
+        ctx.strokeRect(leftCx - pbLw * 0.5, ifaceY - pbLh, pbLw, pbLh * 2);
+
+        // Continuous field lines passing straight through without stopping
+        var armLen = Math.max(50, Math.min(95, Math.round(h * 0.14)));
+        for (var li = -2; li <= 2; li++) {
+          var fx = leftCx + li * (pbLw * 0.20);
+          drawSiteArrow(ctx, fx, ifaceY + armLen, fx, ifaceY - armLen, GOLD, 2.2);
+
+          // Animated tracer dot
+          var frac = ((time * 0.8 + (li + 2) * 0.2) % 1.0);
+          var dotY = (ifaceY + armLen) - frac * (2 * armLen);
+          ctx.fillStyle = GOLD;
+          ctx.beginPath();
+          ctx.arc(fx, dotY, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        inkLabel(ctx, "Flux lines pass through unbroken", leftCx, ifaceY + armLen + 24, { align: 'center', font: '11px sans-serif', color: MUTED, width: w, height: h });
+
+        // --- Right Panel: Electrostatics ---
+        ctx.fillStyle = PANEL;
+        ctx.fillRect(midX + 8, ifaceY, w - (midX + 8), h - ifaceY);
+
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(midX + 12, ifaceY);
+        ctx.lineTo(w - 12, ifaceY);
+        ctx.stroke();
+
+        inkLabel(ctx, "Electrostatics: ∇ · E = ρ / ε₀", rightCx, 36, { align: 'center', font: 'bold 13px sans-serif', color: TEAL, width: w, height: h });
+        inkLabel(ctx, "E_out^⊥ − E_in^⊥ = σ / ε₀", rightCx, 62, { align: 'center', font: 'bold 14px sans-serif', color: TEAL, width: w, height: h });
+        inkLabel(ctx, "Surface charge σ causes jump", rightCx, 86, { align: 'center', font: '11px sans-serif', color: MUTED, width: w, height: h });
+
+        // Surface charges (plus signs) along boundary
+        ctx.save();
+        for (var c = -3; c <= 3; c++) {
+          var cxq = rightCx + c * 20;
+          ctx.fillStyle = CREAM;
+          ctx.strokeStyle = '#c25953';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.arc(cxq, ifaceY, 6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#c25953';
+          ctx.font = '10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('+', cxq, ifaceY);
+        }
+        ctx.restore();
+
+        // Pillbox enclosing surface charge
+        ctx.fillStyle = 'rgba(93, 184, 166, 0.08)';
+        ctx.fillRect(rightCx - pbLw * 0.5, ifaceY - pbLh, pbLw, pbLh * 2);
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 1.6;
+        ctx.strokeRect(rightCx - pbLw * 0.5, ifaceY - pbLh, pbLw, pbLh * 2);
+
+        // Electric field lines originating on surface charges (discontinuous!)
+        for (var ei = -2; ei <= 2; ei++) {
+          var efx = rightCx + ei * (pbLw * 0.20);
+          drawSiteArrow(ctx, efx, ifaceY - 8, efx, ifaceY - armLen, TEAL, 2.0);
+          drawSiteArrow(ctx, efx, ifaceY + 8, efx, ifaceY + armLen, TEAL, 2.0);
+        }
+        inkLabel(ctx, "Field originates on charges: ΔE^⊥ = σ / ε₀", rightCx, ifaceY + armLen + 24, { align: 'center', font: '11px sans-serif', color: MUTED, width: w, height: h });
+      }
+    },
+
+    challenge: {
+      question: "A flat interface at $z = 0$ separates vacuum ($z < 0$, $\\mu_1 = \\mu_0$) from a linear magnetic material ($z > 0$, $\\mu_2 = 4\\mu_0$). No free surface currents flow on the interface. If the magnetic field in vacuum is $\\mathbf{B}_1 = 3\\hat{\\mathbf{x}} + 2\\hat{\\mathbf{z}}\\;\\mathrm{T}$ (where $\\hat{\\mathbf{z}}$ is normal to the surface pointing into the medium), what is the magnetic field $\\mathbf{B}_2$ inside the magnetic medium?",
+      options: [
+        "$\\mathbf{B}_2 = 12\\hat{\\mathbf{x}} + 2\\hat{\\mathbf{z}}\\;\\mathrm{T}$",
+        "$\\mathbf{B}_2 = 3\\hat{\\mathbf{x}} + 8\\hat{\\mathbf{z}}\\;\\mathrm{T}$",
+        "$\\mathbf{B}_2 = 0.75\\hat{\\mathbf{x}} + 2\\hat{\\mathbf{z}}\\;\\mathrm{T}$",
+        "$\\mathbf{B}_2 = 12\\hat{\\mathbf{x}} + 8\\hat{\\mathbf{z}}\\;\\mathrm{T}$",
+        "$\\mathbf{B}_2 = 3\\hat{\\mathbf{x}} + 2\\hat{\\mathbf{z}}\\;\\mathrm{T}$"
+      ],
+      correct: 0,
+      explanation: "1. Normal component: along $\\hat{\\mathbf{z}}$, the boundary condition $B_{\\mathrm{out}}^\\perp - B_{\\mathrm{in}}^\\perp = 0$ forces the normal component to be strictly continuous: $B_{2z} = B_{1z} = 2\\;\\mathrm{T}$.\n" +
+        "2. Tangential component: along $\\hat{\\mathbf{x}}$, in the absence of free surface currents ($K_f = 0$), the parallel auxiliary field is continuous: $H_{2x} = H_{1x} \\implies B_{2x} / \\mu_2 = B_{1x} / \\mu_1$.\n" +
+        "3. Therefore, $B_{2x} = (\\mu_2 / \\mu_1) B_{1x} = 4 \\times 3\\;\\mathrm{T} = 12\\;\\mathrm{T}$.\n" +
+        "Combining the components yields $\\mathbf{B}_2 = 12\\hat{\\mathbf{x}} + 2\\hat{\\mathbf{z}}\\;\\mathrm{T}$. Notice that the normal component is completely unaffected by permeability, while the tangential component scales by $\\mu_2 / \\mu_1$."
     }
   };
 

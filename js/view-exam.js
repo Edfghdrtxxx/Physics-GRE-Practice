@@ -262,6 +262,7 @@ PGRE.views.exam = (function () {
           '</div>' +
           '<div class="exam-timer" id="exam-timer" role="timer" aria-live="off">–:––</div>' +
           '<div class="exam-bar-right">' +
+            '<div class="meter meter-thin exam-progress-meter" id="exam-progress-meter"><div class="meter-fill" style="width:0%"></div></div>' +
             '<span class="exam-progress" id="exam-progress"></span>' +
             '<button class="btn btn-ghost btn-sm" id="exam-pause">Pause</button>' +
             '<button class="btn btn-primary btn-sm" id="exam-submit">Submit</button>' +
@@ -438,6 +439,10 @@ PGRE.views.exam = (function () {
   function updateProgress(exam) {
     var el = document.getElementById('exam-progress');
     if (el) el.textContent = answeredCount(exam) + ' / ' + exam.order.length + ' answered';
+    var mf = document.querySelector('#exam-progress-meter .meter-fill');
+    if (mf && window.PGRE && PGRE.motion && PGRE.motion.animateMeter) {
+      PGRE.motion.animateMeter(mf, 100 * answeredCount(exam) / exam.order.length);
+    }
   }
 
   /* ——— Countdown ——— */
@@ -477,6 +482,9 @@ PGRE.views.exam = (function () {
       (red ? '<span class="exam-timer-note">under 5 min</span>'
            : amber ? '<span class="exam-timer-note">under 15 min</span>' : '');
     el.classList.toggle('is-amber', amber);
+    if (window.PGRE && PGRE.motion && PGRE.motion.reduced !== undefined) {
+      el.classList.toggle('timer-tick', (amber || red) && !PGRE.motion.reduced);
+    }
     el.classList.toggle('is-red', red);
   }
 
@@ -603,6 +611,12 @@ PGRE.views.exam = (function () {
 
     root().innerHTML = html;
     PGRE.typesetMath(root());
+    bindReviewNotes();
+    if (window.PGRE && PGRE.motion && !PGRE.motion.reduced) {
+      var pctEl = root().querySelector('.summary-pct');
+      if (pctEl && PGRE.motion.countUp) PGRE.motion.countUp(pctEl, pct, { duration: 900, format: function (n) { return Math.round(n) + '%'; } });
+      if (PGRE.motion.stagger) PGRE.motion.stagger(root(), { selector: '.exam-review-q', step: 60 });
+    }
   }
 
   /* PROPOSAL #12 — "Why the other choices tempt": an expandable list of the
@@ -630,6 +644,99 @@ PGRE.views.exam = (function () {
     return '<details class="miss distractors"><summary>Why the other choices tempt</summary>' +
       '<div class="distractor-list">' + items + '</div></details>';
   }
+
+  /* ——— Bookmark + margin note in review — the same store API (PGRE.notes) and
+     the same .practice-nb markup as the practice feedback panel
+     (js/view-practice.js notesBlock), so entries land in the one
+     Notes & bookmarks store and share its styling. By-id lookups on exam
+     questions are fine here; bookmarking never adds a question to any
+     practice pool. ——— */
+  var noteTimers = {};   // qid -> debounce timeout id for the review note fields
+
+  function starButton(on) {
+    var label = on ? 'Remove bookmark' : 'Bookmark this question';
+    return '<button class="nb-star' + (on ? ' on' : '') + '" data-star type="button" ' +
+      'aria-pressed="' + (on ? 'true' : 'false') + '" ' +
+      'title="' + label + '" aria-label="' + label + '">' + (on ? '★' : '☆') + '</button>';
+  }
+
+  function starLabel(on) {
+    return on ? 'Bookmarked — saved to Notes &amp; bookmarks' : 'Bookmark this question';
+  }
+
+  function notesBlock(q) {
+    var on = PGRE.notes.isBookmarked(q.id);
+    var note = PGRE.notes.get(q.id);
+    return '<div class="practice-nb" data-qid="' + PGRE.ui.esc(q.id) + '">' +
+      '<div class="practice-nb-bar">' +
+        starButton(on) +
+        '<span class="practice-nb-hint muted" data-star-label>' + starLabel(on) + '</span>' +
+      '</div>' +
+      '<div class="nb-noteblock">' +
+        '<textarea class="nb-note" data-note rows="2" ' +
+          'placeholder="Jot a note for this question…">' + PGRE.ui.esc(note) + '</textarea>' +
+        '<span class="nb-saved" aria-live="polite"></span>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function scheduleNoteSave(qid, ta) {
+    clearTimeout(noteTimers[qid]);
+    noteTimers[qid] = setTimeout(function () { doNoteSave(qid, ta); }, 500);
+  }
+
+  function flushNoteSave(qid, ta) {
+    if (noteTimers[qid]) { clearTimeout(noteTimers[qid]); noteTimers[qid] = null; }
+    doNoteSave(qid, ta);
+  }
+  function doNoteSave(qid, ta) {
+    noteTimers[qid] = null;
+    if (String(ta.value).trim() === String(PGRE.notes.get(qid)).trim()) return; // no change
+    PGRE.notes.set(qid, ta.value);
+    showNoteSaved(ta);
+  }
+
+  function showNoteSaved(ta) {
+    var tick = ta.parentNode.querySelector('.nb-saved');
+    if (!tick) return;
+    tick.textContent = ta.value.trim() === '' ? 'Note cleared' : 'Saved ✓';
+    tick.classList.add('show');
+    clearTimeout(tick._t);
+    tick._t = setTimeout(function () { tick.classList.remove('show'); }, 1600);
+  }
+
+  function bindReviewNotes() {
+    root().querySelectorAll('.practice-nb').forEach(function (wrap) {
+      var qid = wrap.getAttribute('data-qid');
+      var star = wrap.querySelector('[data-star]');
+      var label = wrap.querySelector('[data-star-label]');
+      if (star) star.addEventListener('click', function () {
+        var on = PGRE.notes.toggleBookmark(qid);
+        star.classList.toggle('on', on);
+        star.textContent = on ? '★' : '☆';
+        star.setAttribute('aria-pressed', on ? 'true' : 'false');
+        var t = on ? 'Remove bookmark' : 'Bookmark this question';
+        star.setAttribute('title', t);
+        star.setAttribute('aria-label', t);
+        if (label) label.innerHTML = starLabel(on);
+      });
+      var ta = wrap.querySelector('[data-note]');
+      if (ta) {
+        ta.addEventListener('input', function () { scheduleNoteSave(qid, ta); });
+        ta.addEventListener('blur', function () { flushNoteSave(qid, ta); });
+      }
+    });
+  }
+
+  /* Closing/reloading the tab mid-typing fires no blur and kills the debounce
+     timers — flush every pending review note (a review page holds many). */
+  window.addEventListener('pagehide', function () {
+    document.querySelectorAll('#exam-root .practice-nb').forEach(function (wrap) {
+      var qid = wrap.getAttribute('data-qid');
+      var ta = wrap.querySelector('[data-note]');
+      if (qid && ta && noteTimers[qid]) flushNoteSave(qid, ta);
+    });
+  });
 
   function reviewCard(exam, qid, i) {
     var ui = PGRE.ui, q = PGRE.questionById(qid);
@@ -663,6 +770,7 @@ PGRE.views.exam = (function () {
     '<details class="miss"><summary>Solution</summary>' +
       '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div></details>' +
     distractorBlock(q) +
+    notesBlock(q) +
     '</div>';
     return html;
   }

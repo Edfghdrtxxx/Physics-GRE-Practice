@@ -23,6 +23,7 @@ PGRE.views.dashboard = (function () {
   };
   var qotdStart = 0;                              // per-render answer timer
   var qotdBoundDate = null;                       // today.date when the card was wired
+  var keyBound = false;                           // the document keydown listener is installed once
 
   /* Local YYYY-MM-DD for an offset from today (same convention as store.today). */
   function dayKey(offset) {
@@ -93,6 +94,10 @@ PGRE.views.dashboard = (function () {
         '<span class="choice-body">' + c + '</span></button>';
     });
     html += '</div>';
+    if (!done && PGRE.store.state.settings.keyboard) {
+      html += '<div class="practice-keys muted">' +
+        '<span class="key-hint">A</span>–<span class="key-hint">E</span> answer</div>';
+    }
     html += done ? qotdSolvedFeedback(q, done.correct, null) : '<div id="qotd-feedback"></div>';
     return html;
   }
@@ -163,6 +168,28 @@ PGRE.views.dashboard = (function () {
         answerQotd(q, parseInt(b.getAttribute('data-idx'), 10));
       });
     });
+  }
+
+  /* ——— Keyboard (same opt-in setting as practice: settings.keyboard) ———
+     A–E / 1–5 answer the Question of the day, matching the practice room's
+     convention. Live only while today's question is on screen unanswered. */
+  function onKey(e) {
+    if (!PGRE.store.state.settings.keyboard) return;
+    if (PGRE.store.state.today.qotd) return;           // already solved today
+    if (!document.getElementById('qotd-body')) return; // not on the dashboard
+    var tg = (e.target && e.target.tagName) || '';
+    if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' ||
+        (e.target && e.target.isContentEditable)) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var k = e.key;
+    var idx = -1;
+    if (/^[a-eA-E]$/.test(k)) idx = k.toUpperCase().charCodeAt(0) - 65;
+    else if (/^[1-5]$/.test(k)) idx = parseInt(k, 10) - 1;
+    if (idx < 0) return;
+    var q = qotdPick();
+    if (!q || idx >= q.choices.length) return;
+    e.preventDefault();
+    answerQotd(q, idx);
   }
 
   /* ————————————————————————————————————————————————————————————
@@ -356,7 +383,7 @@ PGRE.views.dashboard = (function () {
     var html = '<div class="hero card">' +
       '<div class="hero-left">' +
         '<h1>' + greet + '.</h1>' +
-        '<div class="hero-level">Level ' + lvl.level + ' · <span class="level-title">' + lvl.title + '</span></div>' +
+        '<div class="hero-level">Level <span class="hero-level-num">' + lvl.level + '</span> · <span class="level-title">' + lvl.title + '</span></div>' +
         ui.meter(lvl.pct, 'meter-xp') +
         '<div class="hero-xp-note">' + ui.fmt(lvl.into) + ' / ' + ui.fmt(lvl.span) + ' XP to Level ' + (lvl.level + 1) + '</div>' +
       '</div>' +
@@ -503,9 +530,92 @@ PGRE.views.dashboard = (function () {
     return html;
   }
 
+  /* ——— Views-A: entry motion helpers ———
+     countUpText: tweens the first number in a plain-text element up to its
+     current value (prefix/suffix preserved, e.g. "1,234" or "85%"). Elements
+     with child markup (e.g. <span> units) are left untouched.
+     animateMeters: lets every .meter-fill in scope run from 0 to its target. */
+  function countUpText(el, duration) {
+    if (!el || !(PGRE.motion && PGRE.motion.countUp)) return;
+    if (el.children.length === 1 && el.firstElementChild.classList.contains('stat-unit')) {
+      var textNode = el.childNodes[0];
+      if (textNode && textNode.nodeType === 3) {
+        var tm = textNode.textContent.trim().match(/^([^\d-]*)([\d,]+(?:\.\d+)?)(.*)$/);
+        if (tm) {
+          var tPrefix = tm[1], tSuffix = tm[3];
+          var tDec = (tm[2].split('.')[1] || '').length;
+          var tTo = parseFloat(tm[2].replace(/,/g, ''));
+          if (!isNaN(tTo)) {
+            PGRE.motion.countUp({
+              set textContent(val) { textNode.textContent = val; },
+              get textContent() { return textNode.textContent; }
+            }, tTo, {
+              duration: duration,
+              decimals: tDec,
+              format: function (v) {
+                return tPrefix + v.toLocaleString('en-US', {
+                  minimumFractionDigits: tDec,
+                  maximumFractionDigits: tDec
+                }) + tSuffix;
+              }
+            });
+            return;
+          }
+        }
+      }
+    }
+    if (el.children.length > 0) return;
+    var m = el.textContent.trim().match(/^([^\d-]*)([\d,]+(?:\.\d+)?)(.*)$/);
+    if (!m) return;
+    var prefix = m[1], suffix = m[3];
+    var decimals = (m[2].split('.')[1] || '').length;
+    var to = parseFloat(m[2].replace(/,/g, ''));
+    if (isNaN(to)) return;
+    PGRE.motion.countUp(el, to, {
+      duration: duration,
+      decimals: decimals,
+      format: function (v) {
+        return prefix + v.toLocaleString('en-US', {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals
+        }) + suffix;
+      }
+    });
+  }
+
+  function animateMeters(scope) {
+    if (!(PGRE.motion && PGRE.motion.animateMeter) || !scope) return;
+    scope.querySelectorAll('.meter-fill').forEach(function (f) {
+      var pct = parseFloat(f.style.width);
+      if (!isNaN(pct)) PGRE.motion.animateMeter(f, pct);
+    });
+  }
+
   function mount() {
+    if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
     // #7 QOTD: typeset the math and wire up the one-tap choices
     bindQotd();
+    // Views-A: entry motion — numbers count up, meters fill, challenges cascade
+    if (PGRE.motion && !PGRE.motion.reduced) {
+      countUpText(document.querySelector('.hero-level-num'), 700);
+      countUpText(document.querySelector('.hero-xp-note'), 700);
+      countUpText(document.querySelector('.hero-right .countdown-num'), 700);
+      document.querySelectorAll('.stat-tile .stat-value').forEach(function (el) {
+        countUpText(el, 700);
+      });
+      document.querySelectorAll('.challenge-prog').forEach(function (el) {
+        countUpText(el, 700);
+      });
+      animateMeters(document.getElementById('view'));
+      var challengeList = document.querySelector('.challenge-list');
+      if (challengeList) {
+        Array.prototype.forEach.call(challengeList.children, function (c) {
+          c.classList.add('stagger-in');
+        });
+        PGRE.motion.stagger(challengeList, { step: 60, max: 6 });
+      }
+    }
+
 
     // formula due count arrives async from the IndexedDB-backed deck
     PGRE.formulaDeck().then(function (deck) {
@@ -513,11 +623,16 @@ PGRE.views.dashboard = (function () {
       if (!el) return;
       if (!deck.length) { el.textContent = 'deck empty — awaits the book'; return; }
       var n = PGRE.srs.formulaDayRemaining(deck).length;
-      el.textContent = n ? n + ' left today' : 'all caught up';
+      var batch = PGRE.srs.formulaDay(deck);
+      var picked = batch.reviewIds.length + batch.newIds.length;
+      el.textContent = n ? n + ' left today'
+        : (picked ? 'all caught up' : 'nothing picked yet');
       if (n) {
         var btn = document.getElementById('rq-formulas-btn');
         if (btn) { btn.classList.remove('btn-ghost'); btn.classList.add('btn-primary'); btn.textContent = 'Study →'; }
       }
+      // Views-A: the late-arriving formula count counts up instead of popping
+      if (PGRE.motion && !PGRE.motion.reduced) countUpText(el, 600);
     });
   }
 

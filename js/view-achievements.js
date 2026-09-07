@@ -13,7 +13,7 @@ PGRE.views.achievements = (function () {
     var p = PGRE.gamify.achievementProgress(a);
     var pct = Math.round(100 * p.cur / p.max);
 
-    var html = '<div class="ach-card' + (unlockedAt ? ' unlocked' : ' locked') + '">' +
+    var html = '<div class="ach-card' + (unlockedAt ? ' unlocked' : ' locked') + '" data-id="' + a.id + '">' +
       '<div class="ach-top">' +
         '<span class="tier-dot tier-' + a.tier + '"></span>' +
         '<span class="ach-tier-name">' + a.tier + '</span>' +
@@ -83,6 +83,15 @@ PGRE.views.achievements = (function () {
       var root = document.getElementById('ach-root');
       root.innerHTML = body();
       wire();
+      if (PGRE.motion && !PGRE.motion.reduced) {
+        var grid = root.querySelector('.ach-grid');
+        if (grid) {
+          Array.prototype.forEach.call(grid.children, function (c) {
+            c.classList.add('stagger-in');
+          });
+          PGRE.motion.stagger(grid, { max: 30 });
+        }
+      }
     }
     document.querySelectorAll('#ach-filters .filter-btn').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -98,8 +107,21 @@ PGRE.views.achievements = (function () {
     });
   }
 
+  function animateMeters() {
+    if (!(PGRE.motion && PGRE.motion.animateMeter)) return;
+    document.querySelectorAll('#ach-root .meter-fill').forEach(function (f) {
+      var pct = parseFloat(f.style.width);
+      if (!isNaN(pct)) PGRE.motion.animateMeter(f, pct);
+    });
+  }
+
   return {
     render: function () { return '<div id="ach-root">' + body() + '</div>'; },
-    mount: function () { wire(); }
+    mount: function () {
+      wire();
+      if (PGRE.motion && !PGRE.motion.reduced) {
+        animateMeters();
+      }
+    }
   };
 })();

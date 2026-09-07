@@ -31,7 +31,14 @@
   var ROSE = '#e05666';
   var GOOD = '#4e9b6f';
 
+  function syncStageTheme() {
+    var t = PGRE.vizStageTheme ? PGRE.vizStageTheme() : null;
+    if (!t) return;
+    INK = t.ink; MUTED = t.muted; CREAM = t.bg; PANEL = t.panel; LINE = t.line;
+  }
+
   function creamFill(ctx, w, h) {
+    syncStageTheme();
     ctx.fillStyle = (CV && CV.colors && CV.colors.bg) ? CV.colors.bg : CREAM;
     ctx.fillRect(0, 0, w, h);
   }
@@ -49,8 +56,8 @@
     ctx.textBaseline = 'middle';
     var tw = ctx.measureText(text).width;
     var left = align === 'right' ? x - tw : (align === 'center' ? x - tw / 2 : x);
-    ctx.fillStyle = 'rgba(250, 249, 245, 0.94)';
-    ctx.strokeStyle = 'rgba(20, 20, 19, 0.10)';
+    ctx.fillStyle = PGRE.vizStageTheme().chipFade(0.94);
+    ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.10);
     ctx.lineWidth = 1;
     ctx.fillRect(left - 4, y - 8, tw + 8, 16);
     ctx.strokeRect(left - 4, y - 8, tw + 8, 16);
@@ -81,20 +88,77 @@
     return canvas;
   }
 
+  function numParam(state, key, fallback) {
+    var n = parseFloat(state && state[key]);
+    return isFinite(n) ? n : fallback;
+  }
+
+  function simSpeedOf(state) {
+    var s = numParam(state, 'simSpeed', 1);
+    if (s < 0.2) s = 0.2;
+    if (s > 3) s = 3;
+    return s;
+  }
+
+  function isOn(v, fallback) {
+    if (v === undefined || v === null || v === '') return !!fallback;
+    if (v === true || v === 1 || v === '1' || v === 'true' || v === 'on') return true;
+    if (v === false || v === 0 || v === '0' || v === 'false' || v === 'off') return false;
+    return !!v;
+  }
+
+  function latexNum(n, digits, unit) {
+    var s = Number(n).toFixed(digits);
+    return unit ? ('$' + s + '\\,' + unit + '$') : ('$' + s + '$');
+  }
+
+  function drawRollingGlyph(ctx, x, y, kind, color, r) {
+    ctx.save();
+    if (kind === 'hoop') {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(2, r * 0.32);
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (kind === 'sphere') {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = PGRE.vizStageTheme().chipFade(0.38);
+      ctx.beginPath();
+      ctx.ellipse(x - r * 0.22, y - r * 0.28, r * 0.42, r * 0.30, -0.45, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = CREAM;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.62, y);
+      ctx.lineTo(x + r * 0.62, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
 
   PGRE.visualizers['cpgf-1.47'] = {
     id: 'cpgf-1.47',
+    topic: 'cm',
     title: 'Simple & Physical Pendulum Dynamics & Large-Angle Anharmonicity',
     formulaLatex:
       '$$\\ddot{\\theta} + \\frac{g}{L}\\sin\\theta = 0 \\xrightarrow{\\theta \\ll 1} \\omega_0 = \\sqrt{\\frac{g}{L}},\\quad T(\\theta_0) \\approx 2\\pi\\sqrt{\\frac{L}{g}}\\left(1 + \\frac{1}{16}\\theta_0^2 + \\frac{11}{3072}\\theta_0^4\\right)$$',
     physicalStory:
-      'A simple pendulum consists of a point mass m suspended by a massless rigid rod of length L. The restoring torque is provided by the tangential component of gravity τ = -mgL sin θ. For small angles (sin θ ≈ θ), the equation linearizes to a simple harmonic oscillator with frequency ω = √(g/L), which is strictly independent of the mass m (Galilean equivalence principle). At large release angles, the softening of sin θ < θ prolongs the oscillation period (anharmonicity), diverging logarithmically to infinity at θ0 = π (separatrix).',
+      'A simple pendulum consists of a point mass $m$ suspended by a massless rigid rod of length $L$. The restoring torque is provided by the tangential component of gravity $\\tau = -mgL\\sin\\theta$. For small angles ($\\sin\\theta \\approx \\theta$), the equation linearizes to a simple harmonic oscillator with frequency $\\omega = \\sqrt{g/L}$, which is strictly independent of the mass $m$ (Galilean equivalence principle). At large release angles, the softening of $\\sin\\theta < \\theta$ prolongs the oscillation period (anharmonicity), diverging logarithmically to infinity at $\\theta_0 = \\pi$ (separatrix).',
     derivationSteps: [
       {
         step: 1,
         title: 'Rotational Form of Newton\'s 2nd Law',
         formula: '\\tau = I\\ddot{\\theta} = -mg(L\\sin\\theta),\\quad I = mL^2',
-        text: 'The gravitational torque about the suspension pivot opposes angular displacement, with moment of inertia I = mL² for a point bob.'
+        text: 'The gravitational torque about the suspension pivot opposes angular displacement, with moment of inertia $I = mL^2$ for a point bob.'
       },
       {
         step: 2,
@@ -106,13 +170,13 @@
         step: 3,
         title: 'Small-Angle Linearization & Natural Frequency',
         formula: '\\sin\\theta = \\theta - \\frac{\\theta^3}{6} + \\dots \\xrightarrow{\\theta \\ll 1} \\ddot{\\theta} + \\left(\\frac{g}{L}\\right)\\theta = 0 \\implies \\omega_0 = \\sqrt{\\frac{g}{L}}',
-        text: 'To first order in Taylor expansion, the motion reduces to simple harmonic motion with period T0 = 2π√(L/g).'
+        text: 'To first order in Taylor expansion, the motion reduces to simple harmonic motion with period $T_0 = 2\\pi\\sqrt{L/g}$.'
       },
       {
         step: 4,
         title: 'Physical Pendulum Generalization',
         formula: '\\omega = \\sqrt{\\frac{mg d}{I_{\\text{pivot}}}} = \\sqrt{\\frac{g}{L_{\\text{eff}}}},\\quad L_{\\text{eff}} = \\frac{I_{\\text{pivot}}}{md} = d + \\frac{I_{\\text{cm}}}{md}',
-        text: 'For a uniform rod of length L pivoted at one end (I = (1/3)mL², d = L/2), effective length is L_eff = (2/3)L, increasing frequency to √(1.5 g/L).'
+        text: 'For a uniform rod of length $L$ pivoted at one end ($I = \\frac13 mL^2$, $d = L/2$), effective length is $L_{\\mathrm{eff}} = \\frac23 L$, increasing frequency to $\\sqrt{3g/(2L)}$.'
       }
     ],
     limitingCases: [
@@ -145,25 +209,26 @@
       {
         trap: 'Mass Independence of Simple Pendulum',
         warning: 'Believing that doubling the bob mass doubles or halves the period.',
-        strategy: 'T = 2π√(L/g) contains NO mass term! A 1 kg bob and a 100 kg bob have identical small-angle periods.'
+        strategy: '$T = 2\\pi\\sqrt{L/g}$ contains no mass term. A $1\\,\\mathrm{kg}$ bob and a $100\\,\\mathrm{kg}$ bob have identical small-angle periods.'
       },
       {
         trap: 'Simple Pendulum vs Uniform Rod',
         warning: 'Treating a swinging rod as a simple pendulum of length L.',
-        strategy: 'Always use physical pendulum formula: L_eff = I/(m d) = ((1/3)mL²)/(m L/2) = (2/3)L. The rod period is T = 2π√(2L / 3g).'
+        strategy: 'Always use the physical-pendulum formula: $L_{\\mathrm{eff}} = I/(md) = (\\frac13 mL^2)/(m L/2) = \\frac23 L$. The rod period is $T = 2\\pi\\sqrt{2L/(3g)}$.'
       },
       {
         trap: 'Large Angle Anharmonic Period Increase',
         warning: 'Assuming T is strictly constant for large release angles like 60°.',
-        strategy: 'Large angle period expands as T ≈ T0(1 + (1/16)θ0²). At 60° (π/3 rad ≈ 1.05 rad), period is ~7% longer than T0!'
+        strategy: 'Large-angle period expands as $T \\approx T_0(1 + \\frac1{16}\\theta_0^2)$. At $60^\\circ$ ($\\pi/3\\,\\mathrm{rad}$), the period is about $7\\%$ longer than $T_0$.'
       }
     ],
     parameters: [
-      { id: 'L', label: 'Length (L)', min: 0.2, max: 2.5, step: 0.05, default: 1.0, unit: 'm' },
-      { id: 'g', label: 'Gravity (g)', min: 1.0, max: 25.0, step: 0.5, default: 9.8, unit: 'm/s²' },
-      { id: 'theta0_deg', label: 'Initial Angle (θ0)', min: 5, max: 170, step: 5, default: 45, unit: 'deg' },
-      { id: 'isRod', label: 'Pendulum Type (0=Simple, 1=Rod)', min: 0, max: 1, step: 1, default: 0, unit: '' },
-      { id: 'damping', label: 'Damping (γ)', min: 0.0, max: 0.2, step: 0.01, default: 0.0, unit: 's⁻¹' }
+      { id: 'L', label: 'Length ($L$)', min: 0.2, max: 2.5, step: 0.05, default: 1.0, unit: 'm' },
+      { id: 'g', label: 'Gravity ($g$)', min: 1.0, max: 25.0, step: 0.1, default: 9.8, unit: 'm/s²' },
+      { id: 'theta0_deg', label: 'Initial Angle ($\\theta_0$)', min: 5, max: 170, step: 5, default: 45, unit: 'deg' },
+      { id: 'isRod', label: 'Uniform rod (physical pendulum)', type: 'toggle', default: false },
+      { id: 'damping', label: 'Damping ($\\gamma$)', min: 0.0, max: 0.2, step: 0.01, default: 0.0, unit: 's⁻¹' },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     challenge: {
       question:
@@ -184,8 +249,9 @@
       state.L = state.L !== undefined ? state.L : 1.0;
       state.g = state.g !== undefined ? state.g : 9.8;
       state.theta0_deg = state.theta0_deg !== undefined ? state.theta0_deg : 45;
-      state.isRod = state.isRod !== undefined ? state.isRod : 0;
+      state.isRod = isOn(state.isRod, false);
       state.damping = state.damping !== undefined ? state.damping : 0.0;
+      if (state.simSpeed === undefined) state.simSpeed = 1.0;
 
       const initRad = (state.theta0_deg * Math.PI) / 180;
       state.sim = {
@@ -289,8 +355,9 @@
 
       const L = Math.max(0.2, Number(state.L) || 1.0);
       const g = Math.max(0.5, Number(state.g) || 9.8);
-      const isRod = Number(state.isRod) === 1;
+      const isRod = isOn(state.isRod, false);
       const damping = Math.max(0.0, Number(state.damping) || 0.0);
+      const speed = simSpeedOf(state);
 
       const Leff = isRod ? (2 / 3) * L : L;
       const omega0 = Math.sqrt(g / Leff);
@@ -300,7 +367,9 @@
       const T_exact_approx = T0 * (1 + (1 / 16) * thetaAmp * thetaAmp + (11 / 3072) * Math.pow(thetaAmp, 4));
 
       const subSteps = 12;
-      const stepDt = Math.min(dt || 0.016, 0.05) / subSteps;
+      var dtEff = (isFinite(dt) && dt > 0 ? dt : 0.016) * speed;
+      if (dtEff > 0.2) dtEff = 0.2;
+      const stepDt = dtEff / subSteps;
 
       if (!sim.isDragging) {
         for (let s = 0; s < subSteps; s++) {
@@ -347,12 +416,12 @@
         pivotY - pad - bobRadius,
         height - pivotY - pad - bobRadius
       );
-      const armLengthPx = Math.max(48, Math.min(maxArm, 170));
+      const armLengthPx = Math.max(48, maxArm * (L / 2.5));
 
       sim.pivotPos = { x: pivotX, y: pivotY };
 
       ctx.save();
-      ctx.strokeStyle = 'rgba(20, 20, 19, 0.10)';
+      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.10);
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 5]);
       ctx.beginPath();
@@ -459,12 +528,12 @@
       ctx.font = '600 11px Inter, -apple-system, sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText('Phase portrait  (θ,  θ̇)', cardX + 12, cardY + 10);
+      ctx.fillText('Phase portrait', cardX + 12, cardY + 10);
       ctx.restore();
 
       const phaseCx = cardX + cardW * 0.5;
       const phaseCy = cardY + cardH * 0.54;
-      const phaseW = Math.min(cardW * 0.38, cardH * 0.32, 110);
+      const phaseW = Math.min(cardW * 0.38, cardH * 0.32);
       const maxOmegaSep = Math.max(2 * omega0, 0.4);
       const thetaScale = phaseW / Math.PI;
       const omegaScale = (phaseW * 0.85) / maxOmegaSep;
@@ -474,7 +543,7 @@
       ctx.rect(cardX + 8, cardY + 28, cardW - 16, cardH - 36);
       ctx.clip();
 
-      ctx.strokeStyle = 'rgba(20, 20, 19, 0.12)';
+      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.12);
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(phaseCx - phaseW - 8, phaseCy);
@@ -532,19 +601,20 @@
 
       const pctShift = Math.max(0, ((T_exact_approx - T0) / T0) * 100);
       vizLegend('Pendulum', [
-        { label: 'Type', value: isRod ? 'Uniform rod,  Leff = 2L/3' : 'Simple pendulum,  Leff = L' },
-        { label: 'ω0 = √(g/Leff)', value: omega0.toFixed(2) + ' rad/s' },
-        { label: 'T0 = 2π/ω0', value: T0.toFixed(3) + ' s' },
-        { label: 'T(θ0) anharmonic', value: T_exact_approx.toFixed(3) + ' s  (+' + pctShift.toFixed(1) + '%)' },
-        { label: 'θ(t)', value: ((sim.theta * 180) / Math.PI).toFixed(1) + ' deg' },
-        { label: 'Traces', value: 'coral = exact sin θ;  teal dashed = linear θ' },
-        { label: 'Drag', value: sim.isDragging ? 'setting release angle' : 'drag the bob to set θ' }
+        { label: 'Type', value: isRod ? 'Uniform rod,  $L_{\\mathrm{eff}}=2L/3$' : 'Simple pendulum,  $L_{\\mathrm{eff}}=L$' },
+        { label: '$\\omega_0=\\sqrt{g/L_{\\mathrm{eff}}}$', value: latexNum(omega0, 2, '\\mathrm{rad/s}') },
+        { label: '$T_0=2\\pi/\\omega_0$', value: latexNum(T0, 3, '\\mathrm{s}') },
+        { label: '$T(\\theta_0)$ anharmonic', value: '$' + T_exact_approx.toFixed(3) + '\\,\\mathrm{s}\\ (+' + pctShift.toFixed(1) + '\\%)$' },
+        { label: '$\\theta(t)$', value: '$' + ((sim.theta * 180) / Math.PI).toFixed(1) + '^\\circ$' },
+        { label: 'Traces', value: 'coral = exact $\\sin\\theta$;  teal dashed = linear $\\theta$' },
+        { label: 'Drag', value: sim.isDragging ? 'setting release angle' : 'drag the bob to set $\\theta$' }
       ]);
     }
   };
 
   PGRE.visualizers['cpgf-1.24'] = {
     id: 'cpgf-1.24',
+    topic: 'cm',
     title: 'Continuous Moment of Inertia & Mass Distribution',
     formulaLatex: 'I = \\int r^2 dm',
     physicalStory: `
@@ -556,12 +626,12 @@
       {
         step: 1,
         latex: 'K_{\\text{rot}} = \\int \\frac{1}{2} v^2 dm = \\int \\frac{1}{2} (\\omega r_\\perp)^2 dm',
-        explanation: 'Express the total kinetic energy of a rigid body rotating at angular velocity \\omega about a fixed axis.'
+        explanation: 'Express the total kinetic energy of a rigid body rotating at angular velocity $\\omega$ about a fixed axis.'
       },
       {
         step: 2,
         latex: 'K_{\\text{rot}} = \\frac{1}{2} \\omega^2 \\int r_\\perp^2 dm \\equiv \\frac{1}{2} I \\omega^2',
-        explanation: 'Factor out the constant angular velocity \\omega to identify the moment of inertia integral I.'
+        explanation: 'Factor out the constant angular velocity $\\omega$ to identify the moment of inertia integral $I$.'
       },
       {
         step: 3,
@@ -612,11 +682,12 @@
     ],
     parameters: [
       { id: 'shapeType', label: 'Rigid Geometry', type: 'select', options: ['Uniform Thin Rod', 'Solid Disk / Cylinder', 'Thin Hoop / Ring', 'Solid Sphere', 'Non-Uniform Power Rod (x^n)'], default: 'Solid Disk / Cylinder' },
-      { id: 'massVal', label: 'Mass (M)', min: 0.5, max: 5.0, step: 0.1, default: 2.0, unit: 'kg' },
-      { id: 'radVal', label: 'Radius / Length (R or L)', min: 0.5, max: 3.0, step: 0.1, default: 1.5, unit: 'm' },
-      { id: 'powerN', label: 'Density Exponent (n)', min: 0, max: 6, step: 1, default: 2, unit: 'power' },
-      { id: 'numSlices', label: 'Integration Slices (N)', min: 4, max: 64, step: 4, default: 24, unit: 'elements' },
-      { id: 'raceActive', label: 'Incline race', type: 'toggle', default: false }
+      { id: 'massVal', label: 'Mass ($M$)', min: 0.5, max: 5.0, step: 0.1, default: 2.0, unit: 'kg' },
+      { id: 'radVal', label: 'Radius / Length ($R$ or $L$)', min: 0.5, max: 3.0, step: 0.1, default: 1.5, unit: 'm' },
+      { id: 'powerN', label: 'Density Exponent ($n$)', min: 0, max: 6, step: 1, default: 2, unit: 'power' },
+      { id: 'numSlices', label: 'Integration Slices ($N$)', min: 4, max: 64, step: 4, default: 24, unit: 'elements' },
+      { id: 'raceActive', label: 'Incline race', type: 'toggle', default: false },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     onParamChange: function (id, val, state) {
       if (id === 'raceActive') state.raceTime = 0;
@@ -629,10 +700,14 @@
       state.numSlices = state.numSlices !== undefined ? state.numSlices : 24;
       state.raceActive = !!state.raceActive;
       state.raceTime = state.raceTime || 0;
+      if (state.simSpeed === undefined) state.simSpeed = 1.0;
     },
     draw: function (ctx, width, height, state, dt) {
       if (dt === undefined) dt = 0.016;
       if (dt > 0.1) dt = 0.1;
+      var speed = simSpeedOf(state);
+      var dtEff = dt * speed;
+      if (dtEff > 0.2) dtEff = 0.2;
 
       state.massVal = state.massVal !== undefined ? state.massVal : 2.0;
       state.radVal = state.radVal !== undefined ? state.radVal : 1.5;
@@ -646,61 +721,132 @@
       var M = state.massVal;
       var R = state.radVal;
       var N = Math.max(4, state.numSlices | 0);
+      var isDisk = state.shapeType === 'Solid Disk / Cylinder';
+      var isHoop = state.shapeType === 'Thin Hoop / Ring';
+      var isSphere = state.shapeType === 'Solid Sphere';
+      var isRod = state.shapeType === 'Uniform Thin Rod';
+      var isPowerRod = state.shapeType === 'Non-Uniform Power Rod (x^n)';
+      var isRolling = isDisk || isHoop || isSphere;
 
       var cFactor = 0.5;
-      var formulaStr = '1/2 M R^2';
+      var formulaTex = '\\frac{1}{2} M R^2';
+      var cLabel = '$c = I/(M R^2)$';
       var I_exact = 0.5 * M * R * R;
       var axisNote = 'axis through center, out of page';
-      var dmNote = 'dm = 2 pi r dr sigma';
+      var dmTex = '$\\mathrm{d}m = 2\\pi r\\,\\mathrm{d}r\\,\\sigma$';
 
-      if (state.shapeType === 'Thin Hoop / Ring') {
+      if (isHoop) {
         cFactor = 1.0;
-        formulaStr = 'M R^2';
+        formulaTex = 'M R^2';
         I_exact = M * R * R;
-        dmNote = 'dm = lambda R d theta  (all mass at r = R)';
-      } else if (state.shapeType === 'Solid Sphere') {
+        dmTex = '$\\mathrm{d}m = \\lambda R\\,\\mathrm{d}\\theta$  (all mass at $r=R$)';
+      } else if (isSphere) {
         cFactor = 0.4;
-        formulaStr = '2/5 M R^2';
+        formulaTex = '\\frac{2}{5} M R^2';
         I_exact = 0.4 * M * R * R;
-        dmNote = 'outer shells carry more I  (r^2 weighting)';
-      } else if (state.shapeType === 'Uniform Thin Rod') {
+        axisNote = 'axis through center (dashed)';
+        dmTex = '$r_\\perp$ to the axis, not the radial $r$';
+      } else if (isRod) {
         cFactor = 1 / 12;
-        formulaStr = '1/12 M L^2  (about CM)';
+        formulaTex = '\\frac{1}{12} M L^2';
+        cLabel = '$c = I/(M L^2)$ about CM';
         I_exact = (1 / 12) * M * R * R;
         axisNote = 'axis through CM, perpendicular to rod';
-        dmNote = 'dm = lambda dx';
-      } else if (state.shapeType === 'Non-Uniform Power Rod (x^n)') {
+        dmTex = '$\\mathrm{d}m = \\lambda\\,\\mathrm{d}x$';
+      } else if (isPowerRod) {
         var n = state.powerN;
         cFactor = (n + 1) / (n + 3);
-        formulaStr = '(' + n + '+1)/(' + n + '+3) M L^2  (pivot at x=0)';
+        formulaTex = '\\frac{' + n + '+1}{' + n + '+3} M L^2';
+        cLabel = '$c = I/(M L^2)$ about $x=0$';
         I_exact = cFactor * M * R * R;
         axisNote = 'axis at x = 0 (light end)';
-        dmNote = 'lambda(x) proportional to x^n';
+        dmTex = '$\\lambda(x)\\propto x^{' + n + '}$';
       }
 
       var leftW = Math.round(width * 0.52);
       var captionH = 36;
       var centerX = leftW * 0.5;
       var centerY = 22 + (height - captionH - 22) * 0.5;
-      var renderRad = Math.min(leftW * 0.38, (height - captionH - 36) * 0.42);
+      var maxRender = Math.min(leftW * 0.38, (height - captionH - 36) * 0.42);
+      var renderRad = Math.max(28, maxRender * (R / 3.0));
 
       ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, leftW, height);
       ctx.clip();
 
-      ctx.fillStyle = MUTED;
-      ctx.font = '600 12px Inter, -apple-system, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText('I = integral r^2 dm', 14, 10);
-
       var highlightIdx = Math.min(N - 1, Math.max(0, Math.floor(N * 0.65)));
 
-      if (state.shapeType === 'Solid Disk / Cylinder' || state.shapeType === 'Thin Hoop / Ring' || state.shapeType === 'Solid Sphere') {
+      if (isSphere) {
+        var grd = ctx.createRadialGradient(
+          centerX - renderRad * 0.28, centerY - renderRad * 0.32, renderRad * 0.08,
+          centerX, centerY, renderRad
+        );
+        grd.addColorStop(0, 'rgba(93, 184, 166, 0.62)');
+        grd.addColorStop(1, 'rgba(93, 184, 166, 0.16)');
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, renderRad, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = TEAL;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.save();
+        ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.16);
+        ctx.lineWidth = 1;
+        for (var sh = 1; sh <= 3; sh++) {
+          ctx.beginPath();
+          ctx.ellipse(centerX, centerY, renderRad * (sh / 4), renderRad, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        ctx.save();
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY - renderRad - 10);
+        ctx.lineTo(centerX, centerY + renderRad + 10);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+
+        var phi = 0.95;
+        var elX = centerX + renderRad * Math.sin(phi);
+        var elY = centerY - renderRad * Math.cos(phi);
+        ctx.strokeStyle = MUTED;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.lineTo(elX, elY);
+        ctx.stroke();
+        ctx.strokeStyle = CORAL;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(centerX, elY);
+        ctx.lineTo(elX, elY);
+        ctx.stroke();
+        ctx.fillStyle = GOLD;
+        ctx.beginPath();
+        ctx.arc(elX, elY, 4, 0, Math.PI * 2);
+        ctx.fill();
+        pill(ctx, 'r', (centerX + elX) * 0.5 + 10, (centerY + elY) * 0.5, MUTED, 'left');
+        pill(ctx, 'r_perp', (centerX + elX) * 0.5, elY + 12, CORAL, 'center');
+
+        ctx.fillStyle = INK;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = CREAM;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        pill(ctx, 'axis', centerX + 10, centerY - renderRad - 4, INK, 'left');
+      } else if (isDisk || isHoop) {
         var dr = renderRad / Math.max(1, N);
 
-        if (state.shapeType === 'Thin Hoop / Ring') {
+        if (isHoop) {
           var hoopThick = Math.max(10, renderRad * 0.12);
           ctx.fillStyle = 'rgba(204, 120, 92, 0.35)';
           ctx.strokeStyle = CORAL;
@@ -723,9 +869,9 @@
             var rInner = i * dr;
             var rOuter = (i + 1) * dr;
             var frac = (i + 0.5) / N;
-            var alpha = 0.10 + 0.70 * (state.shapeType === 'Solid Sphere' ? Math.sqrt(Math.max(0, 1 - frac * frac)) : frac);
+            var alpha = 0.10 + 0.70 * frac;
             ctx.fillStyle = 'rgba(93, 184, 166, ' + alpha + ')';
-            ctx.strokeStyle = 'rgba(20, 20, 19, 0.10)';
+            ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.10);
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.arc(centerX, centerY, rOuter, 0, Math.PI * 2);
@@ -769,10 +915,10 @@
         for (var ri = 0; ri < N; ri++) {
           var xFrac = (ri + 0.5) / N;
           var xPos = rodStartX + ri * dx;
-          var rodAlpha = 0.18 + 0.72 * (state.shapeType === 'Uniform Thin Rod' ? 0.55 : Math.pow(xFrac, state.powerN));
+          var rodAlpha = 0.18 + 0.72 * (isRod ? 0.55 : Math.pow(xFrac, state.powerN));
           ctx.fillStyle = 'rgba(204, 120, 92, ' + rodAlpha + ')';
           ctx.fillRect(xPos, rodY, Math.max(1, dx - 1), rodThick);
-          ctx.strokeStyle = 'rgba(20, 20, 19, 0.10)';
+          ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.10);
           ctx.strokeRect(xPos, rodY, Math.max(1, dx - 1), rodThick);
 
           if (ri === Math.floor(N * 0.75)) {
@@ -784,7 +930,7 @@
           }
         }
 
-        var axisX = (state.shapeType === 'Uniform Thin Rod') ? centerX : rodStartX;
+        var axisX = isRod ? centerX : rodStartX;
         ctx.fillStyle = INK;
         ctx.beginPath();
         ctx.arc(axisX, centerY, 5, 0, Math.PI * 2);
@@ -796,8 +942,7 @@
 
       ctx.restore();
 
-      pill(ctx, axisNote, 14, height - 28, MUTED, 'left');
-      pill(ctx, dmNote, 14, height - 12, GOLD, 'left');
+      pill(ctx, axisNote, 14, height - 18, MUTED, 'left');
 
       ctx.strokeStyle = LINE;
       ctx.lineWidth = 1;
@@ -820,7 +965,7 @@
       ctx.font = '600 12px Inter, -apple-system, sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText('Rolling race   a = g sin theta / (1 + c)', rightX + 4, 10);
+      ctx.fillText(isRolling ? 'Incline race' : 'Not a rolling body', rightX + 4, 10);
 
       ctx.beginPath();
       ctx.moveTo(rampStartX, rampStartY);
@@ -837,73 +982,78 @@
       var gSinTheta = 9.81 * Math.sin(thetaIncline);
 
       var racers = [
-        { name: 'sphere', c: 0.40, color: GOOD, letter: 'S' },
-        { name: 'disk', c: 0.50, color: CORAL, letter: 'D' },
-        { name: 'shell', c: 0.67, color: GOLD, letter: 'H' },
-        { name: 'hoop', c: 1.00, color: ROSE, letter: 'R' }
+        { kind: 'sphere', name: 'sphere', c: 0.40, color: GOOD, letter: 'S', match: isSphere },
+        { kind: 'disk', name: 'disk', c: 0.50, color: CORAL, letter: 'D', match: isDisk },
+        { kind: 'hoop', name: 'hoop', c: 1.00, color: ROSE, letter: 'R', match: isHoop }
       ];
 
-      if (state.raceActive) {
-        state.raceTime += dt;
-      } else {
+      if (isRolling && state.raceActive) {
+        state.raceTime += dtEff;
+      } else if (!isRolling || !state.raceActive) {
         state.raceTime = 0;
       }
 
       var maxTrackPx = Math.max(8, rampLen - 28);
       var pxScale = maxTrackPx / 2.0;
 
-      racers.forEach(function (rc, idx) {
-        var aLin = gSinTheta / (1 + rc.c);
-        var distMeters = 0.5 * aLin * (state.raceTime * state.raceTime);
-        var distPx = Math.min(maxTrackPx, distMeters * pxScale);
-        var u = distPx / maxTrackPx;
-        var startX = rampStartX + 16;
-        var startY = rampStartY + 18 + idx * 20;
-        var endX = rampEndX - 14;
-        var endY = rampEndY - 16 - (3 - idx) * 6;
-        var rX = startX + u * (endX - startX);
-        var rY = startY + u * (endY - startY);
+      if (isRolling) {
+        racers.forEach(function (rc, idx) {
+          var aLin = gSinTheta / (1 + rc.c);
+          var distMeters = 0.5 * aLin * (state.raceTime * state.raceTime);
+          var distPx = Math.min(maxTrackPx, distMeters * pxScale);
+          var u = distPx / maxTrackPx;
+          var startX = rampStartX + 16;
+          var startY = rampStartY + 18 + idx * 22;
+          var endX = rampEndX - 14;
+          var endY = rampEndY - 16 - (2 - idx) * 6;
+          var rX = startX + u * (endX - startX);
+          var rY = startY + u * (endY - startY);
+          var glyphR = rc.match ? 11 : 7;
+          ctx.save();
+          if (!rc.match) ctx.globalAlpha = 0.38;
+          drawRollingGlyph(ctx, rX, rY, rc.kind, rc.color, glyphR);
+          ctx.restore();
+          if (rc.match) {
+            ctx.strokeStyle = INK;
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.arc(rX, rY, glyphR + 3, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        });
 
-        ctx.fillStyle = rc.color;
-        ctx.beginPath();
-        ctx.arc(rX, rY, 8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = CREAM;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        var keyY = height - keyH + 10;
+        var colW = rightW / 3;
+        racers.forEach(function (rc, idx) {
+          var kx = rightX + colW * (idx + 0.5);
+          drawRollingGlyph(ctx, kx - 18, keyY, rc.kind, rc.color, rc.match ? 6 : 5);
+          ctx.fillStyle = rc.match ? INK : MUTED;
+          ctx.font = (rc.match ? '700 ' : '500 ') + '10px Inter, -apple-system, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(rc.name, kx - 8, keyY);
+        });
+      } else {
+        pill(ctx, 'toggle race only for disk / hoop / sphere', rightX + 8, rampStartY + rampHeight * 0.45, MUTED, 'left');
+      }
 
-        ctx.fillStyle = CREAM;
-        ctx.font = '700 9px Inter, -apple-system, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(rc.letter, rX, rY);
-      });
+      var raceVal;
+      if (!isRolling) {
+        raceVal = 'not a rolling body';
+      } else if (state.raceActive) {
+        raceVal = latexNum(state.raceTime, 2, '\\mathrm{s}');
+      } else {
+        raceVal = 'off (toggle to start)';
+      }
 
-      var keyY = height - keyH + 10;
-      var colW = rightW / 4;
-      racers.forEach(function (rc, idx) {
-        var kx = rightX + colW * (idx + 0.5);
-        ctx.fillStyle = rc.color;
-        ctx.beginPath();
-        ctx.arc(kx - 22, keyY, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = INK;
-        ctx.font = '500 10px Inter, -apple-system, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(rc.letter + ' ' + rc.name, kx - 14, keyY);
-        ctx.fillStyle = MUTED;
-        ctx.font = '500 9px Inter, -apple-system, sans-serif';
-        ctx.fillText('c = ' + rc.c.toFixed(2), kx - 14, keyY + 14);
-      });
-
-      vizLegend('Continuous I', [
+      vizLegend('Continuous $I$', [
         { label: 'Geometry', value: state.shapeType },
-        { label: 'I', value: I_exact.toFixed(3) + ' kg m^2' },
-        { label: 'Formula', value: 'I = ' + formulaStr },
-        { label: 'c = I / (M R^2)', value: cFactor.toFixed(3) },
-        { label: 'a / (g sin theta)', value: (1 / (1 + cFactor)).toFixed(3) },
-        { label: 'Race time', value: state.raceActive ? state.raceTime.toFixed(2) + ' s' : 'off (toggle to start)' }
+        { label: '$I$', value: latexNum(I_exact, 3, '\\mathrm{kg\\,m}^2') },
+        { label: 'Formula', value: '$I = ' + formulaTex + '$' },
+        { label: cLabel, value: '$' + cFactor.toFixed(3) + '$' },
+        { label: '$a/(g\\sin\\theta)$', value: isRolling ? '$' + (1 / (1 + cFactor)).toFixed(3) + '$' : 'N/A (does not roll)' },
+        { label: 'Race', value: raceVal },
+        { label: '$\\mathrm{d}m$', value: dmTex }
       ]);
     },
     challenge: {
@@ -931,25 +1081,26 @@
 
   PGRE.visualizers['cpgf-1.25'] = {
     id: 'cpgf-1.25',
+    topic: 'cm',
     title: 'Parallel-Axis (Steiner) Theorem & Physical Pendulum',
     formulaLatex: 'I = I_{\\text{CM}} + M d^2',
     physicalStory: `
-      Calculating the moment of inertia about every possible axis from direct integration is tedious. The **Parallel-Axis Theorem** (Steiner's Theorem) states that the moment of inertia $I$ about any axis parallel to an axis through the Center of Mass (CM) equals $I_{\\text{CM}}$ plus the mass $M$ multiplied by the square of the perpendicular shift distance $d^2$.
+      Calculating the moment of inertia about every possible axis from direct integration is tedious. The Parallel-Axis Theorem (Steiner's Theorem) states that the moment of inertia $I$ about any axis parallel to an axis through the Center of Mass (CM) equals $I_{\\mathrm{CM}}$ plus the mass $M$ multiplied by the square of the perpendicular shift distance $d^2$.
 
       Two foundational physical insights emerge:
-      1. **$I_{\\text{CM}}$ is the absolute global minimum**: For a given axis direction, the moment of inertia is strictly minimized when passing through the Center of Mass ($d=0$).
-      2. **Physical Pendulum Period**: When pivoted at distance $d$ from CM, the oscillation period is $T = 2\\pi \\sqrt{\\frac{I_{\\text{CM}} + M d^2}{M g d}}$. As $d \\to 0$, $T \\to \\infty$ (no restoring gravitational torque); as $d \\to \\infty$, $T \\to \\infty$ (large rotational inertia). Hence, there exists a unique optimal pivot distance $d = \\sqrt{I_{\\text{CM}}/M} = k_g$ (radius of gyration) that **minimizes the oscillation period**!
+      1. $I_{\\mathrm{CM}}$ is the absolute global minimum: for a given axis direction, the moment of inertia is strictly minimized when passing through the Center of Mass ($d=0$).
+      2. Physical pendulum period: when pivoted at distance $d$ from the CM, the oscillation period is $T = 2\\pi \\sqrt{(I_{\\mathrm{CM}} + M d^2)/(M g d)}$. As $d \\to 0$, $T \\to \\infty$ (no restoring gravitational torque); as $d \\to \\infty$, $T \\to \\infty$ (large rotational inertia). Hence there exists a unique optimal pivot distance $d = \\sqrt{I_{\\mathrm{CM}}/M} = k_g$ (radius of gyration) that minimizes the oscillation period.
     `,
     derivationSteps: [
       {
         step: 1,
         latex: '\\mathbf{r} = \\mathbf{r}_{\\text{CM}} + \\mathbf{r}\'',
-        explanation: 'Set up coordinates relative to the Center of Mass, such that \\int \\mathbf{r}\' dm = \\mathbf{0}.'
+        explanation: 'Set up coordinates relative to the Center of Mass, such that $\\int \\mathbf{r}\' dm = \\mathbf{0}$.'
       },
       {
         step: 2,
         latex: 'I_P = \\int |\\mathbf{r}\' - \\mathbf{d}|^2 dm = \\int (r\'^2 - 2\\mathbf{r}\' \\cdot \\mathbf{d} + d^2) dm',
-        explanation: 'Expand the squared perpendicular distance from a new parallel axis shifted by vector \\mathbf{d}.'
+        explanation: 'Expand the squared perpendicular distance from a new parallel axis shifted by vector $\\mathbf{d}$.'
       },
       {
         step: 3,
@@ -987,19 +1138,20 @@
     greTraps: [
       {
         trap: 'Shifting directly between two non-CM parallel axes A and B',
-        fix: 'CRITICAL GRE TRAP: The formula I = I_0 + Md^2 is ONLY valid if I_0 is the moment of inertia about the CENTER OF MASS! You CANNOT do I_B = I_A + M d_{AB}^2. You must first shift back to CM: I_CM = I_A - M d_A^2, then shift to B: I_B = I_CM + M d_B^2.'
+        fix: 'The formula $I = I_0 + Md^2$ is only valid if $I_0$ is about the center of mass. You cannot do $I_B = I_A + M d_{AB}^2$. Shift back to CM first: $I_{\\mathrm{CM}} = I_A - M d_A^2$, then $I_B = I_{\\mathrm{CM}} + M d_B^2$.'
       },
       {
         trap: 'Assuming a shorter pendulum always swings faster',
-        fix: 'In a physical pendulum, shortening the pivot distance d towards CM makes T = 2\\pi\\sqrt{\\frac{I_p}{Mgd}} diverge to infinity because the restoring torque (Mgd) vanishes faster than the inertia I_p.'
+        fix: 'In a physical pendulum, shortening the pivot distance $d$ towards the CM makes $T = 2\\pi\\sqrt{I_p/(Mgd)}$ diverge to infinity because the restoring torque $Mgd$ vanishes faster than the inertia $I_p$.'
       }
     ],
     parameters: [
       { id: 'bodyShape', label: 'Body Geometry', type: 'select', options: ['Uniform Thin Rod (L)', 'Solid Disk (R)', 'Hollow Ring (R)'], default: 'Uniform Thin Rod (L)' },
-      { id: 'bodyMass', label: 'Mass (M)', min: 0.5, max: 4.0, step: 0.1, default: 1.5, unit: 'kg' },
-      { id: 'bodyDim', label: 'Size (L or R)', min: 0.5, max: 2.5, step: 0.1, default: 1.2, unit: 'm' },
-      { id: 'pivotShift', label: 'Shift Distance (d)', min: 0, max: 1.2, step: 0.02, default: 0.35, unit: 'm' },
-      { id: 'paused', label: 'Pause swing', type: 'toggle', default: false }
+      { id: 'bodyMass', label: 'Mass ($M$)', min: 0.5, max: 4.0, step: 0.1, default: 1.5, unit: 'kg' },
+      { id: 'bodyDim', label: 'Size ($L$ or $R$)', min: 0.5, max: 2.5, step: 0.1, default: 1.2, unit: 'm' },
+      { id: 'pivotShift', label: 'Shift Distance ($d$)', min: 0, max: 2.5, step: 0.02, default: 0.35, unit: 'm' },
+      { id: 'paused', label: 'Pause swing', type: 'toggle', default: false },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     onParamChange: function (id, val, state) {
       if (id === 'bodyShape' || id === 'pivotShift' || id === 'bodyDim' || id === 'bodyMass') {
@@ -1019,10 +1171,14 @@
       state.pendulumAngle = state.pendulumAngle !== undefined ? state.pendulumAngle : 0.35;
       state.pendulumOmega = state.pendulumOmega || 0;
       state.paused = !!state.paused;
+      if (state.simSpeed === undefined) state.simSpeed = 1.0;
     },
     draw: function (ctx, width, height, state, dt) {
       if (dt === undefined) dt = 0.016;
       if (dt > 0.1) dt = 0.1;
+      var speed = simSpeedOf(state);
+      var dtEff = dt * speed;
+      if (dtEff > 0.2) dtEff = 0.2;
 
       state.bodyMass = state.bodyMass !== undefined ? state.bodyMass : 1.5;
       state.bodyDim = state.bodyDim !== undefined ? state.bodyDim : 1.2;
@@ -1035,14 +1191,25 @@
 
       var M = state.bodyMass;
       var L = Math.max(0.2, state.bodyDim);
-      var d = Math.min(state.pivotShift, L * 0.5);
+      var isRodBody = state.bodyShape === 'Uniform Thin Rod (L)';
+      var isDiskBody = state.bodyShape === 'Solid Disk (R)';
+      var isRingBody = state.bodyShape === 'Hollow Ring (R)';
+      var dMax = isRodBody ? (L * 0.5) : L;
+      var d = Math.min(Math.max(0, Number(state.pivotShift) || 0), dMax);
+      state.pivotShift = d;
+      if (typeof document !== 'undefined') {
+        var dBadge = document.getElementById('viz-val-pivotShift') || document.getElementById('viz-inline-val-pivotShift');
+        if (dBadge) dBadge.textContent = d.toFixed(2) + ' m';
+        var dSlider = document.getElementById('viz-ctrl-pivotShift') || document.getElementById('viz-inline-ctrl-pivotShift');
+        if (dSlider && Math.abs(Number(dSlider.value) - d) > 0.001) dSlider.value = String(d);
+      }
       var g = 9.81;
 
       var I_cm = (1 / 12) * M * L * L;
-      if (state.bodyShape === 'Solid Disk (R)') {
-        I_cm = 0.5 * M * (L * 0.5) * (L * 0.5);
-      } else if (state.bodyShape === 'Hollow Ring (R)') {
-        I_cm = M * (L * 0.5) * (L * 0.5);
+      if (isDiskBody) {
+        I_cm = 0.5 * M * L * L;
+      } else if (isRingBody) {
+        I_cm = M * L * L;
       }
 
       var I_p = I_cm + M * d * d;
@@ -1052,23 +1219,24 @@
 
       if (!state.paused && d > 0.005 && I_p > 1e-9) {
         var alphaP = -(M * g * d * Math.sin(state.pendulumAngle)) / I_p;
-        state.pendulumOmega += alphaP * dt;
-        state.pendulumOmega *= Math.exp(-0.15 * dt);
-        state.pendulumAngle += state.pendulumOmega * dt;
+        state.pendulumOmega += alphaP * dtEff;
+        state.pendulumAngle += state.pendulumOmega * dtEff;
       }
 
       var leftW = Math.round(width * 0.46);
       var pivotPxX = leftW * 0.5;
       var pxScale = Math.min(leftW, height) * 0.36;
-      var halfBody = (state.bodyShape === 'Uniform Thin Rod (L)') ? pxScale * 0.45 : pxScale * 0.42;
+      var halfBody = isRodBody ? pxScale * 0.45 : pxScale * 0.42;
       var pivotPxY = Math.max(18, halfBody + 14);
-      var dPx = (d / (L * 0.5 || 1)) * (pxScale * 0.45);
+      var dPx = (dMax > 1e-9) ? (d / dMax) * halfBody : 0;
       var cmPxY = dPx;
       var ang = state.pendulumAngle;
       var cmX = pivotPxX - Math.sin(ang) * cmPxY;
       var cmY = pivotPxY + Math.cos(ang) * cmPxY;
 
-      DrawUtils.drawHatchedWall(ctx, pivotPxX - 26, pivotPxY - 10, 52, 10, 'horizontal-top');
+      if (dPx > 10) {
+        DrawUtils.drawHatchedWall(ctx, pivotPxX - 26, pivotPxY - 10, 52, 10, 'horizontal-top');
+      }
 
       ctx.save();
       ctx.translate(pivotPxX, pivotPxY);
@@ -1161,7 +1329,7 @@
       var g1H = (height - 28) * 0.48;
       var g2Y = g1Y + g1H + 8;
       var g2H = height - g2Y - 10;
-      var maxD = L * 0.5;
+      var maxD = dMax;
       var maxI = I_cm + M * maxD * maxD;
 
       function plotBox(x, y, w, h, title, xLab, yLab) {
@@ -1179,7 +1347,7 @@
         return { x: x + 16, y: y + 26, w: w - 28, h: h - 42 };
       }
 
-      var inner1 = plotBox(rightX, g1Y, rightW, g1H, 'I(d) = I_CM + M d^2', 'd', 'I');
+      var inner1 = plotBox(rightX, g1Y, rightW, g1H, 'I versus d', 'd', 'I');
       ctx.save();
       ctx.beginPath();
       ctx.rect(inner1.x, inner1.y, inner1.w, inner1.h);
@@ -1204,7 +1372,7 @@
       ctx.fill();
       ctx.restore();
 
-      var inner2 = plotBox(rightX, g2Y, rightW, g2H, 'T(d) = 2 pi sqrt(I_P / M g d)', 'd', 'T');
+      var inner2 = plotBox(rightX, g2Y, rightW, g2H, 'T versus d', 'd', 'T');
       var tMinY = minT * 0.75;
       var tMaxY = minT * 2.6;
       ctx.save();
@@ -1262,12 +1430,12 @@
 
       vizLegend('Parallel-axis theorem', [
         { label: 'Body', value: state.bodyShape },
-        { label: 'I_CM', value: I_cm.toFixed(3) + ' kg m^2' },
-        { label: 'd', value: d.toFixed(2) + ' m' },
-        { label: 'I_P = I_CM + M d^2', value: I_p.toFixed(3) + ' kg m^2' },
-        { label: 'k_g = sqrt(I_CM/M)', value: k_g.toFixed(3) + ' m' },
-        { label: 'T(d)', value: isFinite(curT) ? curT.toFixed(2) + ' s' : 'infinite (d = 0)' },
-        { label: 'T_min at d = k_g', value: minT.toFixed(2) + ' s' }
+        { label: '$I_{\\mathrm{CM}}$', value: latexNum(I_cm, 3, '\\mathrm{kg\\,m}^2') },
+        { label: '$d$', value: latexNum(d, 2, '\\mathrm{m}') },
+        { label: '$I_P = I_{\\mathrm{CM}} + M d^2$', value: latexNum(I_p, 3, '\\mathrm{kg\\,m}^2') },
+        { label: '$k_g = \\sqrt{I_{\\mathrm{CM}}/M}$', value: latexNum(k_g, 3, '\\mathrm{m}') },
+        { label: '$T(d)$', value: isFinite(curT) ? latexNum(curT, 2, '\\mathrm{s}') : 'infinite ($d = 0$)' },
+        { label: '$T_{\\min}$ at $d = k_g$', value: latexNum(minT, 2, '\\mathrm{s}') }
       ]);
     },
     challenge: {

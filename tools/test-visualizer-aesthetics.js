@@ -19,7 +19,7 @@ var EXPECTED_IDS = [
   'cpgf-1.26', 'cpgf-1.27', 'cpgf-1.15',
   'cpgf-1.28', 'cpgf-1.29', 'cpgf-1.30',
   'cpgf-1.31', 'cpgf-1.32', 'cpgf-1.33',
-  'cpgf-1.9', 'cpgf-2.4', 'cpgf-2.8',
+  'cpgf-1.9', 'cpgf-2.4', 'cpgf-2.8', 'cpgf-2.33',
   'cpgf-2.70', 'cpgf-4.14', 'cpgf-4.32', 'cpgf-5.18',
   'cpgf-5.27', 'cpgf-6.18', 'cpgf-7.17'
 ];
@@ -854,6 +854,59 @@ if (probeId) {
   }
 }
 
+console.log('\n(b2) comprehensive detail modal for non-visualizer cards');
+PGRE.TOPICS = [
+  { id: 'cm', short: 'CM', name: 'Classical Mechanics' },
+  { id: 'em', short: 'EM', name: 'Electricity & Magnetism' }
+];
+PGRE.topicById = function (id) {
+  return PGRE.TOPICS.find(function (t) { return t.id === id; }) || null;
+};
+PGRE.FORMULAS = [
+  {
+    id: 'cpg-f-test-nonviz',
+    topic: 'cm',
+    name: 'Kepler Test Law',
+    front: 'Relate period to orbital radius.',
+    back: '$T^2 = k r^3$',
+    note: 'Valid for central force power-law potentials.',
+    eq: '1.99'
+  },
+  {
+    id: 'cpg-f-test-mnem',
+    topic: 'em',
+    name: 'Gauss Law Test',
+    front: 'Relate flux to charge.',
+    back: '$\\Phi_E = Q/\\epsilon_0$',
+    mnemonic: 'Flux equals charge enclosed'
+  }
+];
+
+try {
+  PGRE.openVisualizerModal('cpg-f-test-nonviz');
+  var nonvizBackdrop = loaded.document.getElementById('viz-modal-backdrop');
+  assert(!!nonvizBackdrop, 'openVisualizerModal mounts #viz-modal-backdrop for non-visualizer card');
+  assert(!!nonvizBackdrop.querySelector('.viz-detail-window'), 'non-visualizer modal has .viz-detail-window');
+  assert(nonvizBackdrop.innerHTML.indexOf('Kepler Test Law') >= 0, 'detail modal includes card title');
+  assert(nonvizBackdrop.innerHTML.indexOf('Classical Mechanics') >= 0, 'detail modal includes topic badge');
+  assert(nonvizBackdrop.innerHTML.indexOf('Eq 1.99') >= 0, 'detail modal includes equation tag');
+  assert(nonvizBackdrop.innerHTML.indexOf('viz-formula-banner') >= 0, 'detail modal includes formula banner');
+  assert(nonvizBackdrop.innerHTML.indexOf('Relate period to orbital radius') >= 0, 'detail modal includes prompt section');
+  assert(nonvizBackdrop.innerHTML.indexOf('Valid for central force') >= 0, 'detail modal includes notes section');
+  assert(nonvizBackdrop.innerHTML.indexOf('Interactive simulation in development for this formula') >= 0, 'detail modal includes status notice');
+  assert(!!loaded.document.getElementById('viz-close-btn'), 'detail modal has #viz-close-btn');
+
+  PGRE.openVisualizerModal('cpg-f-test-mnem');
+  var mnemBackdrop = loaded.document.getElementById('viz-modal-backdrop');
+  assert(mnemBackdrop.innerHTML.indexOf('viz-detail-mnemonic') >= 0, 'detail modal shows mnemonic section when present');
+  assert(mnemBackdrop.innerHTML.indexOf('Flux equals charge enclosed') >= 0, 'detail modal includes mnemonic text');
+
+  PGRE.closeVisualizerModal();
+  assert(!mnemBackdrop.classList.contains('viz-open'), 'closeVisualizerModal removes viz-open class');
+} catch (err) {
+  assert(false, 'non-visualizer detail modal threw: ' + err.message);
+}
+
 console.log('\nHUD helpers route to appendVizLegend (no overlay fillRect)');
 (function testHudHelpers() {
   var orig = PGRE.appendVizLegend;
@@ -958,6 +1011,95 @@ EXPECTED_IDS.forEach(function (id) {
   if (!cream && bg && firstFull.fillStyle === bg) cream = isCreamColor(bg);
   assert(cream, id + ' first full-canvas fill is cream ' + CREAM +
     ' / CV.colors.bg (got ' + JSON.stringify(firstFull.fillStyle) + ')');
+});
+
+console.log('\n(d) LaTeX formatting and typesetting integrity');
+EXPECTED_IDS.forEach(function (id) {
+  var viz = visualizers[id];
+  if (!viz) return;
+  assert(typeof viz.formulaLatex === 'string' && viz.formulaLatex.trim().length > 0,
+    id + ' formulaLatex is non-empty string');
+  assert(typeof viz.title === 'string' && viz.title.trim().length > 0,
+    id + ' title is non-empty string');
+  // Titles should not use raw unicode math approximations
+  var hasUnicodeMath = /[∂∫∇ΣΔ\u0307]/.test(viz.title);
+  assert(!hasUnicodeMath, id + ' title uses LaTeX math formatting instead of plain unicode approximations');
+  if (viz.parameters) {
+    viz.parameters.forEach(function (p) {
+      if (p.options) {
+        p.options.forEach(function (opt) {
+          var lbl = typeof opt === 'object' ? opt.label : opt;
+          var hasBadMath = /[²³½¼¾¹⁰½±×=∂∫∇ΣΔ\u0307]/.test(lbl) && !/\$.*?\$/.test(lbl);
+          assert(!hasBadMath, id + ' param option ' + JSON.stringify(lbl) + ' uses LaTeX format when expressing formulas');
+        });
+      }
+    });
+  }
+});
+
+// Test limiting cases and derivation steps LaTeX parse integrity with vendored KaTeX
+var katex = require(path.join(root, 'vendor', 'katex', 'katex.min.js'));
+
+function decodeEntities(s) {
+  return s.replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+}
+
+function assertMathParses(html, label) {
+  var delims = [['$$', '$$', true], ['$', '$', false]];
+  var text = decodeEntities(html);
+  var i = 0;
+  while (i < text.length) {
+    var best = -1, bestIdx = -1;
+    for (var d = 0; d < delims.length; d++) {
+      var idx = text.indexOf(delims[d][0], i);
+      if (idx === -1) continue;
+      if (bestIdx === -1 || idx < bestIdx || (idx === bestIdx && delims[d][0].length > delims[best][0].length)) {
+        best = d; bestIdx = idx;
+      }
+    }
+    if (best === -1) break;
+    var l = delims[best][0], r = delims[best][1], display = delims[best][2];
+    var end = text.indexOf(r, bestIdx + l.length);
+    if (end === -1) { i = bestIdx + l.length; continue; }
+    var tex = text.slice(bestIdx + l.length, end);
+    try {
+      katex.renderToString(tex, { displayMode: display, throwOnError: true });
+      assert(true, label + ' math segment parses cleanly: ' + tex.slice(0, 40));
+    } catch (err) {
+      assert(false, label + ' math parse error (' + err.message + ') on: ' + tex);
+    }
+    i = end + r.length;
+  }
+}
+
+EXPECTED_IDS.forEach(function (id) {
+  var viz = visualizers[id];
+  if (!viz) return;
+  if (viz.limitingCases) {
+    var limHtml = PGRE.formatLimitingCases(viz.limitingCases);
+    assertMathParses(limHtml, id + ' limitingCases');
+  }
+  if (viz.derivationSteps) {
+    var derivHtml = PGRE.formatDerivations(viz.derivationSteps);
+    assertMathParses(derivHtml, id + ' derivationSteps');
+  }
+});
+
+// Test card teaser truncator logic ensures balanced math delimiters
+var tokenRegex = /(\$\$[\s\S]*?\$\$|\$[^$]*?\$|\*\*[^*]+?\*\*|[^\s$*]+|\s+)/g;
+EXPECTED_IDS.forEach(function (id) {
+  var viz = visualizers[id];
+  if (!viz || !viz.physicalStory) return;
+  var clean = String(viz.physicalStory).trim().replace(/\s+/g, ' ');
+  var match, result = '', limit = 135;
+  tokenRegex.lastIndex = 0;
+  while ((match = tokenRegex.exec(clean)) !== null) {
+    var token = match[0];
+    if (result.length + token.length > limit && result.length >= 60) break;
+    result += token;
+  }
+  var dollarCount = (result.match(/\$/g) || []).length;
+  assert(dollarCount % 2 === 0, id + ' card teaser has balanced math delimiters ($...$) (count: ' + dollarCount + ')');
 });
 
 console.log('\n────────────────────────────────');

@@ -190,37 +190,35 @@ Again resets reps and repeats within the session; Hard ×1.2; Good ×ease; Easy
 `lastReviewedDay` (LOCAL date) — the `studiedToday` source of truth (never compare a
 UTC ISO prefix to a local date string).
 
-**Progressive daily batch** (replaces the old "every never-studied card is due"
-cram queue). `settings.formulaDailyTarget` is a **total** daily cap of reviews + new
-combined (clamp **1–100**, default **10**; every read routes the raw value through
-`srs.clampTarget`, so an imported/corrupt value can't poison the queue). `state.formulaDay`
-= `{ date, reviewIds: [], newIds: [], softIds?: [] }` holds today's batch, rebuilt at the day
-roll and reconciled on every access (`srs.formulaDay(deck)`, persisted only when it changed; an
-empty deck returns a transient batch WITHOUT persisting, guarding the nav-badge path that
-runs before IndexedDB resolves):
-- **Build:** reviews = cards with state and `due ≤ today`, **oldest-due first**, first
-  `min(T, all)`; new = random sample of never-studied cards filling `max(0, T − reviews)` slots.
-- **Reconcile (same day):** drop ids no longer in the deck (and clean `softIds` that left the
-  deck or are still suspended); keep every `studiedToday` member and every `softIds` pin
-  unconditionally; if over target trim only non-protected items (new picks from the end,
-  then unstudied reviews newest-due first — oldest-due kept); if under target top up
-  with due reviews (oldest first) then random never-studied cards.
-- **Soft-add from Search** (`srs.addFormulaDaySoft`): explicit Add buttons pin hits into
-  today's batch (may exceed T). No state → `newIds`; has state → `reviewIds` (including
-  not-yet-due); suspended → unsuspend then add; already in batch → ensure soft pin.
-  `softIds` is same-day only (day roll rebuilds without it). Search stays side-effect free
+**User-curated daily batch** (nothing is ever auto-selected). The daily target is a **soft
+suggestion** (clamp **1–100**, default **10**; every read routes the raw value through
+`srs.clampTarget`, so an imported/corrupt value can't poison the UI). `state.formulaDay`
+= `{ date, reviewIds: [], newIds: [], softIds?: [] }` holds the picked batch. It starts EMPTY
+and grows only through explicit user actions; it **persists across day rolls** (un-studied
+picks carry over) and is reconciled on every access (`srs.formulaDay(deck)`, persisted only
+when it changed; an empty deck returns a transient batch WITHOUT persisting, guarding the
+nav-badge path that runs before IndexedDB resolves):
+- **Reconcile (prune-only):** drop ids no longer in the deck or suspended; drop soft pins
+  that left the deck, are suspended, or were studied today; retire completed picks (graded
+  on an earlier day, due now in the future). Never adds, never trims to the target.
+- **Picker** ("Pick today's cards", `srs.setFormulaDayPicks`): the batch composer — due-now
+  cards first, then upcoming, then never-studied, each section topic-grouped, with a name
+  filter. Save replaces the batch wholesale; `studiedToday` members are locked (a grade
+  committed today is not undone by un-picking). No cap — the count line shows
+  "N picked · target T" as a nudge only.
+- **Browse chips / Search Add** (`srs.addFormulaDaySoft` / `removeFormulaDaySoft`): edit the
+  same batch one card at a time. No state → `newIds`; has state → `reviewIds` (including
+  not-yet-due); suspended → unsuspend then add. Not-yet-due learned adds are pinned in
+  `softIds` so they stay review-eligible until studied today. Search stays side-effect free
   until the user clicks Add (`isInFormulaDay` / status:today never call `formulaDay()`).
-- **Remaining** = batch cards where **(no state) OR (`due ≤ today`) OR (soft-pinned /
-  final-pass AND not studied today)** — an Again-graded card (due today) stays remaining
-  across reloads; a Good/Hard/Easy card (future due) is done. Soft pins surface topical
-  not-yet-due adds from Search until graded today.
-- **Overflow:** due reviews held back from today's batch are **postponed** to tomorrow
-  (counted on the composition line).
-- **New-card slots** are filled by the **picker** (topic-grouped checklist; `studiedToday`
-  picks are locked and preserved verbatim, counting toward the slot tally) or **random
-  auto-fill** / re-roll. Slots `S = max(0, T − reviews)`; when `S = 0` the new-card controls
-  are hidden. Soft-pinned never-studied cards (`softIds`) stay sticky through set/reroll/
-  clear of new picks and do **not** consume S (batch may stay above T).
+- **Remaining** = batch cards where **(no state) OR (`due ≤ today`) OR (soft-pinned AND not
+  studied today)** — an Again-graded card (due today) stays remaining across reloads; a
+  Good/Hard/Easy card (future due) is done and reconcile prunes it.
+- **Overflow line:** due reviews not picked are counted as "due but not picked" (advisory).
+- **No auto-substitution:** Study/Match/Type/Quiz/Cloze draw ONLY from the picked batch's
+  remaining cards (`formulaDayRemaining`); an empty batch means an empty round with a
+  "pick today's cards" prompt. The final-pass week shows a banner suggesting due picks —
+  it never adds cards on its own.
 
 Remaining count drives the dashboard *Review queue* card and the sidebar badge.
 **Browse** the deck via **Learned** (cards with state: last-grade + due chips) / **Upcoming**
@@ -233,11 +231,9 @@ cards (older/newer/Resume).
 - **Exam-date cap (F3):** `settings.examDate` (default `2026-10-28`, editable via the Today card's
   date input). `srs.examCap()` = `max(1, min(days−1, ceil(0.2·days)))`, null when the date is
   invalid/past (capping silently off). `nextIntervals` clamps hard/good/easy to the cap (Again
-  stays 0), so grade-button previews match reality. **Final pass** (`srs.finalPassActive()`, active
-  `0 < days ≤ 7`): every card with state becomes review-eligible (overdue first, then future-due
-  learned cards, oldest-due first); `formulaDayRemaining` extends its rule to *(no state) OR
-  (due ≤ today) OR (final-pass AND not studied today)*; home shows a "Final pass — N learned
-  formulas, D days left (aim for ⌈N/D⌉/day)" banner.
+  stays 0), so grade-button previews match reality. **Final pass** (`srs.finalPassActive()`,
+  active `0 < days ≤ 7`): scheduling is unchanged; the home banner nudges the user to pick
+  due cards into the batch so every learned formula gets one more look — no auto-inclusion.
 - **Learning steps (F7):** stateless cards graduate on Easy (commit) or on a 2nd Hard/Good; a 1st
   Hard/Good bumps to step 1 (chip "learning 1/2", +2 XP, reinsert 3–5 back, no commit); Again
   resets to step 0 (reinsert, no lapse). `study.done` counts only commits; every press is +2 XP.
@@ -249,8 +245,7 @@ cards (older/newer/Resume).
   ←-peek/undo. "Rebuild hints" (pre-flip) and a post-Again interstitial show 5 reconstruction
   prompts. When a round-closing press is an Again, scaffold precedes checkpoint.
 - **Rounds (F11):** every `ROUND_SIZE = 10` presses, a checkpoint overlay offers Keep going / Finish.
-- **Interleaving (F9):** `interleaveByTopic` (view) round-robins the session queue across topics;
-  `srs._sampleSpread` stratifies new-card auto-fill / re-roll across topics (`_sample` kept for others).
+- **Interleaving (F9):** `interleaveByTopic` (view) round-robins the session queue across topics.
 
 **Insight & browse (bundle 2).**
 - **Review log:** `srs.gradeCard` appends `state.cardReviews` (capped 8000) `{ d, id, g, ivl, m: was-mature

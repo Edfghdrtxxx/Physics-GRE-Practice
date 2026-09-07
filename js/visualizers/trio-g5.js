@@ -32,7 +32,14 @@
   var DEEP = '#964b32';
   var MASS_PALETTE = [CORAL, TEAL, GOLD, ROSE, VIOLET];
 
+  function syncStageTheme() {
+    var t = PGRE.vizStageTheme ? PGRE.vizStageTheme() : null;
+    if (!t) return;
+    INK = t.ink; MUTED = t.muted; CREAM = t.bg;
+  }
+
   function fillCream(ctx, width, height) {
+    syncStageTheme();
     ctx.fillStyle = (CV && CV.colors && CV.colors.bg) ? CV.colors.bg : CREAM;
     ctx.fillRect(0, 0, width, height);
   }
@@ -48,6 +55,14 @@
     return dt;
   }
 
+  function simSpeedOf(state) {
+    var s = Number(state && state.simSpeed);
+    if (!(s > 0) || s !== s) return 1;
+    if (s < 0.2) return 0.2;
+    if (s > 3) return 3;
+    return s;
+  }
+
   function labelHalo(ctx, x, y, text, color, align) {
     align = align || 'left';
     ctx.save();
@@ -58,7 +73,7 @@
     var bx = x;
     if (align === 'center') bx = x - w / 2;
     else if (align === 'right') bx = x - w;
-    ctx.fillStyle = 'rgba(250, 249, 245, 0.92)';
+    ctx.fillStyle = PGRE.vizStageTheme().chipFade(0.92);
     ctx.fillRect(bx - 3, y - 8, w + 6, 16);
     ctx.fillStyle = color || INK;
     ctx.fillText(text, x, y);
@@ -125,6 +140,7 @@
 
   PGRE.visualizers['cpgf-1.26'] = {
     id: 'cpgf-1.26',
+    topic: 'cm',
     title: 'Continuous Center of Mass & Geometric Cutouts',
     formulaLatex: '\\mathbf{r}_{\\text{CM}} = \\frac{\\int \\mathbf{r} dm}{M}',
     physicalStory: `
@@ -144,7 +160,7 @@
       {
         step: 2,
         latex: '\\mathbf{r}_{\\text{CM}} = \\frac{1}{M} \\int_V \\mathbf{r} \\rho(\\mathbf{r}) dV',
-        explanation: 'Express dm in terms of the spatial density distribution \\rho(\\mathbf{r}).'
+        explanation: 'Express $dm$ in terms of the spatial density distribution $\\rho(\\mathbf{r})$.'
       },
       {
         step: 3,
@@ -174,9 +190,9 @@
         description: 'Symmetry is preserved; CM remains at the center.'
       },
       {
-        condition: 'R_{\\text{hole}} \\to R',
-        implication: 'x_{\\text{CM}} \\to -R',
-        description: 'As the hole enlarges to touch the edge, the remaining crescent mass concentrates at the opposite perimeter.'
+        condition: 'R_{\\text{hole}} \\to R \\text{ (hole kept inside, tangent to the rim)}',
+        implication: 'x_{\\text{CM}} \\to -R/2',
+        description: 'With $x_h = R - r_h$, $x_{\\mathrm{CM}} = -r_h^2/(R + r_h) \\to -R/2$. A hole growing while staying centered ($x_h = 0$) leaves $x_{\\mathrm{CM}} = 0$ by symmetry.'
       }
     ],
     greTraps: [
@@ -190,24 +206,26 @@
       }
     ],
     parameters: [
-      { id: 'geoModel', label: 'Shape Model', type: 'select', options: ['Disk with Draggable Hole', 'Semicircular Disk vs Wire', 'Solid Hemisphere vs Shell', 'Solid Cone vs Shell / Wedge'], default: 'Disk with Draggable Hole' },
-      { id: 'holeRadius', label: 'Hole Radius (r_h)', min: 0.1, max: 0.6, step: 0.05, default: 0.35, unit: 'R' },
-      { id: 'holeOffset', label: 'Hole Offset (x_h)', min: -0.5, max: 0.5, step: 0.05, default: 0.30, unit: 'R' },
-      { id: 'suspensionAngle', label: 'Suspend Pivot Plumb', min: 0, max: 360, step: 15, default: 45, unit: 'deg' },
-      { id: 'showPlumbLine', label: 'Plumb line through CM', type: 'toggle', default: true }
+      { id: 'geoModel', label: 'Shape Model', type: 'select', options: ['Disk with hole', 'Semicircular Disk vs Wire', 'Solid Hemisphere vs Shell', 'Solid Cone vs Shell / Wedge'], default: 'Disk with hole' },
+      { id: 'holeRadius', label: 'Hole radius ($r_h$)', min: 0.1, max: 0.6, step: 0.05, default: 0.45, unit: '$R$' },
+      { id: 'holeOffset', label: 'Hole offset ($x_h$)', min: -0.5, max: 0.5, step: 0.05, default: 0.40, unit: '$R$' },
+      { id: 'suspensionAngle', label: 'Pivot on rim', min: 0, max: 360, step: 15, default: 45, unit: 'deg' },
+      { id: 'showPlumbLine', label: 'Line through $P$ and CM', type: 'toggle', default: true }
     ],
     init: function (container, state, redraw) {
       createStyleIfNotExists();
-      state.geoModel = state.geoModel || 'Disk with Draggable Hole';
-      state.holeRadius = state.holeRadius !== undefined ? state.holeRadius : 0.35;
-      state.holeOffset = state.holeOffset !== undefined ? state.holeOffset : 0.30;
+      if (state.geoModel === 'Disk with Draggable Hole') state.geoModel = 'Disk with hole';
+      state.geoModel = state.geoModel || 'Disk with hole';
+      state.holeRadius = state.holeRadius !== undefined ? state.holeRadius : 0.45;
+      state.holeOffset = state.holeOffset !== undefined ? state.holeOffset : 0.40;
       state.suspensionAngle = state.suspensionAngle !== undefined ? state.suspensionAngle : 45;
       state.showPlumbLine = state.showPlumbLine !== undefined ? state.showPlumbLine : true;
     },
     draw: function (ctx, width, height, state, dt) {
-      state.geoModel = state.geoModel || 'Disk with Draggable Hole';
-      state.holeRadius = state.holeRadius !== undefined ? Number(state.holeRadius) : 0.35;
-      state.holeOffset = state.holeOffset !== undefined ? Number(state.holeOffset) : 0.30;
+      if (state.geoModel === 'Disk with Draggable Hole') state.geoModel = 'Disk with hole';
+      state.geoModel = state.geoModel || 'Disk with hole';
+      state.holeRadius = state.holeRadius !== undefined ? Number(state.holeRadius) : 0.45;
+      state.holeOffset = state.holeOffset !== undefined ? Number(state.holeOffset) : 0.40;
       state.suspensionAngle = state.suspensionAngle !== undefined ? Number(state.suspensionAngle) : 45;
       state.showPlumbLine = state.showPlumbLine !== undefined ? state.showPlumbLine : true;
 
@@ -217,14 +235,13 @@
       var centerY = height * 0.52;
       var R_px = Math.min(width * 0.34, height * 0.36);
       var rankingRows = [
-        { label: 'wire (hoop)', value: '2R/pi ~ 0.637 R' },
-        { label: 'hemispherical shell', value: 'R/2 = 0.500 R' },
-        { label: 'semicircular disk', value: '4R/3pi ~ 0.424 R' },
-        { label: 'solid hemisphere', value: '3R/8 = 0.375 R' },
-        { label: 'solid cone', value: 'h/4 = 0.250 h' }
+        { label: 'wire (hoop)', value: '$2R/\\pi \\approx 0.637R$' },
+        { label: 'hemispherical shell', value: '$R/2 = 0.500R$' },
+        { label: 'semicircular disk', value: '$4R/(3\\pi) \\approx 0.424R$' },
+        { label: 'solid hemisphere', value: '$3R/8 = 0.375R$' }
       ];
 
-      if (state.geoModel === 'Disk with Draggable Hole') {
+      if (state.geoModel === 'Disk with hole') {
         var r_h = Math.min(0.6, Math.max(0.1, state.holeRadius));
         var maxOffset = Math.max(0, 0.96 - r_h);
         var x_h = Math.max(-maxOffset, Math.min(maxOffset, state.holeOffset));
@@ -331,20 +348,20 @@
         }
 
         legend('Disk with hole (negative mass)', [
-          { label: 'x_CM / R', value: x_cm_val.toFixed(3) },
-          { label: 'r_h / R', value: r_h.toFixed(2) },
-          { label: 'x_h / R', value: x_h.toFixed(2) },
-          { label: 'M_hole / M', value: (r_h * r_h).toFixed(3) },
-          { label: 'recipe', value: '(0 - M_h x_h) / (M - M_h)' }
+          { label: '$x_{\\mathrm{CM}}/R$', value: '$' + x_cm_val.toFixed(3) + '$' },
+          { label: '$r_h/R$', value: '$' + r_h.toFixed(2) + '$' },
+          { label: '$x_h/R$', value: '$' + x_h.toFixed(2) + '$' },
+          { label: '$M_{\\mathrm{hole}}/M$', value: '$' + (r_h * r_h).toFixed(3) + '$' },
+          { label: 'recipe', value: '$(0 - M_h x_h)/(M - M_h)$' }
         ]);
-        legend('High-yield CM (from diameter / base)', rankingRows);
+        legend('High-yield CM (from diameter)', rankingRows);
 
       } else if (state.geoModel === 'Semicircular Disk vs Wire') {
         ctx.fillStyle = 'rgba(204, 120, 92, 0.22)';
         ctx.strokeStyle = CORAL;
         ctx.lineWidth = 2.2;
         ctx.beginPath();
-        ctx.arc(centerX, centerY, R_px, Math.PI, 0, true);
+        ctx.arc(centerX, centerY, R_px, Math.PI, 0, false);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
@@ -352,7 +369,7 @@
         ctx.strokeStyle = GOLD;
         ctx.lineWidth = 4;
         ctx.beginPath();
-        ctx.arc(centerX, centerY, R_px, Math.PI, 0, true);
+        ctx.arc(centerX, centerY, R_px, Math.PI, 0, false);
         ctx.stroke();
 
         ctx.strokeStyle = INK;
@@ -383,18 +400,18 @@
         labelHalo(ctx, centerX + 12, diskCmY, 'disk', TEAL, 'left');
 
         legend('Semicircle: hoop sits above the disk', [
-          { label: 'wire y_CM', value: '2R / pi ~ 0.637 R' },
-          { label: 'disk y_CM', value: '4R / 3pi ~ 0.424 R' },
+          { label: 'wire $y_{\\mathrm{CM}}$', value: '$2R/\\pi \\approx 0.637R$' },
+          { label: 'disk $y_{\\mathrm{CM}}$', value: '$4R/(3\\pi) \\approx 0.424R$' },
           { label: 'why', value: 'hoop mass is all at the rim' }
         ]);
-        legend('High-yield CM (from diameter / base)', rankingRows);
+        legend('High-yield CM (from diameter)', rankingRows);
 
       } else if (state.geoModel === 'Solid Hemisphere vs Shell') {
         ctx.fillStyle = 'rgba(204, 120, 92, 0.20)';
         ctx.strokeStyle = CORAL;
         ctx.lineWidth = 2.2;
         ctx.beginPath();
-        ctx.arc(centerX, centerY, R_px, Math.PI, 0, true);
+        ctx.arc(centerX, centerY, R_px, Math.PI, 0, false);
         ctx.fill();
         ctx.stroke();
 
@@ -426,11 +443,11 @@
         labelHalo(ctx, centerX + 12, solidHemiY, 'solid', TEAL, 'left');
 
         legend('Hemisphere: shell vs solid', [
-          { label: 'hollow shell z_CM', value: 'R / 2 = 0.500 R' },
-          { label: 'solid z_CM', value: '3R / 8 = 0.375 R' },
+          { label: 'hollow shell $z_{\\mathrm{CM}}$', value: '$R/2 = 0.500R$' },
+          { label: 'solid $z_{\\mathrm{CM}}$', value: '$3R/8 = 0.375R$' },
           { label: 'why', value: 'shell mass lives farther from the base' }
         ]);
-        legend('High-yield CM (from diameter / base)', rankingRows);
+        legend('High-yield CM (from diameter)', rankingRows);
 
       } else if (state.geoModel === 'Solid Cone vs Shell / Wedge') {
         var coneH = Math.min(R_px * 1.55, height * 0.72);
@@ -479,10 +496,9 @@
         labelHalo(ctx, centerX - 12, solidConeY, 'solid h/4', TEAL, 'right');
 
         legend('Cone / wedge: from the base', [
-          { label: 'hollow cone / wedge z_CM', value: 'h / 3 ~ 0.333 h' },
-          { label: 'solid cone z_CM', value: 'h / 4 = 0.250 h' }
+          { label: 'hollow cone / wedge $z_{\\mathrm{CM}}$', value: '$h/3 \\approx 0.333h$' },
+          { label: 'solid cone $z_{\\mathrm{CM}}$', value: '$h/4 = 0.250h$' }
         ]);
-        legend('High-yield CM (from diameter / base)', rankingRows);
 
       } else {
         legend('Continuous center of mass', rankingRows);
@@ -512,6 +528,7 @@
 
   PGRE.visualizers['cpgf-1.27'] = {
     id: 'cpgf-1.27',
+    topic: 'cm',
     title: 'Discrete Center of Mass, Seesaw Equilibrium & CM Frame',
     formulaLatex: '\\mathbf{r}_{\\text{CM}} = \\frac{\\sum_i \\mathbf{r}_i m_i}{M}',
     physicalStory: `
@@ -556,15 +573,15 @@
         description: 'Heavy mass dominates (e.g., in the Earth-Sun system, the barycenter resides inside the Sun).'
       },
       {
-        condition: '\\mathbf{F}_{\\text{ext}} = \\mathbf{0} \\text{ (Isolated System)}',
-        implication: '\\mathbf{v}_{\\text{CM}} = \\text{const}, \\quad \\Delta \\mathbf{r}_{\\text{CM}} = \\mathbf{0}',
-        description: 'Internal walking on a boat or mid-air projectile explosion leaves CM trajectory completely undisturbed.'
+        condition: '\\mathbf{F}_{\\text{ext}} = \\mathbf{0} \\text{ (isolated system)}',
+        implication: '\\mathbf{v}_{\\text{CM}} = \\text{const}',
+        description: 'Internal forces cannot change $\\mathbf{v}_{\\mathrm{CM}}$. $\\Delta\\mathbf{r}_{\\mathrm{CM}}=\\mathbf{0}$ only if the system also starts at rest (e.g. a person walking on a boat with $F_{\\mathrm{ext},x}=0$). A projectile has $\\mathbf{F}_{\\mathrm{ext}}=M\\mathbf{g}$, so the CM follows the original parabola while every fragment is still in the air.'
       }
     ],
     greTraps: [
       {
         trap: 'Walking on a boat / shifting masses on a frictionless surface',
-        fix: 'If there is no horizontal external force, the CM does NOT move (\\Delta X_{\\text{CM}} = 0). When a person of mass m walks distance L relative to a boat of mass M, the boat shifts relative to water by \\Delta x_{\\text{boat}} = -\\frac{m}{m + M} L.'
+        fix: 'If there is no horizontal external force AND the system starts at rest, the CM does not move ($\\Delta X_{\\mathrm{CM}} = 0$). When a person of mass $m$ walks distance $L$ relative to a boat of mass $M$, the boat shifts relative to water by $\\Delta x_{\\mathrm{boat}} = -\\frac{m}{m + M} L$.'
       },
       {
         trap: 'Exploding projectile trajectory shift',
@@ -572,8 +589,9 @@
       }
     ],
     parameters: [
-      { id: 'numMasses', label: 'Mass Count (N)', min: 2, max: 5, step: 1, default: 3, unit: 'particles' },
-      { id: 'simMode', label: 'Simulation Mode', type: 'select', options: ['Interactive Multi-Mass Pivot', 'Man Walking on Boat', 'Exploding Projectile Parabola'], default: 'Interactive Multi-Mass Pivot' }
+      { id: 'numMasses', label: 'Mass Count ($N$)', min: 2, max: 5, step: 1, default: 3, unit: 'particles' },
+      { id: 'simMode', label: 'Simulation Mode', type: 'select', options: ['Interactive Multi-Mass Pivot', 'Man Walking on Boat', 'Exploding Projectile Parabola'], default: 'Interactive Multi-Mass Pivot' },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     init: function (container, state, redraw) {
       createStyleIfNotExists();
@@ -637,7 +655,7 @@
       else setTimeout(function () { setupPointerEvents(findVizCanvas()); }, 80);
     },
     draw: function (ctx, width, height, state, dt) {
-      dt = clampDt(dt);
+      dt = clampDt(dt) * simSpeedOf(state);
       state.simMode = state.simMode || 'Interactive Multi-Mass Pivot';
       state.numMasses = state.numMasses !== undefined ? Number(state.numMasses) : 3;
       if (state.numMasses < 2) state.numMasses = 2;
@@ -666,7 +684,7 @@
         var cmX = totalM > 0 ? sumMx / totalM : width * 0.5;
         var cmY = totalM > 0 ? sumMy / totalM : height * 0.45;
 
-        ctx.strokeStyle = 'rgba(20, 20, 19, 0.12)';
+        ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.12);
         ctx.lineWidth = 1.2;
         ctx.setLineDash([4, 4]);
         for (i = 0; i < activeParticles.length; i++) {
@@ -696,7 +714,7 @@
           var labAlign = px > width * 0.78 ? 'right' : 'left';
           var labX = px > width * 0.78 ? px - rSize - 6 : px + rSize + 6;
           labelHalo(ctx, labX, py, p.label, INK, labAlign);
-          massRows.push({ label: p.label, value: p.m.toFixed(1) + ' kg' });
+          massRows.push({ label: '$m_{' + (i + 1) + '}$', value: '$' + p.m.toFixed(1) + '\\,\\mathrm{kg}$' });
         }
 
         drawCMMark(ctx, cmX, cmY, 8);
@@ -718,9 +736,9 @@
         var fulcrumAlign = cmX < 90 ? 'left' : (cmX > width - 90 ? 'right' : 'center');
         labelHalo(ctx, cmX, height - 8, 'fulcrum', ROSE, fulcrumAlign);
 
-        massRows.push({ label: 'M tot', value: totalM.toFixed(1) + ' kg' });
-        massRows.push({ label: 'r_CM', value: '(' + (cmX / width).toFixed(2) + ', ' + (cmY / height).toFixed(2) + ')' });
-        massRows.push({ label: 'tau about CM', value: '0 under uniform g' });
+        massRows.push({ label: '$M$', value: '$' + totalM.toFixed(1) + '\\,\\mathrm{kg}$' });
+        massRows.push({ label: '$\\mathbf{r}_{\\mathrm{CM}}$', value: '$(' + (cmX / width).toFixed(2) + ',\\,' + (cmY / height).toFixed(2) + ')$' });
+        massRows.push({ label: '$\\tau$ about CM', value: '$0$ under uniform $g$' });
         massRows.push({ label: 'drag', value: 'move any mass on the picture' });
         legend('Discrete CM (balance point)', massRows);
 
@@ -786,15 +804,15 @@
         ctx.setLineDash([]);
         labelHalo(ctx, cmFixedX + 10, 16, 'CM (fixed)', GOLD, 'left');
 
-        legend('Walking on a boat (no F_ext,x)', [
-          { label: 'm person', value: m_man + ' kg' },
-          { label: 'M boat', value: M_boat + ' kg' },
-          { label: 'Delta X_CM', value: '0  (frictionless water)' },
-          { label: '|canoe shift|', value: 'm L / (m + M)' }
+        legend('Walking on a boat (starts at rest, $F_{\\mathrm{ext},x}=0$)', [
+          { label: '$m$ person', value: '$' + m_man + '\\,\\mathrm{kg}$' },
+          { label: '$M$ boat', value: '$' + M_boat + '\\,\\mathrm{kg}$' },
+          { label: '$\\Delta X_{\\mathrm{CM}}$', value: '$0$ because $\\mathbf{v}_{\\mathrm{CM}}(0)=\\mathbf{0}$' },
+          { label: 'canoe shift', value: '$m L / (m + M)$' }
         ]);
 
       } else if (state.simMode === 'Exploding Projectile Parabola') {
-        state.projT = (state.projT + dt * 0.8) % 4.0;
+        state.projT = (state.projT + dt * 0.8) % 3.0;
         var t = state.projT;
         var tExplode = 1.8;
         var startX = 48;
@@ -849,6 +867,8 @@
           var f1Y = yExplode + (v0y + gPx * tExplode - 60) * dtPost + 0.5 * gPx * dtPost * dtPost;
           var f2X = xExplode + (v0x + 50) * dtPost;
           var f2Y = yExplode + (v0y + gPx * tExplode + 60) * dtPost + 0.5 * gPx * dtPost * dtPost;
+          if (f1Y > groundY) f1Y = groundY;
+          if (f2Y > groundY) f2Y = groundY;
 
           ctx.fillStyle = TEAL;
           ctx.beginPath();
@@ -874,9 +894,8 @@
         labelHalo(ctx, cmNowX + (cmPAlign === 'left' ? 12 : -12), cmNowY - 14, 'CM', GOLD, cmPAlign);
 
         legend('Exploding projectile', [
-          { label: 'CM path', value: t < tExplode ? 'intact shell' : 'still the original parabola' },
-          { label: 'internal forces', value: 'cannot move the CM' },
-          { label: 'until', value: 'the first fragment hits the ground' }
+          { label: 'CM path', value: t < tExplode ? 'intact shell' : 'original parabola (internal forces cannot change $\\mathbf{a}_{\\mathrm{CM}}$)' },
+          { label: '$\\mathbf{F}_{\\mathrm{ext}}$', value: '$M\\mathbf{g}$ until a fragment hits the ground' }
         ]);
       } else {
         legend('Discrete center of mass', [{ label: 'mode', value: String(state.simMode) }]);
@@ -910,7 +929,8 @@
 
   PGRE.visualizers['cpgf-1.15'] = {
     id: 'cpgf-1.15',
-    title: 'Work Done by a Force: Line Integral W = ∫ F · dl',
+    topic: 'cm',
+    title: 'Work Done by a Force',
     formulaLatex: 'W = \\int_{C} \\mathbf{F} \\cdot d\\mathbf{l} = \\int_{t_a}^{t_b} \\mathbf{F}(\\mathbf{r}(t)) \\cdot \\frac{d\\mathbf{r}}{dt} dt',
     physicalStory: `
 Work is the energy transferred by a force acting over a displacement. Because work is defined by the dot product $dW = \\mathbf{F} \\cdot d\\mathbf{l} = F_\\parallel \\, dl$, only the force component aligned with the instantaneous tangent does work.
@@ -935,11 +955,12 @@ For a **conservative force** ($\\nabla \\times \\mathbf{F} = 0$), work is strict
     ],
     parameters: [
       { id: 'field', label: 'Force Field', type: 'select', default: 'vortex', options: [
-        { value: 'conservative', label: 'Conservative: F = (-x, -y)' },
-        { value: 'vortex', label: 'Non-Conservative (Curl): F = (-y, x)' },
-        { value: 'gravity', label: 'Constant Gravity: F = (0, -mg)' }
+        { value: 'conservative', label: 'Conservative: $\\mathbf{F}=(-x,-y)$' },
+        { value: 'vortex', label: 'Non-conservative (curl): $\\mathbf{F}=(-y,x)$' },
+        { value: 'gravity', label: 'Constant gravity: $\\mathbf{F}=(0,-mg)$' }
       ]},
-      { id: 'detour', label: 'Path 2 Bulge', type: 'range', min: -2, max: 2, step: 0.1, default: 1.2, unit: '' }
+      { id: 'detour', label: 'Path 2 Bulge', type: 'range', min: -2, max: 2, step: 0.1, default: 1.2, unit: '' },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     init: function (container, state, redraw) {
       if (typeof state.field !== 'string') state.field = 'vortex';
@@ -947,7 +968,7 @@ For a **conservative force** ($\\nabla \\times \\mathbf{F} = 0$), work is strict
       state.tAnim = state.tAnim || 0;
     },
     draw: function (ctx, width, height, state, dt) {
-      dt = clampDt(dt);
+      dt = clampDt(dt) * simSpeedOf(state);
       if (typeof state.field !== 'string') state.field = 'vortex';
       if (state.field !== 'conservative' && state.field !== 'vortex' && state.field !== 'gravity') {
         state.field = 'vortex';
@@ -1107,28 +1128,28 @@ For a **conservative force** ($\\nabla \\times \\mathbf{F} = 0$), work is strict
       }
 
       var isConserv = state.field !== 'vortex';
-      var fieldName = state.field === 'conservative' ? 'F = (-x, -y)' : (state.field === 'vortex' ? 'F = (-y, x)' : 'F = (0, -mg)');
-      var curlStr = state.field === 'vortex' ? 'curl F = 2 k-hat  (nonzero)' : 'curl F = 0';
-      legend('Work  W = int F · dl', [
+      var fieldName = state.field === 'conservative' ? '$\\mathbf{F}=(-x,-y)$' : (state.field === 'vortex' ? '$\\mathbf{F}=(-y,x)$' : '$\\mathbf{F}=(0,-mg)$');
+      var curlStr = state.field === 'vortex' ? '$2\\hat{\\mathbf{k}}$ (nonzero)' : '$\\mathbf{0}$';
+      legend('$W = \\int \\mathbf{F} \\cdot d\\mathbf{l}$', [
         { label: 'field', value: fieldName },
-        { label: 'curl', value: curlStr },
-        { label: 'W path 1', value: W1.toFixed(2) + ' J' },
-        { label: 'W path 2', value: W2.toFixed(2) + ' J' },
-        { label: 'path dependence', value: isConserv ? 'W1 = W2  (conservative)' : 'W1 != W2  (path dependent)' },
-        { label: 'loop W2 - W1', value: isConserv ? '~ 0' : (W2 - W1).toFixed(2) + ' J' }
+        { label: '$\\nabla\\times\\mathbf{F}$', value: curlStr },
+        { label: '$W_1$', value: '$' + W1.toFixed(2) + '\\,\\mathrm{J}$' },
+        { label: '$W_2$', value: '$' + W2.toFixed(2) + '\\,\\mathrm{J}$' },
+        { label: 'path dependence', value: isConserv ? '$W_1 = W_2$ (conservative)' : '$W_1 \\neq W_2$ (path dependent)' },
+        { label: 'loop $W_2 - W_1$', value: isConserv ? '$\\approx 0$' : '$' + (W2 - W1).toFixed(2) + '\\,\\mathrm{J}$' }
       ]);
     },
     challenge: {
-      question: "A particle travels in the xy-plane from (0,0) to (1,1) under the force field F = (2xy) î + (x²) ĵ. Path 1 is the line y = x; Path 2 is the parabola y = x². What is the work done along each path?",
+      question: 'A particle travels in the $xy$-plane from $(0,0)$ to $(1,1)$ under the force field $\\mathbf{F} = 2xy\\,\\hat{\\imath} + x^{2}\\hat{\\jmath}$. Path 1 is the line $y = x$; Path 2 is the parabola $y = x^{2}$. What is the work done along each path?',
       options: [
-        "A) W_1 = 1 J, W_2 = 1 J (Force is conservative)",
-        "B) W_1 = 1 J, W_2 = 2/3 J",
-        "C) W_1 = 2 J, W_2 = 1 J",
-        "D) W_1 = 4/3 J, W_2 = 1 J",
-        "E) W_1 = 0 J, W_2 = 0 J"
+        'A) $W_1 = 1\\,\\mathrm{J}$, $W_2 = 1\\,\\mathrm{J}$ (force is conservative)',
+        'B) $W_1 = 1\\,\\mathrm{J}$, $W_2 = 2/3\\,\\mathrm{J}$',
+        'C) $W_1 = 2\\,\\mathrm{J}$, $W_2 = 1\\,\\mathrm{J}$',
+        'D) $W_1 = 4/3\\,\\mathrm{J}$, $W_2 = 1\\,\\mathrm{J}$',
+        'E) $W_1 = 0\\,\\mathrm{J}$, $W_2 = 0\\,\\mathrm{J}$'
       ],
       correct: 0,
-      explanation: "Check the curl: (∇×F)_z = ∂F_y/∂x - ∂F_x/∂y = ∂(x²)/∂x - ∂(2xy)/∂y = 2x - 2x = 0. Since the curl vanishes identically throughout the plane, the force is conservative with potential U(x,y) = -x²y. The work done is simply W = -ΔU = -(U(1,1) - U(0,0)) = -(-1 - 0) = 1 J for both paths."
+      explanation: 'Check the curl: $(\\nabla\\times\\mathbf{F})_z = \\partial F_y/\\partial x - \\partial F_x/\\partial y = \\partial(x^{2})/\\partial x - \\partial(2xy)/\\partial y = 2x - 2x = 0$. Since the curl vanishes identically throughout the plane, the force is conservative with potential $U(x,y) = -x^{2}y$. The work done is simply $W = -\\Delta U = -(U(1,1) - U(0,0)) = -(-1 - 0) = 1\\,\\mathrm{J}$ for both paths.'
     }
   };
 

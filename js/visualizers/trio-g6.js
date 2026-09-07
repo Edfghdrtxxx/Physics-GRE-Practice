@@ -42,7 +42,15 @@
     return Math.min(d, 0.05);
   }
 
+  function syncStageTheme() {
+    var t = PGRE.vizStageTheme ? PGRE.vizStageTheme() : null;
+    if (!t) return;
+    CREAM = t.bg; INK = t.ink; MUTED = t.muted;
+    PANEL = t.chipFade(0.55); FRAME = t.inkFade(0.16); GRID = t.grid;
+  }
+
   function fillStage(ctx, w, h) {
+    syncStageTheme();
     ctx.fillStyle = CREAM;
     ctx.fillRect(0, 0, w, h);
   }
@@ -157,7 +165,7 @@
 
   function divider(ctx, x, h) {
     ctx.save();
-    ctx.strokeStyle = 'rgba(20, 20, 19, 0.12)';
+    ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.12);
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x, 8);
@@ -178,10 +186,127 @@
     return n.toFixed(digits == null ? 2 : digits);
   }
 
+  function simSpeedOf(state) {
+    var s = Number(state && state.simSpeed);
+    if (!Number.isFinite(s) || s <= 0) return 1;
+    if (s < 0.2) return 0.2;
+    if (s > 3) return 3;
+    return s;
+  }
+
+  function scaledDt(dt, state) {
+    return dtSafe(dt) * simSpeedOf(state);
+  }
+
+  var SPEED_PARAM = {
+    id: 'simSpeed',
+    label: 'Simulation Speed',
+    type: 'range',
+    min: 0.2,
+    max: 3.0,
+    step: 0.2,
+    value: 1.0,
+    default: 1.0,
+    unit: 'x'
+  };
+
+  function haloLabel(ctx, x, y, text, color, align) {
+    align = align || 'left';
+    ctx.save();
+    ctx.font = '600 10px Inter, -apple-system, sans-serif';
+    ctx.textAlign = align;
+    ctx.textBaseline = 'middle';
+    var w = ctx.measureText(text).width;
+    var bx = x;
+    if (align === 'center') bx = x - w / 2;
+    else if (align === 'right') bx = x - w;
+    ctx.fillStyle = PGRE.vizStageTheme().chipFade(0.92);
+    ctx.fillRect(bx - 3, y - 7, w + 6, 14);
+    ctx.fillStyle = color || INK;
+    ctx.fillText(text, x, y);
+    ctx.restore();
+  }
+
+  /* Stationary (EL) path for U = 2(q^2-1)^2, q(0)=-1.2, q(1)=1.2.
+     Energy quadrature: unique E > barrier with travel time T = 1. */
+  var QUARTIC_SAMPLES = null;
+  var QUARTIC_Q0 = -1.2;
+  var QUARTIC_Q1 = 1.2;
+  var QUARTIC_T = 1.0;
+
+  function quarticU(q) {
+    var z = q * q - 1.0;
+    return 2.0 * z * z;
+  }
+
+  function quarticTravelTime(E, nQ) {
+    var dq = (QUARTIC_Q1 - QUARTIC_Q0) / nQ;
+    var t = 0;
+    var i, q, kin;
+    for (i = 0; i < nQ; i++) {
+      q = QUARTIC_Q0 + (i + 0.5) * dq;
+      kin = E - quarticU(q);
+      if (kin < 1e-10) return 1e9;
+      t += dq / Math.sqrt(2.0 * kin);
+    }
+    return t;
+  }
+
+  function ensureQuarticSamples() {
+    if (QUARTIC_SAMPLES) return QUARTIC_SAMPLES;
+    var nQ = 400;
+    var targetT = QUARTIC_T;
+    var lo = 2.02;
+    var hi = 40;
+    var k, mid, tm;
+    for (k = 0; k < 48; k++) {
+      mid = 0.5 * (lo + hi);
+      tm = quarticTravelTime(mid, nQ);
+      if (tm > targetT) lo = mid;
+      else hi = mid;
+    }
+    var E = 0.5 * (lo + hi);
+    var samples = [{ t: 0, q: QUARTIC_Q0 }];
+    var dq = (QUARTIC_Q1 - QUARTIC_Q0) / nQ;
+    var t = 0;
+    var i, qMid, kin;
+    for (i = 0; i < nQ; i++) {
+      qMid = QUARTIC_Q0 + (i + 0.5) * dq;
+      kin = Math.max(1e-10, E - quarticU(qMid));
+      t += dq / Math.sqrt(2.0 * kin);
+      samples.push({ t: t, q: QUARTIC_Q0 + (i + 1) * dq });
+    }
+    samples[samples.length - 1].t = QUARTIC_T;
+    samples[samples.length - 1].q = QUARTIC_Q1;
+    QUARTIC_SAMPLES = samples;
+    return samples;
+  }
+
+  function quarticTrueQ(t) {
+    var samples = ensureQuarticSamples();
+    if (t <= 0) return samples[0].q;
+    if (t >= QUARTIC_T) return samples[samples.length - 1].q;
+    var lo = 0;
+    var hi = samples.length - 1;
+    var m;
+    while (hi - lo > 1) {
+      m = (lo + hi) >> 1;
+      if (samples[m].t <= t) lo = m;
+      else hi = m;
+    }
+    var a = samples[lo];
+    var b = samples[hi];
+    var span = b.t - a.t;
+    if (!(span > 0)) return a.q;
+    var f = (t - a.t) / span;
+    return a.q + f * (b.q - a.q);
+  }
+
 
   PGRE.visualizers['cpgf-1.28'] = {
     id: 'cpgf-1.28',
-    title: 'Lagrangian Definition: L(q, q_dot, t) = T - U',
+    topic: 'cm',
+    title: 'Lagrangian Definition: $L(q, \\dot{q}, t) = T - U$',
     formulaLatex: 'L(q, \\dot{q}, t) = T - U',
     physicalStory: `
 The Lagrangian $L = T - U$ is the fundamental generating function of classical mechanics. While total mechanical energy $E = T + U$ is conserved along the physical path, it is the difference $L = T - U$ whose time integral—the Action $S = \\int L \\, dt$—is made stationary by nature (Hamilton's Principle of Stationary Action, $\\delta S = 0$).
@@ -191,56 +316,53 @@ Kinetic energy $T$ acts as a penalty against excessive velocity and spatial curv
     derivationSteps: [
       "1. Start from D'Alembert's principle of virtual work: $\\sum_i (m_i \\ddot{\\mathbf{r}}_i - \\mathbf{F}_i) \\cdot \\delta \\mathbf{r}_i = 0$.",
       "2. For monogenic, conservative systems, generalized force is $Q_j = -\\frac{\\partial U}{\\partial q_j}$, assuming $U = U(q)$ is velocity-independent.",
-      "3. Transform inertial terms into generalized coordinates: $\\sum_i m_i \\ddot{\\mathbf{r}}_i \\cdot \\frac{\\partial \\mathbf{r}}_i{\\partial q_j} = \\frac{d}{dt}\\left(\\frac{\\partial T}{\\partial \\dot{q}_j}\\right) - \\frac{\\partial T}{\\partial q_j}$.",
+      "3. Transform inertial terms into generalized coordinates: $\\sum_i m_i \\ddot{\\mathbf{r}}_i \\cdot \\frac{\\partial \\mathbf{r}_i}{\\partial q_j} = \\frac{d}{dt}\\left(\\frac{\\partial T}{\\partial \\dot{q}_j}\\right) - \\frac{\\partial T}{\\partial q_j}$.",
       "4. Group kinetic and potential components: $\\frac{d}{dt}\\left(\\frac{\\partial T}{\\partial \\dot{q}_j}\\right) - \\frac{\\partial (T - U)}{\\partial q_j} = 0$.",
       "5. Since $\\frac{\\partial U}{\\partial \\dot{q}_j} = 0$, define $L \\equiv T - U$, which simplifies the equations of motion to $\\frac{d}{dt}\\left(\\frac{\\partial L}{\\partial \\dot{q}_j}\\right) - \\frac{\\partial L}{\\partial q_j} = 0$."
     ],
     limitingCases: [
-      { condition: 'Free Particle ($U = 0$)', result: '$L = T = \\frac{1}{2}m\\dot{q}^2$', description: 'Straight-line uniform motion (geodesic in flat space).' },
-      { condition: 'Constant Potential ($U = U_0$)', result: '$L = T - U_0$', description: 'Equations of motion are completely unchanged by constant potential shifts.' },
-      { condition: 'Static Limit ($\\dot{q} = 0$)', result: '$L = -U(q)$', description: 'Stationary action reduces to minimizing potential energy $\\nabla U = 0$ (static equilibrium).' },
-      { condition: 'Relativistic Limit', result: '$L = -mc^2\\sqrt{1 - v^2/c^2} - U$', description: 'Taylor expansion yields $\\frac{1}{2}mv^2 - mc^2 - U$, recovering $T - U$ up to a constant rest mass energy.' }
+      { condition: 'Free Particle ($U = 0$)', result: 'L = T = \\frac{1}{2}m\\dot{q}^2', description: 'Straight-line uniform motion (geodesic in flat space).' },
+      { condition: 'Constant Potential ($U = U_0$)', result: 'L = T - U_0', description: 'Equations of motion are completely unchanged by constant potential shifts.' },
+      { condition: 'Static Limit ($\\dot{q} = 0$)', result: 'L = -U(q)', description: 'Stationary action reduces to minimizing potential energy $\\nabla U = 0$ (static equilibrium).' },
+      { condition: 'Relativistic Limit', result: 'L = -mc^2\\sqrt{1 - v^2/c^2} - U', description: 'Taylor expansion yields $\\frac{1}{2}mv^2 - mc^2 - U$, recovering $T - U$ up to a constant rest mass energy.' }
     ],
     greTraps: [
-      { trap: 'Sign of Potential Energy', explanation: 'Never write $L = T + U$. Remember: Lagrangian has Less/Minus ($L = T - U$), Hamiltonian has Heavy/Plus ($H = T + U$).' },
-      { trap: 'Gauge Invariance & Total Time Derivatives', explanation: 'Adding a total time derivative $\\frac{d F(q, t)}{dt}$ to $L$ produces identical Euler-Lagrange equations.' },
-      { trap: 'Velocity-Dependent Potentials', explanation: 'For a charge $q$ in an electromagnetic field, $L = \\frac{1}{2}mv^2 - q\\phi + q\\mathbf{A}\\cdot\\mathbf{v}$. The potential term is generalized.' }
+      { trap: 'Sign of Potential Energy', description: 'Never write $L = T + U$. Remember: Lagrangian has Less/Minus ($L = T - U$), Hamiltonian has Heavy/Plus ($H = T + U$).' },
+      { trap: 'Gauge Invariance & Total Time Derivatives', description: 'Adding a total time derivative $\\frac{d F(q, t)}{dt}$ to $L$ produces identical Euler-Lagrange equations.' },
+      { trap: 'Velocity-Dependent Potentials', description: 'For a charge $q$ in an electromagnetic field, $L = \\frac{1}{2}mv^2 - q\\phi + q\\mathbf{A}\\cdot\\mathbf{v}$. The potential term is generalized.' }
     ],
     parameters: [
-      { id: 'alpha', label: 'Perturbation (α)', type: 'range', min: -2, max: 2, step: 0.05, value: 0.6, default: 0.6, format: v => v.toFixed(2) },
-      { id: 'mode', label: 'Harmonic Mode (n)', type: 'range', min: 1, max: 3, step: 1, value: 1, default: 1, format: v => `${v}` },
-      { id: 'potential', label: 'Potential U(q)', type: 'select', value: 'gravity', default: 'gravity', options: [
-        { value: 'gravity', label: 'Uniform Gravity: U = mg q' },
-        { value: 'harmonic', label: 'Harmonic Well: U = ½k q²' },
-        { value: 'quartic', label: 'Double Well: U = a(q²-1)²' }
+      { id: 'alpha', label: 'Perturbation $\\alpha$', type: 'range', min: -2, max: 2, step: 0.05, value: 0.6, default: 0.6, format: v => v.toFixed(2) },
+      { id: 'mode', label: 'Harmonic mode $n$', type: 'range', min: 1, max: 3, step: 1, value: 1, default: 1, format: v => `${v}` },
+      { id: 'potential', label: 'Potential $U(q)$', type: 'select', value: 'gravity', default: 'gravity', options: [
+        { value: 'gravity', label: 'Uniform gravity: $U = mg q$' },
+        { value: 'harmonic', label: 'Harmonic well: $U = \\frac{1}{2}k q^{2}$' },
+        { value: 'quartic', label: 'Double well: $U = 2(q^{2}-1)^{2}$' }
       ]},
-      { id: 'animate', label: 'Playback', type: 'toggle', value: true, default: true }
+      { id: 'animate', label: 'Playback', type: 'toggle', value: true, default: true },
+      SPEED_PARAM
     ],
     init(container, state, redraw) {
       state.alpha = state.alpha ?? 0.6;
       state.mode = state.mode ?? 1;
       state.potential = state.potential ?? 'gravity';
       state.animate = state.animate ?? true;
+      state.simSpeed = simSpeedOf(state);
       state.tAnim = num(state.tAnim, 0);
 
       const controls = [
-        { id: 'alpha', label: 'Perturbation α', type: 'range', min: -2, max: 2, step: 0.05, value: state.alpha, format: v => v.toFixed(2) },
-        { id: 'mode', label: 'Mode n', type: 'range', min: 1, max: 3, step: 1, value: state.mode, format: v => `${v}` },
-        { id: 'potential', label: 'Potential', type: 'select', value: state.potential, options: [
-          { value: 'gravity', label: 'Uniform Gravity: U = mg q' },
-          { value: 'harmonic', label: 'Harmonic: U = ½k q²' },
-          { value: 'quartic', label: 'Double Well: U = 2(q²-1)²' }
-        ]},
-        { id: 'resetAlpha', label: 'Extremum (α=0)', type: 'button', text: 'Set True Path (α=0)', onClick: () => { state.alpha = 0; } }
+        { id: 'resetAlpha', label: 'Extremum ($\\alpha=0$)', type: 'button', text: 'Set True Path (α=0)', onClick: () => { state.alpha = 0; } }
       ];
 
       U.createControlUI(container, controls, (id, val) => {
         if (id === 'resetAlpha') {
           state.alpha = 0;
-          const range = container.querySelector('input[type=range]');
+          // Init container holds only action buttons; sync the standard parameters-panel slider.
+          const panel = container.parentNode;
+          const range = panel && panel.querySelector('#viz-ctrl-alpha');
           if (range) range.value = 0;
-          const disp = container.querySelectorAll('span')[0];
-          if (disp) disp.innerText = '0.00';
+          const disp = panel && panel.querySelector('#viz-val-alpha');
+          if (disp) disp.textContent = '0';
         } else {
           state[id] = val;
         }
@@ -255,7 +377,7 @@ Kinetic energy $T$ acts as a penalty against excessive velocity and spatial curv
       const mode = Math.max(1, Math.round(num(state.mode, 1)));
       const potential = state.potential || 'gravity';
       const animate = state.animate !== false;
-      const dtv = dtSafe(dt);
+      const dtv = scaledDt(dt, state);
       if (!Number.isFinite(state.tAnim)) state.tAnim = 0;
       if (animate) state.tAnim = (state.tAnim + dtv * 0.8) % 1.0;
 
@@ -274,8 +396,7 @@ Kinetic energy $T$ acts as a penalty against excessive velocity and spatial curv
           const B = den === 0 ? 0 : (q1 - q0 * Math.cos(omega * T_total)) / den;
           return A * Math.cos(omega * t) + B * Math.sin(omega * t);
         }
-        const s = t / T_total;
-        return q0 + (q1 - q0) * s - 0.45 * Math.sin(Math.PI * s);
+        return quarticTrueQ(t);
       };
 
       const getPerturbedPath = (t, a) => {
@@ -313,12 +434,12 @@ Kinetic energy $T$ acts as a penalty against excessive velocity and spatial curv
       const curAction = computeAction(alpha);
       const atStationary = Math.abs(alpha) < 0.03;
 
-      legend('Lagrangian L = T − U', [
-        { label: 'T', value: fmt(curKin) },
-        { label: 'U', value: fmt(curPot) },
-        { label: 'L = T − U', value: fmt(curLag) },
-        { label: 'S[α]', value: fmt(curAction, 3) },
-        { label: 'path', value: atStationary ? 'stationary (α = 0)' : 'varied, α = ' + fmt(alpha) }
+      legend('Lagrangian $L = T - U$', [
+        { label: '$T$', value: fmt(curKin) },
+        { label: '$U$', value: fmt(curPot) },
+        { label: '$L = T - U$', value: fmt(curLag) },
+        { label: '$S[\\alpha]$', value: fmt(curAction, 3) },
+        { label: 'path', value: atStationary ? 'stationary ($\\alpha = 0$)' : 'varied, $\\alpha = ' + fmt(alpha) + '$' }
       ]);
 
       const splitX = Math.floor(width * 0.56);
@@ -361,7 +482,7 @@ Kinetic energy $T$ acts as a penalty against excessive velocity and spatial curv
       clipRect(ctx, lx, ly, lw, lh);
 
       if (qMin < 0 && qMax > 0) {
-        ctx.strokeStyle = 'rgba(20, 20, 19, 0.22)';
+        ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.22);
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(lx, toSY(0));
@@ -443,22 +564,23 @@ Kinetic energy $T$ acts as a penalty against excessive velocity and spatial curv
       axisText(ctx, 'S', rx0 + 4, ry + 12, 'left');
     },
     challenge: {
-      question: "A particle moves in 1D under a potential U(x) = ½kx². If the Lagrangian is L = ½mẋ² - ½kx², which of the following modified Lagrangians produces the EXACT SAME physical equations of motion?",
+      question: "A particle moves in 1D under a potential $U(x) = \\frac{1}{2}kx^{2}$. If the Lagrangian is $L = \\frac{1}{2}m\\dot{x}^{2} - \\frac{1}{2}kx^{2}$, which of the following modified Lagrangians produces the EXACT SAME physical equations of motion?",
       options: [
-        "A) L' = ½mẋ² + ½kx²",
-        "B) L' = ½mẋ² - ½kx² + d/dt(c · x² · t)",
-        "C) L' = mẋ² - kx² + c x",
-        "D) L' = ½mẋ² - ½kx² + d/dt(m x ẋ)",
-        "E) L' = (½mẋ² - ½kx²)²"
+        "A) $L' = \\frac{1}{2}m\\dot{x}^{2} + \\frac{1}{2}kx^{2}$",
+        "B) $L' = \\frac{1}{2}m\\dot{x}^{2} - \\frac{1}{2}kx^{2} + \\frac{d}{dt}(c \\cdot x^{2} \\cdot t)$",
+        "C) $L' = m\\dot{x}^{2} - kx^{2} + c x$",
+        "D) $L' = \\frac{1}{2}m\\dot{x}^{2} - \\frac{1}{2}kx^{2} + \\frac{d}{dt}(m x \\dot{x})$",
+        "E) $L' = \\left(\\frac{1}{2}m\\dot{x}^{2} - \\frac{1}{2}kx^{2}\\right)^{2}$"
       ],
       correct: 1,
-      explanation: "According to gauge invariance in Lagrangian mechanics, adding the total time derivative of any function of coordinates and time, dF(q, t)/dt, leaves the Euler-Lagrange equations unchanged because its variation δ∫(dF/dt)dt = δ[F(t2)-F(t1)] = 0 vanishes at fixed endpoints. Option B adds dF/dt with F(x,t) = c x² t. Option D adds a term with explicit velocity dependence in F, which is not a valid coordinate gauge function."
+      explanation: "According to gauge invariance in Lagrangian mechanics, adding the total time derivative of any function of coordinates and time, $\\frac{d F(q, t)}{dt}$, leaves the Euler-Lagrange equations unchanged because its variation $\\delta\\int (\\mathrm{d}F/\\mathrm{d}t)\\,\\mathrm{d}t = \\delta[F(t_2)-F(t_1)] = 0$ vanishes at fixed endpoints. Option B adds $\\mathrm{d}F/\\mathrm{d}t$ with $F(x,t) = c x^{2} t$. Option D adds a term with explicit velocity dependence in $F$, which is not a valid coordinate gauge function."
     }
   };
 
   PGRE.visualizers['cpgf-1.29'] = {
     id: 'cpgf-1.29',
-    title: 'Euler-Lagrange Equations: d/dt(∂L/∂q̇) = ∂L/∂q',
+    topic: 'cm',
+    title: 'Euler-Lagrange Equations: $\\frac{d}{dt}\\left(\\frac{\\partial L}{\\partial \\dot{q}_i}\\right) = \\frac{\\partial L}{\\partial q_i}$',
     formulaLatex: '\\frac{d}{dt}\\left(\\frac{\\partial L}{\\partial \\dot{q}_i}\\right) = \\frac{\\partial L}{\\partial q_i}',
     physicalStory: `
 The Euler-Lagrange equations are the cornerstone of variational mechanics. They assert that the rate of change of canonical momentum $\\frac{d}{dt}(\\frac{\\partial L}{\\partial \\dot{q}})$ precisely equals the generalized force $\\frac{\\partial L}{\\partial q}$. 
@@ -474,33 +596,32 @@ Remarkably, the Euler-Lagrange formulation automatically eliminates all workless
       "6. By the Fundamental Lemma of the Calculus of Variations, since $\\delta q(t)$ is arbitrary, the integrand must vanish identically: $\\frac{d}{dt}\\left(\\frac{\\partial L}{\\partial \\dot{q}}\\right) = \\frac{\\partial L}{\\partial q}$."
     ],
     limitingCases: [
-      { condition: 'Cartesian Coordinate ($q = x$)', result: '$m\\ddot{x} = -\\frac{\\partial U}{\\partial x} = F_x$', description: 'Recovers standard Newtonian 2nd Law for a particle.' },
-      { condition: 'Polar Coordinates ($q = \\theta$)', result: '$\\frac{d}{dt}(mr^2\\dot{\\theta}) = -\\frac{\\partial U}{\\partial \\theta} = \\tau_z$', description: 'Recovers rotational form of Newton 2nd Law (Torque = rate of change of angular momentum).' },
-      { condition: 'Cyclic / Ignorable Coordinate ($\\partial L / \\partial q_k = 0$)', result: '$p_k = \\frac{\\partial L}{\\partial \\dot{q}_k} = \\text{const}$', description: 'Conservation of canonical momentum (Noether\'s Theorem).' }
+      { condition: 'Cartesian Coordinate ($q = x$)', result: 'm\\ddot{x} = -\\frac{\\partial U}{\\partial x} = F_x', description: 'Recovers standard Newtonian 2nd Law for a particle.' },
+      { condition: 'Polar Coordinates ($q = \\theta$)', result: '\\frac{d}{dt}(mr^2\\dot{\\theta}) = -\\frac{\\partial U}{\\partial \\theta} = \\tau_z', description: 'Recovers rotational form of Newton 2nd Law (Torque = rate of change of angular momentum).' },
+      { condition: 'Cyclic / Ignorable Coordinate ($\\partial L / \\partial q_k = 0$)', result: 'p_k = \\frac{\\partial L}{\\partial \\dot{q}_k} = \\text{const}', description: 'Conservation of canonical momentum (Noether\'s Theorem).' }
     ],
     greTraps: [
-      { trap: 'Total vs Partial Time Derivative', explanation: '$\\frac{d}{dt}\\left(\\frac{\\partial L}{\\partial \\dot{q}}\\right)$ is a TOTAL derivative. You must apply the chain rule: $\\frac{d}{dt} = \\dot{q}\\frac{\\partial}{\\partial q} + \\ddot{q}\\frac{\\partial}{\\partial \\dot{q}} + \\frac{\\partial}{\\partial t}$.' },
-      { trap: 'Implicit Coordinate Dependencies', explanation: 'In polar coordinates $T = \\frac{1}{2}m(\\dot{r}^2 + r^2\\dot{\\theta}^2)$, $\\frac{\\partial L}{\\partial r} = mr\\dot{\\theta}^2$ represents the fictitious centrifugal force term. Do not forget it!' }
+      { trap: 'Total vs Partial Time Derivative', description: '$\\frac{d}{dt}\\left(\\frac{\\partial L}{\\partial \\dot{q}}\\right)$ is a TOTAL derivative. You must apply the chain rule: $\\frac{d}{dt} = \\dot{q}\\frac{\\partial}{\\partial q} + \\ddot{q}\\frac{\\partial}{\\partial \\dot{q}} + \\frac{\\partial}{\\partial t}$.' },
+      { trap: 'Implicit Coordinate Dependencies', description: 'In polar coordinates $T = \\frac{1}{2}m(\\dot{r}^2 + r^2\\dot{\\theta}^2)$, $\\frac{\\partial L}{\\partial r} = mr\\dot{\\theta}^2$ represents the fictitious centrifugal force term. Do not forget it!' }
     ],
     parameters: [
-      { id: 'omega', label: 'Hoop spin ω', type: 'range', min: 0, max: 6, step: 0.1, value: 3.5, default: 3.5, unit: 'rad/s' },
-      { id: 'g', label: 'Gravity g', type: 'range', min: 1, max: 20, step: 0.5, value: 9.8, default: 9.8, unit: 'm/s²' },
-      { id: 'theta0', label: 'Initial angle θ₀', type: 'range', min: -3.14, max: 3.14, step: 0.05, value: 0.8, default: 0.8 }
+      { id: 'omega', label: 'Hoop spin $\\omega$', type: 'range', min: 0, max: 6, step: 0.1, value: 3.5, default: 3.5, unit: 'rad/s' },
+      { id: 'g', label: 'Gravity $g$', type: 'range', min: 1, max: 20, step: 0.5, value: 9.8, default: 9.8, unit: 'm/s²' },
+      { id: 'theta0', label: 'Initial angle $\\theta_0$', type: 'range', min: -3.14, max: 3.14, step: 0.05, value: 0.8, default: 0.8 },
+      SPEED_PARAM
     ],
     init(container, state, redraw) {
       state.omega = state.omega ?? 3.5;
       state.g = state.g ?? 9.8;
       state.R = 1.0;
+      state.simSpeed = simSpeedOf(state);
       state.theta = num(state.theta, num(state.theta0, 0.8));
       state.thetaDot = num(state.thetaDot, 0);
       state.phi = num(state.phi, 0);
 
       const controls = [
-        { id: 'omega', label: 'Hoop Spin ω', type: 'range', min: 0, max: 6, step: 0.1, value: state.omega, format: v => `${v.toFixed(1)} rad/s` },
-        { id: 'g', label: 'Gravity g', type: 'range', min: 1, max: 20, step: 0.5, value: state.g, format: v => `${v.toFixed(1)} m/s²` },
         { id: 'reset', label: 'Perturb Bead', type: 'button', text: 'Kick Bead (+1.5 rad/s)', onClick: () => { state.thetaDot += 1.5; } }
       ];
-
       U.createControlUI(container, controls, (id, val) => {
         state[id] = val;
         redraw();
@@ -523,9 +644,9 @@ Remarkably, the Euler-Lagrange formulation automatically eliminates all workless
       if (!Number.isFinite(state.thetaDot)) state.thetaDot = 0;
       if (!Number.isFinite(state.phi)) state.phi = 0;
 
-      const dtv = dtSafe(dt);
+      const dtv = scaledDt(dt, state);
       const gamma = 0.25;
-      const subSteps = 8;
+      const subSteps = Math.max(8, Math.min(24, Math.round(8 * simSpeedOf(state))));
       const subDt = dtv / subSteps;
       for (let step = 0; step < subSteps; step++) {
         const accel = (omega * omega * Math.cos(state.theta) - g / R) * Math.sin(state.theta) - gamma * state.thetaDot;
@@ -546,11 +667,13 @@ Remarkably, the Euler-Lagrange formulation automatically eliminates all workless
       };
 
       legend('Euler–Lagrange: bead on a rotating hoop', [
-        { label: 'ω', value: fmt(omega, 1) + ' rad/s' },
-        { label: 'ω_c = √(g/R)', value: fmt(omega_c, 2) + ' rad/s' },
-        { label: 'regime', value: isSupercritical ? 'supercritical (θ = 0 unstable)' : 'subcritical (θ = 0 stable)' },
-        { label: 'θ', value: fmt(state.theta * 180 / Math.PI, 0) + '°' },
-        { label: 'θ_eq', value: isSupercritical ? '±' + fmt(theta_eq * 180 / Math.PI, 0) + '°' : '0°' }
+        { label: '$\\omega$', value: fmt(omega, 1) + ' rad/s' },
+        { label: '$\\omega_c = \\sqrt{g/R}$', value: fmt(omega_c, 2) + ' rad/s' },
+        { label: 'regime', value: isSupercritical ? 'supercritical ($\\theta = 0$ unstable)' : 'subcritical ($\\theta = 0$ stable)' },
+        { label: '$\\theta$', value: fmt(state.theta * 180 / Math.PI, 0) + '°' },
+        { label: '$\\theta_{\\mathrm{eq}}$', value: isSupercritical ? '$\\pm$' + fmt(theta_eq * 180 / Math.PI, 0) + '°' : '$0^{\\circ}$' },
+        { label: 'damping', value: 'linear $\\gamma\\dot{\\theta}$ with $\\gamma = 0.25$ (added so the bead settles; the GRE hoop is frictionless)' },
+        { label: 'arrows', value: 'rose $mg$; gold $F_c = m\\omega^{2}\\rho$ with $\\rho = R\\sin\\theta$' }
       ]);
 
       const splitX = Math.floor(width * 0.52);
@@ -565,7 +688,7 @@ Remarkably, the Euler-Lagrange formulation automatically eliminates all workless
       ctx.save();
       clipRect(ctx, 8, 22, splitX - 16, height - 30);
 
-      ctx.strokeStyle = 'rgba(20, 20, 19, 0.28)';
+      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.28);
       ctx.lineWidth = 1.2;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
@@ -574,7 +697,7 @@ Remarkably, the Euler-Lagrange formulation automatically eliminates all workless
       ctx.stroke();
       ctx.setLineDash([]);
 
-      ctx.strokeStyle = 'rgba(20, 20, 19, 0.14)';
+      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.14);
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(cx, cy, rPixels, 0, Math.PI * 2);
@@ -608,8 +731,19 @@ Remarkably, the Euler-Lagrange formulation automatically eliminates all workless
       const rho = Math.abs(Math.sin(state.theta)) * R;
       const fcfLen = Math.min(40, 16 * (omega * omega * rho / 8));
       const cfSign = Math.sin(state.theta) >= 0 ? 1 : -1;
-      arrow(ctx, bx, by, bx, by + fgLen, ROSE, 2);
-      arrow(ctx, bx, by, bx + cfSign * fcfLen * Math.cos(state.phi), by, GOLD, 2);
+      const gx2 = bx;
+      const gy2 = by + fgLen;
+      const cfx2 = bx + cfSign * fcfLen * Math.cos(state.phi);
+      const cfy2 = by;
+      arrow(ctx, bx, by, gx2, gy2, ROSE, 2);
+      arrow(ctx, bx, by, cfx2, cfy2, GOLD, 2);
+      if (fgLen > 12) {
+        var gAlign = bx > cx ? 'left' : 'right';
+        haloLabel(ctx, bx + (gAlign === 'left' ? 8 : -8), by + fgLen * 0.55, 'mg', ROSE, gAlign);
+      }
+      if (Math.hypot(cfx2 - bx, cfy2 - by) > 12) {
+        haloLabel(ctx, (bx + cfx2) / 2, by - 11, 'Fc', GOLD, 'center');
+      }
 
       drawDot(ctx, bx, by, 7, CORAL, INK);
       ctx.restore();
@@ -649,7 +783,7 @@ Remarkably, the Euler-Lagrange formulation automatically eliminates all workless
       const uPts = thPoints.map(pt => ({ x: toThX(pt.th), y: toUY(pt.u) }));
       strokePoly(ctx, uPts, CORAL, 2.3);
 
-      ctx.strokeStyle = 'rgba(20, 20, 19, 0.22)';
+      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.22);
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(toThX(0), ry);
@@ -670,22 +804,23 @@ Remarkably, the Euler-Lagrange formulation automatically eliminates all workless
       axisText(ctx, '+π', rx + rw, height - 10, 'right');
     },
     challenge: {
-      question: "A bead of mass m slides without friction on a circular hoop of radius R rotating at constant angular speed ω about its vertical diameter. What is the critical angular frequency ω_c above which a stable non-zero equilibrium angle θ ≠ 0 exists?",
+      question: "A bead of mass $m$ slides without friction on a circular hoop of radius $R$ rotating at constant angular speed $\\omega$ about its vertical diameter. What is the critical angular frequency $\\omega_c$ above which a stable non-zero equilibrium angle $\\theta \\neq 0$ exists?",
       options: [
-        "A) ω_c = √(g / R)",
-        "B) ω_c = √(2g / R)",
-        "C) ω_c = g / R",
-        "D) ω_c = √(g / 2R)",
-        "E) Stable equilibria at θ ≠ 0 never occur for any rotation speed."
+        "A) $\\omega_c = \\sqrt{g / R}$",
+        "B) $\\omega_c = \\sqrt{2g / R}$",
+        "C) $\\omega_c = g / R$",
+        "D) $\\omega_c = \\sqrt{g / 2R}$",
+        "E) Stable equilibria at $\\theta \\neq 0$ never occur for any rotation speed."
       ],
       correct: 0,
-      explanation: "From the Euler-Lagrange equation, the equilibrium condition dU_eff/dθ = 0 gives (ω² cosθ - g/R) sinθ = 0. Non-zero equilibrium angles require cosθ = g / (R ω²). Since |cosθ| ≤ 1, a real solution for θ ≠ 0 exists if and only if g / (R ω²) < 1, which means ω > ω_c = √(g / R). For ω > ω_c, the bottom position θ = 0 becomes an unstable local maximum, and two symmetric stable minima emerge at cosθ_0 = g/(R ω²)."
+      explanation: "From the Euler-Lagrange equation, the equilibrium condition $\\mathrm{d}U_{\\mathrm{eff}}/\\mathrm{d}\\theta = 0$ gives $(\\omega^{2} \\cos\\theta - g/R) \\sin\\theta = 0$. Non-zero equilibrium angles require $\\cos\\theta = g / (R \\omega^{2})$. Since $|\\cos\\theta| \\le 1$, a real solution for $\\theta \\neq 0$ exists if and only if $g / (R \\omega^{2}) < 1$, which means $\\omega > \\omega_c = \\sqrt{g / R}$. For $\\omega > \\omega_c$, the bottom position $\\theta = 0$ becomes an unstable local maximum, and two symmetric stable minima emerge at $\\cos\\theta_0 = g/(R \\omega^{2})$."
     }
   };
 
   PGRE.visualizers['cpgf-1.30'] = {
     id: 'cpgf-1.30',
-    title: 'Canonical Momentum & Cyclic Coordinates: p_i = ∂L/∂q̇_i',
+    topic: 'cm',
+    title: 'Canonical Momentum & Cyclic Coordinates: $p_i \\equiv \\frac{\\partial L}{\\partial \\dot{q}_i}$',
     formulaLatex: 'p_i \\equiv \\frac{\\partial L}{\\partial \\dot{q}_i}',
     physicalStory: `
 Canonical momentum $p_i$ is the conjugate momentum to coordinate $q_i$. Crucially, canonical momentum is NOT always equal to mechanical momentum $m\\mathbf{v}$.
@@ -701,26 +836,28 @@ In polar coordinates, $p_\\theta = mr^2\\dot{\\theta}$ represents angular moment
       "6. In Landau gauge $\\mathbf{A} = (0, Bx, 0)$, the coordinate $y$ is cyclic, which guarantees that $p_y = mv_y + qBx = \\text{constant}$ is strictly conserved throughout cyclotron motion."
     ],
     limitingCases: [
-      { condition: 'Standard Cartesian ($U$ velocity-independent)', result: '$p_x = m\\dot{x}$', description: 'Canonical momentum equals standard Newtonian linear momentum.' },
-      { condition: 'Polar Coordinates ($q = \\theta$, central force)', result: '$p_\\theta = mr^2\\dot{\\theta} = L_z$', description: 'Canonical momentum is orbital angular momentum.' },
-      { condition: 'Landau Gauge $\\mathbf{A} = (0, Bx, 0)$', result: '$p_y = mv_y + qBx = \\text{const}$', description: 'Guiding center $X_0 = x + \\frac{v_y}{\\omega_c} = \\frac{p_y}{qB}$ is conserved.' }
+      { condition: 'Standard Cartesian ($U$ velocity-independent)', result: 'p_x = m\\dot{x}', description: 'Canonical momentum equals standard Newtonian linear momentum.' },
+      { condition: 'Polar Coordinates ($q = \\theta$, central force)', result: 'p_\\theta = mr^2\\dot{\\theta} = L_z', description: 'Canonical momentum is orbital angular momentum.' },
+      { condition: 'Landau Gauge $\\mathbf{A} = (0, Bx, 0)$', result: 'p_y = mv_y + qBx = \\text{const}', description: 'Guiding center $X_0 = x + \\frac{v_y}{\\omega_c} = \\frac{p_y}{qB}$ is conserved.' }
     ],
     greTraps: [
-      { trap: 'Canonical vs Mechanical Momentum in Magnetic Fields', explanation: 'Mechanical momentum $m\\mathbf{v} = \\mathbf{p} - q\\mathbf{A}$ changes direction during cyclotron orbits, but the canonical momentum $p_y$ in Landau gauge remains strictly invariant!' },
-      { trap: 'Dimensions of Canonical Momentum', explanation: 'The product $p_i q_i$ always has dimensions of Action ($\\text{J}\\cdot\\text{s}$). If $q_i$ is an angle (dimensionless), $p_i$ has dimensions of angular momentum.' }
+      { trap: 'Canonical vs Mechanical Momentum in Magnetic Fields', description: 'Mechanical momentum $m\\mathbf{v} = \\mathbf{p} - q\\mathbf{A}$ changes direction during cyclotron orbits, but the canonical momentum $p_y$ in Landau gauge remains strictly invariant!' },
+      { trap: 'Dimensions of Canonical Momentum', description: 'The product $p_i q_i$ always has dimensions of Action ($\\text{J}\\cdot\\text{s}$). If $q_i$ is an angle (dimensionless), $p_i$ has dimensions of angular momentum.' }
     ],
     parameters: [
-      { id: 'B', label: 'Magnetic field B', type: 'range', min: 0.5, max: 3.0, step: 0.1, value: 1.5, default: 1.5, unit: 'T' },
-      { id: 'q', label: 'Charge q', type: 'range', min: -2, max: 2, step: 1, value: 1, default: 1 },
+      { id: 'B', label: 'Magnetic field $B$', type: 'range', min: 0.5, max: 3.0, step: 0.1, value: 1.5, default: 1.5, unit: 'T' },
+      { id: 'q', label: 'Charge $q$', type: 'range', min: -2, max: 2, step: 1, value: 1, default: 1 },
       { id: 'gauge', label: 'Gauge choice', type: 'select', value: 'landau', default: 'landau', options: [
-        { value: 'landau', label: 'Landau Gauge: A = (0, Bx, 0)' },
-        { value: 'symmetric', label: 'Symmetric Gauge: A = ½B(-y, x, 0)' }
-      ]}
+        { value: 'landau', label: 'Landau gauge: $\\mathbf{A} = (0, Bx, 0)$' },
+        { value: 'symmetric', label: 'Symmetric gauge: $\\mathbf{A} = \\frac{1}{2}B(-y, x, 0)$' }
+      ]},
+      SPEED_PARAM
     ],
     init(container, state, redraw) {
       state.B = state.B ?? 1.5;
       state.q = state.q ?? 1;
       state.gauge = state.gauge ?? 'landau';
+      state.simSpeed = simSpeedOf(state);
       state.x = num(state.x, -0.5);
       state.y = num(state.y, 0);
       state.vx = num(state.vx, 0);
@@ -730,18 +867,11 @@ In polar coordinates, $p_\\theta = mr^2\\dot{\\theta}$ represents angular moment
       state.tSim = num(state.tSim, 0);
 
       const controls = [
-        { id: 'B', label: 'B Field', type: 'range', min: 0.5, max: 3.0, step: 0.1, value: state.B, format: v => `${v.toFixed(1)} T` },
-        { id: 'gauge', label: 'Gauge', type: 'select', value: state.gauge, options: [
-          { value: 'landau', label: 'Landau: A = (0, Bx, 0)' },
-          { value: 'symmetric', label: 'Symmetric: A = ½B(-y, x)' }
-        ]},
         { id: 'reset', label: 'Reset Trajectory', type: 'button', text: 'Reset Particle', onClick: () => {
           state.x = -0.5; state.y = 0; state.vx = 0; state.vy = 2.0; state.trail = []; state.hist = []; state.tSim = 0;
         }}
       ];
-
-      U.createControlUI(container, controls, (id, val) => {
-        state[id] = val;
+      U.createControlUI(container, controls, () => {
         redraw();
       });
     },
@@ -772,7 +902,7 @@ In polar coordinates, $p_\\theta = mr^2\\dot{\\theta}$ represents angular moment
       if (!Array.isArray(state.hist)) state.hist = [];
       if (!Number.isFinite(state.tSim)) state.tSim = 0;
 
-      const dtv = dtSafe(dt);
+      const dtv = scaledDt(dt, state);
       const omega_c = (q * B) / mass;
 
       if (dtv > 0) {
@@ -827,12 +957,13 @@ In polar coordinates, $p_\\theta = mr^2\\dot{\\theta}$ represents angular moment
       const conserved = landau ? pCanonY : pCanonTheta;
       const oscillating = landau ? pMechY : LzMech;
 
-      legend('Canonical momentum  p = ∂L/∂q̇', [
-        { label: 'gauge', value: landau ? 'Landau  A = (0, Bx, 0)' : 'symmetric  A = ½B(−y, x)' },
-        { label: 'cyclic', value: landau ? 'y  →  P_y conserved' : 'θ  →  P_θ conserved' },
-        { label: landau ? 'P_y = mv_y + qBx' : 'P_θ = L_z + ½ q B r²', value: fmt(conserved, 3) },
-        { label: landau ? 'mv_y' : 'L_z = x mv_y − y mv_x', value: fmt(oscillating, 3) },
-        { label: '|p_mech|', value: fmt(Math.hypot(pMechX, pMechY), 3) }
+      legend('Canonical momentum', [
+        { label: 'gauge', value: landau ? 'Landau  $\\mathbf{A} = (0, Bx, 0)$' : 'symmetric  $\\mathbf{A} = \\frac{1}{2}B(-y, x)$' },
+        { label: 'cyclic', value: landau ? '$y \\to P_y$ conserved' : '$\\theta \\to P_{\\theta}$ conserved' },
+        { label: landau ? '$P_y = mv_y + qBx$' : '$P_{\\theta} = L_z + \\frac{1}{2} q B r^{2}$', value: fmt(conserved, 3) },
+        { label: landau ? '$mv_y$' : '$L_z = x mv_y - y mv_x$', value: fmt(oscillating, 3) },
+        { label: '$|p_{\\mathrm{mech}}|$', value: fmt(Math.hypot(pMechX, pMechY), 3) },
+        { label: 'arrows', value: 'coral $m\\mathbf{v}$; gold $q\\mathbf{A}$; teal $\\mathbf{P} = m\\mathbf{v} + q\\mathbf{A}$' }
       ]);
 
       const splitX = Math.floor(width * 0.54);
@@ -844,12 +975,15 @@ In polar coordinates, $p_\\theta = mr^2\\dot{\\theta}$ represents angular moment
       const viewR = 2.55;
       const scale = Math.max(12, Math.min(leftW / (2 * viewR), (height - 52) / (2 * viewR)));
 
-      titleBand(ctx, 'Cyclotron orbit  (P = mv + qA)', 14, 18);
+      titleBand(ctx, 'Cyclotron orbit', 14, 18);
+      haloLabel(ctx, splitX - 16, 18, 'P', TEAL, 'right');
+      haloLabel(ctx, splitX - 38, 18, 'qA', GOLD, 'right');
+      haloLabel(ctx, splitX - 68, 18, 'mv', CORAL, 'right');
 
       ctx.save();
       clipRect(ctx, 8, 22, leftW, height - 32);
 
-      ctx.strokeStyle = 'rgba(20, 20, 19, 0.22)';
+      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.22);
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(cx - viewR * scale, cy);
@@ -888,7 +1022,7 @@ In polar coordinates, $p_\\theta = mr^2\\dot{\\theta}$ represents angular moment
       const Px2 = px + pCanonX * vScale;
       const Py2 = py - pCanonY * vScale;
 
-      ctx.strokeStyle = 'rgba(20, 20, 19, 0.18)';
+      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.18);
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
@@ -901,6 +1035,15 @@ In polar coordinates, $p_\\theta = mr^2\\dot{\\theta}$ represents angular moment
       arrow(ctx, px, py, mx2, my2, CORAL, 2.2);
       arrow(ctx, px, py, ax2, ay2, GOLD, 2.2);
       arrow(ctx, px, py, Px2, Py2, TEAL, 2.6);
+      if (Math.hypot(mx2 - px, my2 - py) > 14) {
+        haloLabel(ctx, mx2, my2 - 10, 'mv', CORAL, 'center');
+      }
+      if (Math.hypot(ax2 - px, ay2 - py) > 14) {
+        haloLabel(ctx, ax2, ay2 - 10, 'qA', GOLD, 'center');
+      }
+      if (Math.hypot(Px2 - px, Py2 - py) > 14) {
+        haloLabel(ctx, Px2, Py2 + 12, 'P', TEAL, 'center');
+      }
       drawDot(ctx, px, py, 6, CORAL, INK);
       ctx.restore();
 
@@ -941,7 +1084,7 @@ In polar coordinates, $p_\\theta = mr^2\\dot{\\theta}$ represents angular moment
       ctx.save();
       clipRect(ctx, rx, ry, rw, rh);
       if (yMin < 0 && yMax > 0) {
-        ctx.strokeStyle = 'rgba(20, 20, 19, 0.22)';
+        ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.22);
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(rx, toHY(0));
@@ -960,16 +1103,16 @@ In polar coordinates, $p_\\theta = mr^2\\dot{\\theta}$ represents angular moment
       axisText(ctx, landau ? 'P' : 'P_θ', rx0 + 2, ry + 12, 'left');
     },
     challenge: {
-      question: "A particle of mass m and charge q moves in a uniform magnetic field B = B ẑ using the Landau gauge A = (0, Bx, 0). Which quantity is an exact constant of motion?",
+      question: "A particle of mass $m$ and charge $q$ moves in a uniform magnetic field $\\mathbf{B} = B \\hat{\\mathbf{z}}$ using the Landau gauge $\\mathbf{A} = (0, Bx, 0)$. Which quantity is an exact constant of motion?",
       options: [
-        "A) m v_y",
-        "B) m v_y + q B x",
-        "C) m v_x + q B y",
-        "D) m (v_x² + v_y²) + q B x",
-        "E) m (v_x + v_y)"
+        "A) $m v_y$",
+        "B) $m v_y + q B x$",
+        "C) $m v_x + q B y$",
+        "D) $m (v_x^{2} + v_y^{2}) + q B x$",
+        "E) $m (v_x + v_y)$"
       ],
       correct: 1,
-      explanation: "The Lagrangian in Landau gauge is L = ½m(ẋ² + ẏ² + ż²) + q B x ẏ. Since the coordinate y does not appear explicitly in L (y is cyclic), the canonical conjugate momentum p_y = ∂L/∂ẏ = m v_y + q B x is strictly conserved (dp_y/dt = 0). The quantity p_y/(qB) represents the x-coordinate of the cyclotron guiding center."
+      explanation: "The Lagrangian in Landau gauge is $L = \\frac{1}{2}m(\\dot{x}^{2} + \\dot{y}^{2} + \\dot{z}^{2}) + q B x \\dot{y}$. Since the coordinate $y$ does not appear explicitly in $L$ ($y$ is cyclic), the canonical conjugate momentum $p_y = \\partial L/\\partial \\dot{y} = m v_y + q B x$ is strictly conserved ($\\mathrm{d}p_y/\\mathrm{d}t = 0$). The quantity $p_y/(qB)$ represents the $x$-coordinate of the cyclotron guiding center."
     }
   };
 

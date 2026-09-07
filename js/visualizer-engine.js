@@ -31,7 +31,9 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     window.PGRE._vizLegendSections = [{ title: title || "", rows: rows || [] }];
   };
 
-  function paintLegendStrip(strip) {
+  var LEGEND_REPAINT_MIN_MS = 120;
+
+  function paintLegendStrip(strip, force) {
     if (!strip) return;
     var sections = window.PGRE._vizLegendSections || [];
     var nonempty = sections.filter(function(sec) {
@@ -59,11 +61,22 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
       });
       html += "</div></div>";
     });
-    if (strip._lastHtml !== html) {
-      strip.innerHTML = html;
-      strip._lastHtml = html;
-      typeset(strip);
+    if (strip._lastHtml === html) return;
+    var now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+    if (!force && strip._lastPaintAt && (now - strip._lastPaintAt) < LEGEND_REPAINT_MIN_MS) {
+      // Mid-throttle: defer one trailing repaint so the final value still lands.
+      if (!strip._pendingPaint) {
+        strip._pendingPaint = setTimeout(function() {
+          strip._pendingPaint = null;
+          paintLegendStrip(strip, true);
+        }, LEGEND_REPAINT_MIN_MS);
+      }
+      return;
     }
+    strip._lastPaintAt = now;
+    strip.innerHTML = html;
+    strip._lastHtml = html;
+    typeset(strip);
   }
 
   // --- Helpers ---
@@ -79,11 +92,41 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
       renderMathInElement(el, {
         delimiters: [
           { left: "$$", right: "$$", display: true },
-          { left: "$", right: "$", display: false }
+          { left: "\\[", right: "\\]", display: true },
+          { left: "$", right: "$", display: false },
+          { left: "\\(", right: "\\)", display: false }
         ],
         throwOnError: false
       });
     }
+  }
+
+  function formatDisplayMath(tex) {
+    if (!tex) return "";
+    var s = String(tex).trim();
+    if ((s.startsWith("$$") && s.endsWith("$$")) || (s.startsWith("\\[") && s.endsWith("\\]"))) {
+      return s;
+    }
+    var singleDollarMatch = s.match(/^\$([^$]+)\$$/);
+    if (singleDollarMatch) {
+      return "$$" + singleDollarMatch[1].trim() + "$$";
+    }
+    if (s.includes("$")) {
+      return s;
+    }
+    return "$$" + s + "$$";
+  }
+
+  function formatInlineMath(tex) {
+    if (!tex) return "";
+    var s = String(tex).trim();
+    if (s.includes("$") || s.includes("\\(") || s.includes("\\[")) {
+      return s;
+    }
+    if (/[\\=]/.test(s) || (/^[a-zA-Z0-9_^*+-/=<>\s,.:;()]+$/.test(s) && /[=<>]/.test(s))) {
+      return "$" + s + "$";
+    }
+    return s;
   }
 
   function formatDerivations(steps) {
@@ -95,7 +138,7 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
       var text = s.text || s.explanation || s.description || "";
       var h = "<li class=\"viz-step-item\">";
       h += "<strong>" + esc(title) + "</strong>";
-      if (formula) h += "<div class=\"viz-step-math\">$$" + formula + "$$</div>";
+      if (formula) h += "<div class=\"viz-step-math\">" + formatDisplayMath(formula) + "</div>";
       if (text) h += "<div class=\"viz-step-desc\">" + text + "</div>";
       h += "</li>";
       return h;
@@ -105,14 +148,29 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
   function formatLimitingCases(limits) {
     if (!limits || !limits.length) return "<p>Standard physical limits apply.</p>";
     return limits.map(function(l) {
-      if (typeof l === "string") return "<li>" + l + "</li>";
-      var name = l.name || l.case || l.condition || "Limiting Case";
+      if (typeof l === "string") return "<li class=\"viz-limit-item\">" + formatInlineMath(l) + "</li>";
+      var name = l.name || l.case || "";
+      var cond = l.condition || "";
       var formula = l.result || l.formula || l.implication;
       var text = l.explanation || l.description || "";
-      var cond = l.condition && l.condition !== name ? l.condition : "";
+
+      var head = "";
+      if (name && cond && name !== cond) {
+        var cleanCond = cond.trim();
+        var alreadyInName = name.indexOf(cleanCond) !== -1 ||
+          (name.indexOf("$") !== -1 && name.toLowerCase().replace(/[\s\\]/g, "").indexOf(cleanCond.toLowerCase().replace(/[\s\\]/g, "")) !== -1);
+        head = "<strong>" + esc(formatInlineMath(name)) + "</strong>";
+        if (!alreadyInName) {
+          head += " <span class=\"viz-limit-cond\">(" + esc(formatInlineMath(cond)) + ")</span>";
+        }
+      } else {
+        var title = name || cond || "Limiting Case";
+        head = "<strong>" + esc(formatInlineMath(title)) + "</strong>";
+      }
+
       var h = "<li class=\"viz-limit-item\">";
-      h += "<div class=\"viz-limit-head\"><strong>" + esc(name) + "</strong>" + (cond ? (" <code>" + esc(cond) + "</code>") : "") + "</div>";
-      if (formula) h += "<div class=\"viz-limit-math\">$$" + formula + "$$</div>";
+      h += "<div class=\"viz-limit-head\">" + head + "</div>";
+      if (formula) h += "<div class=\"viz-limit-math\">" + formatDisplayMath(formula) + "</div>";
       if (text) h += "<div class=\"viz-limit-desc\">" + text + "</div>";
       h += "</li>";
       return h;
@@ -139,11 +197,76 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
 
   function formatFormulaBanner(formulaLatex) {
     if (!formulaLatex) return "";
-    var latex = formulaLatex.trim();
-    if (!latex.startsWith("$$") && !latex.startsWith("$")) {
-      latex = "$$" + latex + "$$";
+    return "<div class=\"viz-formula-banner\">" + formatDisplayMath(formulaLatex) + "</div>";
+  }
+
+  window.PGRE.formatInlineMath = formatInlineMath;
+  window.PGRE.formatDisplayMath = formatDisplayMath;
+  window.PGRE.formatLimitingCases = formatLimitingCases;
+  window.PGRE.formatDerivations = formatDerivations;
+
+  function lookupFormulaCard(cardId) {
+    if (!cardId) return null;
+    if (window.PGRE && typeof window.PGRE.getFormulaCard === "function") {
+      var c0 = window.PGRE.getFormulaCard(cardId);
+      if (c0) return c0;
     }
-    return "<div class=\"viz-formula-banner\">" + latex + "</div>";
+    if (window.PGRE && window.PGRE.views && window.PGRE.views.formulas) {
+      if (typeof window.PGRE.views.formulas.getCard === "function") {
+        var c1 = window.PGRE.views.formulas.getCard(cardId);
+        if (c1) return c1;
+      }
+      if (typeof window.PGRE.views.formulas.getDeck === "function") {
+        var d1 = window.PGRE.views.formulas.getDeck();
+        if (Array.isArray(d1)) {
+          for (var i = 0; i < d1.length; i++) {
+            if (d1[i] && d1[i].id === cardId) return d1[i];
+          }
+        }
+      }
+    }
+    if (window.PGRE && Array.isArray(window.PGRE.deck)) {
+      for (var i = 0; i < window.PGRE.deck.length; i++) {
+        if (window.PGRE.deck[i] && window.PGRE.deck[i].id === cardId) return window.PGRE.deck[i];
+      }
+    }
+    if (window.PGRE && Array.isArray(window.PGRE.BOOK_FORMULAS)) {
+      for (var i = 0; i < window.PGRE.BOOK_FORMULAS.length; i++) {
+        if (window.PGRE.BOOK_FORMULAS[i] && window.PGRE.BOOK_FORMULAS[i].id === cardId) return window.PGRE.BOOK_FORMULAS[i];
+      }
+    }
+    if (window.PGRE && Array.isArray(window.PGRE.FORMULAS)) {
+      for (var i = 0; i < window.PGRE.FORMULAS.length; i++) {
+        if (window.PGRE.FORMULAS[i] && window.PGRE.FORMULAS[i].id === cardId) return window.PGRE.FORMULAS[i];
+      }
+    }
+    if (window.PGRE && window.PGRE.dataFormulas) {
+      var df = window.PGRE.dataFormulas;
+      var arr = Array.isArray(df) ? df : (df.deck || df.FORMULAS || df.cards);
+      if (Array.isArray(arr)) {
+        for (var i = 0; i < arr.length; i++) {
+          if (arr[i] && arr[i].id === cardId) return arr[i];
+        }
+      }
+    }
+    if (window.PGRE && Array.isArray(window.PGRE.allFormulaCards)) {
+      for (var i = 0; i < window.PGRE.allFormulaCards.length; i++) {
+        if (window.PGRE.allFormulaCards[i] && window.PGRE.allFormulaCards[i].id === cardId) return window.PGRE.allFormulaCards[i];
+      }
+    }
+    if (window.PGRE && window.PGRE.visualizers && window.PGRE.visualizers[cardId]) {
+      var vz = window.PGRE.visualizers[cardId];
+      return {
+        id: cardId,
+        topic: vz.topic || "cm",
+        name: vz.title || cardId,
+        front: vz.physicalStory || vz.title || cardId,
+        back: vz.formulaLatex || "",
+        note: vz.note || "",
+        eq: vz.eq || ""
+      };
+    }
+    return null;
   }
 
   function buildControls(paramsContainer, viz, state, onParamChange) {
@@ -347,14 +470,22 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     var ctx = canvas.getContext("2d");
     var lastTime = performance.now();
     var inlineLegend = wrap.querySelector("#viz-inline-legend-strip");
-
-    // Call init with an isolated dummy div
+    // Call init with a live container so viz-defined controls (action buttons) render
     if (typeof viz.init === "function") {
-      var dummy = document.createElement("div");
-      viz.init(dummy, activeInlineState, function() {});
+      var initControls = document.createElement("div");
+      initControls.className = "viz-init-controls";
+      paramsContainer.parentNode.appendChild(initControls);
+      viz.init(initControls, activeInlineState, function() {});
     }
 
     function inlineRenderLoop(now) {
+      if (!canvas || !canvas.isConnected) {
+        if (inlineAnimId) {
+          cancelAnimationFrame(inlineAnimId);
+          inlineAnimId = null;
+        }
+        return;
+      }
       var dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
 
@@ -373,7 +504,7 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
 
       ctx.save();
       ctx.scale(dpr, dpr);
-      ctx.fillStyle = "#faf9f5";
+      ctx.fillStyle = (window.PGRE.CV && window.PGRE.CV.colors.bg) || "#faf9f5";
       ctx.fillRect(0, 0, targetW, targetH);
       if (window.PGRE.resetVizLegend) window.PGRE.resetVizLegend();
       if (typeof viz.draw === "function") {
@@ -403,14 +534,6 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
 
   // --- MODAL DIALOG / FULLSCREEN VISUALIZER ---
   window.PGRE.openVisualizerModal = function(cardId) {
-    var viz = window.PGRE.visualizers[cardId];
-    if (!viz) {
-      if (window.PGRE.ui && window.PGRE.ui.toast) {
-        window.PGRE.ui.toast("Visualizer for " + cardId + " is coming soon!");
-      }
-      return;
-    }
-
     // Synchronous immediate cleanup of previous modal to avoid delayed timeout wipe
     if (modalAnimId) {
       cancelAnimationFrame(modalAnimId);
@@ -424,6 +547,8 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     currentViz = null;
     currentState = null;
 
+    var viz = window.PGRE.visualizers && window.PGRE.visualizers[cardId];
+    if (viz && typeof viz.draw === "function") {
     var backdrop = document.createElement("div");
     backdrop.className = "viz-modal-backdrop";
     backdrop.id = "viz-modal-backdrop";
@@ -554,14 +679,22 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     var ctx = canvas.getContext("2d");
     var lastTime = performance.now();
     var modalLegend = document.getElementById("viz-legend-strip");
-
-    // Call init with an isolated dummy div
+    // Call init with a live container so viz-defined controls (action buttons) render
     if (typeof viz.init === "function") {
-      var dummy = document.createElement("div");
-      viz.init(dummy, currentState, function() {});
+      var modalInitControls = document.createElement("div");
+      modalInitControls.className = "viz-init-controls";
+      paramsContainer.parentNode.appendChild(modalInitControls);
+      viz.init(modalInitControls, currentState, function() {});
     }
 
     function renderLoop(now) {
+      if (!canvas || !canvas.isConnected) {
+        if (modalAnimId) {
+          cancelAnimationFrame(modalAnimId);
+          modalAnimId = null;
+        }
+        return;
+      }
       var dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
 
@@ -580,7 +713,7 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
 
       ctx.save();
       ctx.scale(dpr, dpr);
-      ctx.fillStyle = "#faf9f5";
+      ctx.fillStyle = (window.PGRE.CV && window.PGRE.CV.colors.bg) || "#faf9f5";
       ctx.fillRect(0, 0, targetW, targetH);
       if (window.PGRE.resetVizLegend) window.PGRE.resetVizLegend();
       if (typeof viz.draw === "function") {
@@ -593,6 +726,119 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     }
 
     modalAnimId = requestAnimationFrame(renderLoop);
+    } else {
+      // Non-visualizer card: Comprehensive Formula Detail Modal
+      var c = lookupFormulaCard(cardId) || { id: cardId, name: cardId, front: "Recall the formula.", back: "", topic: "cm" };
+
+      var backdrop = document.createElement("div");
+      backdrop.className = "viz-modal-backdrop";
+      backdrop.id = "viz-modal-backdrop";
+
+      function renderCardDetailBody(card) {
+        var title = (card && (card.name || card.tag)) || (card && card.id) || cardId;
+        var topicKey = (card && card.topic) || "";
+        var tObj = (window.PGRE && window.PGRE.topicById && topicKey) ? window.PGRE.topicById(topicKey) : null;
+        var topicName = tObj ? tObj.name : topicKey;
+        var topicBadge = topicName ? ("<span class=\"viz-inline-badge\">" + esc(topicName) + "</span>") : "";
+        var eqTag = (card && card.eq) ? ("<span class=\"viz-eq-badge\">Eq " + esc(card.eq) + "</span>") : "";
+
+        var promptRaw = (card && card.front) || "";
+        var promptHTML = promptRaw ? (window.PGRE && window.PGRE.formulaTextHTML ? window.PGRE.formulaTextHTML(promptRaw) : promptRaw) : "";
+
+        var noteRaw = (card && card.note) || "";
+        var noteHTML = noteRaw ? (window.PGRE && window.PGRE.formulaTextHTML ? window.PGRE.formulaTextHTML(noteRaw) : noteRaw) : "";
+
+        var mnemText = "";
+        if (window.PGRE && window.PGRE.srs && typeof window.PGRE.srs.getMnemonic === "function") {
+          mnemText = window.PGRE.srs.getMnemonic(cardId) || "";
+        } else if (window.PGRE && window.PGRE.store && window.PGRE.store.state && window.PGRE.store.state.cardNotes && window.PGRE.store.state.cardNotes[cardId]) {
+          var cn = window.PGRE.store.state.cardNotes[cardId];
+          mnemText = (cn && cn.text) ? cn.text : (typeof cn === "string" ? cn : "");
+        } else if (card && card.mnemonic) {
+          mnemText = card.mnemonic;
+        } else if (card && card.mnem) {
+          mnemText = card.mnem;
+        }
+
+        var promptSection = promptHTML ? (
+          "<div class=\"viz-card-detail-section\">" +
+            "<div class=\"viz-detail-section-title\">Prompt &amp; Question</div>" +
+            "<div class=\"viz-detail-content viz-detail-prompt\">" + promptHTML + "</div>" +
+          "</div>"
+        ) : "";
+
+        var noteSection = noteHTML ? (
+          "<div class=\"viz-card-detail-section\">" +
+            "<div class=\"viz-detail-section-title\">Physical &amp; Formula Notes</div>" +
+            "<div class=\"viz-detail-content viz-detail-note\">" + noteHTML + "</div>" +
+          "</div>"
+        ) : "";
+
+        var mnemonicSection = mnemText ? (
+          "<div class=\"viz-card-detail-section\">" +
+            "<div class=\"viz-detail-section-title\">Mnemonic</div>" +
+            "<div class=\"viz-detail-content viz-detail-mnemonic\">" + esc(mnemText) + "</div>" +
+          "</div>"
+        ) : "";
+
+        var statusNotice = "<div class=\"viz-status-notice\">Interactive simulation in development for this formula</div>";
+
+        return "" +
+          "<div class=\"viz-modal-window viz-detail-window\" id=\"viz-modal-window\">" +
+            "<div class=\"viz-modal-header\">" +
+              "<div class=\"viz-header-title-group\">" +
+                "<h2 class=\"viz-header-title\">" + esc(title) + "</h2>" +
+                topicBadge +
+                eqTag +
+              "</div>" +
+              "<button class=\"viz-close-btn\" id=\"viz-close-btn\" aria-label=\"Close modal\">&times;</button>" +
+            "</div>" +
+            "<div class=\"viz-modal-body viz-detail-body\" id=\"viz-modal-body\">" +
+              formatFormulaBanner(card && card.back ? card.back : "") +
+              promptSection +
+              noteSection +
+              mnemonicSection +
+              statusNotice +
+            "</div>" +
+          "</div>";
+      }
+
+      backdrop.innerHTML = renderCardDetailBody(c);
+      document.body.appendChild(backdrop);
+      typeset(backdrop);
+
+      requestAnimationFrame(function() {
+        backdrop.classList.add("viz-open");
+      });
+
+      activeModal = backdrop;
+      currentViz = null;
+      currentState = null;
+
+      // Close handlers
+      var closeBtn = document.getElementById("viz-close-btn");
+      if (closeBtn) closeBtn.addEventListener("click", window.PGRE.closeVisualizerModal);
+      backdrop.addEventListener("click", function(e) {
+        if (e.target === backdrop) window.PGRE.closeVisualizerModal();
+      });
+
+      // If card was initially incomplete, attempt async deck lookup
+      if ((!c || (!c.back && !c.front)) && window.PGRE && typeof window.PGRE.formulaDeck === "function") {
+        window.PGRE.formulaDeck().then(function(loadedDeck) {
+          if (Array.isArray(loadedDeck) && activeModal === backdrop) {
+            for (var i = 0; i < loadedDeck.length; i++) {
+              if (loadedDeck[i] && loadedDeck[i].id === cardId) {
+                backdrop.innerHTML = renderCardDetailBody(loadedDeck[i]);
+                typeset(backdrop);
+                var newCloseBtn = document.getElementById("viz-close-btn");
+                if (newCloseBtn) newCloseBtn.addEventListener("click", window.PGRE.closeVisualizerModal);
+                break;
+              }
+            }
+          }
+        }).catch(function() {});
+      }
+    }
   };
 
   window.PGRE.closeVisualizerModal = function() {
@@ -620,6 +866,12 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
       window.PGRE.closeVisualizerModal();
     }
   });
+  // Close an open visualizer modal when the route/hash changes
+  if (typeof window !== "undefined" && typeof window.addEventListener === "function") window.addEventListener("hashchange", function() {
+    if (activeModal) {
+      window.PGRE.closeVisualizerModal();
+    }
+  });
 
 })();
 
@@ -628,15 +880,52 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
 (function (global) {
   global.PGRE = global.PGRE || {};
   global.PGRE.visualizers = global.PGRE.visualizers || {};
+  // Stage palette read at draw time so canvas visualizers follow dark mode.
+  var VIZ_STAGE_THEMES = {
+    light: {
+      bg: '#faf9f5', ink: '#141413', muted: '#6c6a64',
+      grid: 'rgba(20, 20, 19, 0.06)',
+      gridMid: 'rgba(20, 20, 19, 0.08)',
+      gridBright: 'rgba(20, 20, 19, 0.12)',
+      line: '#e6dfd8', panel: '#f5f0e8', ivory: '#efe9de',
+      cardBg: 'rgba(245, 240, 232, 0.96)',
+      hudBg: 'rgba(245, 240, 232, 0.96)',
+      hudBorder: 'rgba(20, 20, 19, 0.12)',
+      chip: 'rgba(250, 249, 245, 0.94)',
+      chipLine: 'rgba(20, 20, 19, 0.10)',
+      inkFade: function (a) { return 'rgba(20, 20, 19, ' + a + ')'; },
+      chipFade: function (a) { return 'rgba(250, 249, 245, ' + a + ')'; }
+    },
+    dark: {
+      bg: '#181715', ink: '#f3f1ea', muted: '#a8a49a',
+      grid: 'rgba(243, 241, 234, 0.07)',
+      gridMid: 'rgba(243, 241, 234, 0.09)',
+      gridBright: 'rgba(243, 241, 234, 0.14)',
+      line: 'rgba(243, 241, 234, 0.16)', panel: '#242220', ivory: '#2b2926',
+      cardBg: 'rgba(36, 34, 32, 0.96)',
+      hudBg: 'rgba(36, 34, 32, 0.96)',
+      hudBorder: 'rgba(243, 241, 234, 0.14)',
+      chip: 'rgba(36, 34, 32, 0.94)',
+      chipLine: 'rgba(243, 241, 234, 0.12)',
+      inkFade: function (a) { return 'rgba(243, 241, 234, ' + a + ')'; },
+      chipFade: function (a) { return 'rgba(24, 23, 21, ' + a + ')'; }
+    }
+  };
+  function vizStageTheme() {
+    var dark = typeof document !== 'undefined' && document.documentElement &&
+      document.documentElement.getAttribute('data-theme') === 'dark';
+    return dark ? VIZ_STAGE_THEMES.dark : VIZ_STAGE_THEMES.light;
+  }
+  global.PGRE.vizStageTheme = vizStageTheme;
 
   var CV = {
   // Claude aesthetic colors for simulation canvas
   colors: {
-    bg: '#faf9f5',
-    grid: 'rgba(20, 20, 19, 0.06)',
-    gridBright: 'rgba(20, 20, 19, 0.12)',
-    text: '#141413',
-    textMuted: '#6c6a64',
+    get bg() { return vizStageTheme().bg; },
+    get grid() { return vizStageTheme().grid; },
+    get gridBright() { return vizStageTheme().gridBright; },
+    get text() { return vizStageTheme().ink; },
+    get textMuted() { return vizStageTheme().muted; },
     sun: '#d4a017',        // Warm gold
     sunGlow: 'rgba(212, 160, 23, 0.35)',
     orbit: 'rgba(204, 120, 92, 0.45)', // Brand Coral
@@ -650,10 +939,8 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     vecCent: '#d4a017',    // Amber / Centrifugal
     vecEff: '#5db8a6',     // Teal
     energy: '#e05666',     // Crimson
-    sectorA: 'rgba(204, 120, 92, 0.22)',
-    sectorB: 'rgba(93, 184, 166, 0.22)',
-    hudBg: 'rgba(245, 240, 232, 0.96)',
-    hudBorder: 'rgba(20, 20, 19, 0.12)'
+    get hudBg() { return vizStageTheme().hudBg; },
+    get hudBorder() { return vizStageTheme().hudBorder; }
   },
 
   drawGrid(ctx, width, height, step = 40) {
@@ -722,9 +1009,9 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
 
       const textMetrics = ctx.measureText ? ctx.measureText(label) : null;
       const textWidth = (textMetrics && textMetrics.width) ? textMetrics.width : (label.length * 7);
-      ctx.fillStyle = 'rgba(250, 249, 245, 0.94)';
+      ctx.fillStyle = vizStageTheme().chip;
       ctx.fillRect(midX - textWidth / 2 - 4, midY - 8, textWidth + 8, 16);
-      ctx.strokeStyle = 'rgba(20, 20, 19, 0.12)';
+      ctx.strokeStyle = vizStageTheme().chipLine;
       ctx.lineWidth = 1;
       ctx.strokeRect(midX - textWidth / 2 - 4, midY - 8, textWidth + 8, 16);
 
@@ -754,13 +1041,13 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
 };
   var DrawUtils = {
     colors: {
-      bg: '#faf9f5',
-      cardBg: 'rgba(245, 240, 232, 0.96)',
-      cardBorder: 'rgba(230, 223, 216, 0.15)',
-      grid: 'rgba(20, 20, 19, 0.08)',
-      gridText: '#6c6a64',
-      text: '#141413',
-      textMuted: '#6c6a64',
+      get bg() { return vizStageTheme().bg; },
+      get cardBg() { return vizStageTheme().cardBg; },
+      get cardBorder() { return vizStageTheme().line; },
+      get grid() { return vizStageTheme().gridMid; },
+      get gridText() { return vizStageTheme().muted; },
+      get text() { return vizStageTheme().ink; },
+      get textMuted() { return vizStageTheme().muted; },
       cyan: '#cc785c',
       cyanGlow: 'rgba(204, 120, 92, 0.35)',
       emerald: '#4e9b6f',
@@ -772,7 +1059,7 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
       violet: '#9d7cd8',
       violetGlow: 'rgba(157, 124, 216, 0.35)',
       blue: '#5db8a6',
-      white: '#141413'
+      get white() { return vizStageTheme().ink; }
     },
 
     drawAxes(ctx, cx, cy, width, height, xLabel, yLabel, gridStep) {
@@ -983,7 +1270,7 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
       ctx.arc(cx, cy, 3, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = '#141413';
+      ctx.fillStyle = vizStageTheme().ink;
       ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
@@ -1098,7 +1385,7 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
       ctx.restore();
     },
 
-    drawCardBadge(ctx, text, x, y, bg = 'rgba(204, 120, 92, 0.15)', border = '#cc785c', textCol = '#141413') {
+    drawCardBadge(ctx, text, x, y, bg = 'rgba(204, 120, 92, 0.15)', border = '#cc785c', textCol = vizStageTheme().ink) {
       ctx.save();
       ctx.font = '11px monospace';
       const tw = ctx.measureText(text).width;
@@ -1117,16 +1404,21 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     },
 
     createControlUI(container, controls, onChange) {
+      if (!controls || !controls.length) {
+        container.style.display = 'none';
+        return;
+      }
+      var theme = vizStageTheme();
       container.innerHTML = '';
       container.style.display = 'flex';
       container.style.flexWrap = 'wrap';
       container.style.gap = '12px';
       container.style.padding = '10px 14px';
-      container.style.background = 'rgba(245, 240, 232, 0.75)';
-      container.style.borderTop = '1px solid rgba(255, 255, 255, 0.1)';
+      container.style.background = theme.cardBg;
+      container.style.borderTop = '1px solid ' + theme.hudBorder;
       container.style.borderRadius = '0 0 8px 8px';
       container.style.fontSize = '12px';
-      container.style.color = '#141413';
+      container.style.color = theme.ink;
 
       controls.forEach(ctrl => {
         const item = document.createElement('div');
@@ -1137,7 +1429,7 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
         const label = document.createElement('label');
         label.innerText = ctrl.label;
         label.style.fontWeight = '500';
-        label.style.color = '#6c6a64';
+        label.style.color = theme.muted;
         item.appendChild(label);
 
         if (ctrl.type === 'range') {
@@ -1167,9 +1459,9 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
           item.appendChild(valDisplay);
         } else if (ctrl.type === 'select') {
           const sel = document.createElement('select');
-          sel.style.background = '#efe9de';
-          sel.style.color = '#141413';
-          sel.style.border = '1px solid #8e8b82';
+          sel.style.background = theme.ivory;
+          sel.style.color = theme.ink;
+          sel.style.border = '1px solid ' + theme.hudBorder;
           sel.style.borderRadius = '4px';
           sel.style.padding = '2px 6px';
           sel.style.fontSize = '12px';

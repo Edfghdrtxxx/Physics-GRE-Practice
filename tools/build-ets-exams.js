@@ -46,6 +46,64 @@ function balancedDollars(s) {
   return ((s || '').match(/\$/g) || []).length % 2 === 0;
 }
 
+/* KaTeX validation: every $...$ / $$...$$ / \(...\) / \[...\] segment in
+   question, solution, and choice text is parse-checked with the vendored
+   KaTeX (same delimiters as PGRE.typesetMath in js/app.js) so malformed
+   LaTeX fails the build instead of reaching the UI as raw TeX. */
+let katex = null;
+try {
+  katex = require(path.join(ROOT, 'vendor', 'katex', 'katex.min.js'));
+} catch (e) {
+  console.warn('WARNING: vendor/katex not loadable (' + e.message +
+    '); skipping LaTeX validation');
+}
+
+const MATH_DELIMS = [
+  ['$$', '$$', true],
+  ['\\[', '\\]', true],
+  ['$', '$', false],
+  ['\\(', '\\)', false]
+];
+
+function mathSegments(html) {
+  const text = String(html == null ? '' : html).replace(/<[^>]*>/g, ' ');
+  const segs = [];
+  let i = 0;
+  const n = text.length;
+  outer: while (i < n) {
+    for (const [l, r, display] of MATH_DELIMS) {
+      const start = text.indexOf(l, i);
+      if (start === -1) continue;
+      const end = text.indexOf(r, start + l.length);
+      if (end === -1) { i = start + l.length; continue outer; }
+      segs.push({ tex: text.slice(start + l.length, end), display });
+      i = end + r.length;
+      continue outer;
+    }
+    break;
+  }
+  return segs;
+}
+
+const latexErrors = [];
+
+function checkLatex(label, html) {
+  if (!katex) return;
+  for (const seg of mathSegments(html)) {
+    try {
+      katex.renderToString(seg.tex, {
+        displayMode: seg.display,
+        throwOnError: true,
+        strict: false,
+        trust: false
+      });
+    } catch (e) {
+      latexErrors.push(label + ': ' + String(e.message).split('\n')[0] +
+        ' — in $' + seg.tex + '$');
+    }
+  }
+}
+
 function fail(msg) { console.error('BUILD FAILED: ' + msg); process.exit(1); }
 
 if (!fs.existsSync(SRC)) fail('no ' + SRC + ' directory');
@@ -100,6 +158,7 @@ for (const dir of examDirs.sort()) {
     if (answer == null) fail(dir + ' q' + n + ': bad answer letter "' + r.answer + '"');
     for (const s of [r.q, r.sol, ...r.choices]) {
       if (!balancedDollars(s)) report.warnings.push(dir + ' q' + n + ': unbalanced $ delimiters');
+      checkLatex(dir + ' q' + n, s);
     }
     if (r.solverAgreed === false) disagreed++;
 
@@ -160,6 +219,11 @@ for (const dir of examDirs.sort()) {
 
 exams.sort((a, b) => (a.order || 999) - (b.order || 999) || a.id.localeCompare(b.id));
 exams.forEach(e => delete e.order);
+
+if (latexErrors.length) {
+  fail(latexErrors.length + ' malformed LaTeX expression(s):\n  ' +
+    latexErrors.join('\n  '));
+}
 
 const header =
   '/* Released ETS GRE Physics exams — REAL exam content, ETS copyright.\n' +

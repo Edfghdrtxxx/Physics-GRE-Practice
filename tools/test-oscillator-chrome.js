@@ -2,11 +2,64 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const net = require('net');
 const { spawn } = require('child_process');
 
-const PORT = 8129;
-const CDP_PORT = 9334;
-const ARTIFACT_DIR = '/Users/leyi/.gemini/antigravity/brain/d1cef413-7a18-4ecf-830d-e150a49ccef8';
+// Ports default to ephemeral (0) so restricted environments never collide;
+// override with PGRE_TEST_PORT / PGRE_CDP_PORT to pin them.
+const PORT = parseInt(process.env.PGRE_TEST_PORT || '0', 10);
+const CDP_PORT = parseInt(process.env.PGRE_CDP_PORT || '0', 10);
+// Screenshots land in a temp dir unless PGRE_ARTIFACT_DIR says otherwise.
+const ARTIFACT_DIR = process.env.PGRE_ARTIFACT_DIR ||
+  fs.mkdtempSync(path.join(os.tmpdir(), 'pgre-oscillator-artifacts-'));
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.listen(0, '127.0.0.1', () => {
+      const p = srv.address().port;
+      srv.close(() => resolve(p));
+    });
+    srv.on('error', reject);
+  });
+}
+
+function findChrome() {
+  const candidates = [
+    process.env.CHROME_BIN,
+    process.env.CHROME_PATH,
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser'
+  ].filter(Boolean);
+  for (const c of candidates) {
+    try { fs.accessSync(c, fs.constants.X_OK); return c; } catch (e) {}
+  }
+  return candidates[0]; // let spawn fail with a clear error
+}
+
+// SIGTERM Chrome, wait (bounded) for it to exit so its profile dir is
+// released before we rm it; escalate to SIGKILL if it hangs.
+function stopChrome(proc) {
+  return new Promise(resolve => {
+    if (!proc || proc.exitCode !== null || proc.signalCode !== null) return resolve();
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      try { proc.kill('SIGKILL'); } catch (e) {}
+      setTimeout(finish, 1000); // SIGKILL is uncatchable; brief grace then move on
+    }, 5000);
+    proc.once('exit', finish);
+    try { proc.kill(); } catch (e) { finish(); }
+  });
+}
 
 const server = http.createServer((req, res) => {
   let reqPath = req.url.split('?')[0];
@@ -35,23 +88,25 @@ const server = http.createServer((req, res) => {
 
 async function main() {
   await new Promise((resolve) => server.listen(PORT, '127.0.0.1', resolve));
-  console.log(`HTTP server listening on http://127.0.0.1:${PORT}`);
+  const httpPort = server.address().port;
+  console.log(`HTTP server listening on http://127.0.0.1:${httpPort}`);
+  const cdpPort = CDP_PORT || await freePort();
 
-  const userDataDir = fs.mkdtempSync('/tmp/chrome-dynamic-test-');
-  const chromeProc = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chrome-dynamic-test-'));
+  const chromeProc = spawn(findChrome(), [
     '--headless=new',
-    `--remote-debugging-port=${CDP_PORT}`,
+    `--remote-debugging-port=${cdpPort}`,
     `--user-data-dir=${userDataDir}`,
     '--no-first-run',
     '--window-size=1280,1050',
-    `http://127.0.0.1:${PORT}/simulations/oscillator.html`
+    `http://127.0.0.1:${httpPort}/simulations/oscillator.html`
   ]);
 
   let wsUrl = null;
   for (let i = 0; i < 30; i++) {
     await new Promise(r => setTimeout(r, 200));
     try {
-      const res = await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`);
+      const res = await fetch(`http://127.0.0.1:${cdpPort}/json/list`);
       const list = await res.json();
       const target = list.find(t => t.type === 'page');
       if (target && target.webSocketDebuggerUrl) {
@@ -139,11 +194,10 @@ async function main() {
   await evaluate(`document.getElementById('sim-theme-toggle').click();`);
   await new Promise(r => setTimeout(r, 1000));
   await takeScreenshot('chrome_dynamic_dark.png');
-
   ws.close();
-  chromeProc.kill();
+  await stopChrome(chromeProc);
   server.close();
-  fs.rmSync(userDataDir, { recursive: true, force: true });
+  fs.rmSync(userDataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   console.log('Dynamic Chrome CDP testing completed successfully!');
 }
 

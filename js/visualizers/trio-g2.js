@@ -35,7 +35,14 @@
     ivory: '#efe9de'
   };
 
+  function syncStageTheme() {
+    var t = PGRE.vizStageTheme ? PGRE.vizStageTheme() : null;
+    if (!t) return;
+    C.bg = t.bg; C.ink = t.ink; C.muted = t.muted; C.line = t.line; C.panel = t.panel; C.ivory = t.ivory;
+  }
+
   function creamFill(ctx, width, height) {
+    syncStageTheme();
     ctx.fillStyle = (CV && CV.colors && CV.colors.bg) ? CV.colors.bg : C.bg;
     ctx.fillRect(0, 0, width, height);
   }
@@ -43,7 +50,7 @@
   function lightGrid(ctx, width, height, step) {
     step = step || 40;
     ctx.save();
-    ctx.strokeStyle = (CV && CV.colors && CV.colors.grid) ? CV.colors.grid : 'rgba(20, 20, 19, 0.06)';
+    ctx.strokeStyle = (CV && CV.colors && CV.colors.grid) ? CV.colors.grid : PGRE.vizStageTheme().inkFade(0.06);
     ctx.lineWidth = 1;
     ctx.beginPath();
     var x, y;
@@ -90,9 +97,9 @@
       if (ly < b.y + 10) ly = b.y + 10;
       if (ly > b.y + b.h - 10) ly = b.y + b.h - 10;
     }
-    ctx.fillStyle = 'rgba(250, 249, 245, 0.94)';
+    ctx.fillStyle = PGRE.vizStageTheme().chipFade(0.94);
     ctx.fillRect(lx - pad, ly - 8, w + pad * 2, 16);
-    ctx.strokeStyle = 'rgba(20, 20, 19, 0.10)';
+    ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.10);
     ctx.lineWidth = 1;
     ctx.strokeRect(lx - pad, ly - 8, w + pad * 2, 16);
     ctx.fillStyle = color || C.ink;
@@ -192,6 +199,7 @@
 
   PGRE.visualizers['cpgf-1.4'] = {
   id: 'cpgf-1.4',
+  topic: 'cm',
   title: 'Centripetal Force & Newton’s 1st Law Tangential Fly-Off',
   formulaLatex: 'F_c = \\frac{m v^2}{r} = m \\omega^2 r',
 
@@ -222,9 +230,9 @@ If the net radial force suddenly ceases (for example, if a whirling tether snaps
   ],
 
   parameters: [
-    { id: 'mass', label: 'Mass (m)', min: 0.5, max: 5.0, step: 0.5, default: 2.0, unit: 'kg' },
-    { id: 'speed', label: 'Linear Speed (v)', min: 30, max: 120, step: 10, default: 70, unit: 'px/s' },
-    { id: 'radius', label: 'Radius (r)', min: 60, max: 160, step: 10, default: 110, unit: 'px' },
+    { id: 'mass', label: 'Mass ($m$)', min: 0.5, max: 5.0, step: 0.5, default: 2.0, unit: 'kg' },
+    { id: 'speed', label: 'Linear Speed ($v$)', min: 30, max: 120, step: 10, default: 70, unit: 'px/s' },
+    { id: 'radius', label: 'Radius ($r$)', min: 60, max: 160, step: 10, default: 110, unit: 'px' },
     { id: 'cutString', label: 'Cut Tether (Inertial Fly-Off)', type: 'toggle', default: false, unit: '' },
     { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
   ],
@@ -263,6 +271,10 @@ If the net radial force suddenly ceases (for example, if a whirling tether snaps
     var omega = v / Math.max(r, 1);
     var Fc = (m * v * v) / Math.max(r, 1);
     var vDraw = v * (rDraw / Math.max(r, 1));
+    var massR = Math.max(6, Math.min(18, 5.5 + 2.6 * m));
+    var fcFrac = Fc / (Fc + 80);
+    var tLen = 16 + (rDraw * 0.58 - 16) * fcFrac;
+    var tetherW = 1.6 + 2.4 * fcFrac;
 
     if (isCut && !state._snapped) {
       state._snapped = true;
@@ -309,7 +321,7 @@ If the net radial force suddenly ceases (for example, if a whirling tether snaps
 
       ctx.save();
       ctx.strokeStyle = C.muted;
-      ctx.lineWidth = 2.4;
+      ctx.lineWidth = tetherW;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.lineTo(px, py);
@@ -318,9 +330,10 @@ If the net radial force suddenly ceases (for example, if a whirling tether snaps
 
       disc(ctx, cx, cy, 6, C.ink, C.gold);
 
-      var tFrac = 0.42;
-      var tx = px - (px - cx) * tFrac;
-      var ty = py - (py - cy) * tFrac;
+      var uxIn = (cx - px) / Math.max(rDraw, 1);
+      var uyIn = (cy - py) / Math.max(rDraw, 1);
+      var tx = px + uxIn * tLen;
+      var ty = py + uyIn * tLen;
       arrow(ctx, px, py, tx, ty, C.rose, 2.8);
       pill(ctx, 'T = F_c', (px + tx) / 2, (py + ty) / 2, C.rose, 'center', bounds);
 
@@ -331,7 +344,7 @@ If the net radial force suddenly ceases (for example, if a whirling tether snaps
       arrow(ctx, px, py, vxe, vye, C.emerald, 2.4);
       pill(ctx, 'v', vxe, vye, C.emerald, 'center', bounds);
 
-      disc(ctx, px, py, 8, C.coral, C.ink);
+      disc(ctx, px, py, massR, C.coral, C.ink);
     } else if (state._snapPos && state._snapVel && state._freePos) {
       var step = dt * simSpeed;
       state._freePos.x += state._snapVel.x * step;
@@ -395,7 +408,7 @@ If the net radial force suddenly ceases (for example, if a whirling tether snaps
       disc(ctx, state._snapPos.x, state._snapPos.y, 4, C.rose, C.ink);
       pill(ctx, 'release', state._snapPos.x + 10, state._snapPos.y - 12, C.rose, 'left', bounds);
 
-      disc(ctx, state._freePos.x, state._freePos.y, 8, C.teal, C.ink);
+      disc(ctx, state._freePos.x, state._freePos.y, massR, C.teal, C.ink);
       var sMag = Math.hypot(state._snapVel.x, state._snapVel.y) || 1;
       var sLen = 40;
       var sxe = state._freePos.x + (state._snapVel.x / sMag) * sLen;
@@ -404,15 +417,29 @@ If the net radial force suddenly ceases (for example, if a whirling tether snaps
       pill(ctx, 'v const', sxe, sye, C.emerald, 'center', bounds);
     }
 
-    legend('Centripetal dynamics', [
-      { label: 'F_c = mv^2/r', value: Fc.toFixed(1) + ' N' },
-      { label: 'm', value: m.toFixed(1) + ' kg' },
-      { label: 'v', value: v.toFixed(0) + ' px/s' },
-      { label: 'r', value: r.toFixed(0) + ' px' },
-      { label: 'K = 1/2 mv^2', value: (0.5 * m * v * v).toFixed(1) + ' J' },
-      { label: 'Work by F_c', value: '0 (F perpendicular to v)' },
-      { label: 'Path', value: isCut ? 'tangent fly-off' : 'uniform circle' }
-    ]);
+    var legendRows;
+    if (isCut) {
+      legendRows = [
+        { label: '$F_{\\mathrm{net}}$', value: '$0$' },
+        { label: '$T$', value: '$0$ (cut)' },
+        { label: '$m$', value: '$' + m.toFixed(1) + '\\,\\mathrm{kg}$' },
+        { label: '$v$', value: '$' + v.toFixed(0) + '\\,\\mathrm{px/s}$' },
+        { label: '$r$', value: '$' + r.toFixed(0) + '\\,\\mathrm{px}$' },
+        { label: '$K = \\frac{1}{2} mv^2$', value: '$' + (0.5 * m * v * v).toFixed(1) + '$' },
+        { label: 'Path', value: 'tangent fly-off' }
+      ];
+    } else {
+      legendRows = [
+        { label: '$F_c = mv^2/r$', value: '$' + Fc.toFixed(1) + '$' },
+        { label: '$m$', value: '$' + m.toFixed(1) + '\\,\\mathrm{kg}$' },
+        { label: '$v$', value: '$' + v.toFixed(0) + '\\,\\mathrm{px/s}$' },
+        { label: '$r$', value: '$' + r.toFixed(0) + '\\,\\mathrm{px}$' },
+        { label: '$K = \\frac{1}{2} mv^2$', value: '$' + (0.5 * m * v * v).toFixed(1) + '$' },
+        { label: 'Work by $F_c$', value: '$0$ ($F \\perp v$)' },
+        { label: 'Path', value: 'uniform circle' }
+      ];
+    }
+    legend('Centripetal dynamics', legendRows);
   },
 
   challenge: {
@@ -430,6 +457,7 @@ If the net radial force suddenly ceases (for example, if a whirling tether snaps
 
   PGRE.visualizers['cpgf-1.22'] = {
   id: 'cpgf-1.22',
+  topic: 'cm',
   title: 'Coriolis Fictitious Force: Inertial vs Rotating Turntable Frame',
   formulaLatex: '\\mathbf{F}_{\\text{Coriolis}} = -2m (\\mathbf{\\Omega} \\times \\mathbf{v}_{\\text{rot}})',
 
@@ -463,8 +491,8 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
   ],
 
   parameters: [
-    { id: 'omega', label: 'Turntable Spin Rate (Ω)', min: -3.0, max: 3.0, step: 0.25, default: 1.2, unit: 'rad/s' },
-    { id: 'launchSpeed', label: 'Launch Speed (v_0)', min: 40, max: 140, step: 10, default: 80, unit: 'px/s' },
+    { id: 'omega', label: 'Turntable Spin Rate ($\\Omega$)', min: -3.0, max: 3.0, step: 0.25, default: 1.2, unit: 'rad/s' },
+    { id: 'launchSpeed', label: 'Launch Speed ($v_0$)', min: 40, max: 140, step: 10, default: 80, unit: 'px/s' },
     { id: 'launchAngle', label: 'Launch Direction', min: 0, max: 360, step: 15, default: 0, unit: 'deg' },
     { id: 'showForces', label: 'Show Fictitious Vectors', type: 'toggle', default: true, unit: '' },
     { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
@@ -516,16 +544,21 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
     if (curT < dStep * 1.5) {
       state._inertialTrail = [];
       state._rotTrail = [];
+      state._rotAngle = 0;
     }
 
     var curRot = state._rotAngle;
-    var rot_x = in_x * Math.cos(curRot) + in_y * Math.sin(curRot);
-    var rot_y = -in_x * Math.sin(curRot) + in_y * Math.cos(curRot);
+    var cP = Math.cos(curRot);
+    var sP = Math.sin(curRot);
+    var rot_x = in_x * cP + in_y * sP;
+    var rot_y = -in_x * sP + in_y * cP;
 
     var v_in_x = v0 * Math.cos(angleRad);
     var v_in_y = v0 * Math.sin(angleRad);
-    var v_rot_x = (v_in_x - Omega * in_y) * Math.cos(curRot) + (v_in_y + Omega * in_x) * Math.sin(curRot);
-    var v_rot_y = -(v_in_x - Omega * in_y) * Math.sin(curRot) + (v_in_y + Omega * in_x) * Math.cos(curRot);
+    var vx_rel = v_in_x - Omega * in_y;
+    var vy_rel = v_in_y + Omega * in_x;
+    var v_rot_x = vx_rel * cP + vy_rel * sP;
+    var v_rot_y = -vx_rel * sP + vy_rel * cP;
 
     if (!state._inertialTrail) state._inertialTrail = [];
     if (!state._rotTrail) state._rotTrail = [];
@@ -715,20 +748,20 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
     var v_rot_mag = Math.hypot(v_rot_x, v_rot_y);
     var f_cor_mag = Math.abs(2 * Omega * v_rot_mag);
     legend('Coriolis dynamics', [
-      { label: 'Ω', value: Omega.toFixed(2) + ' rad/s' },
-      { label: '|F_Cor| (m = 1)', value: f_cor_mag.toFixed(1) + ' N' },
-      { label: '|v_rot|', value: v_rot_mag.toFixed(1) + ' px/s' },
-      { label: 'Deflection', value: Omega >= 0 ? 'right of v (CCW)' : 'left of v (CW)' },
-      { label: 'Work by F_Cor', value: '0 (F_Cor perpendicular to v_rot)' }
+      { label: '$\\Omega$', value: '$' + Omega.toFixed(2) + '\\,\\mathrm{rad/s}$' },
+      { label: '$|\\mathbf{F}_{\\mathrm{Cor}}|$ ($m=1$)', value: '$' + f_cor_mag.toFixed(1) + '$' },
+      { label: '$|\\mathbf{v}_{\\mathrm{rot}}|$', value: '$' + v_rot_mag.toFixed(1) + '\\,\\mathrm{px/s}$' },
+      { label: 'Deflection', value: Omega >= 0 ? 'right of $v$ (CCW)' : 'left of $v$ (CW)' },
+      { label: 'Work by $\\mathbf{F}_{\\mathrm{Cor}}$', value: '$0$ ($\\mathbf{F}_{\\mathrm{Cor}} \\perp \\mathbf{v}_{\\mathrm{rot}}$)' }
     ]);
   },
 
   challenge: {
     question: "A heavy ball is dropped from rest from the top of a vertical tower of height $h$ at latitude $\\lambda$ in the Northern Hemisphere. Neglecting air drag and terms of order $\\Omega^2$, in which direction and by what displacement $\\Delta x$ is the ball deflected by the Coriolis force when it strikes the ground?",
     options: [
-      "East, \\Delta x = \\frac{1}{3} \\Omega g \\cos\\lambda \\left(\\frac{2h}{g}\\right)^{3/2}",
-      "West, \\Delta x = \\frac{1}{3} \\Omega g \\cos\\lambda \\left(\\frac{2h}{g}\\right)^{3/2}",
-      "South, \\Delta x = \\Omega g \\sin\\lambda \\left(\\frac{2h}{g}\\right)^2",
+      "East, $\\Delta x = \\frac{1}{3} \\Omega g \\cos\\lambda \\left(\\frac{2h}{g}\\right)^{3/2}$",
+      "West, $\\Delta x = \\frac{1}{3} \\Omega g \\cos\\lambda \\left(\\frac{2h}{g}\\right)^{3/2}$",
+      "South, $\\Delta x = \\Omega g \\sin\\lambda \\left(\\frac{2h}{g}\\right)^2$",
       "Zero deflection (falls strictly vertically)"
     ],
     correct: 0,
@@ -738,6 +771,7 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
 
   PGRE.visualizers['cpgf-1.20'] = {
     id: 'cpgf-1.20',
+    topic: 'cm',
     title: "Rotational Newton's Second Law & Gyroscopic Dynamics",
     formulaLatex: '\\boldsymbol{\\tau} = \\frac{d\\mathbf{L}}{dt}',
     physicalStory: `
@@ -778,7 +812,7 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
       {
         step: 6,
         latex: 'd\\phi = \\frac{|d\\mathbf{L}|}{L_s \\sin\\theta} = \\frac{\\tau dt}{L_s \\sin\\theta} \\implies \\Omega_p = \\frac{d\\phi}{dt} = \\frac{M g d}{I_s \\omega_s}',
-        explanation: 'For gyroscopic precession under gravity (\\tau = Mgd sin\\theta), horizontal deflection of L yields uniform steady precession.'
+        explanation: 'For gyroscopic precession under gravity ($\\tau = M g d \\sin\\theta$), horizontal deflection of $\\mathbf{L}$ yields uniform steady precession.'
       }
     ],
     limitingCases: [
@@ -800,7 +834,7 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
       {
         condition: '\\theta = 0 \\text{ (Vertical Sleeping Top)}',
         implication: '\\boldsymbol{\\tau} = \\mathbf{0}',
-        description: 'No gravitational torque; stable vertical spin occurs if spin exceeds threshold \\omega_s > \\frac{2}{I_s}\\sqrt{M g d I_\\perp}.'
+        description: 'No gravitational torque; stable vertical spin occurs if spin exceeds threshold $\\omega_s > \\frac{2}{I_s}\\sqrt{M g d I_\\perp}$.'
       }
     ],
     greTraps: [
@@ -818,11 +852,12 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
       }
     ],
     parameters: [
-      { id: 'spinSpeed', label: 'Spin Rate (ω_s)', min: 5, max: 80, step: 1, default: 35, unit: 'rad/s' },
-      { id: 'tiltAngle', label: 'Tilt Angle (θ)', min: 10, max: 80, step: 1, default: 45, unit: 'deg' },
-      { id: 'axleLength', label: 'Axle Distance (d)', min: 5, max: 25, step: 1, default: 14, unit: 'cm' },
-      { id: 'rotorMass', label: 'Rotor Mass (M)', min: 0.2, max: 2.0, step: 0.1, default: 0.8, unit: 'kg' },
-      { id: 'torqueMode', label: 'Torque Mode', type: 'select', options: ['Gravity Precession', 'Axial Spin-Up (Parallel)', 'Impulse Perturbation'], default: 'Gravity Precession' }
+      { id: 'spinSpeed', label: 'Spin Rate ($\\omega_s$)', min: 5, max: 80, step: 1, default: 35, unit: 'rad/s' },
+      { id: 'tiltAngle', label: 'Tilt Angle ($\\theta$)', min: 10, max: 80, step: 1, default: 45, unit: 'deg' },
+      { id: 'axleLength', label: 'Axle Distance ($d$)', min: 5, max: 25, step: 1, default: 14, unit: 'cm' },
+      { id: 'rotorMass', label: 'Rotor Mass ($M$)', min: 0.2, max: 2.0, step: 0.1, default: 0.8, unit: 'kg' },
+      { id: 'torqueMode', label: 'Torque Mode', type: 'select', options: ['Gravity Precession', 'Axial Spin-Up (Parallel)', 'Impulse Perturbation'], default: 'Gravity Precession' },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     init: function (container, state, redraw) {
       state.phi = state.phi || 0;
@@ -854,6 +889,9 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
       var rotorMass = parseFloat(state.rotorMass);
       if (isNaN(rotorMass)) rotorMass = 0.8;
       var torqueMode = state.torqueMode || 'Gravity Precession';
+      var simSpeed = parseFloat(state.simSpeed);
+      if (isNaN(simSpeed)) simSpeed = 1.0;
+      dt = dt * simSpeed;
       state.phi = state.phi || 0;
       state.spinPhase = state.spinPhase || 0;
       state.nutationAngle = state.nutationAngle || 0;
@@ -1115,15 +1153,15 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
         if (head) pill(ctx, 'Ω_p', head.x + 8, head.y + 12, C.teal, 'left', bounds);
       }
 
-      var Tprec = Omega_p > 0.01 ? (2 * Math.PI / Omega_p).toFixed(2) + ' s' : 'inf';
+      var Tprec = Omega_p > 0.01 ? (2 * Math.PI / Omega_p).toFixed(2) + '\\,\\mathrm{s}' : '\\infty';
       legend('Rotational dynamics (Eq 1.20)', [
-        { label: 'Rule', value: 'dL = τ dt' },
-        { label: 'Mode', value: isSpinUp ? 'τ ∥ L (spin-up)' : (isImpulse ? 'impulse + precession' : 'τ ⊥ L (precession)') },
-        { label: 'omega_s', value: omega_s.toFixed(1) + ' rad/s' },
-        { label: 'L_s', value: L_s.toFixed(3) + ' kg m^2/s' },
-        { label: 'tau_grav', value: tau_mag.toFixed(3) + ' N m' },
-        { label: 'Omega_p', value: Omega_p.toFixed(3) + ' rad/s' },
-        { label: 'T_prec', value: Tprec }
+        { label: 'Rule', value: '$d\\mathbf{L} = \\boldsymbol{\\tau}\\,dt$' },
+        { label: 'Mode', value: isSpinUp ? '$\\tau \\parallel L$ (spin-up)' : (isImpulse ? 'impulse + precession' : '$\\tau \\perp L$ (precession)') },
+        { label: '$\\omega_s$', value: '$' + omega_s.toFixed(1) + '\\,\\mathrm{rad/s}$' },
+        { label: '$L_s$', value: '$' + L_s.toFixed(3) + '\\,\\mathrm{kg\\,m}^2/\\mathrm{s}$' },
+        { label: '$\\tau_{\\mathrm{grav}}$', value: '$' + tau_mag.toFixed(3) + '\\,\\mathrm{N\\,m}$' },
+        { label: '$\\Omega_p$', value: '$' + Omega_p.toFixed(3) + '\\,\\mathrm{rad/s}$' },
+        { label: '$T_{\\mathrm{prec}}$', value: '$' + Tprec + '$' }
       ]);
     },
     challenge: {

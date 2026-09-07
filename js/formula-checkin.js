@@ -204,7 +204,7 @@ PGRE.formulaCheckIn = (function () {
       ? '<span class="fci-badge fci-checked">Checked in today</span>'
       : '<span class="fci-badge fci-pending">Not yet today</span>';
     var streak = st.current > 0
-      ? '<strong class="fci-streak">' + st.current + '-day streak</strong>'
+      ? '<strong class="fci-streak"><span class="fci-num" data-to="' + st.current + '">' + st.current + '</span>-day streak</strong>'
       : '<strong class="fci-streak">No streak yet</strong>';
     var best = '';
     if (st.best > 0) {
@@ -226,7 +226,7 @@ PGRE.formulaCheckIn = (function () {
     var bonus = safeInt(result.bonus, BONUS_XP) || BONUS_XP;
     return '<div class="card formula-checkin-celebrate" role="status">' +
       '<strong>' + msg + '</strong>' +
-      ' <span class="muted">+' + bonus + ' XP check-in bonus.</span>' +
+      ' <span class="muted">+<span class="fci-num" data-to="' + bonus + '">' + bonus + '</span> XP check-in bonus.</span>' +
       '</div>';
   }
 
@@ -242,9 +242,32 @@ PGRE.formulaCheckIn = (function () {
     if (!st.checkedToday) return '';
     return '<div class="card formula-checkin-already" role="status">' +
       '<span class="fci-badge fci-checked">Already checked in today</span> ' +
-      '<strong class="fci-streak">' + st.current + '-day streak</strong>' +
+      '<strong class="fci-streak"><span class="fci-num" data-to="' + st.current + '">' + st.current + '</span>-day streak</strong>' +
       (st.best ? ' <span class="muted">· best ' + st.best + '</span>' : '') +
       '</div>';
+  }
+  /* Count-up any .fci-num spans once they are inserted into the DOM. A
+     rAF-debounced scan keeps this to one document query per frame at most;
+     countUp itself is instant under reduced motion. */
+  function animateNums(rootEl) {
+    if (!window.PGRE || !PGRE.motion || !PGRE.motion.countUp) return;
+    var nodes = (rootEl || document).querySelectorAll('.fci-num:not(.fci-num-done)');
+    nodes.forEach(function (el) {
+      el.classList.add('fci-num-done');
+      PGRE.motion.countUp(el, parseInt(el.getAttribute('data-to'), 10) || 0);
+    });
+  }
+  var numScanPending = false;
+  function scheduleNumScan() {
+    if (numScanPending) return;
+    numScanPending = true;
+    requestAnimationFrame(function () {
+      numScanPending = false;
+      animateNums();
+    });
+  }
+  if (typeof MutationObserver !== 'undefined' && document.body) {
+    new MutationObserver(scheduleNumScan).observe(document.body, { childList: true, subtree: true });
   }
 
   return {
@@ -260,6 +283,7 @@ PGRE.formulaCheckIn = (function () {
     celebrateMessage: celebrateMessage,
     stripHTML: stripHTML,
     celebrateHTML: celebrateHTML,
-    alreadyHTML: alreadyHTML
+    alreadyHTML: alreadyHTML,
+    animate: animateNums
   };
 })();

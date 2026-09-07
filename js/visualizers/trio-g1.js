@@ -31,7 +31,14 @@
   var VIOLET = '#9d7cd8';
   var LINE = 'rgba(20, 20, 19, 0.12)';
 
+  function syncStageTheme() {
+    var t = PGRE.vizStageTheme ? PGRE.vizStageTheme() : null;
+    if (!t) return;
+    CREAM = t.bg; INK = t.ink; MUTED = t.muted; LINE = t.hudBorder;
+  }
+
   function creamFill(ctx, width, height) {
+    syncStageTheme();
     ctx.fillStyle = (CV && CV.colors && CV.colors.bg) || CREAM;
     ctx.fillRect(0, 0, width, height);
   }
@@ -39,7 +46,7 @@
   function lightGrid(ctx, width, height, step) {
     step = step || 40;
     ctx.save();
-    ctx.strokeStyle = (CV && CV.colors && CV.colors.grid) || 'rgba(20, 20, 19, 0.06)';
+    ctx.strokeStyle = (CV && CV.colors && CV.colors.grid) || PGRE.vizStageTheme().inkFade(0.06);
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (var x = 0; x <= width; x += step) {
@@ -107,7 +114,7 @@
     var w = ctx.measureText ? ctx.measureText(text).width : String(text).length * 6.5;
     var ax = opts.align === 'left' ? x : (opts.align === 'right' ? x - w : x - w / 2);
     var ay = opts.baseline === 'top' ? y : (opts.baseline === 'bottom' ? y - 12 : y - 7);
-    ctx.fillStyle = 'rgba(250, 249, 245, 0.92)';
+    ctx.fillStyle = PGRE.vizStageTheme().chipFade(0.92);
     ctx.fillRect(ax - 3, ay - 1, w + 6, 14);
     ctx.fillStyle = opts.color || INK;
     ctx.fillText(text, x, y);
@@ -175,6 +182,7 @@
 
   PGRE.visualizers['cpgf-1.35'] = {
   id: 'cpgf-1.35',
+  topic: 'cm',
   title: 'Conserved Angular Momentum & Kepler’s 2nd Law in Polar Coordinates',
   formulaLatex: 'l = m r^2 \\dot{\\phi} = \\text{constant} \\quad\\iff\\quad \\frac{dA}{dt} = \\frac{1}{2} r^2 \\dot{\\phi} = \\frac{l}{2m}',
 
@@ -205,11 +213,11 @@ In plane polar coordinates $(r, \\phi)$, the angular momentum magnitude is $l = 
   ],
 
   parameters: [
-    { id: 'eccentricity', label: 'Eccentricity (e)', min: 0.0, max: 0.85, step: 0.05, default: 0.65, unit: '' },
-    { id: 'semiMajorAxis', label: 'Semi-Major Axis (a)', min: 100, max: 220, step: 10, default: 160, unit: 'px' },
-    { id: 'mass', label: 'Mass (m)', min: 0.5, max: 4.0, step: 0.5, default: 1.0, unit: 'kg' },
-    { id: 'sectorDuration', label: 'Sector Sweep Interval', min: 0.5, max: 2.5, step: 0.25, default: 1.0, unit: 's' },
-    { id: 'showVectors', label: 'Show Velocity Vectors', type: 'toggle', default: true, unit: '' },
+    { id: 'eccentricity', label: 'Eccentricity ($e$)', min: 0.0, max: 0.85, step: 0.05, default: 0.65, unit: '' },
+    { id: 'semiMajorAxis', label: 'Semi-major axis ($a$)', min: 100, max: 220, step: 10, default: 160, unit: '' },
+    { id: 'mass', label: 'Mass ($m$)', min: 0.5, max: 4.0, step: 0.5, default: 1.0, unit: '' },
+    { id: 'sectorDuration', label: 'Sector sweep interval', min: 0.5, max: 2.5, step: 0.25, default: 1.0, unit: 's' },
+    { id: 'showVectors', label: 'Show velocity vectors', type: 'toggle', default: true, unit: '' },
     { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
   ],
 
@@ -245,8 +253,10 @@ In plane polar coordinates $(r, \\phi)$, the angular momentum magnitude is $l = 
     var availW = Math.max(80, width - padL - padR);
     var availH = Math.max(80, height - padT - padB);
     var bPhys = aPhys * Math.sqrt(Math.max(0.001, 1 - e * e));
-    var s = Math.min(availW / (2 * aPhys), availH / (2 * Math.max(bPhys, 8)));
+    var aFit = 220;
+    var s = Math.min(availW / (2 * aFit), availH / (2 * aFit));
     if (!isFinite(s) || s <= 0) s = 1;
+    var planetR = 5.5 + 4.5 * Math.sqrt(m);
 
     var a = aPhys;
     var b = bPhys;
@@ -370,7 +380,7 @@ In plane polar coordinates $(r, \\phi)$, the angular momentum magnitude is $l = 
     }
 
     ctx.save();
-    ctx.strokeStyle = 'rgba(20, 20, 19, 0.18)';
+    ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.18);
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(ecx - a * s, cy);
@@ -416,11 +426,11 @@ In plane polar coordinates $(r, \\phi)$, the angular momentum magnitude is $l = 
     ctx.restore();
 
     if (CV && CV.drawGlowCircle) {
-      CV.drawGlowCircle(ctx, px, py, 7, (CV.colors && CV.colors.particle) || CORAL, (CV.colors && CV.colors.particleGlow) || 'rgba(204, 120, 92, 0.5)', 14);
+      CV.drawGlowCircle(ctx, px, py, planetR, (CV.colors && CV.colors.particle) || CORAL, (CV.colors && CV.colors.particleGlow) || 'rgba(204, 120, 92, 0.5)', planetR * 2);
     } else {
       ctx.fillStyle = CORAL;
       ctx.beginPath();
-      ctx.arc(px, py, 7, 0, Math.PI * 2);
+      ctx.arc(px, py, planetR, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -436,18 +446,21 @@ In plane polar coordinates $(r, \\phi)$, the angular momentum magnitude is $l = 
 
     var periX = ecx + a * s;
     var apoX = ecx - a * s;
-    // Interior of the ellipse, off the vertical tangent at each vertex (and off the planet).
-    haloLabel(ctx, 'periapsis', periX - 32, Math.max(18, cy - 26), { color: MUTED });
-    haloLabel(ctx, 'apoapsis', apoX + 32, Math.min(height - 12, cy + 26), { color: MUTED });
+    var periLabelX = periX - Math.max(36, sunR + 20);
+    if (periLabelX < cx + sunR + 10) periLabelX = Math.min(periX - 8, cx - sunR - 18);
+    periLabelX = Math.max(padL + 8, Math.min(width - padR - 8, periLabelX));
+    haloLabel(ctx, 'periapsis', periLabelX, Math.min(height - 14, cy + 22), { color: MUTED });
+    haloLabel(ctx, 'apoapsis', apoX + 32, Math.max(18, cy - 22), { color: MUTED });
 
     pushLegend('Kepler 2nd law', [
-      { label: 'Angular momentum l', value: l.toFixed(1) + ' kg·m²/s' },
-      { label: 'Areal velocity dA/dt', value: arealVelocity.toFixed(1) + ' m²/s' },
-      { label: 'Radial distance r', value: r.toFixed(1) + ' px' },
-      { label: 'Angular speed φ̇', value: phi_dot.toFixed(3) + ' rad/s' },
-      { label: 'Tangential v_φ', value: v_phi.toFixed(1) + ' px/s' },
-      { label: 'Radial v_r', value: v_r.toFixed(1) + ' px/s' },
-      { label: 'Speed |v|', value: v_total.toFixed(1) + ' px/s' }
+      { label: '$m$', value: '$' + m.toFixed(1) + '$' },
+      { label: '$l = m r^2 \\dot{\\phi}$', value: '$' + l.toFixed(1) + '$' },
+      { label: '$dA/dt = l/(2m)$', value: '$' + arealVelocity.toFixed(1) + '$' },
+      { label: '$r$', value: '$' + r.toFixed(1) + '$' },
+      { label: '$\\dot{\\phi}$', value: '$' + phi_dot.toFixed(3) + '$' },
+      { label: '$v_\\phi$', value: '$' + v_phi.toFixed(1) + '$' },
+      { label: '$v_r$', value: '$' + v_r.toFixed(1) + '$' },
+      { label: '$|v|$', value: '$' + v_total.toFixed(1) + '$' }
     ]);
   },
 
@@ -466,18 +479,15 @@ In plane polar coordinates $(r, \\phi)$, the angular momentum magnitude is $l = 
 
   PGRE.visualizers['cpgf-1.38'] = {
   id: 'cpgf-1.38',
+  topic: 'cm',
   title: 'Total Energy & 1D Effective Potential Well in Central Forces',
   formulaLatex: 'E = \\frac{1}{2}m\\dot{r}^2 + \\frac{l^2}{2mr^2} + U(r) \\equiv \\frac{1}{2}m\\dot{r}^2 + V_{\\text{eff}}(r)',
 
-  physicalStory: `By virtue of angular momentum conservation $l = m r^2 \\dot{\\phi} = \\text{const}$, the azimuthal coordinate $\\phi$ is cyclic. We can eliminate $\\dot{\\phi} = l / (m r^2)$ from the 2D kinetic energy, mapping the entire 2D orbital motion onto an equivalent 1D radial motion governed by the **Effective Potential** $V_{\\text{eff}}(r) = \\frac{l^2}{2mr^2} + U(r)$.
+  physicalStory: `By virtue of angular momentum conservation $l = m r^2 \\dot{\\phi} = \\text{const}$, the azimuthal coordinate $\\phi$ is cyclic. We can eliminate $\\dot{\\phi} = l / (m r^2)$ from the 2D kinetic energy, mapping the entire 2D orbital motion onto an equivalent 1D radial motion governed by the effective potential $V_{\\text{eff}}(r) = \\frac{l^2}{2mr^2} + U(r)$.
 
-The term $\\frac{l^2}{2mr^2}$ is the fictitious **centrifugal barrier**, a steeply repulsive $1/r^2$ potential generated by angular momentum that physically prevents the particle from falling into the origin. For Newtonian gravity $U(r) = -k/r$, the combination of the repulsive centrifugal barrier at short range and the attractive gravitational well at long range forms an asymmetric potential well.
+The term $\\frac{l^2}{2mr^2}$ is the fictitious centrifugal barrier, a steeply repulsive $1/r^2$ potential generated by angular momentum that physically prevents the particle from falling into the origin. For Newtonian gravity $U(r) = -k/r$, the combination of the repulsive centrifugal barrier at short range and the attractive gravitational well at long range forms an asymmetric potential well.
 
-The total mechanical energy $E$ determines the orbit geometry:
-• $E = V_{\\text{eff},\\min}$: Circular orbit at equilibrium radius $r_0 = l^2/(mk)$ with $\\dot{r} = 0$.
-• $V_{\\text{eff},\\min} < E < 0$: Bound elliptical orbit oscillating between turning points $r_{\\min}$ and $r_{\\max}$ where $E = V_{\\text{eff}}(r)$.
-• $E = 0$: Parabolic escape orbit with a single turning point ($e = 1$).
-• $E > 0$: Unbound hyperbolic scatter orbit ($e > 1$).`,
+The total mechanical energy $E$ determines the orbit geometry. When $E = V_{\\text{eff},\\min}$, the motion is circular at the equilibrium radius $r_0 = l^2/(mk)$ with $\\dot{r} = 0$. When $V_{\\text{eff},\\min} < E < 0$, a bound ellipse oscillates between turning points $r_{\\min}$ and $r_{\\max}$ where $E = V_{\\text{eff}}(r)$. When $E = 0$, the orbit is a parabolic escape with a single turning point ($e = 1$). When $E > 0$, the motion is an unbound hyperbolic scatter ($e > 1$).`,
 
   derivationSteps: [
     "1. 2D Kinetic Energy in polar coordinates: $T = \\frac{1}{2}m(\\dot{r}^2 + r^2\\dot{\\phi}^2)$.",
@@ -503,9 +513,9 @@ The total mechanical energy $E$ determines the orbit geometry:
   ],
 
   parameters: [
-    { id: 'relEnergy', label: 'Energy State (E / |E_min|)', min: -0.99, max: 0.8, step: 0.05, default: -0.6, unit: '' },
-    { id: 'angMom', label: 'Angular Momentum (l)', min: 0.8, max: 2.0, step: 0.1, default: 1.3, unit: '' },
-    { id: 'showRadialKinetic', label: 'Show Radial Kinetic Energy T_r', type: 'toggle', default: true, unit: '' },
+    { id: 'relEnergy', label: 'Energy ($E / |E_{\\min}|$)', min: -1, max: 0.8, step: 0.05, default: -0.6, unit: '' },
+    { id: 'angMom', label: 'Angular momentum ($l$)', min: 0.8, max: 2.0, step: 0.1, default: 1.3, unit: '' },
+    { id: 'showRadialKinetic', label: 'Show radial kinetic $T_r$', type: 'toggle', default: true, unit: '' },
     { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
   ],
 
@@ -534,7 +544,7 @@ The total mechanical energy $E$ determines the orbit geometry:
 
     var r0 = (l * l) / (m * k);
     var Emin = -(m * k * k) / (2 * l * l);
-    var E = relE < 0 ? relE * Math.abs(Emin) : relE * Math.abs(Emin) * 0.8;
+    var E = relE * Math.abs(Emin);
 
     var disc = k * k + (2 * E * l * l) / m;
     var r_min;
@@ -557,6 +567,15 @@ The total mechanical energy $E$ determines the orbit geometry:
     if (!isFinite(r_min) || r_min < 8) r_min = Math.max(8, r0 * 0.4);
     if (!isFinite(r_max)) r_max = 99999;
 
+    var splitX = Math.round(width * 0.44);
+    var padT = 28;
+    var ox = splitX * 0.5;
+    var oy = padT + (height - padT) * 0.5;
+    var orbitRoom = Math.min(splitX * 0.38, (height - padT - 16) * 0.42);
+    var rView = (E < 0 && r_max < 800) ? Math.max(r_max, r0) * 1.12 : Math.max(r0 * 2.4, r_min * 2.8, 90);
+    var orbitScale = orbitRoom / Math.max(rView, 1);
+    var rLeave = (orbitRoom * 1.08) / Math.max(orbitScale, 1e-6);
+
     var subSteps = 10;
     var simDt = (dt * speed) / subSteps;
 
@@ -565,47 +584,41 @@ The total mechanical energy $E$ determines the orbit geometry:
       state._rdot = 0;
       state._phi = 0;
       state._orbitTrail = [];
+      state._escaped = false;
       state._lastL = l;
       state._lastE = E;
     }
 
-    for (var step = 0; step < subSteps; step++) {
-      var r_curr = Math.max(15, state._r);
-      var f_eff = (l * l) / (m * r_curr * r_curr * r_curr) - k / (r_curr * r_curr);
-      var r_ddot = f_eff / m;
-      state._rdot += r_ddot * simDt;
-      state._r += state._rdot * simDt;
-      if (state._r <= r_min) {
-        state._r = r_min;
-        if (state._rdot < 0) state._rdot = -state._rdot;
-      } else if (E < 0 && state._r >= r_max) {
-        state._r = r_max;
-        if (state._rdot > 0) state._rdot = -state._rdot;
-      } else if (E >= 0 && state._r > 280) {
-        state._r = r_min;
-        var Vmin = (l * l) / (2 * m * r_min * r_min) - k / r_min;
-        state._rdot = Math.sqrt(Math.max(0, (2 / m) * (E - Vmin)));
-        state._phi = 0;
-        state._orbitTrail = [];
+    if (!state._escaped) {
+      for (var step = 0; step < subSteps; step++) {
+        var r_curr = Math.max(15, state._r);
+        var f_eff = (l * l) / (m * r_curr * r_curr * r_curr) - k / (r_curr * r_curr);
+        var r_ddot = f_eff / m;
+        state._rdot += r_ddot * simDt;
+        state._r += state._rdot * simDt;
+        if (state._r <= r_min) {
+          state._r = r_min;
+          if (state._rdot < 0) state._rdot = -state._rdot;
+        } else if (E < 0 && state._r >= r_max) {
+          state._r = r_max;
+          if (state._rdot > 0) state._rdot = -state._rdot;
+        }
+        var phi_dot = l / (m * state._r * state._r);
+        state._phi += phi_dot * simDt;
       }
-      var phi_dot = l / (m * state._r * state._r);
-      state._phi += phi_dot * simDt;
+      if (E >= 0 && state._r > rLeave) {
+        state._r = rLeave;
+        state._rdot = 0;
+        state._escaped = true;
+      }
     }
-
-    var splitX = Math.round(width * 0.44);
-    var padT = 28;
-    var ox = splitX * 0.5;
-    var oy = padT + (height - padT) * 0.5;
-    var orbitRoom = Math.min(splitX * 0.38, (height - padT - 16) * 0.42);
-    var rView = (E < 0 && r_max < 800) ? Math.max(r_max, r0) * 1.12 : Math.max(r0 * 2.4, r_min * 2.8, 90);
-    var orbitScale = orbitRoom / Math.max(rView, 1);
 
     function toOrbitX(rv, phi) { return ox + rv * Math.cos(phi) * orbitScale; }
     function toOrbitY(rv, phi) { return oy + rv * Math.sin(phi) * orbitScale; }
 
     dividerV(ctx, splitX, 8, height - 8);
     panelTitle(ctx, 'Orbit in the plane', 14, 8, 'left');
-    panelTitle(ctx, 'Radial well  V_eff(r)', splitX + 14, 8, 'left');
+    panelTitle(ctx, 'Radial well', splitX + 14, 8, 'left');
 
     function dashCircle(radius, color) {
       if (radius < 4) return;
@@ -639,8 +652,10 @@ The total mechanical energy $E$ determines the orbit geometry:
     var py = toOrbitY(state._r, state._phi);
 
     if (!state._orbitTrail) state._orbitTrail = [];
-    state._orbitTrail.push({ x: px, y: py });
-    if (state._orbitTrail.length > 120) state._orbitTrail.shift();
+    if (!state._escaped) {
+      state._orbitTrail.push({ x: px, y: py });
+      if (state._orbitTrail.length > 120) state._orbitTrail.shift();
+    }
 
     ctx.save();
     for (var ti = 0; ti < state._orbitTrail.length - 1; ti++) {
@@ -685,7 +700,7 @@ The total mechanical energy $E$ determines the orbit geometry:
     ctx.rect(gx0, gy0, gx1 - gx0, gy1 - gy0);
     ctx.clip();
 
-    ctx.strokeStyle = 'rgba(20, 20, 19, 0.22)';
+    ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.22);
     ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.moveTo(gx0, gZeroY);
@@ -792,7 +807,7 @@ The total mechanical energy $E$ determines the orbit geometry:
     beadX = Math.max(gx0 + 4, Math.min(gx1 - 4, beadX));
     beadY = Math.max(gy0 + 4, Math.min(gy1 - 4, beadY));
 
-    if (showTr && plotEY <= beadY - 2 && beadX > gx0 && beadX < gx1) {
+    if (showTr && !state._escaped && plotEY <= beadY - 2 && beadX > gx0 && beadX < gx1) {
       ctx.save();
       var barH = Math.min(beadY, gy1) - Math.max(plotEY, gy0);
       if (barH > 2) {
@@ -814,39 +829,32 @@ The total mechanical energy $E$ determines the orbit geometry:
       ctx.fill();
     }
 
-    ctx.save();
-    ctx.font = '10px Inter, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    var keyX = splitX + 14;
-    var keyY = 22;
-    ctx.fillStyle = GOLD;
-    ctx.fillText('l²/(2mr²)', keyX, keyY);
-    ctx.fillStyle = CORAL;
-    ctx.fillText('−k/r', keyX + 78, keyY);
-    ctx.fillStyle = VIOLET;
-    ctx.fillText('V_eff', keyX + 122, keyY);
-    ctx.restore();
-
-    var orbitKind = almostCirc ? 'circular' : (E < 0 ? 'bound ellipse' : (Math.abs(E) < 1e-4 ? 'parabolic escape' : 'hyperbolic scatter'));
-    var Tr = Math.max(0, E - currentVeff);
+    var orbitKind = almostCirc
+      ? 'circular'
+      : (E < 0
+        ? 'bound ellipse'
+        : (Math.abs(E) < 1e-4 ? 'parabolic escape' : 'hyperbolic scatter'));
+    if (state._escaped) orbitKind += ' (frozen at view edge)';
+    var Tr = state._escaped ? 0 : Math.max(0, E - currentVeff);
     pushLegend('Effective potential', [
-      { label: 'Total energy E', value: E.toFixed(1) + ' J' },
-      { label: 'Well minimum E_min', value: Emin.toFixed(1) + ' J' },
+      { label: '$E$', value: '$' + E.toFixed(1) + '$' },
+      { label: '$E_{\\min}$', value: '$' + Emin.toFixed(1) + '$' },
+      { label: '$E / |E_{\\min}|$', value: '$' + (Math.abs(Emin) > 1e-9 ? (E / Math.abs(Emin)).toFixed(2) : '0') + '$' },
       { label: 'Orbit', value: orbitKind },
-      { label: 'Current radius r', value: currentR.toFixed(1) + ' px' },
-      { label: 'Circular radius r_0', value: r0.toFixed(1) + ' px' },
-      { label: 'Radial kinetic T_r', value: Tr.toFixed(1) + ' J' }
+      { label: '$r$', value: '$' + currentR.toFixed(1) + '$' },
+      { label: '$r_0$', value: '$' + r0.toFixed(1) + '$' },
+      { label: '$T_r$', value: '$' + Tr.toFixed(1) + '$' },
+      { label: 'Curves', value: '$l^2/(2mr^2)$, $-k/r$, $V_{\\mathrm{eff}}$' }
     ]);
   },
 
   challenge: {
     question: "A particle of mass $m$ moves under an attractive central potential $U(r) = -\\frac{k}{r^2}$ ($k > 0$) with non-zero angular momentum $l$. For what critical value of $k$ does the effective potential lose its repulsive centrifugal barrier entirely, causing the particle to spiral uncontrollably into the origin?",
     options: [
-      "k > \\frac{l^2}{2m}",
-      "k > \\frac{l^2}{m}",
-      "k > \\frac{2l^2}{m}",
-      "k > \\sqrt{\\frac{l^2}{2m}}"
+      "$k > \\frac{l^2}{2m}$",
+      "$k > \\frac{l^2}{m}$",
+      "$k > \\frac{2l^2}{m}$",
+      "$k > \\sqrt{\\frac{l^2}{2m}}$"
     ],
     correct: 0,
     explanation: "The effective potential for $U(r) = -k/r^2$ is $V_{\\text{eff}}(r) = \\frac{l^2}{2mr^2} - \\frac{k}{r^2} = \\left(\\frac{l^2}{2m} - k\\right)\\frac{1}{r^2}$. If $k > \\frac{l^2}{2m}$, the coefficient becomes strictly negative, meaning $V_{\\text{eff}}(r) \\to -\\infty$ as $r \\to 0$. There is no centrifugal barrier to turn the particle around, leading to orbital collapse and inward spiraling into $r = 0$ (orbital capture)."
@@ -855,6 +863,7 @@ The total mechanical energy $E$ determines the orbit geometry:
 
   PGRE.visualizers['cpgf-1.3'] = {
   id: 'cpgf-1.3',
+  topic: 'cm',
   title: 'Centripetal Radial Acceleration & The Velocity Hodograph',
   formulaLatex: 'a_c = \\frac{v^2}{r} = \\omega^2 r = v\\omega',
 
@@ -862,7 +871,7 @@ The total mechanical energy $E$ determines the orbit geometry:
 
 Geometrically, consider an infinitesimal time $dt$: the position vector rotates through angle $d\\theta = \\omega dt = (v/r) dt$. The velocity vector rotates by the identical angle $d\\theta$, creating a difference vector $|\\Delta\\mathbf{v}| = v d\\theta = v (v/r) dt = (v^2/r) dt$. Dividing by $dt$ yields the centripetal acceleration $a_c = v^2/r$.
 
-In the **Velocity Hodograph** (the locus of velocity vectors plotted from a common origin), the tip of $\\mathbf{v}(t)$ traces out a circle of radius $v$ with angular speed $\\omega$. The velocity of the velocity vector is the acceleration vector $\\mathbf{a} = d\\mathbf{v}/dt = \\omega v = v^2/r$.`,
+In the velocity hodograph (the locus of velocity vectors plotted from a common origin), the tip of $\\mathbf{v}(t)$ traces out a circle of radius $v$ with angular speed $\\omega$. The velocity of the velocity vector is the acceleration vector $\\mathbf{a} = d\\mathbf{v}/dt = \\omega v = v^2/r$.`,
 
   derivationSteps: [
     "1. Parametric position vector: $\\mathbf{r}(t) = r\\cos(\\omega t)\\hat{\\mathbf{i}} + r\\sin(\\omega t)\\hat{\\mathbf{j}} = r\\hat{\\mathbf{r}}$.",
@@ -887,10 +896,9 @@ In the **Velocity Hodograph** (the locus of velocity vectors plotted from a comm
   ],
 
   parameters: [
-    { id: 'radius', label: 'Radius (r)', min: 60, max: 180, step: 10, default: 120, unit: 'px' },
-    { id: 'omega', label: 'Angular Velocity (ω)', min: 0.5, max: 4.0, step: 0.25, default: 1.8, unit: 'rad/s' },
-    { id: 'motionMode', label: 'Motion Type', type: 'select', options: [{ value: 1, label: 'Uniform Circle' }, { value: 2, label: 'Variable Ellipse' }], default: 1, unit: '' },
-    { id: 'showHodograph', label: 'Show Velocity Space Hodograph', type: 'toggle', default: true, unit: '' },
+    { id: 'radius', label: 'Radius ($r$)', min: 60, max: 180, step: 10, default: 120, unit: '' },
+    { id: 'omega', label: 'Angular velocity ($\\omega$)', min: 0.5, max: 4.0, step: 0.25, default: 1.8, unit: 'rad/s' },
+    { id: 'showHodograph', label: 'Show velocity-space hodograph', type: 'toggle', default: true, unit: '' },
     { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
   ],
 
@@ -908,8 +916,6 @@ In the **Velocity Hodograph** (the locus of velocity vectors plotted from a comm
 
     var r = numParam(state, 'radius', 120);
     var omega = numParam(state, 'omega', 1.8);
-    var mode = parseInt(state.motionMode != null ? state.motionMode : 1, 10);
-    if (mode !== 2) mode = 1;
     var showHodo = flagParam(state, 'showHodograph', true);
     var speed = numParam(state, 'simSpeed', 1.0);
     dt = safeDt(dt);
@@ -923,32 +929,26 @@ In the **Velocity Hodograph** (the locus of velocity vectors plotted from a comm
     var cx = leftW * 0.5;
     var cy = padT + (height - padT) * 0.52;
     var rFit = Math.min(leftW * 0.34, (height - padT) * 0.34);
-    var aPhys = mode === 2 ? r * 1.25 : r;
-    var bPhys = mode === 2 ? r * 0.75 : r;
-    var fit = Math.min(rFit / Math.max(aPhys, 1), rFit / Math.max(bPhys, 1));
+    var fit = rFit / Math.max(r, 1);
     if (!isFinite(fit) || fit <= 0) fit = 1;
-    var aAxis = aPhys * fit;
-    var bAxis = bPhys * fit;
+    var rDraw = r * fit;
 
-    var px = cx + aAxis * Math.cos(theta);
-    var py = cy + bAxis * Math.sin(theta);
-    var vxDraw = -aAxis * omega * Math.sin(theta);
-    var vyDraw = bAxis * omega * Math.cos(theta);
-    var axDraw = -aAxis * omega * omega * Math.cos(theta);
-    var ayDraw = -bAxis * omega * omega * Math.sin(theta);
-    var vx = -aPhys * omega * Math.sin(theta);
-    var vy = bPhys * omega * Math.cos(theta);
-    var ax = -aPhys * omega * omega * Math.cos(theta);
-    var ay = -bPhys * omega * omega * Math.sin(theta);
-    var v_mag = Math.hypot(vx, vy);
-    var a_mag = Math.hypot(ax, ay);
+    var px = cx + rDraw * Math.cos(theta);
+    var py = cy + rDraw * Math.sin(theta);
+    var vxDraw = -rDraw * omega * Math.sin(theta);
+    var vyDraw = rDraw * omega * Math.cos(theta);
+    var axDraw = -rDraw * omega * omega * Math.cos(theta);
+    var ayDraw = -rDraw * omega * omega * Math.sin(theta);
+    var v_mag = omega * r;
+    var a_mag = omega * omega * r;
+    var a_from_v2r = (v_mag * v_mag) / Math.max(r, 1e-6);
+    var a_from_vom = v_mag * omega;
 
     ctx.save();
     ctx.strokeStyle = (CV && CV.colors && CV.colors.orbit) || 'rgba(204, 120, 92, 0.45)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    if (mode === 1) ctx.arc(cx, cy, aAxis, 0, Math.PI * 2);
-    else ctx.ellipse(cx, cy, aAxis, bAxis, 0, 0, Math.PI * 2);
+    ctx.arc(cx, cy, rDraw, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
 
@@ -963,8 +963,8 @@ In the **Velocity Hodograph** (the locus of velocity vectors plotted from a comm
       ctx.fill();
     }
 
-    var vPix = Math.min(42, aAxis * 0.42);
-    var aPix = Math.min(38, aAxis * 0.38);
+    var vPix = Math.min(42, rDraw * 0.42);
+    var aPix = Math.min(38, rDraw * 0.38);
     var vDrawMag = Math.max(Math.hypot(vxDraw, vyDraw), 1e-6);
     var aDrawMag = Math.max(Math.hypot(axDraw, ayDraw), 1e-6);
     var vScalePos = vPix / vDrawMag;
@@ -995,17 +995,19 @@ In the **Velocity Hodograph** (the locus of velocity vectors plotted from a comm
       var hx = splitX + (width - splitX) * 0.5;
       var hy = padT + (height - padT) * 0.50;
       var hodoRoom = Math.min((width - splitX) * 0.32, (height - padT) * 0.30);
-      var vHodoA = aPhys * omega;
-      var vHodoB = bPhys * omega;
-      var hodoScale = hodoRoom / Math.max(vHodoA, vHodoB, 1e-6);
+      var vHodo = omega * r;
+      var hodoScale = hodoRoom / Math.max(vHodo, 1e-6);
+      var vx = -r * omega * Math.sin(theta);
+      var vy = r * omega * Math.cos(theta);
+      var ax = -r * omega * omega * Math.cos(theta);
+      var ay = -r * omega * omega * Math.sin(theta);
 
       ctx.save();
       ctx.strokeStyle = 'rgba(78, 155, 111, 0.4)';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 3]);
       ctx.beginPath();
-      if (mode === 1) ctx.arc(hx, hy, vHodoA * hodoScale, 0, Math.PI * 2);
-      else ctx.ellipse(hx, hy, vHodoA * hodoScale, vHodoB * hodoScale, 0, 0, Math.PI * 2);
+      ctx.arc(hx, hy, vHodo * hodoScale, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.restore();
@@ -1027,12 +1029,13 @@ In the **Velocity Hodograph** (the locus of velocity vectors plotted from a comm
     }
 
     pushLegend('Centripetal kinematics', [
-      { label: 'Linear speed v = ωr', value: v_mag.toFixed(1) + ' px/s' },
-      { label: 'Centripetal accel a_c', value: a_mag.toFixed(1) + ' px/s²' },
-      { label: 'Angular speed ω', value: omega.toFixed(2) + ' rad/s' },
-      { label: 'Radius r', value: r.toFixed(0) + ' px' },
-      { label: 'Period T', value: ((2 * Math.PI) / Math.max(omega, 1e-6)).toFixed(2) + ' s' },
-      { label: 'Hodograph', value: mode === 1 ? 'tip of v traces a circle of radius v' : 'tip of v traces an ellipse in v-space' }
+      { label: '$v = \\omega r$', value: '$' + v_mag.toFixed(1) + '$' },
+      { label: '$a_c = v^2/r$', value: '$' + a_from_v2r.toFixed(1) + '$' },
+      { label: '$\\omega^2 r$', value: '$' + a_mag.toFixed(1) + '$' },
+      { label: '$v\\omega$', value: '$' + a_from_vom.toFixed(1) + '$' },
+      { label: '$\\omega$', value: '$' + omega.toFixed(2) + '$' },
+      { label: '$r$', value: '$' + r.toFixed(0) + '$' },
+      { label: '$T$', value: '$' + ((2 * Math.PI) / Math.max(omega, 1e-6)).toFixed(2) + '$' }
     ]);
   },
 
