@@ -30,6 +30,13 @@ PGRE.views.exam = (function () {
   var timer = null;      // setInterval handle for the countdown
   var lastPersist = 0;   // throttle durationSec writes
   var lastTickAt = 0;    // wall-clock anchor so background-tab throttling can't buy free time
+  var meterAnimated = false;  // animateMeter on first paint only — later paints set width
+
+  function motionViewEnter() {
+    if (window.PGRE && PGRE.motion && PGRE.motion.viewEnter) {
+      PGRE.motion.viewEnter(document.getElementById('view'));
+    }
+  }
 
   function whenEngine(cb) {
     if (PGRE.examEngine) { cb(); return; }
@@ -52,18 +59,33 @@ PGRE.views.exam = (function () {
     if (ex) PGRE.store.save(); // last unsaved seconds survive a reload
   });
 
-  /* Keyboard: A–E to (de)select, ←/→ to navigate, F to flag. Registered once;
-     only acts inside the room with no modal open. */
+  /* Keyboard: A–E / 1–5 to (de)select, ←/→ to navigate, F to flag, P to pause.
+     Registered once; only acts inside the room. Modal keys (Esc / Enter) share
+     the existing hide/resume/confirm handlers. */
   document.addEventListener('keydown', function (e) {
     if (!document.body.classList.contains('exam-fullscreen')) return;
-    var host = document.getElementById('exam-modal-host');
-    if (host && host.firstChild) return; // pause / submit modal open
-    var exam = PGRE.examEngine && PGRE.examEngine.active();
-    if (!exam || exam.paused) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return; // ⌘C / ⌘F etc. must never answer or flag
+    var host = document.getElementById('exam-modal-host');
+    var modalOpen = !!(host && host.firstChild);
+    var exam = PGRE.examEngine && PGRE.examEngine.active();
+    if (!exam) return;
     var k = e.key;
-    if (/^[a-eA-E]$/.test(k)) {
-      var idx = k.toUpperCase().charCodeAt(0) - 65;
+    if (modalOpen) {
+      if (k === 'Escape') {
+        e.preventDefault();
+        if (exam.paused) togglePause(exam);
+        else hideModal();
+      } else if (k === 'Enter' && host.querySelector('#exam-confirm')) {
+        var ae = document.activeElement;
+        if (ae && (ae.id === 'exam-confirm' || ae.id === 'exam-cancel')) return;
+        e.preventDefault();
+        doSubmit(exam, false);
+      }
+      return;
+    }
+    if (exam.paused) return;
+    if (/^[a-eA-E]$/.test(k) || /^[1-5]$/.test(k)) {
+      var idx = /^[1-5]$/.test(k) ? parseInt(k, 10) - 1 : k.toUpperCase().charCodeAt(0) - 65;
       var q = PGRE.questionById(exam.order[exam.cursor]);
       if (q && idx < q.choices.length) { selectAnswer(exam, idx); e.preventDefault(); }
     } else if (k === 'ArrowRight' && exam.cursor < exam.order.length - 1) {
@@ -72,6 +94,8 @@ PGRE.views.exam = (function () {
       goTo(exam, exam.cursor - 1); e.preventDefault();
     } else if (k === 'f' || k === 'F') {
       toggleFlag(exam); e.preventDefault();
+    } else if (k === 'p' || k === 'P') {
+      togglePause(exam); e.preventDefault();
     }
   });
 
@@ -205,6 +229,7 @@ PGRE.views.exam = (function () {
         startExam({ source: b.getAttribute('data-replay') });
       });
     });
+    motionViewEnter();
   }
 
   function bankNotReady(need, have, legacy) {
@@ -273,7 +298,7 @@ PGRE.views.exam = (function () {
             '<div id="exam-q"></div>' +
             '<div class="exam-navrow">' +
               '<button class="btn btn-ghost" id="exam-prev">← Back</button>' +
-              '<button class="btn btn-ghost" id="exam-flag">⚑ Flag for review</button>' +
+              '<button class="btn btn-ghost" id="exam-flag" aria-pressed="false">⚑ Flag for review</button>' +
               '<button class="btn btn-primary" id="exam-next">Next →</button>' +
             '</div>' +
           '</div>' +
@@ -300,10 +325,12 @@ PGRE.views.exam = (function () {
     });
     document.getElementById('exam-flag').addEventListener('click', function () { toggleFlag(exam); });
 
+    meterAnimated = false;
     renderQuestion(exam);
     renderPalette(exam);
     startTimer(exam);
     if (exam.paused) showPauseOverlay(exam);
+    motionViewEnter();
   }
 
   function renderQuestion(exam) {
@@ -321,7 +348,7 @@ PGRE.views.exam = (function () {
     var t = PGRE.topicById(q.topic);
     var picked = exam.answers[qid];
     var flagged = exam.flags.indexOf(qid) !== -1;
-    var html = '<div class="exam-qmeta">' +
+    var html = '<div class="exam-qmeta" id="exam-q-heading" tabindex="-1">' +
       '<span>Question ' + (exam.cursor + 1) + ' of ' + exam.order.length + '</span>' +
       (t ? '<span class="chip">' + t.name + '</span>' : '') +
       (flagged ? '<span class="chip exam-flagchip">⚑ Flagged for review</span>' : '') +
@@ -329,7 +356,8 @@ PGRE.views.exam = (function () {
     '<div class="q-text">' + q.q + '</div>' +
     '<div class="choices">';
     q.choices.forEach(function (c, idx) {
-      html += '<button class="choice' + (idx === picked ? ' is-picked' : '') + '" data-idx="' + idx + '">' +
+      html += '<button class="choice' + (idx === picked ? ' is-picked' : '') +
+        '" data-idx="' + idx + '" aria-pressed="' + (idx === picked ? 'true' : 'false') + '">' +
         '<span class="choice-letter">' + LETTERS[idx] + '</span>' +
         '<span class="choice-body">' + c + '</span></button>';
     });
@@ -340,6 +368,8 @@ PGRE.views.exam = (function () {
       b.addEventListener('click', function () { selectAnswer(exam, parseInt(b.getAttribute('data-idx'), 10)); });
     });
     updateNav(exam);
+    var heading = document.getElementById('exam-q-heading');
+    if (heading && heading.focus) heading.focus();
   }
 
   function updateNav(exam) {
@@ -352,6 +382,7 @@ PGRE.views.exam = (function () {
       var flagged = exam.flags.indexOf(exam.order[exam.cursor]) !== -1;
       flag.textContent = flagged ? '⚑ Unflag' : '⚑ Flag for review';
       flag.classList.toggle('is-flagged', flagged);
+      flag.setAttribute('aria-pressed', flagged ? 'true' : 'false');
     }
   }
 
@@ -362,7 +393,9 @@ PGRE.views.exam = (function () {
     PGRE.store.save();
     var box = document.getElementById('exam-q');
     if (box) box.querySelectorAll('.choice').forEach(function (b) {
-      b.classList.toggle('is-picked', parseInt(b.getAttribute('data-idx'), 10) === exam.answers[qid]);
+      var on = parseInt(b.getAttribute('data-idx'), 10) === exam.answers[qid];
+      b.classList.toggle('is-picked', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
     refreshPaletteCell(exam, exam.cursor);
     updateProgress(exam);
@@ -404,7 +437,8 @@ PGRE.views.exam = (function () {
     if (i === exam.cursor) cls += ' is-current';
     if (exam.answers[qid] != null) cls += ' is-answered';
     if (exam.flags.indexOf(qid) !== -1) cls += ' is-flagged';
-    return '<button class="' + cls + '" data-goto="' + i + '" title="Question ' + (i + 1) + '">' +
+    return '<button class="' + cls + '" data-goto="' + i + '" title="Question ' + (i + 1) + '"' +
+      (i === exam.cursor ? ' aria-current="true"' : '') + '>' +
       (i + 1) + '</button>';
   }
   function renderPalette(exam) {
@@ -433,15 +467,24 @@ PGRE.views.exam = (function () {
     var grid = document.getElementById('exam-palette');
     if (!grid) return;
     grid.querySelectorAll('.pal-cell').forEach(function (c, i) {
-      c.classList.toggle('is-current', i === exam.cursor);
+      var on = i === exam.cursor;
+      c.classList.toggle('is-current', on);
+      if (on) c.setAttribute('aria-current', 'true');
+      else c.removeAttribute('aria-current');
     });
   }
   function updateProgress(exam) {
     var el = document.getElementById('exam-progress');
     if (el) el.textContent = answeredCount(exam) + ' / ' + exam.order.length + ' answered';
     var mf = document.querySelector('#exam-progress-meter .meter-fill');
-    if (mf && window.PGRE && PGRE.motion && PGRE.motion.animateMeter) {
-      PGRE.motion.animateMeter(mf, 100 * answeredCount(exam) / exam.order.length);
+    if (!mf) return;
+    var pct = 100 * answeredCount(exam) / exam.order.length;
+    if (!meterAnimated && window.PGRE && PGRE.motion && PGRE.motion.animateMeter) {
+      meterAnimated = true;
+      PGRE.motion.animateMeter(mf, pct);
+    } else {
+      meterAnimated = true;
+      mf.style.width = pct + '%';
     }
   }
 
@@ -507,7 +550,9 @@ PGRE.views.exam = (function () {
       'paused — use this sparingly so your practice reflects true test conditions.</p>' +
       '<div class="btn-row"><button class="btn btn-primary" id="exam-resume-btn">Resume exam</button></div>' +
     '</div></div>';
-    document.getElementById('exam-resume-btn').addEventListener('click', function () { togglePause(exam); });
+    var resume = document.getElementById('exam-resume-btn');
+    resume.addEventListener('click', function () { togglePause(exam); });
+    if (resume.focus) resume.focus();
   }
   function hideModal() { var h = document.getElementById('exam-modal-host'); if (h) h.innerHTML = ''; }
 
@@ -528,8 +573,10 @@ PGRE.views.exam = (function () {
         '<button class="btn btn-primary" id="exam-confirm">Submit &amp; score</button>' +
         '<button class="btn btn-ghost" id="exam-cancel">Keep working</button>' +
       '</div></div></div>';
-    document.getElementById('exam-confirm').addEventListener('click', function () { doSubmit(exam, false); });
+    var confirmBtn = document.getElementById('exam-confirm');
+    confirmBtn.addEventListener('click', function () { doSubmit(exam, false); });
     document.getElementById('exam-cancel').addEventListener('click', hideModal);
+    if (confirmBtn.focus) confirmBtn.focus();
   }
 
   function doSubmit(exam, auto) {
@@ -612,11 +659,15 @@ PGRE.views.exam = (function () {
     root().innerHTML = html;
     PGRE.typesetMath(root());
     bindReviewNotes();
-    if (window.PGRE && PGRE.motion && !PGRE.motion.reduced) {
+    if (window.PGRE && PGRE.motion) {
       var pctEl = root().querySelector('.summary-pct');
       if (pctEl && PGRE.motion.countUp) PGRE.motion.countUp(pctEl, pct, { duration: 900, format: function (n) { return Math.round(n) + '%'; } });
+      root().querySelectorAll('.exam-review-q').forEach(function (c) {
+        c.classList.add('stagger-in');
+      });
       if (PGRE.motion.stagger) PGRE.motion.stagger(root(), { selector: '.exam-review-q', step: 60 });
     }
+    motionViewEnter();
   }
 
   /* PROPOSAL #12 — "Why the other choices tempt": an expandable list of the

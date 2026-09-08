@@ -25,9 +25,13 @@ PGRE.views.dashboard = (function () {
   var qotdBoundDate = null;                       // today.date when the card was wired
   var keyBound = false;                           // the document keydown listener is installed once
 
-  /* Local YYYY-MM-DD for an offset from today (same convention as store.today). */
+  /* Local YYYY-MM-DD for an offset from the 03:00 study-day (same window as
+     todaySec / studyLog keys). Before 03:00, offset 0 is yesterday's date. */
   function dayKey(offset) {
-    var d = new Date();
+    var now = new Date();
+    var d = new Date(now.getTime());
+    d.setHours(3, 0, 0, 0);
+    if (now.getTime() < d.getTime()) d.setDate(d.getDate() - 1);
     d.setDate(d.getDate() + (offset || 0));
     return d.getFullYear() + '-' +
       String(d.getMonth() + 1).padStart(2, '0') + '-' +
@@ -60,7 +64,7 @@ PGRE.views.dashboard = (function () {
   }
 
   function qotdSolvedFeedback(q, isCorrect, xp) {
-    return '<div class="feedback ' + (isCorrect ? 'feedback-good' : 'feedback-bad') + '">' +
+    return '<div class="feedback reveal-in ' + (isCorrect ? 'feedback-good' : 'feedback-bad') + '">' +
         '<span class="fb-icon">' + (isCorrect ? '✓' : '✗') + '</span>' +
         '<strong>' + (isCorrect ? 'Correct' : 'Not quite — the answer is ' + LETTERS[q.answer]) + '</strong>' +
         (xp != null ? '<span class="fb-xp">+' + xp + ' XP</span>' : '') +
@@ -89,7 +93,8 @@ PGRE.views.dashboard = (function () {
       // your actual wrong pick, not just the correct choice. Older stored results
       // predate the field (picked undefined) and degrade to answer-only.
       if (done && done.picked != null && idx === done.picked && !done.correct) cls += ' is-wrong';
-      html += '<button class="' + cls + '" data-idx="' + idx + '"' + (done ? ' disabled' : '') + '>' +
+      html += '<button class="' + cls + '" data-idx="' + idx + '"' + (done ? ' disabled' : '') +
+        ' aria-pressed="' + (done && done.picked === idx ? 'true' : 'false') + '">' +
         '<span class="choice-letter">' + LETTERS[idx] + '</span>' +
         '<span class="choice-body">' + c + '</span></button>';
     });
@@ -150,6 +155,7 @@ PGRE.views.dashboard = (function () {
       b.disabled = true;
       if (i === q.answer) b.classList.add('is-answer');
       if (i === idx && !isCorrect) b.classList.add('is-wrong');
+      b.setAttribute('aria-pressed', i === idx ? 'true' : 'false');
     });
     var fb = document.getElementById('qotd-feedback');
     if (fb) { fb.innerHTML = qotdSolvedFeedback(q, isCorrect, xp); PGRE.typesetMath(fb); }
@@ -365,6 +371,107 @@ PGRE.views.dashboard = (function () {
 
   /* ———————————————————————————————————————————————————————————— */
 
+  function examDateStr() {
+    var s = PGRE.store.state;
+    return (s.settings && s.settings.examDate) || PGRE.EXAM_DATE || '';
+  }
+
+  function examDateLabel() {
+    var d = examDateStr();
+    if (!d) return '';
+    var dt = new Date(d + 'T12:00:00');
+    if (isNaN(dt.getTime())) return '';
+    return dt.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+    });
+  }
+
+  /* Next unused intact ETS form. Never GR8677/GR9277 as a fresh test.
+     If ets2024 has not been sat, it is the pointer even when the catalog
+     has not loaded. */
+  function nextMockPointer() {
+    var sat = {};
+    (PGRE.store.state.exams || []).forEach(function (x) {
+      if (x && x.source) sat[String(x.source).toLowerCase()] = true;
+    });
+    var skip = { gr8677: 1, gr9277: 1 };
+    function catalogTitle(id, fallback) {
+      var list = PGRE.ETS_EXAMS || [];
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].id === id) return list[i].title || fallback;
+      }
+      return fallback;
+    }
+    if (!sat.ets2024) return { title: catalogTitle('ets2024', 'ETS 2024') };
+    var list = PGRE.ETS_EXAMS || [];
+    for (var i = 0; i < list.length; i++) {
+      var ex = list[i];
+      if (!ex || !ex.id) continue;
+      var id = String(ex.id).toLowerCase();
+      if (skip[id] || sat[id]) continue;
+      return { title: ex.title || ex.id };
+    }
+    return null;
+  }
+
+  function todayAgendaHTML() {
+    var ui = PGRE.ui;
+    var mock = nextMockPointer();
+    var html = '<div class="card review-queue" id="today-agenda">' +
+      '<h2>Today</h2><div class="rq-rows">' +
+      '<div class="rq-row"><span class="rq-label">Mixed practice</span>' +
+        '<span class="rq-count">Questions from the daily pool</span>' +
+        '<a class="btn btn-primary btn-sm" href="#/practice/all">Practice →</a></div>' +
+      '<div class="rq-row"><span class="rq-label">Formula review</span>' +
+        '<span class="rq-count" id="today-formulas">…</span>' +
+        '<button type="button" class="btn btn-primary btn-sm" id="today-formulas-btn">Study →</button></div>';
+    if (mock) {
+      html += '<div class="rq-row"><span class="rq-label">Mock exam</span>' +
+        '<span class="rq-count">Next current-format mock: ' + ui.esc(mock.title) + '</span>' +
+        '<a class="btn btn-ghost btn-sm" href="#/exam">Open →</a></div>';
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  function formulaStatus(deck) {
+    var srs = PGRE.srs;
+    var T = srs.clampTarget(PGRE.store.state.settings &&
+      PGRE.store.state.settings.formulaDailyTarget);
+    if (!deck.length) {
+      return { text: 'deck empty — awaits the book', remaining: 0,
+        unlearned: 0, picked: 0, target: T };
+    }
+    var remaining = srs.formulaDayRemaining(deck).length;
+    var batch = srs.formulaDay(deck);
+    var picked = batch.reviewIds.length + batch.newIds.length;
+    var unlearned = srs.newInDeck(deck).length;
+    var text;
+    if (remaining) text = remaining + ' left today';
+    else if (picked) text = 'all caught up';
+    else if (unlearned) text = unlearned + ' not yet introduced';
+    else text = 'all introduced';
+    return { text: text, remaining: remaining, unlearned: unlearned,
+      picked: picked, target: T };
+  }
+
+  function startFormulaFromToday(ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    var todayBtn = document.getElementById('today-formulas-btn');
+    var rqBtn = document.getElementById('rq-formulas-btn');
+    if (todayBtn) todayBtn.disabled = true;
+    if (rqBtn) rqBtn.disabled = true;
+    PGRE.formulaDeck().then(function (deck) {
+      PGRE.srs.fillFormulaDayIfEmpty(deck);
+      if (PGRE.views.formulas && PGRE.views.formulas.armStudyFromFill) {
+        PGRE.views.formulas.armStudyFromFill();
+      }
+      location.hash = '#/formulas';
+    }).catch(function () {
+      location.hash = '#/formulas';
+    });
+  }
+
   function render() {
     var ui = PGRE.ui, g = PGRE.gamify, s = PGRE.store.state;
     var lvl = g.levelInfo(s.xp);
@@ -389,9 +496,12 @@ PGRE.views.dashboard = (function () {
       '</div>' +
       '<div class="hero-right">' +
         '<div class="countdown"><div class="countdown-num">' + days + '</div>' +
-        '<div class="countdown-label">day' + (days === 1 ? '' : 's') + ' until the exam<br>Wed, Oct 28, 2026</div></div>' +
+        '<div class="countdown-label">day' + (days === 1 ? '' : 's') + ' until the exam<br>' +
+          examDateLabel() + '</div></div>' +
       '</div>' +
     '</div>';
+
+    html += todayAgendaHTML();
 
     html += '<div class="stat-row">' +
       ui.statTile('Total XP', ui.fmt(s.xp)) +
@@ -410,7 +520,7 @@ PGRE.views.dashboard = (function () {
           (dueM ? 'Drill →' : 'Open →') + '</a></div>' +
       '<div class="rq-row"><span class="rq-label">Formula recall</span>' +
         '<span class="rq-count" id="rq-formulas">…</span>' +
-        '<a class="btn btn-ghost btn-sm" href="#/formulas" id="rq-formulas-btn">Open →</a></div>' +
+        '<button type="button" class="btn btn-ghost btn-sm" id="rq-formulas-btn">Open →</button></div>' +
     '</div></div>';
 
     // #7 Question of the day — a low-friction daily hook that feeds the streak
@@ -599,7 +709,7 @@ PGRE.views.dashboard = (function () {
     if (PGRE.motion && !PGRE.motion.reduced) {
       countUpText(document.querySelector('.hero-level-num'), 700);
       countUpText(document.querySelector('.hero-xp-note'), 700);
-      countUpText(document.querySelector('.hero-right .countdown-num'), 700);
+      // countdown must paint at its final value — do not tween .countdown-num
       document.querySelectorAll('.stat-tile .stat-value').forEach(function (el) {
         countUpText(el, 700);
       });
@@ -614,25 +724,51 @@ PGRE.views.dashboard = (function () {
         });
         PGRE.motion.stagger(challengeList, { step: 60, max: 6 });
       }
+      var view = document.getElementById('view');
+      if (view) {
+        var cascade = 0;
+        Array.prototype.forEach.call(view.children, function (el) {
+          if (el.classList.contains('card') || el.classList.contains('stat-row') ||
+              el.classList.contains('two-col') || el.classList.contains('review-queue')) {
+            el.classList.add('stagger-in');
+            el.style.animationDelay = (cascade * 70) + 'ms';
+            cascade += 1;
+          }
+        });
+      }
+      var countdownNum = document.querySelector('.countdown-num');
+      if (countdownNum) countdownNum.classList.add('countdown-breathe');
     }
+    var todayAgenda = document.getElementById('today-agenda');
+    if (todayAgenda) todayAgenda.classList.add('today-draw');
 
+    var tfBtn = document.getElementById('today-formulas-btn');
+    if (tfBtn) tfBtn.addEventListener('click', startFormulaFromToday);
+    var rqOpen = document.getElementById('rq-formulas-btn');
+    if (rqOpen) rqOpen.addEventListener('click', startFormulaFromToday);
 
     // formula due count arrives async from the IndexedDB-backed deck
     PGRE.formulaDeck().then(function (deck) {
+      var st = formulaStatus(deck);
       var el = document.getElementById('rq-formulas');
-      if (!el) return;
-      if (!deck.length) { el.textContent = 'deck empty — awaits the book'; return; }
-      var n = PGRE.srs.formulaDayRemaining(deck).length;
-      var batch = PGRE.srs.formulaDay(deck);
-      var picked = batch.reviewIds.length + batch.newIds.length;
-      el.textContent = n ? n + ' left today'
-        : (picked ? 'all caught up' : 'nothing picked yet');
-      if (n) {
-        var btn = document.getElementById('rq-formulas-btn');
-        if (btn) { btn.classList.remove('btn-ghost'); btn.classList.add('btn-primary'); btn.textContent = 'Study →'; }
+      if (el) el.textContent = st.text;
+      var todayEl = document.getElementById('today-formulas');
+      if (todayEl) todayEl.textContent = st.text;
+      var rqBtn = document.getElementById('rq-formulas-btn');
+      if (rqBtn && st.remaining) {
+        rqBtn.classList.remove('btn-ghost');
+        rqBtn.classList.add('btn-primary');
+        rqBtn.textContent = 'Study →';
       }
-      // Views-A: the late-arriving formula count counts up instead of popping
-      if (PGRE.motion && !PGRE.motion.reduced) countUpText(el, 600);
+      if (tfBtn && !tfBtn.disabled) {
+        if (st.remaining) tfBtn.textContent = 'Study →';
+        else if (st.unlearned && !st.picked) tfBtn.textContent = 'Study ' + st.target + ' →';
+        else tfBtn.textContent = 'Open →';
+      }
+      // remaining counts may tween; do not tween "N not yet introduced"
+      if (PGRE.motion && !PGRE.motion.reduced && st.remaining) {
+        if (el) countUpText(el, 600);
+      }
     });
   }
 

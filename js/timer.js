@@ -2,7 +2,8 @@
    app (reading, deriving formulas on paper). Credits real wall-clock seconds
    into state.studyLog['YYYY-MM-DD'] using timestamps (state.timer.lastCredit),
    never accumulated setInterval counts, so a throttled/frozen tab or a reload
-   neither loses nor double-counts time. Splits credit across local midnight.
+   neither loses nor double-counts time. Splits credit across the 03:00 local
+   study-day (same window as PGRE.studyTime.todaySec).
    Persists, so it survives reload/close (boot credits the gap since lastCredit).
    While it runs the passive heartbeat (js/study-time.js) must NOT also credit.
    Booted from PGRE.boot after PGRE.studyTime.start(). */
@@ -37,6 +38,14 @@ PGRE.timer = (function () {
       String(d.getDate()).padStart(2, '0');
   }
 
+  /* 03:00 local study-day start — lockstep with js/study-time.js studyDayStart. */
+  function studyDayStart(d) {
+    var start = new Date(d.getTime());
+    start.setHours(3, 0, 0, 0);
+    if (d.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
+    return start;
+  }
+
   function st() { return PGRE.store.state.timer; }
 
   function fmtDur(sec) {
@@ -45,6 +54,62 @@ PGRE.timer = (function () {
     var p = function (n) { return n < 10 ? '0' + n : '' + n; };
     return h > 0 ? h + ':' + p(m) + ':' + p(s) : m + ':' + p(s);
   }
+
+  /* Same figure as the dashboard Study time card "active today":
+     Math.round(PGRE.studyTime.todaySec() / 60). One source — studyLog. */
+  function fmtActiveToday(sec) {
+    sec = Math.max(0, sec || 0);
+    var todayMin = Math.round(sec / 60);
+    return (sec > 0 && todayMin === 0) ? '<1 min' : todayMin + ' min';
+  }
+
+  function paintToday() {
+    if (!PGRE.studyTime || typeof PGRE.studyTime.todaySec !== 'function') return;
+    var todaySec = PGRE.studyTime.todaySec();
+    var label = fmtActiveToday(todaySec);
+    var todayEl = document.getElementById('today-learn-time');
+    var todayWrap = document.getElementById('today-learn');
+    if (todayEl) {
+      todayEl.textContent = label;
+      todayEl.classList.toggle('has-time', todaySec > 0);
+    }
+    if (todayWrap) {
+      todayWrap.setAttribute('aria-label', 'Active today: ' + label);
+    }
+    var cardBig = document.querySelector('.dash-study-card .dash-study-fig .dash-study-big');
+    if (cardBig) {
+      var todayMin = Math.round(todaySec / 60);
+      var todayDisp = (todaySec > 0 && todayMin === 0) ? '<1' : String(todayMin);
+      cardBig.innerHTML = todayDisp + '<span class="stat-unit"> min</span>';
+    }
+  }
+
+  var rolloverHandle = null;
+  function scheduleRollover() {
+    if (rolloverHandle) { clearTimeout(rolloverHandle); rolloverHandle = null; }
+    var now = new Date();
+    var next = new Date(now.getTime());
+    next.setHours(3, 0, 0, 0);
+    if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+    var delay = next.getTime() - Date.now() + 80;
+    if (delay < 250) delay = 250;
+    if (delay > 2147483647) delay = 2147483647; // 32-bit setTimeout cap
+    rolloverHandle = setTimeout(function () {
+      rolloverHandle = null;
+      paintToday();
+      scheduleRollover();
+    }, delay);
+  }
+
+  var todayTickHandle = null;
+  function startTodayTick() {
+    if (!todayTickHandle) todayTickHandle = setInterval(paintToday, 1000);
+  }
+  function stopTodayTick() {
+    if (todayTickHandle) { clearInterval(todayTickHandle); todayTickHandle = null; }
+  }
+
+
 
   function flush(force) {
     if (!dirty && !force) return;
@@ -61,19 +126,20 @@ PGRE.timer = (function () {
   }
 
   /* Credit [fromMs, toMs] wall-clock seconds into studyLog, split at each local
-     midnight so a session that spans days lands in the right buckets. Returns
-     the distinct local day keys the span credited, in chronological order, so
-     the caller can touchDay() every crossed day (not just today). */
+     03:00 so a session that spans study-days lands in the same buckets
+     todaySec() reads. Returns the distinct study-day keys the span credited,
+     in chronological order, so the caller can touchDay() every crossed day. */
   function addSpan(fromMs, toMs) {
     var keys = [];
     if (toMs <= fromMs) return keys;
     var log = PGRE.store.state.studyLog;
     var cursor = fromMs;
     while (cursor < toMs) {
-      var d = new Date(cursor);
-      var nextMid = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
-      var segEnd = toMs < nextMid ? toMs : nextMid;
-      var key = dayStr(d);
+      var start = studyDayStart(new Date(cursor));
+      var nextCut = new Date(start.getTime());
+      nextCut.setDate(nextCut.getDate() + 1);
+      var segEnd = toMs < nextCut.getTime() ? toMs : nextCut.getTime();
+      var key = dayStr(start);
       log[key] = (log[key] || 0) + (segEnd - cursor) / 1000;
       keys.push(key);
       cursor = segEnd;
@@ -398,6 +464,7 @@ PGRE.timer = (function () {
         }
       } else { time.hidden = true; time.textContent = '0:00'; time.removeAttribute('title'); }
     }
+    paintToday();
   }
 
   function bindControls() {
@@ -422,16 +489,40 @@ PGRE.timer = (function () {
     });
   }
 
+  function adoptStudyLog(raw) {
+    if (!raw || !PGRE.store || !PGRE.store.state) return;
+    try {
+      var incoming = JSON.parse(raw);
+      if (incoming && incoming.studyLog && typeof incoming.studyLog === 'object') {
+        PGRE.store.state.studyLog = incoming.studyLog;
+      }
+    } catch (e) { /* peer write unreadable */ }
+  }
+
   function registerLifecycle() {
     if (lifecycleBound) return;
     lifecycleBound = true;
     // Bank + persist before the tab is frozen/discarded; catch up on return.
     document.addEventListener('visibilitychange', function () {
+      if (document.hidden) stopTodayTick(); else startTodayTick();
       var t = st();
-      if (!t || !t.on) return;
+      if (!t || !t.on) {
+        // Idle: still paint today's total (hidden freeze, midnight, other tab).
+        if (!document.hidden) paintToday();
+        return;
+      }
       if (t.paused) return;                    // BUNDLE D: held -> no credit, no state change
       credit(Date.now());
       if (document.hidden) flush(true); else render();
+    });
+    window.addEventListener('hashchange', function () { render(); });
+    document.addEventListener('click', paintToday, { capture: false, passive: true });
+    document.addEventListener('keydown', paintToday, { capture: false, passive: true });
+    window.addEventListener('storage', function (e) {
+      if (!e || e.key !== PGRE.store.KEY) return;
+      var t = st();
+      if (!t || !t.on) adoptStudyLog(e.newValue);
+      paintToday();
     });
     // Last focused seconds survive closing. NB: pagehide does NOT stop the timer
     // — timer.on + lastCredit persist, and the next boot credits the gap. A PAUSED
@@ -473,6 +564,8 @@ PGRE.timer = (function () {
       flush(true);
     }
     render();
+    startTodayTick();
+    scheduleRollover();
   }
 
   return {

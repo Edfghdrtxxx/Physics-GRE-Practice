@@ -61,6 +61,12 @@
 .btn:active {
   transform: translateY(1px);
 }
+/* Kinetic polish (waiver: user instruction 2026-09-09 — practice/dashboard
+   motion extends the focus-page precedent; same vocabulary, no shadows/glows) */
+.btn-primary:hover,
+.btn-primary:focus-visible {
+  transform: translateY(-1px);
+}
 .btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -191,10 +197,136 @@
   to   { opacity: 0.3; }
 }
 
+/* == kinetic-polish == */
+
+/* ——— Countdown breathe ———
+   A slow ambient opacity cycle on the exam-countdown number. The 6s period
+   reads as organic, not mechanical; the trough (0.68) is deep enough to
+   notice after a beat, not so deep it looks broken. */
+.countdown-breathe {
+  animation: countdown-breathe 6s ease-in-out infinite;
+}
+@keyframes countdown-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.68; }
+}
+
+/* ——— Today card accent bar ———
+   A 3px coral left-border that scales in from the top edge on mount,
+   drawing the eye to the daily agenda. Uses a pseudo-element so the
+   card's own border is not disturbed. */
+.today-draw {
+  position: relative;
+  overflow: hidden;
+}
+.today-draw::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+  border-radius: var(--radius) 0 0 var(--radius);
+  transform-origin: top center;
+  animation: today-draw var(--dur-slow) var(--ease-out) both;
+}
+@keyframes today-draw {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+/* ——— Wrong-answer shake ———
+   A decaying horizontal oscillation on a wrong choice. Amplitude drops
+   from 4px to 1px over 400ms — physical, not cute. */
+.answer-shake {
+  animation: answer-shake 400ms var(--ease-out) both;
+}
+@keyframes answer-shake {
+  0%, 100% { transform: translateX(0); }
+  12% { transform: translateX(-4px); }
+  25% { transform: translateX(4px); }
+  37% { transform: translateX(-3px); }
+  50% { transform: translateX(2px); }
+  62% { transform: translateX(-2px); }
+  75% { transform: translateX(1px); }
+}
+
+/* ——— Correct-answer settle ———
+   A micro scale that clicks the correct choice into place — barely
+   perceptible, but the spring ease gives it a physical snap. */
+.answer-settle {
+  animation: answer-settle 280ms var(--ease-spring) both;
+}
+@keyframes answer-settle {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.012); }
+  100% { transform: scale(1); }
+}
+
+/* ——— Formula card answer wipe ———
+   A vertical clip-path reveal for formula answer backs — more
+   deliberate than a fade, suggesting the answer being uncovered. */
+.fcard-reveal {
+  animation: fcard-reveal var(--dur-slow) var(--ease-out) both;
+}
+@keyframes fcard-reveal {
+  from { clip-path: inset(0 0 100% 0); opacity: 0.3; }
+  to   { clip-path: inset(0); opacity: 1; }
+}
+
+/* ——— Grade button cascade ———
+   Grade buttons stagger in after the flip, reinforcing the reveal. */
+.grade-cascade {
+  opacity: 0;
+  animation: stagger-in var(--dur) var(--ease-spring) both;
+}
+
+/* ——— Toast spring ———
+   Override the default linear toast transition with the spring ease,
+   so toasts overshoot slightly and settle — more physical. */
+.toast.show {
+  transition: opacity .25s var(--ease-out),
+              transform .35s var(--ease-spring);
+}
+
+/* ——— XP pop ———
+   A brief scale pop on the XP counter in feedback — the reward moment. */
+.xp-pop {
+  animation: xp-pop 450ms var(--ease-spring) both;
+}
+@keyframes xp-pop {
+  0%   { transform: scale(0.7); opacity: 0; }
+  55%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+/* ——— CTA arrow nudge ———
+   The arrow text in Today row buttons shifts right on hover. */
+.rq-row .btn:hover {
+  letter-spacing: 0.04em;
+}
+
 /* ——— Reduced motion: static everything ——— */
 @media (prefers-reduced-motion: reduce) {
   .skel-bar { animation: none; }
-  .reveal-in { animation: none; }
+  .reveal-in { animation: none; opacity: 1; transform: none; }
   .timer-tick .exam-timer-clock { animation: none; }
   .flash-tile.matched-out { animation: none; opacity: 0.3; }
+  .meter-fill { transition: none; }
+  .toast { transition: none; transform: none; }
+  .toast.show { opacity: 1; transform: none; }
+  .flash-tile-shake { animation: none; transform: none; }
+  .topic-card:hover { transform: none; }
+  .grade-btn { transition: none; }
+  .flash-tile { transition: none; }
+  /* kinetic polish */
+  .countdown-breathe { animation: none; }
+  .today-draw::before { animation: none; }
+  .answer-shake { animation: none; transform: none; }
+  .answer-settle { animation: none; transform: none; }
+  .fcard-reveal { animation: none; clip-path: none; opacity: 1; }
+  .grade-cascade { animation: none; opacity: 1; }
+  .xp-pop { animation: none; opacity: 1; transform: none; }
+  .btn-primary:hover { transform: none; }
 }

@@ -1,4 +1,4 @@
-/* Review plan: Jul 13 – Oct 28, 2026 (exam day: Wed, Oct 28).
+/* Review plan: Jul 13 – Nov 1, 2026 (exam day: Sun, Nov 1).
    Intensity: Intensive (~15–17 h/week).
    Three phases: Foundation Pass → Second Pass & Practice Tests → Sharpen & Taper.
    Reading tasks refer to the corresponding chapters of "Conquering the Physics GRE";
@@ -165,7 +165,7 @@ PGRE.PLAN = [
   },
   {
     id: 'p3', name: 'Phase 3 · Sharpen & Taper',
-    desc: 'Data-driven drilling on your weakest topics, final mock, then taper so you arrive fresh on October 28.',
+    desc: 'Data-driven drilling on your weakest topics, final mock, then taper so you arrive fresh on November 1.',
     weeks: [
       {
         id: 'w14', start: '2026-10-12', end: '2026-10-18', title: 'Weak-topic offensive · Test #5', topics: [], hours: 16,
@@ -190,11 +190,11 @@ PGRE.PLAN = [
         ]
       },
       {
-        id: 'w16', start: '2026-10-26', end: '2026-10-28', title: 'Taper — exam Wednesday Oct 28', topics: [], hours: 4,
+        id: 'w16', start: '2026-10-26', end: '2026-11-01', title: 'Taper — exam Sunday Nov 1', topics: [], hours: 4,
         tasks: [
           { id: 'w16t1', label: 'Mon: light skim of formula sheets and exam playbook only — no new material', hours: 2, xp: 15 },
           { id: 'w16t2', label: 'Tue: 30-minute confidence review, pack bag, early night', hours: 1.5, xp: 15 },
-          { id: 'w16t3', label: 'Wed: EXAM DAY — arrive early, trust the preparation', hours: 0.5, xp: 50 }
+          { id: 'w16t3', label: 'Sun: EXAM DAY — arrive early, trust the preparation', hours: 0.5, xp: 50 }
         ]
       }
     ]

@@ -3,6 +3,10 @@
    (click, keydown, hashchange, visibilitychange) are heartbeats: the gap
    since the previous heartbeat is credited, capped at GAP_MAX seconds, so
    idle stretches never inflate the log and a hidden tab counts nothing.
+   The study-day key is 03:00 local → next 03:00 local (DST-safe Date field
+   setters), so todaySec() is that window — the same figure the toolbar and
+   the dashboard "active today" card both read. weekSec() walks Monday–today
+   of that same 03:00 study-week, so 00:00–03:00 agrees with todaySec().
    Saves are throttled to at most one per SAVE_MS. Booted from PGRE.boot. */
 window.PGRE = window.PGRE || {};
 
@@ -18,6 +22,16 @@ PGRE.studyTime = (function () {
     return d.getFullYear() + '-' +
       String(d.getMonth() + 1).padStart(2, '0') + '-' +
       String(d.getDate()).padStart(2, '0');
+  }
+
+  /* 03:00 local → next 03:00 local. setHours/setDate, not +24h ms, so a DST
+     spring-forward or fall-back still lands on civil 03:00. Before 03:00 the
+     window opened yesterday at 03:00. */
+  function studyDayStart(d) {
+    var start = new Date(d.getTime());
+    start.setHours(3, 0, 0, 0);
+    if (d.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
+    return start;
   }
 
   function flush() {
@@ -48,7 +62,7 @@ PGRE.studyTime = (function () {
     if (lastBeat) {
       var gap = (now - lastBeat) / 1000;
       if (gap > 0) { // a clock set backwards credits nothing
-        var day = dayStr(new Date());
+        var day = dayStr(studyDayStart(new Date()));
         var log = PGRE.store.state.studyLog;
         log[day] = (log[day] || 0) + Math.min(gap, GAP_MAX);
         dirty = true;
@@ -78,19 +92,22 @@ PGRE.studyTime = (function () {
     },
 
     todaySec: function () {
-      return this.daySec(dayStr(new Date()));
+      return this.daySec(dayStr(studyDayStart(new Date())));
     },
 
-    /* Monday-based week: seconds from this week's Monday through today. */
+    /* Monday-based study-week: seconds from this week's Monday 03:00 through
+       the current study-day (same keys todaySec() reads). */
     weekSec: function () {
-      var now = new Date();
-      var back = (now.getDay() + 6) % 7; // Mon = 0 … Sun = 6
+      var start = studyDayStart(new Date());
+      var back = (start.getDay() + 6) % 7; // Mon = 0 … Sun = 6
       var total = 0;
       for (var i = 0; i <= back; i++) {
-        var d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        var d = new Date(start.getTime());
+        d.setDate(d.getDate() - i);
         total += this.daySec(dayStr(d));
       }
       return total;
     }
+
   };
 })();

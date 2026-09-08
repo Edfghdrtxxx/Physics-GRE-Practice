@@ -514,8 +514,11 @@ PGRE.route = function () {
   PGRE.setActiveNav(view, params);
   PGRE.refreshNavBadges();
 
-  // View-enter animation + staggered card grids after mount.
-  PGRE.motion && PGRE.motion.viewEnter && PGRE.motion.viewEnter(main);
+  // Exam and formulas paint a placeholder/skeleton first; they call viewEnter
+  // after the real content mounts so we don't animate the loading stand-in.
+  if (view !== 'exam' && view !== 'formulas') {
+    PGRE.motion && PGRE.motion.viewEnter && PGRE.motion.viewEnter(main);
+  }
   ['topic-grid', 'stat-row', 'two-col', 'ach-grid'].forEach(function (cls) {
     var grid = main.querySelector('.' + cls);
     if (grid) {
@@ -549,6 +552,8 @@ PGRE.setActiveNav = function (view, params) {
     var active = key === view || (view === 'topic' && key === 'topic-' + params.id) ||
                  (view === 'practice' && key === 'topic-' + params.id);
     a.classList.toggle('active', active);
+    if (active) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
   });
 };
 
@@ -607,7 +612,10 @@ PGRE.applyTheme = function (t) {
   t = t || 'light';
   document.documentElement.dataset.theme = t;
   var btn = document.getElementById('theme-toggle');
-  if (btn) btn.textContent = t === 'dark' ? 'Light mode' : 'Dark mode';
+  if (btn) {
+    btn.textContent = t === 'dark' ? 'Light mode' : 'Dark mode';
+    btn.setAttribute('aria-pressed', t === 'dark' ? 'true' : 'false');
+  }
 };
 
 /* Persist + apply — the sidebar toggle and any settings UI call this. */

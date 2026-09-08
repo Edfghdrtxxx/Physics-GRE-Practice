@@ -449,6 +449,31 @@ PGRE.srs = {
     return batch;
   },
 
+  /* Explicit Today-agenda fill. formulaDay() still never auto-adds.
+     If the picked batch is empty and unlearned cards exist, put up to
+     clampTarget(formulaDailyTarget) unseen ids into newIds and persist.
+     Does not raise the target. */
+  fillFormulaDayIfEmpty: function (deck) {
+    deck = deck || [];
+    var batch = this.formulaDay(deck);
+    if (!deck.length) return batch;
+    if (batch.reviewIds.length + batch.newIds.length) return batch;
+    var self = this;
+    var ids = [];
+    var T = this.clampTarget(PGRE.store.state.settings &&
+      PGRE.store.state.settings.formulaDailyTarget);
+    this.newInDeck(deck).some(function (c) {
+      if (!c || !c.id || self.isSuspended(c.id)) return false;
+      ids.push(c.id);
+      return ids.length >= T;
+    });
+    if (!ids.length) return batch;
+    batch.newIds = ids;
+    PGRE.store.state.formulaDay = batch;
+    PGRE.store.save();
+    return batch;
+  },
+
   /* Membership check against the picked batch. Does NOT call formulaDay() —
      search UI uses this and must stay side-effect free until the user
      explicitly clicks Add. */

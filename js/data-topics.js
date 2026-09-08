@@ -2,7 +2,7 @@
    with official content weights (ETS Test Content outline). */
 window.PGRE = window.PGRE || {};
 
-PGRE.EXAM_DATE = '2026-10-28';
+PGRE.EXAM_DATE = '2026-11-01';
 
 PGRE.TOPICS = [
   {

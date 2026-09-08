@@ -27,6 +27,7 @@ PGRE.views.formulas = (function () {
   var activeGame = null; // Match/Type/Quiz controller { onKey, stop } or null
   var browseTab = 'learned'; // Browse sub-tab: 'learned' | 'upcoming'
   var memStatsOpen = false;  // F10: Memory stats card starts collapsed each mount
+  var studyFromFill = false;  // one-shot: dashboard CTA starts Study, not picker
   var ROUND_SIZE = 10;   // F11: grade presses per round (every press counts)
   // Classic Anki SM-2: four grades. (A legacy 'mastered' value may still
   // appear in cardReviews / lastGrade from older sessions; history chips
@@ -49,6 +50,48 @@ PGRE.views.formulas = (function () {
 
   function root() { return document.getElementById('formulas-root'); }
   function body() { return document.getElementById('flash-body'); }
+
+  /* Interactive sims are keyed by card id in PGRE.visualizers. About 30 book
+     cards have a draw() — the rest have none, so the nav button stays off. */
+  function hasInteractiveVisualizer(id) {
+    var v = window.PGRE && PGRE.visualizers && PGRE.visualizers[id];
+    return !!(v && typeof v.draw === 'function');
+  }
+
+  function openVisualizerFor(id) {
+    if (!id || !window.PGRE || typeof PGRE.openVisualizerModal !== 'function') return;
+    PGRE.openVisualizerModal(id);
+  }
+
+  function vizNavButtonHTML(id, extraClass, btnId) {
+    if (!hasInteractiveVisualizer(id)) return '';
+    var cls = 'btn btn-ghost viz-nav-btn' + (extraClass ? ' ' + extraClass : '');
+    var idAttr = btnId ? ' id="' + btnId + '"' : '';
+    return '<button type="button" class="' + cls + '"' + idAttr +
+      ' data-viz-open="' + PGRE.ui.esc(id) + '" aria-haspopup="dialog">Open Simulation</button>';
+  }
+
+  function wireVizNav(scope) {
+    var rootEl = scope || document;
+    if (!rootEl || !rootEl.querySelectorAll) return;
+    rootEl.querySelectorAll('[data-viz-open]').forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openVisualizerFor(b.getAttribute('data-viz-open'));
+      });
+    });
+  }
+
+  function visualizerModalOpen() {
+    return !!document.getElementById('viz-modal-backdrop');
+  }
+
+  function closeVisualizerIfOpen() {
+    if (window.PGRE && typeof PGRE.closeVisualizerModal === 'function') {
+      PGRE.closeVisualizerModal();
+    }
+  }
 
   function shuffle(arr) {
     var a = arr.slice();
@@ -139,7 +182,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20260906b';
+      s.src = 'js/flashmodes.js?v=20260907a';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -180,8 +223,12 @@ PGRE.views.formulas = (function () {
       if (t[0] === 'visual') {
         extra = ' title="Interactive Formula Visualizer Laboratory" aria-label="Visualizer Lab"';
       }
-      html += '<button class="flash-tab' + (mode === t[0] ? ' active' : '') + '" role="tab"' +
-        ' data-mode="' + t[0] + '"' + (dis ? ' disabled' : '') + extra + '>' + t[1] + '</button>';
+      var selected = mode === t[0];
+      html += '<button class="flash-tab' + (selected ? ' active' : '') + '" role="tab"' +
+        ' data-mode="' + t[0] + '"' +
+        ' aria-selected="' + (selected ? 'true' : 'false') + '"' +
+        ' tabindex="' + (selected ? '0' : '-1') + '"' +
+        (dis ? ' disabled' : '') + extra + '>' + t[1] + '</button>';
     });
     html += '</div>';
     if (empty) {
@@ -196,11 +243,23 @@ PGRE.views.formulas = (function () {
     root().innerHTML = html;
     root().querySelectorAll('.flash-tab').forEach(function (b) {
       if (b.disabled) return;
-      b.addEventListener('click', function () { switchMode(b.getAttribute('data-mode')); });
+      b.addEventListener('click', function () {
+        var m = b.getAttribute('data-mode');
+        root().querySelectorAll('.flash-tab').forEach(function (tab) {
+          var on = tab.getAttribute('data-mode') === m;
+          tab.classList.toggle('active', on);
+          tab.setAttribute('aria-selected', on ? 'true' : 'false');
+          tab.tabIndex = on ? 0 : -1;
+        });
+        switchMode(m);
+      });
     });
     var pf = document.getElementById('print-formulas');
     if (pf) pf.addEventListener('click', printSheet);
     renderMode();
+    if (window.PGRE && PGRE.motion && PGRE.motion.viewEnter) {
+      PGRE.motion.viewEnter(document.getElementById('view'));
+    }
   }
 
   /* ——— Print / PDF (proposal #13) ———
@@ -317,6 +376,7 @@ PGRE.views.formulas = (function () {
   window.addEventListener('beforeprint', flagWideCards);
 
   function switchMode(m) {
+    closeVisualizerIfOpen();
     if (m === mode) {
       /* Re-clicking the tab you are already on is normally a no-op — but a live
          Study session has taken the body over, and its own tab is the obvious
@@ -460,6 +520,15 @@ PGRE.views.formulas = (function () {
   /* ——— Study mode home — progressive daily batch, rendered into body ——— */
   function renderHome() {
     study = null;
+    if (studyFromFill) {
+      studyFromFill = false;
+      var remainingFromFill = PGRE.srs.formulaDayRemaining(deck);
+      if (remainingFromFill.length) {
+        if (PGRE.refreshNavBadges) PGRE.refreshNavBadges();
+        startStudy(remainingFromFill);
+        return;
+      }
+    }
     if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: back to base (Home ▸ Formula recall)
     var ui = PGRE.ui, srs = PGRE.srs;
     var fresh = srs.newInDeck(deck);
@@ -615,9 +684,11 @@ PGRE.views.formulas = (function () {
     html += '<div class="card"><h2>Browse the deck</h2>' +
       '<div class="browse-tabs" role="tablist">' +
       '<button class="browse-tab' + (browseTab === 'learned' ? ' active' : '') +
-        '" data-btab="learned">Learned</button>' +
+        '" role="tab" data-btab="learned" aria-selected="' + (browseTab === 'learned' ? 'true' : 'false') +
+        '" tabindex="' + (browseTab === 'learned' ? '0' : '-1') + '">Learned</button>' +
       '<button class="browse-tab' + (browseTab === 'upcoming' ? ' active' : '') +
-        '" data-btab="upcoming">Upcoming</button>' +
+        '" role="tab" data-btab="upcoming" aria-selected="' + (browseTab === 'upcoming' ? 'true' : 'false') +
+        '" tabindex="' + (browseTab === 'upcoming' ? '0' : '-1') + '">Upcoming</button>' +
       '</div><div id="browse-body">' + browseBodyHTML() + '</div></div>';
 
     body().innerHTML = html;
@@ -904,7 +975,10 @@ PGRE.views.formulas = (function () {
         if (tab === browseTab) return;
         browseTab = tab;
         root().querySelectorAll('.browse-tab').forEach(function (o) {
-          o.classList.toggle('active', o.getAttribute('data-btab') === tab);
+          var on = o.getAttribute('data-btab') === tab;
+          o.classList.toggle('active', on);
+          o.setAttribute('aria-selected', on ? 'true' : 'false');
+          o.tabIndex = on ? 0 : -1;
         });
         box.innerHTML = browseBodyHTML();
         PGRE.typesetMath(box);   // deck names/tags can carry $…$ — typeset the swapped-in list
@@ -990,11 +1064,13 @@ PGRE.views.formulas = (function () {
             peek.innerHTML = '<div class="fcard-front">' + formulaHTML(c.front) + '</div>' +
               '<div class="fcard-back">' + backHTML(c) +
               (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') + '</div>' +
+              vizNavButtonHTML(c.id, 'btn-sm') +
               '<div class="peek-history"></div>' +
               '<div class="peek-suspend" data-susp-for="' + PGRE.ui.esc(c.id) + '"></div>' +
               '<div class="peek-mnemonic" data-mnem-for="' + PGRE.ui.esc(c.id) + '"></div>';
             peek.setAttribute('data-filled', '1');
             PGRE.typesetMath(peek);
+            wireVizNav(peek);
             // F2: mnemonic editor lives below the card body (plain text, no math).
             wireMnemonic(peek.querySelector('.peek-mnemonic'), c.id);
           }
@@ -1301,6 +1377,7 @@ PGRE.views.formulas = (function () {
   }
 
   function renderCard() {
+    closeVisualizerIfOpen();
     if (window.PGRE && window.PGRE.teardownInlineVisualizer) {
       window.PGRE.teardownInlineVisualizer();
     }
@@ -1398,6 +1475,7 @@ PGRE.views.formulas = (function () {
   }
 
   function renderPeek() {
+    closeVisualizerIfOpen();
     var n = study.history.length, idx = study.peek.idx;
     var entry = study.history[idx], c = entry.c;
     var t = PGRE.topicById(c.topic), nm = cardName(c);
@@ -1414,12 +1492,15 @@ PGRE.views.formulas = (function () {
         '<div class="fcard-back">' + backHTML(c) +
           (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') + '</div>' +
       '</div>' +
+      vizNavButtonHTML(c.id, 'btn-sm', 'peek-viz') +
       '<div class="btn-row session-peek-bar">' +
         '<button class="btn btn-ghost" id="peek-older"' + (idx <= 0 ? ' disabled' : '') +
           '>← Older</button>' +
         '<button class="btn btn-ghost" id="peek-newer"' + (atNewest ? ' disabled' : '') +
           '>Newer →</button>' +
-        '<button class="btn btn-primary" id="peek-resume">Resume study</button>' +
+        '<span class="session-peek-actions">' +
+          '<button class="btn btn-primary" id="peek-resume">Resume study</button>' +
+        '</span>' +
       '</div></div>';
     body().innerHTML = html;
     PGRE.typesetMath(body());
@@ -1428,6 +1509,7 @@ PGRE.views.formulas = (function () {
     if (ob) ob.addEventListener('click', function () { peekStep(-1); });
     if (nb) nb.addEventListener('click', function () { peekStep(1); });
     document.getElementById('peek-resume').addEventListener('click', resumePeek);
+    wireVizNav(body());
   }
 
   function peekStep(d) {
@@ -1452,7 +1534,7 @@ PGRE.views.formulas = (function () {
     var backEl = document.getElementById('fcard-back');
     if (backEl) {
       backEl.hidden = false;
-      backEl.classList.add('reveal-in');   // fade + 4px rise via motion tokens
+      backEl.classList.add('fcard-reveal');   // clip-path wipe via motion tokens
       if (window.PGRE && window.PGRE.renderInlineVisualizer) {
         window.PGRE.renderInlineVisualizer(c.id, backEl);
       }
@@ -1478,14 +1560,19 @@ PGRE.views.formulas = (function () {
       var lbl;
       if (stateless && step === 0 && (g.key === 'hard' || g.key === 'good')) lbl = 'soon';
       else lbl = PGRE.srs.ivlLabel(ivls[g.key]);
-      html += '<button class="btn grade-btn grade-' + g.key + '" data-grade="' + g.key + '">' +
+      html += '<button class="btn grade-btn grade-' + g.key + '" data-grade="' + g.key +
+        '" aria-pressed="false">' +
         '<span class="grade-top">' + g.label + ' <span class="key-hint">' + g.hint + '</span></span>' +
         '<span class="grade-ivl">' + lbl + '</span></button>';
     });
     var box = document.getElementById('fcard-actions');
     box.innerHTML = html;
-    box.querySelectorAll('[data-grade]').forEach(function (b) {
+    box.querySelectorAll('[data-grade]').forEach(function (b, i) {
       b.addEventListener('click', function () { grade(b.getAttribute('data-grade')); });
+      if (PGRE.motion && !PGRE.motion.reduced) {
+        b.classList.add('grade-cascade');
+        b.style.animationDelay = (i * 60) + 'ms';
+      }
     });
   }
 
@@ -1496,7 +1583,10 @@ PGRE.views.formulas = (function () {
     var c = study.queue[0], id = c.id;
     var stateless = !PGRE.srs.cardState(id);
     var pressed = document.querySelector('#fcard-actions [data-grade="' + g + '"]');
-    if (pressed) pressed.classList.add('chosen');   // instant tint, no delay — keyboard flow unaffected
+    if (pressed) {
+      pressed.classList.add('chosen');   // instant tint, no delay — keyboard flow unaffected
+      pressed.setAttribute('aria-pressed', 'true');
+    }
     var step = study.steps[id] || 0;
 
     // F1a: snapshot the whole session + card state BEFORE any mutation.
@@ -2223,7 +2313,8 @@ PGRE.views.formulas = (function () {
       '<div class="fs-front">' + formulaHTML(c.front || 'Recall the formula.') + '</div>' +
       '<div class="fs-back"' + (open ? '' : ' hidden') + '></div>' +
       '<div class="fs-card-foot">' +
-        '<button type="button" class="btn btn-ghost btn-sm fs-flip">' +
+        '<button type="button" class="btn btn-ghost btn-sm fs-flip" aria-expanded="' +
+          (open ? 'true' : 'false') + '">' +
           (open ? 'Hide formula' : 'Show formula') + '</button>' +
         '<span class="fs-card-actions">' +
           '<button type="button" class="btn btn-ghost btn-sm fs-modal-btn" data-fs-modal="' +
@@ -2364,7 +2455,10 @@ PGRE.views.formulas = (function () {
     back.hidden = !open;
     art.classList.toggle('is-open', open);
     var btn = art.querySelector('.fs-flip');
-    if (btn) btn.textContent = open ? 'Hide formula' : 'Show formula';
+    if (btn) {
+      btn.textContent = open ? 'Hide formula' : 'Show formula';
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
   }
 
   /* One persistent, guarded keyboard handler (the view is a singleton). Study
@@ -2375,6 +2469,9 @@ PGRE.views.formulas = (function () {
     var typing = e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName);
     if (mode === 'study') {
       if (!study || typing) return;
+      // The visualizer modal owns Escape / pointer while it is up — do not
+      // resume, step, flip, or grade the card underneath it.
+      if (visualizerModalOpen()) return;
       // F8: route strictly by the single overlay field — exactly one overlay at a
       // time, and each consumes only its own keys (never flipping/grading a hidden
       // live card underneath).
@@ -2391,7 +2488,14 @@ PGRE.views.formulas = (function () {
       }
       if (ov === 'scaffold' || ov === 'checkpoint') {   // space/Enter = continue
         if (e.metaKey || e.ctrlKey || e.altKey) return;
-        if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); runNextOverlay(); }
+        if (e.key === ' ' || e.key === 'Enter') {
+          var ae = document.activeElement;
+          // Focused Finish / Keep / Continue fire natively — don't double-run.
+          if (ae && (ae.id === 'cp-finish' || ae.id === 'cp-keep' ||
+                     ae.id === 'scaffold-continue')) return;
+          e.preventDefault();
+          runNextOverlay();   // unfocused: Keep going
+        }
         return;
       }
       // ov === null: normal flip/grade flow + F1a undo. ⌘Z is the only chord
@@ -2420,7 +2524,15 @@ PGRE.views.formulas = (function () {
       }
       return;
     }
-    if (typing) return;
+    // Type-to-recall keeps the prompt INPUT focused; still let Ctrl/Meta+Z
+    // reach the game's undoLast. Other keys stay with the input (Enter submits).
+    if (typing) {
+      if (activeGame && activeGame.onKey &&
+          (e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        activeGame.onKey(e);
+      }
+      return;
+    }
     if (activeGame && activeGame.onKey) activeGame.onKey(e);
   });
 
@@ -2492,6 +2604,7 @@ PGRE.views.formulas = (function () {
       });
     },
     getCard: deckById,
+    armStudyFromFill: function () { studyFromFill = true; },
     getDeck: function () { return deck; }
   };
 })();

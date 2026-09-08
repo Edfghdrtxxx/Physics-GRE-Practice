@@ -62,16 +62,12 @@
       active += 1;
       if (active > 1) return;   // already running for an outer operation
       if (finishTimer) { clearTimeout(finishTimer); finishTimer = 0; }   // a pending finish must not kill a new run
+      if (motion.reduced) return;   // visual no-op: no crawl, no 60% stand-in
       el = ensureEl();
       el.classList.remove('motion-loader-done', 'motion-loader-hide');
       el.style.opacity = '1';
       el.style.width = '0%';
       startedAt = Date.now();
-      if (motion.reduced) {
-        // Reduced motion: static visible bar, no crawl animation.
-        el.style.width = '60%';
-        return;
-      }
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(paint);
     }
@@ -79,6 +75,13 @@
     function done() {
       if (active > 0) active -= 1;
       if (active > 0) return;   // outer operation still pending
+      if (motion.reduced) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+        if (el && el.isConnected) el.remove();
+        el = null;
+        return;
+      }
       if (!el || !el.isConnected) return;
       cancelAnimationFrame(raf);
       var bar = el;
@@ -91,10 +94,10 @@
             if (bar.isConnected) bar.remove();
             if (el === bar) el = null;
           }, 400);
-        }, motion.reduced ? 0 : 120);
+        }, 120);
       };
       var waited = Date.now() - startedAt;
-      if (motion.reduced || waited >= MIN_VISIBLE_MS) finish();
+      if (waited >= MIN_VISIBLE_MS) finish();
       else finishTimer = setTimeout(finish, MIN_VISIBLE_MS - waited);
     }
 
@@ -185,6 +188,7 @@
 
     var startTs = null;
     if (el._cu) cancelAnimationFrame(el._cu);   // cancel any prior tween on this element
+    if (motion.reduced) { render(target); el._cu = 0; return; }
     function frame(now) {
       if (!el.isConnected) return;   // stop if the element left the DOM
       if (startTs === null) startTs = now;
@@ -199,8 +203,8 @@
 
   /* ——— animateMeter ———
      For .meter-fill elements: set width to 0 now, then to `pct` on the next
-     frame so the existing `transition: width .4s` (style.css) animates on
-     first paint instead of snapping. Reduced motion: set final width. */
+     frame so the existing `transition: width var(--dur-slow)` (style.css)
+     animates on first paint instead of snapping. Reduced motion: set final width. */
   motion.animateMeter = function (el, pct) {
     if (!el) return;
     var target = Math.max(0, Math.min(100, Number(pct) || 0));

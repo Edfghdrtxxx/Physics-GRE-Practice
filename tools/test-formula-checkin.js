@@ -229,10 +229,10 @@ var strip = fci.stripHTML(st0);
 assert(/formula-checkin-card/.test(strip) && /Not yet today/.test(strip),
   'stripHTML shows pending surface');
 var strip2 = fci.stripHTML({ checkedToday: true, current: 3, best: 5, lastDay: '2026-08-04' });
-assert(/Checked in today/.test(strip2) && /3-day streak/.test(strip2),
+assert(/Checked in today/.test(strip2) && /data-to="3"/.test(strip2) && /day streak/.test(strip2),
   'stripHTML shows checked + streak');
 var cel = fci.celebrateHTML(recCon);
-assert(/formula-checkin-celebrate/.test(cel) && /\+15 XP/.test(cel),
+assert(/formula-checkin-celebrate/.test(cel) && /data-to="15"/.test(cel) && /XP/.test(cel),
   'celebrateHTML paints reward moment');
 var alr = fci.alreadyHTML({ checkedToday: true, current: 3, best: 5 });
 assert(/Already checked in today/.test(alr), 'alreadyHTML for re-entry');
@@ -252,7 +252,7 @@ assert(/formulaCheckIn:\s*\{\s*current:\s*0/.test(storeSrc),
   'store defaults include formulaCheckIn');
 assert(/formula-checkin\.js/.test(indexSrc), 'index.html loads formula-checkin.js');
 // Cache-buster must not leave games on a pre-check-in flashmodes build
-assert(/flashmodes\.js\?v=20260804b/.test(viewSrc),
+assert(/flashmodes\.js\?v=/.test(viewSrc) && !/flashmodes\.js\?v=20260725b/.test(viewSrc),
   'ensureFlashmodes loads flashmodes with post-check-in cache buster');
 assert(!/flashmodes\.js\?v=20260725b/.test(viewSrc),
   'stale flashmodes?v=20260725b cache buster removed');

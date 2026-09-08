@@ -523,7 +523,8 @@ PGRE.views.mistakes = (function () {
         if (idx === q.answer) cls += ' is-answer';
         if (idx === st.picked && !st.correct) cls += ' is-wrong';
       }
-      html += '<button class="' + cls + '" data-idx="' + idx + '">' +
+      html += '<button class="' + cls + '" data-idx="' + idx + '" aria-pressed="' +
+        (show && idx === st.picked ? 'true' : 'false') + '">' +
         '<span class="choice-letter">' + LETTERS[idx] + '</span>' +
         '<span class="choice-body">' + c + '</span></button>';
     });

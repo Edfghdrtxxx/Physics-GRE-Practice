@@ -369,7 +369,7 @@ PGRE.flashmodes = (function () {
     function render() {
       var grid = '';
       st.tiles.forEach(function (t, idx) {
-        grid += '<button class="flash-tile" data-tile="' + idx + '">' +
+        grid += '<button class="flash-tile" data-tile="' + idx + '" aria-pressed="false">' +
           '<span class="flash-tile-kind">' + (t.kind === 'prompt' ? 'Prompt' : 'Formula') + '</span>' +
           '<span class="flash-tile-body">' + t.html + '</span></button>';
       });
@@ -399,10 +399,14 @@ PGRE.flashmodes = (function () {
       var pos = st.selected.indexOf(idx);
       if (pos !== -1) { // toggle off
         st.selected.splice(pos, 1);
-        tile(idx).classList.remove('selected');
+        var off = tile(idx);
+        off.classList.remove('selected');
+        off.setAttribute('aria-pressed', 'false');
         return;
       }
-      tile(idx).classList.add('selected');
+      var onEl = tile(idx);
+      onEl.classList.add('selected');
+      onEl.setAttribute('aria-pressed', 'true');
       st.selected.push(idx);
       if (st.selected.length < 2) return;
 
@@ -414,6 +418,7 @@ PGRE.flashmodes = (function () {
         [iA, iB].forEach(function (i) {
           var elm = tile(i);
           elm.classList.remove('selected');
+          elm.setAttribute('aria-pressed', 'false');
           elm.classList.add('matched', 'matched-out');
           elm.disabled = true;
         });
@@ -427,13 +432,21 @@ PGRE.flashmodes = (function () {
           var elm = tile(i);
           elm.classList.add('bad', 'flash-tile-shake');
         });
-        setTimeout(function () {
+        function clearMismatch() {
           [iA, iB].forEach(function (i) {
             var elm = tile(i);
-            if (elm) elm.classList.remove('selected', 'bad', 'flash-tile-shake');
+            if (elm) {
+              elm.classList.remove('selected', 'bad', 'flash-tile-shake');
+              elm.setAttribute('aria-pressed', 'false');
+            }
           });
           st.locked = false;
-        }, 600);
+        }
+        if (window.PGRE && PGRE.motion && PGRE.motion.reduced) {
+          clearMismatch();
+        } else {
+          setTimeout(clearMismatch, 600);
+        }
       }
     }
 
@@ -461,7 +474,21 @@ PGRE.flashmodes = (function () {
     }
 
     render();
-    return { onKey: function () {}, stop: stop };
+    return {
+      onKey: function (e) {
+        if (st.locked || st.done) return;
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        var ae = document.activeElement;
+        if ((e.key === 'Enter' || e.key === ' ') && ae && ae.getAttribute &&
+            ae.getAttribute('data-tile') != null) return; // native click → onPick
+        var n = parseInt(e.key, 10);
+        if (e.key >= '1' && e.key <= '9' && n >= 1 && n <= st.tiles.length) {
+          e.preventDefault();
+          onPick(n - 1);
+        }
+      },
+      stop: stop
+    };
   }
 
   /* ——— Type-to-recall ——— */
@@ -524,7 +551,8 @@ PGRE.flashmodes = (function () {
       var gradesHtml = '';
       GRADES.forEach(function (g) {
         gradesHtml += '<button class="btn grade-btn grade-' + g.key +
-          (g.key === st.defaultGrade ? ' is-default' : '') + '" data-grade="' + g.key + '">' +
+          (g.key === st.defaultGrade ? ' is-default' : '') + '" data-grade="' + g.key +
+          '" aria-pressed="false">' +
           g.label + '<span class="key-hint">' + g.hint + '</span></button>';
       });
       var box = document.getElementById('flash-reveal');
@@ -558,6 +586,11 @@ PGRE.flashmodes = (function () {
        (those live in Study mode only). */
     function grade(g) {
       if (!st.submitted) return;
+      var pressed = el.querySelector('[data-grade="' + g + '"]');
+      if (pressed) {
+        pressed.classList.add('chosen');
+        pressed.setAttribute('aria-pressed', 'true');
+      }
       var c = st.queue[st.i], id = c.id;
       var prev = PGRE.store.state.cards[id];
       st.undo = { id: id, day: PGRE.srs.today(),
@@ -610,6 +643,11 @@ PGRE.flashmodes = (function () {
     renderPrompt();
     return {
       onKey: function (e) {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+          e.preventDefault();
+          undoLast();
+          return;
+        }
         if (e.metaKey || e.ctrlKey || e.altKey) return; // browser chords never grade
         if (e.repeat) return;                // a held key confirms at most once
         if (st.i >= st.queue.length) return; // round over: the summary card is showing
@@ -684,7 +722,7 @@ PGRE.flashmodes = (function () {
         '<div class="q-text">' + formulaHTML(c.front || 'Which formula matches?') + '</div>' +
         '<div class="choices">';
       st.built.opts.forEach(function (o, idx) {
-        html += '<button class="choice" data-idx="' + idx + '">' +
+        html += '<button class="choice" data-idx="' + idx + '" aria-pressed="false">' +
           '<span class="choice-letter">' + (idx + 1) + '</span>' +
           '<span class="choice-body">' + o + '</span></button>';
       });
@@ -719,6 +757,7 @@ PGRE.flashmodes = (function () {
         b.disabled = true;
         if (i === correctIdx) b.classList.add('is-answer');
         if (i === idx && !isCorrect) b.classList.add('is-wrong');
+        b.setAttribute('aria-pressed', i === idx ? 'true' : 'false');
       });
       var fb = document.getElementById('flash-fb');
       fb.innerHTML =
@@ -801,13 +840,21 @@ PGRE.flashmodes = (function () {
     render();
     return {
       onKey: function (e) {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+          e.preventDefault();
+          undoLast();
+          return;
+        }
         if (e.metaKey || e.ctrlKey || e.altKey) return; // browser chords never answer
         if (st.i >= st.queue.length) return; // round over: the completion card is showing
         if (!st.answered) {
           var n = parseInt(e.key, 10);
           if (n >= 1 && n <= st.built.opts.length) { e.preventDefault(); pick(n - 1); }
         } else if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault(); next();
+          if (document.activeElement && document.activeElement.id === 'flash-next') return;
+          e.preventDefault();
+          var nx = document.getElementById('flash-next');
+          if (nx) nx.click();
         }
       },
       stop: function () { settle(); }
@@ -1080,8 +1127,13 @@ PGRE.flashmodes = (function () {
         '<strong>' + (isCorrect ? 'Correct' : 'The box holds option ' + (correctIdx + 1)) + '</strong></div>';
       PGRE.typesetMath(fb);
       // A brief pause to read the highlighted answer, then advance automatically.
+      // Reduced motion: land on the next card immediately after the tints paint.
       clearTimer();
-      st.timer = setTimeout(next, isCorrect ? 650 : 1200);
+      if (window.PGRE && PGRE.motion && PGRE.motion.reduced) {
+        next();
+      } else {
+        st.timer = setTimeout(next, isCorrect ? 650 : 1200);
+      }
     }
 
     function next() {

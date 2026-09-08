@@ -62,7 +62,7 @@ PGRE.store = {
                   keyboard: true, qotdTopicRotate: true, formulaDailyTarget: 10,
                   // exam date (F3) — drives the interval cap + final pass; literal
                   // mirrors PGRE.EXAM_DATE (js/data-topics.js)
-                  examDate: '2026-10-28',
+                  examDate: '2026-11-01',
                   // F3 — when true (default), nextIntervals clamps Hard/Good/Easy
                   // to examCap(); when false, classic uncapped Anki SM-2. Does not
                   // rewrite cards already scheduled; migrate() backfills true.
@@ -198,6 +198,7 @@ PGRE.store = {
       if (!st[k] || typeof st[k] !== 'object' || Array.isArray(st[k])) st[k] = d[k];
       for (var kk in d[k]) if (!(kk in st[k])) st[k][kk] = d[k][kk];
     });
+    if (st.settings.examDate === '2026-10-28') st.settings.examDate = '2026-11-01';
   },
 
   save: function () {

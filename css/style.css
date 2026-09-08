@@ -208,7 +208,19 @@ body.sidebar-folded #sidebar { display: none; opacity: 0; }
   line-height: 1;
 }
 
-.brand { padding: 0 10px 18px; }
+/* Home control: the sidebar title block is a real hash link to #/. Keep
+   the original padding/type so swapping div→a does not shift layout.
+   Global `a` (coral + hover underline) must not restyle the wordmark. */
+.brand {
+  display: block;
+  padding: 0 10px 18px;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: var(--ctl-r);
+}
+a.brand:hover,
+a.brand:focus-visible { text-decoration: none; color: inherit; }
 .brand-name { font-family: var(--heading); font-size: 21px; font-weight: 400; color: var(--ink); }
 /* De-coraled: the sidebar's one coral is #sidebar-nav a.active (coral scarcity). */
 .brand-name .accent { color: var(--ink); }
@@ -361,7 +373,7 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
   height: 100%;
   background: var(--accent);
   border-radius: 4px 4px 4px 4px;
-  transition: width 0.4s ease;
+  transition: width var(--dur-slow) var(--ease-out);
 }
 .meter-thin { height: 6px; margin-top: 8px; }
 .meter-xp { height: 10px; }
@@ -847,6 +859,9 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 .rq-count { flex: 1; color: var(--ink-2); font-size: 13.5px; }
 .rq-row .btn { margin: 0; }
 
+/* Today agenda (kinetic polish) — warm tint + extra left padding for the
+   coral accent-bar pseudo-element (css/motion.css .today-draw::before). */
+#today-agenda { background: var(--ivory); padding-left: 28px; }
 /* ——— Due chips (mistake book, formula deck) ——— */
 .due-chip {
   font-size: 11px;
@@ -2179,7 +2194,16 @@ body.exam-fullscreen #view { max-width: none; margin: 0; padding: 0; }
 }
 .session-peek-bar { align-items: center; }
 .session-peek-bar .btn { margin: 0; }
+.session-peek-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
 .peek-grade { margin-left: auto; }
+.browse-peek .viz-nav-btn,
+.practice-card > .viz-nav-btn { margin-top: 10px; }
 
 /* ——— Exam day + final pass (F3) ——— */
 .exam-day-row {
@@ -3641,7 +3665,79 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
   color: var(--ink-3);
 }
 /* F5: split the toggle button from a nav-able readout that links to #/focus. */
-.focus-row { display: flex; align-items: stretch; gap: 6px; }
+.focus-row { display: flex; align-items: center; gap: 6px; }
+/* Today's 03:00→03:00 focus total, left of Start focus. Same 28px row
+   as the pill / expand control; no chrome so it does not compete.
+   Center the cluster on the pill axis — baseline-aligning the 11px
+   TODAY kicker against 12.5px duration yanked the minutes above
+   "Start focus". Real hash link to #/study-time (dashboard Details →).
+   Global `a` (coral + hover underline) must not restyle it. */
+.today-learn {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 8px 0 2px;
+  flex: none;
+  white-space: nowrap;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: var(--ctl-r);
+}
+a.today-learn:hover,
+a.today-learn:focus-visible { text-decoration: none; color: inherit; }
+.today-learn-run {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.today-learn-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  line-height: 1;
+}
+.today-learn-time {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  color: var(--ink-2);
+}
+/* Editorial text shimmer: coral ribbon on ink across TODAY + duration
+   as one clip-text run. 2.2s linear, 200% size, peak at 50%. Both
+   ends are ink so repeat-x tiles if a frame overshoots — no clip
+   holes. Gate: .has-time only. */
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .today-learn-run:has(.today-learn-time.has-time) {
+    background-image: linear-gradient(105deg,
+      var(--ink-2) 0%,
+      var(--ink-2) 38%,
+      var(--accent) 50%,
+      var(--ink-2) 62%,
+      var(--ink-2) 100%);
+    background-size: 200% 100%;
+    background-repeat: repeat-x;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: today-shimmer 2.2s linear infinite;
+  }
+  .today-learn-run:has(.today-learn-time.has-time) .today-learn-kicker,
+  .today-learn-run:has(.today-learn-time.has-time) .today-learn-time {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+@keyframes today-shimmer {
+  from { background-position: 100% 0; }
+  to   { background-position: 0% 0; }
+}
 .focus-open {
   display: flex; align-items: center; gap: 6px;
   height: 28px;
@@ -3759,6 +3855,23 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
   .focus-open .focus-time { animation: none; }
   .focus-toggle { transition: background .15s, border-color .15s, color .15s; }
   .focus-toggle:hover, .focus-open:hover { transform: none; }
+  /* Must beat @supports .today-learn-run:has(.today-learn-time.has-time). */
+  .today-learn-run:has(.today-learn-time.has-time) {
+    animation: none;
+    background-image: none;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+    color: unset;
+    -webkit-text-fill-color: unset;
+  }
+  .today-learn-run:has(.today-learn-time.has-time) .today-learn-kicker {
+    color: var(--ink-3);
+    -webkit-text-fill-color: var(--ink-3);
+  }
+  .today-learn-run:has(.today-learn-time.has-time) .today-learn-time {
+    color: var(--ink-2);
+    -webkit-text-fill-color: var(--ink-2);
+  }
 }
 
 /* Print sheets are built into the DOM but hidden on screen; css/print.css

@@ -321,7 +321,7 @@ PGRE.views.practice = (function () {
       '<div class="q-text">' + q.q + '</div>' +
       '<div class="choices">';
     q.choices.forEach(function (c, idx) {
-      html += '<button class="choice" data-idx="' + idx + '">' +
+      html += '<button class="choice" data-idx="' + idx + '" aria-pressed="false">' +
         '<span class="choice-letter">' + LETTERS[idx] + '</span><span class="choice-body">' + c + '</span></button>';
     });
     html += '</div>';
@@ -369,8 +369,15 @@ PGRE.views.practice = (function () {
     el().querySelectorAll('.choice').forEach(function (b) {
       var i = parseInt(b.getAttribute('data-idx'), 10);
       b.disabled = true;
-      if (i === q.answer) b.classList.add('is-answer');
-      if (i === idx && !isCorrect) b.classList.add('is-wrong');
+      if (i === q.answer) {
+        b.classList.add('is-answer');
+        if (PGRE.motion && !PGRE.motion.reduced) b.classList.add('answer-settle');
+      }
+      if (i === idx && !isCorrect) {
+        b.classList.add('is-wrong');
+        if (PGRE.motion && !PGRE.motion.reduced) b.classList.add('answer-shake');
+      }
+      b.setAttribute('aria-pressed', i === idx ? 'true' : 'false');
     });
 
     var fb = document.getElementById('feedback');
@@ -393,6 +400,10 @@ PGRE.views.practice = (function () {
     if (window.PGRE && PGRE.motion && PGRE.motion.countUp) {
       var xpEl = fb.querySelector('.fb-xp');
       if (xpEl) PGRE.motion.countUp(xpEl, xp, { duration: 600, format: function (n) { return '+' + Math.round(n) + ' XP'; } });
+    }
+    if (PGRE.motion && !PGRE.motion.reduced) {
+      var xpPop = fb.querySelector('.fb-xp');
+      if (xpPop) xpPop.classList.add('xp-pop');
     }
     var nb = document.getElementById('next-btn');
     nb.addEventListener('click', next);

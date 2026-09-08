@@ -1,4 +1,4 @@
-/* Study plan — Jul 13 → Oct 28, 2026 in three phases.
+/* Study plan — Jul 13 → November 1, 2026 in three phases.
    Checking a task grants its XP (once) and counts as study activity. */
 window.PGRE = window.PGRE || {};
 PGRE.views = PGRE.views || {};
@@ -26,7 +26,7 @@ PGRE.views.plan = (function () {
 
     var html = '<div class="card hero">' +
       '<div class="hero-left"><h1>Review plan</h1>' +
-      '<p class="muted">July 13 → October 28, 2026 · intensive (~15–17 h/week) · two full passes, five released practice tests, then taper.</p>' +
+      '<p class="muted">July 13 → November 1, 2026 · intensive (~15–17 h/week) · two full passes, five released practice tests, then taper.</p>' +
       ui.meter(100 * allDone / Math.max(1, allTasks)) +
       '<div class="hero-xp-note">' + allDone + ' / ' + allTasks + ' tasks complete</div></div>' +
       '<div class="hero-right"><div class="countdown"><div class="countdown-num">' + days + '</div>' +

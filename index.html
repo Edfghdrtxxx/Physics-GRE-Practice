@@ -8,11 +8,11 @@
   <!-- ?v= is a cache-buster: bump it whenever these files change so browsers
        can never serve a stale copy -->
   <link rel="stylesheet" href="css/fonts.css?v=20260725c">
-  <link rel="stylesheet" href="css/style.css?v=20260901a">
+  <link rel="stylesheet" href="css/style.css?v=20260908d">
   <link rel="stylesheet" href="css/visualizer.css?v=20260901a">
   <link rel="stylesheet" href="css/print.css?v=20260901a">
   <link rel="stylesheet" href="css/ambient.css?v=20260906a">
-  <link rel="stylesheet" href="css/motion.css?v=20260906a">
+  <link rel="stylesheet" href="css/motion.css?v=20260907a">
   <link rel="stylesheet" href="vendor/katex/katex.min.css">
 </head>
 <body>
@@ -23,13 +23,13 @@
        "#main" never reaches the hash router (it would remount the dashboard). -->
   <a class="skip-link" href="#main">Skip to content</a>
   <aside id="sidebar">
-    <div class="brand">
+    <a class="brand" id="brand-home" href="#/" aria-label="Physics GRE home">
       <div class="brand-name">Physics <span class="accent">GRE</span></div>
-      <div class="brand-sub">Prep Studio · exam Oct 28, 2026</div>
-    </div>
+      <div class="brand-sub">Prep Studio · exam Nov 1, 2026</div>
+    </a>
     <nav id="sidebar-nav"></nav>
     <div id="sidebar-footer">
-      <button id="theme-toggle" class="btn btn-ghost btn-sm" type="button">Dark mode</button>
+      <button id="theme-toggle" class="btn btn-ghost btn-sm" type="button" aria-pressed="false">Dark mode</button>
     </div>
   </aside>
 
@@ -50,6 +50,13 @@
              so folding the sidebar never hides it -->
         <div id="focus-timer" class="focus-timer">
           <div class="focus-row">
+            <a class="today-learn" id="today-learn" href="#/study-time"
+               title="Active time today">
+              <span class="today-learn-run">
+                <span class="today-learn-kicker">Today</span>
+                <span id="today-learn-time" class="today-learn-time" aria-live="polite">0 min</span>
+              </span>
+            </a>
             <button id="focus-toggle" class="focus-toggle" type="button"
                     aria-pressed="false" aria-label="Start focus timer"
                     title="Times reading &amp; derivations you do away from the app.">
@@ -80,11 +87,11 @@
   <script src="vendor/katex/contrib/auto-render.min.js"></script>
 
   <!-- data -->
-  <script src="js/data-topics.js"></script>
+  <script src="js/data-topics.js?v=20260908e"></script>
   <script src="js/data-questions.js"></script>
   <script src="js/data-formulas.js"></script>
   <script src="js/data-achievements.js"></script>
-  <script src="js/data-plan.js"></script>
+  <script src="js/data-plan.js?v=20260908e"></script>
 
   <!-- book-derived bank (gitignored; generated placeholders until the
        extraction pipeline fills them) -->
@@ -94,35 +101,35 @@
   <script src="content/bank/ets-exams.js?v=20260901a"></script>  <!-- released ETS exams (gitignored — ETS copyright) -->
 
   <!-- engine -->
-  <script src="js/store.js?v=20260831b"></script>
+  <script src="js/store.js?v=20260908e"></script>
   <script src="js/srs.js?v=20260831b"></script>
   <script src="js/bank.js?v=20260901a"></script>
-  <script src="js/study-time.js"></script>
-  <script src="js/timer.js"></script>
+  <script src="js/study-time.js?v=20260908a"></script>
+  <script src="js/timer.js?v=20260908a"></script>
   <script src="js/focus-sound.js?v=20260804a"></script>  <!-- focus-timer selectable SFX -->
   <script src="js/focus-fx.js?v=20260718a"></script>  <!-- detector field + beamline fx for the focus page -->
   <script src="js/notes.js"></script>
-  <script src="js/gamify.js"></script>
+  <script src="js/gamify.js?v=20260908e"></script>
   <script src="js/formula-checkin.js?v=20260804a"></script>  <!-- formula-recall daily check-in -->
 
   <!-- views -->
-  <script src="js/view-dashboard.js?v=20260901a"></script>
+  <script src="js/view-dashboard.js?v=20260907a"></script>
   <script src="js/view-topic.js"></script>
-  <script src="js/view-practice.js?v=20260901a"></script>
+  <script src="js/view-practice.js?v=20260907a"></script>
   <script src="js/view-history.js"></script>
   <script src="js/view-analytics.js"></script>
   <script src="js/view-build.js?v=20260901a"></script>
   <script src="js/view-search.js"></script>
   <script src="js/view-notes.js?v=20260901a"></script>
-  <script src="js/view-mistakes.js?v=20260901a"></script>
-  <script src="js/view-formulas.js?v=20260831b"></script>
+  <script src="js/view-mistakes.js?v=20260907a"></script>
+  <script src="js/view-formulas.js?v=20260907a"></script>
   <script src="js/view-focus.js?v=20260804a"></script>        <!-- F5 focus page -->
   <script src="js/view-study-time.js"></script>   <!-- dedicated study-time page -->
   <script src="js/view-achievements.js"></script>
-  <script src="js/view-plan.js?v=20260901a"></script>
+  <script src="js/view-plan.js?v=20260908e"></script>
   <script src="js/view-content.js"></script>
   <script src="js/exam-engine.js"></script>
-  <script src="js/view-exam.js?v=20260901a"></script>
+  <script src="js/view-exam.js?v=20260907a"></script>
   <script src="js/visualizer-engine.js?v=20260901a"></script>
   <script src="js/visualizers/trio-g1.js?v=20260901a"></script>
   <script src="js/visualizers/trio-g2.js?v=20260901a"></script>
@@ -136,9 +143,9 @@
   <script src="js/visualizers/trio-g10.js?v=20260901a"></script>
 
   <!-- shell -->
-  <script src="js/app.js?v=20260906a"></script>
+  <script src="js/app.js?v=20260907a"></script>
   <!-- motion & ambient effects: loaded after app.js but still parsed before DOMContentLoaded fires, so PGRE.ambient/motion exist before PGRE.boot runs -->
   <script src="js/ambient-fx.js?v=20260906a"></script>
-  <script src="js/motion.js?v=20260906a"></script>
+  <script src="js/motion.js?v=20260907a"></script>
 </body>
 </html>
