@@ -26,7 +26,6 @@
   var CORAL = '#cc785c';
   var GOLD = '#d4a017';
   var TEAL = '#5db8a6';
-  var GOOD = '#22c55e';
   var ROSE = '#e05666';
   var PANEL = 'rgba(245, 240, 232, 0.55)';
   var FRAME = 'rgba(20, 20, 19, 0.16)';
@@ -102,16 +101,6 @@
     ctx.restore();
   }
 
-  function titleBand(ctx, text, x, y) {
-    ctx.save();
-    ctx.fillStyle = INK;
-    ctx.font = '600 12px Inter, -apple-system, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText(text, x, y);
-    ctx.restore();
-  }
-
   function axisText(ctx, text, x, y, align) {
     ctx.save();
     ctx.fillStyle = MUTED;
@@ -138,6 +127,18 @@
     ctx.restore();
   }
 
+  function fillPoly(ctx, pts, color) {
+    if (!pts || pts.length < 3) return;
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
   function arrow(ctx, x1, y1, x2, y2, color, lw) {
     var dx = x2 - x1;
     var dy = y2 - y1;
@@ -160,17 +161,6 @@
     ctx.lineTo(x2 - ah * Math.cos(ang + Math.PI / 6), y2 - ah * Math.sin(ang + Math.PI / 6));
     ctx.closePath();
     ctx.fill();
-    ctx.restore();
-  }
-
-  function divider(ctx, x, h) {
-    ctx.save();
-    ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.12);
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x, 8);
-    ctx.lineTo(x, h - 8);
-    ctx.stroke();
     ctx.restore();
   }
 
@@ -227,79 +217,56 @@
     ctx.restore();
   }
 
-  /* Stationary (EL) path for U = 2(q^2-1)^2, q(0)=-1.2, q(1)=1.2.
-     Energy quadrature: unique E > barrier with travel time T = 1. */
-  var QUARTIC_SAMPLES = null;
-  var QUARTIC_Q0 = -1.2;
-  var QUARTIC_Q1 = 1.2;
-  var QUARTIC_T = 1.0;
-
-  function quarticU(q) {
-    var z = q * q - 1.0;
-    return 2.0 * z * z;
+  function potentialU(q, kind) {
+    if (kind === 'double') {
+      var z = q * q - 1;
+      return 2 * z * z;
+    }
+    if (kind === 'cosine') return 1 - Math.cos(q);
+    return 0.5 * q * q;
   }
 
-  function quarticTravelTime(E, nQ) {
-    var dq = (QUARTIC_Q1 - QUARTIC_Q0) / nQ;
-    var t = 0;
-    var i, q, kin;
-    for (i = 0; i < nQ; i++) {
-      q = QUARTIC_Q0 + (i + 0.5) * dq;
-      kin = E - quarticU(q);
-      if (kin < 1e-10) return 1e9;
-      t += dq / Math.sqrt(2.0 * kin);
-    }
-    return t;
+  function potentialDU(q, kind) {
+    if (kind === 'double') return 8 * q * (q * q - 1);
+    if (kind === 'cosine') return Math.sin(q);
+    return q;
   }
 
-  function ensureQuarticSamples() {
-    if (QUARTIC_SAMPLES) return QUARTIC_SAMPLES;
-    var nQ = 400;
-    var targetT = QUARTIC_T;
-    var lo = 2.02;
-    var hi = 40;
-    var k, mid, tm;
-    for (k = 0; k < 48; k++) {
-      mid = 0.5 * (lo + hi);
-      tm = quarticTravelTime(mid, nQ);
-      if (tm > targetT) lo = mid;
-      else hi = mid;
-    }
-    var E = 0.5 * (lo + hi);
-    var samples = [{ t: 0, q: QUARTIC_Q0 }];
-    var dq = (QUARTIC_Q1 - QUARTIC_Q0) / nQ;
-    var t = 0;
-    var i, qMid, kin;
-    for (i = 0; i < nQ; i++) {
-      qMid = QUARTIC_Q0 + (i + 0.5) * dq;
-      kin = Math.max(1e-10, E - quarticU(qMid));
-      t += dq / Math.sqrt(2.0 * kin);
-      samples.push({ t: t, q: QUARTIC_Q0 + (i + 1) * dq });
-    }
-    samples[samples.length - 1].t = QUARTIC_T;
-    samples[samples.length - 1].q = QUARTIC_Q1;
-    QUARTIC_SAMPLES = samples;
-    return samples;
+  function wrapPi(q) {
+    var twoPi = 2 * Math.PI;
+    while (q > Math.PI) q -= twoPi;
+    while (q < -Math.PI) q += twoPi;
+    return q;
   }
 
-  function quarticTrueQ(t) {
-    var samples = ensureQuarticSamples();
-    if (t <= 0) return samples[0].q;
-    if (t >= QUARTIC_T) return samples[samples.length - 1].q;
-    var lo = 0;
-    var hi = samples.length - 1;
-    var m;
-    while (hi - lo > 1) {
-      m = (lo + hi) >> 1;
-      if (samples[m].t <= t) lo = m;
-      else hi = m;
-    }
-    var a = samples[lo];
-    var b = samples[hi];
-    var span = b.t - a.t;
-    if (!(span > 0)) return a.q;
-    var f = (t - a.t) / span;
-    return a.q + f * (b.q - a.q);
+  function hoopProject(th, phi, cam, cx, cy, s) {
+    var x = Math.sin(th) * Math.cos(phi);
+    var y = Math.sin(th) * Math.sin(phi);
+    var z = -Math.cos(th);
+    var ca = Math.cos(cam);
+    var sa = Math.sin(cam);
+    return {
+      sx: cx + s * (x * ca - y * sa),
+      sy: cy - s * z,
+      depth: x * sa + y * ca
+    };
+  }
+
+  function resetOscillator(state) {
+    var amp = num(state.amp, 1.2);
+    state.q = amp;
+    state.v = 0;
+    state.tSim = 0;
+    state.trail = [];
+  }
+
+  function resetCyclotron(state) {
+    state.x = -0.55;
+    state.y = 0;
+    state.vx = 0;
+    state.vy = 2.0;
+    state.trail = [];
+    state.tSim = 0;
   }
 
 
@@ -309,259 +276,219 @@
     title: 'Lagrangian Definition: $L(q, \\dot{q}, t) = T - U$',
     formulaLatex: 'L(q, \\dot{q}, t) = T - U',
     physicalStory: `
-The Lagrangian $L = T - U$ is the fundamental generating function of classical mechanics. While total mechanical energy $E = T + U$ is conserved along the physical path, it is the difference $L = T - U$ whose time integral—the Action $S = \\int L \\, dt$—is made stationary by nature (Hamilton's Principle of Stationary Action, $\\delta S = 0$).
+The Lagrangian of a conservative system is the difference $L = T - U$, not the sum. Mechanical energy $E = T + U$ is constant along the motion (when $L$ has no explicit time dependence and constraints are scleronomic), but it is $L$ whose time integral $S = \\int L\\,dt$ is stationary.
 
-Kinetic energy $T$ acts as a penalty against excessive velocity and spatial curvature, while potential energy $U$ penalizes spending time in high-potential regions. Hamilton's principle seeks the exact physical trajectory that balances kinetic cost with potential terrain.
+For unit mass in one dimension, $T = \\frac12\\dot{q}^{2}$ and $U = U(q)$. In a harmonic well $U = \\frac12 q^{2}$ one has $L = T - U = -E\\cos(2t)$ if $q(0) = A$, $\\dot{q}(0) = 0$: $L$ oscillates at twice the frequency of $q(t)$, flipping sign twice per period, while $E$ never moves.
     `.trim(),
     derivationSteps: [
-      "1. Start from D'Alembert's principle of virtual work: $\\sum_i (m_i \\ddot{\\mathbf{r}}_i - \\mathbf{F}_i) \\cdot \\delta \\mathbf{r}_i = 0$.",
-      "2. For monogenic, conservative systems, generalized force is $Q_j = -\\frac{\\partial U}{\\partial q_j}$, assuming $U = U(q)$ is velocity-independent.",
-      "3. Transform inertial terms into generalized coordinates: $\\sum_i m_i \\ddot{\\mathbf{r}}_i \\cdot \\frac{\\partial \\mathbf{r}_i}{\\partial q_j} = \\frac{d}{dt}\\left(\\frac{\\partial T}{\\partial \\dot{q}_j}\\right) - \\frac{\\partial T}{\\partial q_j}$.",
-      "4. Group kinetic and potential components: $\\frac{d}{dt}\\left(\\frac{\\partial T}{\\partial \\dot{q}_j}\\right) - \\frac{\\partial (T - U)}{\\partial q_j} = 0$.",
-      "5. Since $\\frac{\\partial U}{\\partial \\dot{q}_j} = 0$, define $L \\equiv T - U$, which simplifies the equations of motion to $\\frac{d}{dt}\\left(\\frac{\\partial L}{\\partial \\dot{q}_j}\\right) - \\frac{\\partial L}{\\partial q_j} = 0$."
+      "1. D'Alembert: $\\sum_i (m_i\\ddot{\\mathbf{r}}_i - \\mathbf{F}_i)\\cdot\\delta\\mathbf{r}_i = 0$ for virtual displacements consistent with the constraints.",
+      "2. Conservative monogenic forces give generalized forces $Q_j = -\\partial U/\\partial q_j$ with $U = U(q)$.",
+      "3. Inertial terms in generalized coordinates become $\\frac{d}{dt}(\\partial T/\\partial\\dot{q}_j) - \\partial T/\\partial q_j$.",
+      "4. Collecting terms yields $\\frac{d}{dt}(\\partial T/\\partial\\dot{q}_j) - \\partial(T - U)/\\partial q_j = 0$.",
+      "5. If $U$ is velocity-independent, $\\partial U/\\partial\\dot{q}_j = 0$, so $L \\equiv T - U$ produces the Euler–Lagrange equation."
     ],
     limitingCases: [
-      { condition: 'Free Particle ($U = 0$)', result: 'L = T = \\frac{1}{2}m\\dot{q}^2', description: 'Straight-line uniform motion (geodesic in flat space).' },
-      { condition: 'Constant Potential ($U = U_0$)', result: 'L = T - U_0', description: 'Equations of motion are completely unchanged by constant potential shifts.' },
-      { condition: 'Static Limit ($\\dot{q} = 0$)', result: 'L = -U(q)', description: 'Stationary action reduces to minimizing potential energy $\\nabla U = 0$ (static equilibrium).' },
-      { condition: 'Relativistic Limit', result: 'L = -mc^2\\sqrt{1 - v^2/c^2} - U', description: 'Taylor expansion yields $\\frac{1}{2}mv^2 - mc^2 - U$, recovering $T - U$ up to a constant rest mass energy.' }
+      { condition: 'Free particle ($U = 0$)', result: 'L = T = \\frac12 m\\dot{q}^{2}', description: 'Stationary action recovers uniform straight-line motion.' },
+      { condition: 'Constant shift $U \\to U + U_0$', result: 'L \\to L - U_0', description: 'Equations of motion unchanged: $U_0$ is a total time derivative of $U_0 t$.' },
+      { condition: 'Harmonic oscillator', result: 'L = -E\\cos(2\\omega t + \\phi)', description: '$L$ has frequency $2\\omega$; $E = T + U$ is constant.' },
+      { condition: 'Static limit $\\dot{q} = 0$', result: 'L = -U(q)', description: 'Stationary action reduces to $\\nabla U = 0$.' }
     ],
     greTraps: [
-      { trap: 'Sign of Potential Energy', description: 'Never write $L = T + U$. Remember: Lagrangian has Less/Minus ($L = T - U$), Hamiltonian has Heavy/Plus ($H = T + U$).' },
-      { trap: 'Gauge Invariance & Total Time Derivatives', description: 'Adding a total time derivative $\\frac{d F(q, t)}{dt}$ to $L$ produces identical Euler-Lagrange equations.' },
-      { trap: 'Velocity-Dependent Potentials', description: 'For a charge $q$ in an electromagnetic field, $L = \\frac{1}{2}mv^2 - q\\phi + q\\mathbf{A}\\cdot\\mathbf{v}$. The potential term is generalized.' }
+      { trap: 'Sign of $U$', description: 'Never write $L = T + U$. Lagrangian is the difference; Hamiltonian $H = \\dot{q}p - L$ is $T + U$ for standard $T$.' },
+      { trap: 'Gauge $dF(q,t)/dt$', description: 'Adding a total time derivative of $F(q,t)$ leaves the Euler–Lagrange equations invariant.' },
+      { trap: 'Velocity-dependent $U$', description: 'Charges in $\\mathbf{A}$ use $L = \\frac12 mv^{2} - q\\phi + q\\mathbf{A}\\cdot\\mathbf{v}$, not $T - q\\phi$.' }
     ],
     parameters: [
-      { id: 'alpha', label: 'Perturbation $\\alpha$', type: 'range', min: -2, max: 2, step: 0.05, value: 0.6, default: 0.6, format: v => v.toFixed(2) },
-      { id: 'mode', label: 'Harmonic mode $n$', type: 'range', min: 1, max: 3, step: 1, value: 1, default: 1, format: v => `${v}` },
-      { id: 'potential', label: 'Potential $U(q)$', type: 'select', value: 'gravity', default: 'gravity', options: [
-        { value: 'gravity', label: 'Uniform gravity: $U = mg q$' },
-        { value: 'harmonic', label: 'Harmonic well: $U = \\frac{1}{2}k q^{2}$' },
-        { value: 'quartic', label: 'Double well: $U = 2(q^{2}-1)^{2}$' }
+      { id: 'potential', label: 'Potential $U(q)$', type: 'select', value: 'harmonic', default: 'harmonic', options: [
+        { value: 'harmonic', label: 'Harmonic: $U = \\frac12 q^{2}$' },
+        { value: 'double', label: 'Double well: $U = 2(q^{2}-1)^{2}$' },
+        { value: 'cosine', label: 'Pendulum: $U = 1 - \\cos q$' }
       ]},
-      { id: 'animate', label: 'Playback', type: 'toggle', value: true, default: true },
+      { id: 'amp', label: 'Release $q(0)$', type: 'range', min: 0.35, max: 1.85, step: 0.05, value: 1.20, default: 1.20 },
       SPEED_PARAM
     ],
-    init(container, state, redraw) {
-      state.alpha = state.alpha ?? 0.6;
-      state.mode = state.mode ?? 1;
-      state.potential = state.potential ?? 'gravity';
-      state.animate = state.animate ?? true;
+    init: function (container, state, redraw) {
+      state.potential = state.potential || 'harmonic';
+      state.amp = num(state.amp, 1.2);
       state.simSpeed = simSpeedOf(state);
-      state.tAnim = num(state.tAnim, 0);
-
-      const controls = [
-        { id: 'resetAlpha', label: 'Extremum ($\\alpha=0$)', type: 'button', text: 'Set True Path (α=0)', onClick: () => { state.alpha = 0; } }
-      ];
-
-      U.createControlUI(container, controls, (id, val) => {
-        if (id === 'resetAlpha') {
-          state.alpha = 0;
-          // Init container holds only action buttons; sync the standard parameters-panel slider.
-          const panel = container.parentNode;
-          const range = panel && panel.querySelector('#viz-ctrl-alpha');
-          if (range) range.value = 0;
-          const disp = panel && panel.querySelector('#viz-val-alpha');
-          if (disp) disp.textContent = '0';
-        } else {
-          state[id] = val;
-        }
-        redraw();
-      });
+      if (!Number.isFinite(state.q)) resetOscillator(state);
+      if (!Number.isFinite(state.v)) state.v = 0;
+      if (!Number.isFinite(state.tSim)) state.tSim = 0;
+      if (!Array.isArray(state.trail)) state.trail = [];
     },
-    draw(ctx, width, height, state, dt) {
+    onParamChange: function (id, val, state) {
+      if (id === 'amp' || id === 'potential') {
+        if (id === 'amp') state.amp = val;
+        if (id === 'potential') state.potential = val;
+        resetOscillator(state);
+      }
+    },
+    draw: function (ctx, width, height, state, dt) {
       fillStage(ctx, width, height);
       state = state || {};
+      var kind = state.potential || 'harmonic';
+      if (kind !== 'double' && kind !== 'cosine') kind = 'harmonic';
+      var amp = num(state.amp, 1.2);
+      if (!Number.isFinite(state.q)) state.q = amp;
+      if (!Number.isFinite(state.v)) state.v = 0;
+      if (!Number.isFinite(state.tSim)) state.tSim = 0;
+      if (!Array.isArray(state.trail)) state.trail = [];
 
-      const alpha = num(state.alpha, 0.6);
-      const mode = Math.max(1, Math.round(num(state.mode, 1)));
-      const potential = state.potential || 'gravity';
-      const animate = state.animate !== false;
-      const dtv = scaledDt(dt, state);
-      if (!Number.isFinite(state.tAnim)) state.tAnim = 0;
-      if (animate) state.tAnim = (state.tAnim + dtv * 0.8) % 1.0;
-
-      const m = 1.0;
-      const T_total = 1.0;
-      const q0 = -1.2, q1 = 1.2;
-
-      const getTruePath = (t) => {
-        if (potential === 'gravity') {
-          const g = 4.0;
-          return q0 + (q1 - q0) * (t / T_total) + 0.5 * g * t * (T_total - t);
-        } else if (potential === 'harmonic') {
-          const omega = 2.5;
-          const A = q0;
-          const den = Math.sin(omega * T_total);
-          const B = den === 0 ? 0 : (q1 - q0 * Math.cos(omega * T_total)) / den;
-          return A * Math.cos(omega * t) + B * Math.sin(omega * t);
+      var dtv = scaledDt(dt, state);
+      var sub = Math.max(6, Math.min(20, Math.round(8 * simSpeedOf(state))));
+      var hdt = dtv / sub;
+      var i, a1, a2;
+      if (kind === 'harmonic') {
+        // Exact: q̈ = -q, ω = 1.
+        var c = Math.cos(dtv);
+        var s = Math.sin(dtv);
+        var qn = state.q * c + state.v * s;
+        state.v = -state.q * s + state.v * c;
+        state.q = qn;
+        state.tSim += dtv;
+      } else if (dtv > 0) {
+        for (i = 0; i < sub; i++) {
+          a1 = -potentialDU(state.q, kind);
+          state.q += state.v * hdt + 0.5 * a1 * hdt * hdt;
+          a2 = -potentialDU(state.q, kind);
+          state.v += 0.5 * (a1 + a2) * hdt;
         }
-        return quarticTrueQ(t);
-      };
+        if (kind === 'cosine') state.q = wrapPi(state.q);
+        state.tSim += dtv;
+      }
 
-      const getPerturbedPath = (t, a) => {
-        const eta = Math.sin(mode * Math.PI * (t / T_total));
-        return getTruePath(t) + a * eta;
-      };
+      var Tkin = 0.5 * state.v * state.v;
+      var Upot = potentialU(state.q, kind);
+      var Lval = Tkin - Upot;
+      var Emech = Tkin + Upot;
+      var omegaNote = kind === 'harmonic'
+        ? '$L$ oscillates at $2\\omega$ ($\\omega = 1$)'
+        : (kind === 'double' ? (Emech < 2 ? 'trapped in one well' : 'crosses the barrier $U(0)=2$') : 'pendulum well');
 
-      const getU = (q) => {
-        if (potential === 'gravity') return 4.0 * q;
-        if (potential === 'harmonic') return 0.5 * 6.25 * q * q;
-        return 2.0 * Math.pow(q * q - 1.0, 2);
-      };
-
-      const computeAction = (a) => {
-        const steps = 80;
-        const dtStep = T_total / steps;
-        let S = 0;
-        for (let i = 0; i < steps; i++) {
-          const t = i * dtStep;
-          const tNext = (i + 1) * dtStep;
-          const qMid = getPerturbedPath(t + dtStep * 0.5, a);
-          const v = (getPerturbedPath(tNext, a) - getPerturbedPath(t, a)) / dtStep;
-          S += (0.5 * m * v * v - getU(qMid)) * dtStep;
-        }
-        return S;
-      };
-
-      const curT = state.tAnim * T_total;
-      const curQ = getPerturbedPath(curT, alpha);
-      const dtSmall = 0.001;
-      const vCur = (getPerturbedPath(curT + dtSmall, alpha) - getPerturbedPath(curT - dtSmall, alpha)) / (2 * dtSmall);
-      const curKin = 0.5 * m * vCur * vCur;
-      const curPot = getU(curQ);
-      const curLag = curKin - curPot;
-      const curAction = computeAction(alpha);
-      const atStationary = Math.abs(alpha) < 0.03;
-
-      legend('Lagrangian $L = T - U$', [
-        { label: '$T$', value: fmt(curKin) },
-        { label: '$U$', value: fmt(curPot) },
-        { label: '$L = T - U$', value: fmt(curLag) },
-        { label: '$S[\\alpha]$', value: fmt(curAction, 3) },
-        { label: 'path', value: atStationary ? 'stationary ($\\alpha = 0$)' : 'varied, $\\alpha = ' + fmt(alpha) + '$' }
+      legend('$L = T - U$', [
+        { label: '$T$', value: fmt(Tkin, 3) },
+        { label: '$U$', value: fmt(Upot, 3) },
+        { label: '$L = T - U$', value: fmt(Lval, 3) },
+        { label: '$E = T + U$', value: fmt(Emech, 3) },
+        { label: 'motion', value: omegaNote }
       ]);
 
-      const splitX = Math.floor(width * 0.56);
-      divider(ctx, splitX, height);
+      var padL = 36;
+      var padR = 88;
+      var padT = 18;
+      var padB = 26;
+      var lx = padL;
+      var ly = padT;
+      var lw = Math.max(40, width - padL - padR);
+      var lh = Math.max(40, height - padT - padB);
 
-      const titleY = 18;
-      const boxTop = 28;
-      const boxBot = height - 26;
-      const boxH = Math.max(12, boxBot - boxTop);
+      var qLo, qHi;
+      if (kind === 'cosine') { qLo = -Math.PI; qHi = Math.PI; }
+      else if (kind === 'double') { qLo = -2.15; qHi = 2.15; }
+      else { qLo = -2.2; qHi = 2.2; }
 
-      // LEFT: q(t)
-      const lPadL = 40;
-      const lPadR = 12;
-      const lx = lPadL;
-      const ly = boxTop;
-      const lw = Math.max(12, splitX - lPadL - lPadR);
-      const lh = boxH;
+      var uMax = 0.4;
+      var nSample = 120;
+      var qs, uq;
+      for (i = 0; i <= nSample; i++) {
+        qs = qLo + (qHi - qLo) * (i / nSample);
+        uq = potentialU(qs, kind);
+        if (uq > uMax) uMax = uq;
+      }
+      uMax = Math.max(uMax, Emech, 0.5) * 1.18;
+      var uLo = kind === 'cosine' ? -0.15 : -0.08 * uMax;
 
-      titleBand(ctx, 'Path q(t)', 14, titleY);
+      var toX = function (q) { return lx + ((q - qLo) / (qHi - qLo)) * lw; };
+      var toY = function (u) { return ly + lh * (1 - (u - uLo) / (uMax - uLo)); };
+
       plotBox(ctx, lx, ly, lw, lh);
       innerGrid(ctx, lx, ly, lw, lh, 4, 4);
-
-      let qMin = Infinity, qMax = -Infinity;
-      for (let i = 0; i <= 80; i++) {
-        const t = (i / 80) * T_total;
-        const qP = getPerturbedPath(t, alpha);
-        const qTr = getTruePath(t);
-        qMin = Math.min(qMin, qP, qTr);
-        qMax = Math.max(qMax, qP, qTr);
-      }
-      const qPad = Math.max(0.35, (qMax - qMin) * 0.18);
-      qMin -= qPad;
-      qMax += qPad;
-      if (qMax <= qMin) { qMin = -3; qMax = 3; }
-
-      const toSX = (t) => lx + (t / T_total) * lw;
-      const toSY = (q) => ly + lh * (1 - (q - qMin) / (qMax - qMin));
 
       ctx.save();
       clipRect(ctx, lx, ly, lw, lh);
 
-      if (qMin < 0 && qMax > 0) {
-        ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.22);
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(lx, toSY(0));
-        ctx.lineTo(lx + lw, toSY(0));
-        ctx.stroke();
+      var zeroY = toY(0);
+      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.22);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(lx, zeroY);
+      ctx.lineTo(lx + lw, zeroY);
+      ctx.stroke();
+
+      var curve = [];
+      var under = [{ x: toX(qLo), y: zeroY }];
+      for (i = 0; i <= nSample; i++) {
+        qs = qLo + (qHi - qLo) * (i / nSample);
+        uq = potentialU(qs, kind);
+        curve.push({ x: toX(qs), y: toY(uq) });
+        under.push({ x: toX(qs), y: toY(Math.max(0, uq)) });
+      }
+      under.push({ x: toX(qHi), y: zeroY });
+      fillPoly(ctx, under, 'rgba(204, 120, 92, 0.22)');
+      strokePoly(ctx, curve, CORAL, 2.3);
+
+      state.trail.push({ q: state.q, u: Upot });
+      if (state.trail.length > 90) state.trail.shift();
+      if (state.trail.length > 2) {
+        var tr = [];
+        for (i = 0; i < state.trail.length; i++) {
+          tr.push({ x: toX(state.trail[i].q), y: toY(state.trail[i].u) });
+        }
+        strokePoly(ctx, tr, 'rgba(204, 120, 92, 0.45)', 1.6);
       }
 
-      const truePts = [];
-      const varPts = [];
-      for (let i = 0; i <= 80; i++) {
-        const t = (i / 80) * T_total;
-        truePts.push({ x: toSX(t), y: toSY(getTruePath(t)) });
-        varPts.push({ x: toSX(t), y: toSY(getPerturbedPath(t, alpha)) });
-      }
-      strokePoly(ctx, truePts, GOOD, 2.4, [5, 4]);
-      strokePoly(ctx, varPts, CORAL, 2.2);
+      var px = toX(state.q);
+      var py = toY(Upot);
+      var dUq = potentialDU(state.q, kind);
+      var tx = 1;
+      var tyScreen = -(dUq) * (lh / (uMax - uLo)) / (lw / (qHi - qLo));
+      var tlen = Math.hypot(tx, tyScreen) || 1;
+      var vPix = Math.max(-36, Math.min(36, state.v * 18));
+      arrow(ctx, px, py, px + vPix * tx / tlen, py + vPix * tyScreen / tlen, GOLD, 2);
 
-      drawDot(ctx, toSX(0), toSY(q0), 4, INK, null);
-      drawDot(ctx, toSX(T_total), toSY(q1), 4, INK, null);
-      drawDot(ctx, toSX(curT), toSY(curQ), 6, GOLD, INK);
+      drawDot(ctx, px, py, 6.5, CORAL, INK);
       ctx.restore();
 
-      axisText(ctx, 't = 0', lx, height - 10, 'left');
-      axisText(ctx, 't = T', lx + lw, height - 10, 'right');
-      axisText(ctx, 'q', 12, ly + 12, 'left');
+      axisText(ctx, kind === 'cosine' ? '−π' : fmt(qLo, 1), lx, height - 8, 'left');
+      axisText(ctx, 'q', lx + lw * 0.5, height - 8, 'center');
+      axisText(ctx, kind === 'cosine' ? '+π' : fmt(qHi, 1), lx + lw, height - 8, 'right');
+      axisText(ctx, 'U', 10, ly + 12, 'left');
 
-      // RIGHT: S(α)
-      const rx0 = splitX + 16;
-      const rPadL = 36;
-      const rx = rx0 + rPadL;
-      const ry = boxTop;
-      const rw = Math.max(12, width - rx - 14);
-      const rh = boxH;
+      var bx = width - padR + 14;
+      var by = ly + 8;
+      var bw = Math.max(18, padR - 24);
+      var bh = lh - 16;
+      var colW = Math.max(6, (bw - 12) / 3);
+      var gap = 3;
+      var scale = Math.max(Emech, Math.abs(Lval), Tkin, Upot, 0.35);
+      var zeroBarY = by + bh * 0.62;
 
-      titleBand(ctx, 'Action S[α]', rx0, titleY);
-      plotBox(ctx, rx, ry, rw, rh);
-      innerGrid(ctx, rx, ry, rw, rh, 4, 4);
-
-      const alphaPoints = [];
-      let minS = Infinity, maxS = -Infinity;
-      for (let a = -2.0; a <= 2.05; a += 0.1) {
-        const sVal = computeAction(a);
-        alphaPoints.push({ a, s: sVal });
-        if (sVal < minS) minS = sVal;
-        if (sVal > maxS) maxS = sVal;
+      function posBar(x0, val, color) {
+        var hgt = (Math.max(0, val) / scale) * (zeroBarY - by - 8);
+        ctx.fillStyle = color;
+        ctx.fillRect(x0, zeroBarY - hgt, colW, Math.max(1, hgt));
       }
-      const sPadding = Math.max(0.4, (maxS - minS) * 0.18);
-      minS -= sPadding;
-      maxS += sPadding;
-      if (maxS <= minS) { minS -= 1; maxS += 1; }
-
-      const toAX = (a) => rx + ((a + 2.0) / 4.0) * rw;
-      const toAY = (s) => ry + rh * (1 - (s - minS) / (maxS - minS));
 
       ctx.save();
-      clipRect(ctx, rx, ry, rw, rh);
-
-      const s0x = toAX(0);
-      ctx.strokeStyle = 'rgba(34, 197, 94, 0.45)';
+      ctx.fillStyle = PGRE.vizStageTheme().chipFade(0.45);
+      ctx.fillRect(bx - 6, by - 4, bw + 10, bh + 8);
+      posBar(bx, Tkin, GOLD);
+      posBar(bx + colW + gap, Upot, CORAL);
+      var Lh = (Lval / scale) * (zeroBarY - by - 8);
+      ctx.fillStyle = TEAL;
+      if (Lh >= 0) ctx.fillRect(bx + 2 * (colW + gap), zeroBarY - Lh, colW, Math.max(1, Lh));
+      else ctx.fillRect(bx + 2 * (colW + gap), zeroBarY, colW, Math.max(1, -Lh));
+      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.28);
       ctx.lineWidth = 1;
-      ctx.setLineDash([3, 3]);
       ctx.beginPath();
-      ctx.moveTo(s0x, ry);
-      ctx.lineTo(s0x, ry + rh);
+      ctx.moveTo(bx - 2, zeroBarY);
+      ctx.lineTo(bx + bw, zeroBarY);
       ctx.stroke();
-      ctx.setLineDash([]);
-
-      const sPts = alphaPoints.map(pt => ({ x: toAX(pt.a), y: toAY(pt.s) }));
-      strokePoly(ctx, sPts, TEAL, 2.3);
-
-      const s0 = computeAction(0);
-      drawDot(ctx, s0x, toAY(s0), 5, GOOD, INK);
-      drawDot(ctx, toAX(alpha), toAY(curAction), 6, CORAL, INK);
       ctx.restore();
 
-      axisText(ctx, '−2', rx, height - 10, 'left');
-      axisText(ctx, '0', s0x, height - 10, 'center');
-      axisText(ctx, '+2', rx + rw, height - 10, 'right');
-      axisText(ctx, 'S', rx0 + 4, ry + 12, 'left');
+      haloLabel(ctx, bx + colW * 0.5, height - 14, 'T', GOLD, 'center');
+      haloLabel(ctx, bx + colW + gap + colW * 0.5, height - 14, 'U', CORAL, 'center');
+      haloLabel(ctx, bx + 2 * (colW + gap) + colW * 0.5, height - 14, 'L', TEAL, 'center');
     },
     challenge: {
       question: "A particle moves in 1D under a potential $U(x) = \\frac{1}{2}kx^{2}$. If the Lagrangian is $L = \\frac{1}{2}m\\dot{x}^{2} - \\frac{1}{2}kx^{2}$, which of the following modified Lagrangians produces the EXACT SAME physical equations of motion?",
@@ -573,7 +500,7 @@ Kinetic energy $T$ acts as a penalty against excessive velocity and spatial curv
         "E) $L' = \\left(\\frac{1}{2}m\\dot{x}^{2} - \\frac{1}{2}kx^{2}\\right)^{2}$"
       ],
       correct: 1,
-      explanation: "According to gauge invariance in Lagrangian mechanics, adding the total time derivative of any function of coordinates and time, $\\frac{d F(q, t)}{dt}$, leaves the Euler-Lagrange equations unchanged because its variation $\\delta\\int (\\mathrm{d}F/\\mathrm{d}t)\\,\\mathrm{d}t = \\delta[F(t_2)-F(t_1)] = 0$ vanishes at fixed endpoints. Option B adds $\\mathrm{d}F/\\mathrm{d}t$ with $F(x,t) = c x^{2} t$. Option D adds a term with explicit velocity dependence in $F$, which is not a valid coordinate gauge function."
+      explanation: "Adding the total time derivative of any $F(q,t)$ leaves the Euler–Lagrange equations unchanged, because $\\delta\\int (dF/dt)\\,dt = \\delta[F(t_2)-F(t_1)] = 0$ at fixed endpoints. Option B adds $dF/dt$ with $F(x,t) = c x^{2} t$. Option D uses an $F$ that depends on $\\dot{x}$, which is not a legal coordinate gauge function $F(q,t)$."
     }
   };
 
@@ -583,225 +510,188 @@ Kinetic energy $T$ acts as a penalty against excessive velocity and spatial curv
     title: 'Euler-Lagrange Equations: $\\frac{d}{dt}\\left(\\frac{\\partial L}{\\partial \\dot{q}_i}\\right) = \\frac{\\partial L}{\\partial q_i}$',
     formulaLatex: '\\frac{d}{dt}\\left(\\frac{\\partial L}{\\partial \\dot{q}_i}\\right) = \\frac{\\partial L}{\\partial q_i}',
     physicalStory: `
-The Euler-Lagrange equations are the cornerstone of variational mechanics. They assert that the rate of change of canonical momentum $\\frac{d}{dt}(\\frac{\\partial L}{\\partial \\dot{q}})$ precisely equals the generalized force $\\frac{\\partial L}{\\partial q}$. 
-
-Remarkably, the Euler-Lagrange formulation automatically eliminates all workless holonomic constraint forces (such as the normal force holding a bead on a rotating wire), bypassing the complex vector projections required by Newton's Second Law.
+Euler–Lagrange is Newton in generalized coordinates, with holonomic constraint forces already eliminated. For a bead of mass $m$ on a hoop of radius $R$ spinning at constant $\\omega$ about its vertical diameter, the only coordinate is $\\theta$ measured from the bottom, and
+$$L = \\tfrac12 m R^{2}\\dot{\\theta}^{2} + \\tfrac12 m R^{2}\\omega^{2}\\sin^{2}\\theta + mgR\\cos\\theta.$$
+The wire's normal never appears. Equilibria satisfy $(\\omega^{2}\\cos\\theta - g/R)\\sin\\theta = 0$. For $\\omega > \\omega_c = \\sqrt{g/R}$ the bottom $\\theta = 0$ is unstable and two stable latitudes peel off at $\\cos\\theta_{\\mathrm{eq}} = g/(R\\omega^{2})$ — a supercritical pitchfork. The motion here is frictionless: the bead conserves the Jacobi integral and oscillates about whichever well it occupies.
     `.trim(),
     derivationSteps: [
-      "1. Hamilton's Principle asserts that the action $S = \\int_{t_1}^{t_2} L(q, \\dot{q}, t) \\, dt$ is stationary under variations $\\delta q(t)$ with $\\delta q(t_1) = \\delta q(t_2) = 0$.",
-      "2. Expand the variation to first order: $\\delta S = \\int_{t_1}^{t_2} \\left( \\frac{\\partial L}{\\partial q} \\delta q + \\frac{\\partial L}{\\partial \\dot{q}} \\delta \\dot{q} \\right) dt = 0$.",
-      "3. Use the identity $\\delta \\dot{q} = \\frac{d}{dt}(\\delta q)$ and integrate the second term by parts: $\\int_{t_1}^{t_2} \\frac{\\partial L}{\\partial \\dot{q}} \\frac{d}{dt}(\\delta q) dt = \\left[ \\frac{\\partial L}{\\partial \\dot{q}} \\delta q \\right]_{t_1}^{t_2} - \\int_{t_1}^{t_2} \\frac{d}{dt}\\left(\\frac{\\partial L}{\\partial \\dot{q}}\\right) \\delta q \\, dt$.",
-      "4. The boundary term vanishes since endpoints are fixed: $\\delta q(t_1) = \\delta q(t_2) = 0$.",
-      "5. Combining gives $\\int_{t_1}^{t_2} \\left[ \\frac{\\partial L}{\\partial q} - \\frac{d}{dt}\\left(\\frac{\\partial L}{\\partial \\dot{q}}\\right) \\right] \\delta q(t) \\, dt = 0$.",
-      "6. By the Fundamental Lemma of the Calculus of Variations, since $\\delta q(t)$ is arbitrary, the integrand must vanish identically: $\\frac{d}{dt}\\left(\\frac{\\partial L}{\\partial \\dot{q}}\\right) = \\frac{\\partial L}{\\partial q}$."
+      "1. Hamilton's principle: $S = \\int_{t_1}^{t_2} L(q,\\dot{q},t)\\,dt$ is stationary for variations with $\\delta q(t_1)=\\delta q(t_2)=0$.",
+      "2. First variation: $\\delta S = \\int(\\partial L/\\partial q\\,\\delta q + \\partial L/\\partial\\dot{q}\\,\\delta\\dot{q})\\,dt = 0$.",
+      "3. $\\delta\\dot{q} = d(\\delta q)/dt$; integrate the second term by parts.",
+      "4. Boundary term $[(\\partial L/\\partial\\dot{q})\\delta q]_{t_1}^{t_2}$ vanishes.",
+      "5. $\\int[\\partial L/\\partial q - d(\\partial L/\\partial\\dot{q})/dt]\\,\\delta q\\,dt = 0$ for arbitrary $\\delta q$ implies the Euler–Lagrange equation.",
+      "6. Hoop: $\\partial L/\\partial\\dot{\\theta} = m R^{2}\\dot{\\theta}$ and $\\partial L/\\partial\\theta = m R^{2}\\omega^{2}\\sin\\theta\\cos\\theta - mgR\\sin\\theta$, so $\\ddot{\\theta} = (\\omega^{2}\\cos\\theta - g/R)\\sin\\theta$."
     ],
     limitingCases: [
-      { condition: 'Cartesian Coordinate ($q = x$)', result: 'm\\ddot{x} = -\\frac{\\partial U}{\\partial x} = F_x', description: 'Recovers standard Newtonian 2nd Law for a particle.' },
-      { condition: 'Polar Coordinates ($q = \\theta$)', result: '\\frac{d}{dt}(mr^2\\dot{\\theta}) = -\\frac{\\partial U}{\\partial \\theta} = \\tau_z', description: 'Recovers rotational form of Newton 2nd Law (Torque = rate of change of angular momentum).' },
-      { condition: 'Cyclic / Ignorable Coordinate ($\\partial L / \\partial q_k = 0$)', result: 'p_k = \\frac{\\partial L}{\\partial \\dot{q}_k} = \\text{const}', description: 'Conservation of canonical momentum (Noether\'s Theorem).' }
+      { condition: 'Cartesian $q = x$', result: 'm\\ddot{x} = -\\partial U/\\partial x', description: 'Recovers Newtonian $F = ma$.' },
+      { condition: '$\\omega = 0$', result: '\\ddot{\\theta} = -(g/R)\\sin\\theta', description: 'Ordinary pendulum on a fixed hoop.' },
+      { condition: '$\\omega > \\sqrt{g/R}$', result: '\\cos\\theta_{\\mathrm{eq}} = g/(R\\omega^{2})', description: 'Two stable latitudes; $\\theta = 0$ is a local maximum of $U_{\\mathrm{eff}}$.' },
+      { condition: 'Cyclic coordinate $\\partial L/\\partial q_k = 0$', result: 'p_k = \\mathrm{const}', description: 'Noether conservation of the conjugate momentum.' }
     ],
     greTraps: [
-      { trap: 'Total vs Partial Time Derivative', description: '$\\frac{d}{dt}\\left(\\frac{\\partial L}{\\partial \\dot{q}}\\right)$ is a TOTAL derivative. You must apply the chain rule: $\\frac{d}{dt} = \\dot{q}\\frac{\\partial}{\\partial q} + \\ddot{q}\\frac{\\partial}{\\partial \\dot{q}} + \\frac{\\partial}{\\partial t}$.' },
-      { trap: 'Implicit Coordinate Dependencies', description: 'In polar coordinates $T = \\frac{1}{2}m(\\dot{r}^2 + r^2\\dot{\\theta}^2)$, $\\frac{\\partial L}{\\partial r} = mr\\dot{\\theta}^2$ represents the fictitious centrifugal force term. Do not forget it!' }
+      { trap: 'Total vs partial $d/dt$', description: '$d(\\partial L/\\partial\\dot{q})/dt$ is a total derivative: chain-rule through $q$, $\\dot{q}$, and $t$.' },
+      { trap: '$\\theta = 0$ is always an equilibrium', description: '$\\sin\\theta = 0$ solves the EL equation for every $\\omega$. Above $\\omega_c$ it is unstable; a bead placed exactly at the bottom with $\\dot{\\theta}=0$ never leaves.' },
+      { trap: 'Centrifugal term', description: 'The $m R^{2}\\omega^{2}\\sin^{2}\\theta$ piece of $T$ produces $\\partial L/\\partial\\theta \\supset m R^{2}\\omega^{2}\\sin\\theta\\cos\\theta$. It is not an extra Newtonian force you add by hand in the inertial frame.' }
     ],
     parameters: [
       { id: 'omega', label: 'Hoop spin $\\omega$', type: 'range', min: 0, max: 6, step: 0.1, value: 3.5, default: 3.5, unit: 'rad/s' },
       { id: 'g', label: 'Gravity $g$', type: 'range', min: 1, max: 20, step: 0.5, value: 9.8, default: 9.8, unit: 'm/s²' },
-      { id: 'theta0', label: 'Initial angle $\\theta_0$', type: 'range', min: -3.14, max: 3.14, step: 0.05, value: 0.8, default: 0.8 },
+      { id: 'theta0', label: 'Release $\\theta_0$', type: 'range', min: -3.14, max: 3.14, step: 0.05, value: 0.8, default: 0.8 },
       SPEED_PARAM
     ],
-    init(container, state, redraw) {
-      state.omega = state.omega ?? 3.5;
-      state.g = state.g ?? 9.8;
+    init: function (container, state, redraw) {
+      state.omega = num(state.omega, 3.5);
+      state.g = num(state.g, 9.8);
       state.R = 1.0;
       state.simSpeed = simSpeedOf(state);
       state.theta = num(state.theta, num(state.theta0, 0.8));
       state.thetaDot = num(state.thetaDot, 0);
       state.phi = num(state.phi, 0);
-
-      const controls = [
-        { id: 'reset', label: 'Perturb Bead', type: 'button', text: 'Kick Bead (+1.5 rad/s)', onClick: () => { state.thetaDot += 1.5; } }
-      ];
-      U.createControlUI(container, controls, (id, val) => {
-        state[id] = val;
-        redraw();
-      });
+      state.trail = Array.isArray(state.trail) ? state.trail : [];
+      if (U && typeof U.createControlUI === 'function') {
+        U.createControlUI(container, [
+          { id: 'kick', label: 'Perturb bead', type: 'button', text: 'Kick bead', onClick: function () { state.thetaDot += 1.2; } }
+        ], function () { redraw(); });
+      }
     },
-    onParamChange(id, val, state) {
+    onParamChange: function (id, val, state) {
       if (id === 'theta0') {
         state.theta = val;
         state.thetaDot = 0;
+        state.trail = [];
       }
     },
-    draw(ctx, width, height, state, dt) {
+    draw: function (ctx, width, height, state, dt) {
       fillStage(ctx, width, height);
       state = state || {};
-
-      const omega = num(state.omega, 3.5);
-      const g = num(state.g, 9.8);
-      const R = 1.0;
+      var omega = num(state.omega, 3.5);
+      var g = num(state.g, 9.8);
+      var R = 1.0;
       if (!Number.isFinite(state.theta)) state.theta = num(state.theta0, 0.8);
       if (!Number.isFinite(state.thetaDot)) state.thetaDot = 0;
       if (!Number.isFinite(state.phi)) state.phi = 0;
+      if (!Array.isArray(state.trail)) state.trail = [];
 
-      const dtv = scaledDt(dt, state);
-      const gamma = 0.25;
-      const subSteps = Math.max(8, Math.min(24, Math.round(8 * simSpeedOf(state))));
-      const subDt = dtv / subSteps;
-      for (let step = 0; step < subSteps; step++) {
-        const accel = (omega * omega * Math.cos(state.theta) - g / R) * Math.sin(state.theta) - gamma * state.thetaDot;
-        state.thetaDot += accel * subDt;
-        state.theta += state.thetaDot * subDt;
+      var dtv = scaledDt(dt, state);
+      var sub = Math.max(8, Math.min(28, Math.round(10 * simSpeedOf(state))));
+      var hdt = dtv / sub;
+      var step, acc;
+      for (step = 0; step < sub; step++) {
+        acc = (omega * omega * Math.cos(state.theta) - g / R) * Math.sin(state.theta);
+        state.thetaDot += acc * hdt;
+        state.theta += state.thetaDot * hdt;
       }
       state.phi += omega * dtv;
+      state.theta = wrapPi(state.theta);
 
-      while (state.theta > Math.PI) state.theta -= 2 * Math.PI;
-      while (state.theta < -Math.PI) state.theta += 2 * Math.PI;
+      var omegaC = Math.sqrt(Math.max(0, g / R));
+      var supercritical = omega > omegaC + 1e-6;
+      var thetaEq = supercritical ? Math.acos(Math.max(-1, Math.min(1, g / (R * omega * omega)))) : 0;
+      var Ueff = -g * R * Math.cos(state.theta) - 0.5 * omega * omega * R * R * Math.sin(state.theta) * Math.sin(state.theta);
+      var Ejac = 0.5 * R * R * state.thetaDot * state.thetaDot + Ueff;
 
-      const omega_c = Math.sqrt(Math.max(0, g / R));
-      const isSupercritical = omega > omega_c + 1e-6;
-      const theta_eq = isSupercritical ? Math.acos(Math.max(-1, Math.min(1, g / (R * omega * omega)))) : 0;
-
-      const getUeff = (th) => {
-        return -g * R * Math.cos(th) - 0.5 * omega * omega * R * R * Math.sin(th) * Math.sin(th);
-      };
-
-      legend('Euler–Lagrange: bead on a rotating hoop', [
-        { label: '$\\omega$', value: fmt(omega, 1) + ' rad/s' },
-        { label: '$\\omega_c = \\sqrt{g/R}$', value: fmt(omega_c, 2) + ' rad/s' },
-        { label: 'regime', value: isSupercritical ? 'supercritical ($\\theta = 0$ unstable)' : 'subcritical ($\\theta = 0$ stable)' },
+      legend('Bead on a rotating hoop', [
+        { label: '$\\omega / \\omega_c$', value: fmt(omega / Math.max(omegaC, 1e-6), 2) + '  ($\\omega_c=\\sqrt{g/R}$)' },
+        { label: 'regime', value: supercritical ? 'supercritical — $\\theta=0$ unstable' : 'subcritical — $\\theta=0$ stable' },
         { label: '$\\theta$', value: fmt(state.theta * 180 / Math.PI, 0) + '°' },
-        { label: '$\\theta_{\\mathrm{eq}}$', value: isSupercritical ? '$\\pm$' + fmt(theta_eq * 180 / Math.PI, 0) + '°' : '$0^{\\circ}$' },
-        { label: 'damping', value: 'linear $\\gamma\\dot{\\theta}$ with $\\gamma = 0.25$ (added so the bead settles; the GRE hoop is frictionless)' },
-        { label: 'arrows', value: 'rose $mg$; gold $F_c = m\\omega^{2}\\rho$ with $\\rho = R\\sin\\theta$' }
+        { label: '$\\theta_{\\mathrm{eq}}$', value: supercritical ? '$\\pm$' + fmt(thetaEq * 180 / Math.PI, 0) + '°' : '$0^{\\circ}$' },
+        { label: '$E$ (Jacobi)', value: fmt(Ejac, 2) },
+        { label: 'friction', value: 'none; kick to leave $\\theta=0$' }
       ]);
 
-      const splitX = Math.floor(width * 0.52);
-      divider(ctx, splitX, height);
+      var cx = width * 0.5;
+      var cy = 16 + (height - 36) * 0.48;
+      var s = Math.max(28, Math.min(cx - 40, cy - 28, height - cy - 28));
+      var cam = 0.42;
+      var phi = state.phi;
 
-      const cx = splitX * 0.5;
-      const cy = 22 + (height - 22 - 22) / 2;
-      const rPixels = Math.max(24, Math.min(cx - 36, cy - 34, height - cy - 28));
-
-      titleBand(ctx, 'Bead on a rotating hoop', 14, 18);
+      function proj(th) { return hoopProject(th, phi, cam, cx, cy, s); }
 
       ctx.save();
-      clipRect(ctx, 8, 22, splitX - 16, height - 30);
+      clipRect(ctx, 8, 8, width - 16, height - 16);
 
       ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.28);
       ctx.lineWidth = 1.2;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.moveTo(cx, cy - rPixels - 18);
-      ctx.lineTo(cx, cy + rPixels + 10);
+      ctx.moveTo(cx, cy - s - 16);
+      ctx.lineTo(cx, cy + s + 12);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.14);
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(cx, cy, rPixels, 0, Math.PI * 2);
-      ctx.stroke();
-
-      const aspect = Math.abs(Math.cos(state.phi));
-      ctx.strokeStyle = CORAL;
-      ctx.globalAlpha = 0.85;
-      ctx.lineWidth = 2.4;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, Math.max(3, rPixels * aspect), rPixels, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-
-      const markEq = (th) => {
-        const mx = cx + rPixels * Math.sin(th) * Math.cos(state.phi);
-        const my = cy + rPixels * Math.cos(th);
-        drawDot(ctx, mx, my, 3.5, GOOD, null);
-      };
-      if (isSupercritical) {
-        markEq(theta_eq);
-        markEq(-theta_eq);
+      function drawLatitude(th, color, lw) {
+        var pts = [];
+        var k, psi, x, y, z, ca, sa, xr;
+        ca = Math.cos(cam); sa = Math.sin(cam);
+        var rad = Math.sin(th);
+        z = -Math.cos(th);
+        for (k = 0; k <= 48; k++) {
+          psi = (k / 48) * Math.PI * 2;
+          x = rad * Math.cos(psi);
+          y = rad * Math.sin(psi);
+          xr = x * ca - y * sa;
+          pts.push({ x: cx + s * xr, y: cy - s * z });
+        }
+        strokePoly(ctx, pts, color, lw, [3, 4]);
+      }
+      if (supercritical) {
+        drawLatitude(thetaEq, 'rgba(212, 160, 23, 0.55)', 1.6);
+        drawLatitude(-thetaEq, 'rgba(212, 160, 23, 0.55)', 1.6);
       } else {
-        markEq(0);
+        drawLatitude(0, 'rgba(93, 184, 166, 0.45)', 1.4);
       }
 
-      const bx = cx + rPixels * Math.sin(state.theta) * Math.cos(state.phi);
-      const by = cy + rPixels * Math.cos(state.theta);
-
-      const fgLen = Math.min(36, 22 * (g / 9.8));
-      const rho = Math.abs(Math.sin(state.theta)) * R;
-      const fcfLen = Math.min(40, 16 * (omega * omega * rho / 8));
-      const cfSign = Math.sin(state.theta) >= 0 ? 1 : -1;
-      const gx2 = bx;
-      const gy2 = by + fgLen;
-      const cfx2 = bx + cfSign * fcfLen * Math.cos(state.phi);
-      const cfy2 = by;
-      arrow(ctx, bx, by, gx2, gy2, ROSE, 2);
-      arrow(ctx, bx, by, cfx2, cfy2, GOLD, 2);
-      if (fgLen > 12) {
-        var gAlign = bx > cx ? 'left' : 'right';
-        haloLabel(ctx, bx + (gAlign === 'left' ? 8 : -8), by + fgLen * 0.55, 'mg', ROSE, gAlign);
+      var hoopN = 96;
+      var back = [];
+      var front = [];
+      var h, p, p2;
+      for (h = 0; h < hoopN; h++) {
+        p = hoopProject(-Math.PI + (2 * Math.PI * h) / hoopN, phi, cam, cx, cy, s);
+        p2 = hoopProject(-Math.PI + (2 * Math.PI * (h + 1)) / hoopN, phi, cam, cx, cy, s);
+        if (0.5 * (p.depth + p2.depth) < 0) back.push([p, p2]);
+        else front.push([p, p2]);
       }
-      if (Math.hypot(cfx2 - bx, cfy2 - by) > 12) {
-        haloLabel(ctx, (bx + cfx2) / 2, by - 11, 'Fc', GOLD, 'center');
+      function strokeSegs(segs, color, lw) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lw;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        var si;
+        for (si = 0; si < segs.length; si++) {
+          ctx.moveTo(segs[si][0].sx, segs[si][0].sy);
+          ctx.lineTo(segs[si][1].sx, segs[si][1].sy);
+        }
+        ctx.stroke();
+      }
+      strokeSegs(back, PGRE.vizStageTheme().inkFade(0.22), 2);
+      strokeSegs(front, CORAL, 2.6);
+
+      var eqA = proj(thetaEq);
+      var eqB = proj(-thetaEq);
+      if (supercritical) {
+        drawDot(ctx, eqA.sx, eqA.sy, 3.4, GOLD, null);
+        drawDot(ctx, eqB.sx, eqB.sy, 3.4, GOLD, null);
+      } else {
+        var bot = proj(0);
+        drawDot(ctx, bot.sx, bot.sy, 3.4, TEAL, null);
       }
 
-      drawDot(ctx, bx, by, 7, CORAL, INK);
+      var bead = proj(state.theta);
+      state.trail.push({ x: bead.sx, y: bead.sy, d: bead.depth });
+      if (state.trail.length > 70) state.trail.shift();
+      if (state.trail.length > 2) {
+        strokePoly(ctx, state.trail.map(function (pt) { return { x: pt.x, y: pt.y }; }), 'rgba(204, 120, 92, 0.4)', 1.8);
+      }
+
+      var gLen = Math.min(32, 18 * (g / 9.8));
+      arrow(ctx, bead.sx, bead.sy, bead.sx, bead.sy + gLen, ROSE, 2);
+      if (gLen > 12) haloLabel(ctx, bead.sx + (bead.sx > cx ? 10 : -10), bead.sy + gLen * 0.55, 'mg', ROSE, bead.sx > cx ? 'left' : 'right');
+
+      drawDot(ctx, bead.sx, bead.sy, 7, CORAL, INK);
       ctx.restore();
 
-      axisText(ctx, 'θ = 0 (bottom)', cx, height - 10, 'center');
-
-      const rPadL = 34;
-      const rx0 = splitX + 14;
-      const rx = rx0 + rPadL;
-      const ry = 28;
-      const rw = Math.max(12, width - rx - 14);
-      const rh = Math.max(12, height - ry - 26);
-
-      titleBand(ctx, 'U_eff(θ)', rx0, 18);
-      plotBox(ctx, rx, ry, rw, rh);
-      innerGrid(ctx, rx, ry, rw, rh, 4, 4);
-
-      const thPoints = [];
-      let minU = Infinity, maxU = -Infinity;
-      for (let th = -Math.PI; th <= Math.PI; th += 0.04) {
-        const u = getUeff(th);
-        thPoints.push({ th, u });
-        if (u < minU) minU = u;
-        if (u > maxU) maxU = u;
-      }
-      const uPad = Math.max(0.8, (maxU - minU) * 0.16);
-      minU -= uPad;
-      maxU += uPad;
-      if (maxU <= minU) { minU -= 1; maxU += 1; }
-
-      const toThX = (th) => rx + ((th + Math.PI) / (2 * Math.PI)) * rw;
-      const toUY = (u) => ry + rh * (1 - (u - minU) / (maxU - minU));
-
-      ctx.save();
-      clipRect(ctx, rx, ry, rw, rh);
-
-      const uPts = thPoints.map(pt => ({ x: toThX(pt.th), y: toUY(pt.u) }));
-      strokePoly(ctx, uPts, CORAL, 2.3);
-
-      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.22);
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(toThX(0), ry);
-      ctx.lineTo(toThX(0), ry + rh);
-      ctx.stroke();
-
-      if (isSupercritical) {
-        drawDot(ctx, toThX(theta_eq), toUY(getUeff(theta_eq)), 4, GOOD, INK);
-        drawDot(ctx, toThX(-theta_eq), toUY(getUeff(-theta_eq)), 4, GOOD, INK);
-      } else {
-        drawDot(ctx, toThX(0), toUY(getUeff(0)), 4, GOOD, INK);
-      }
-      drawDot(ctx, toThX(state.theta), toUY(getUeff(state.theta)), 6, GOLD, INK);
-      ctx.restore();
-
-      axisText(ctx, '−π', rx, height - 10, 'left');
-      axisText(ctx, '0', toThX(0), height - 10, 'center');
-      axisText(ctx, '+π', rx + rw, height - 10, 'right');
+      axisText(ctx, 'bottom  θ = 0', cx, height - 8, 'center');
+      axisText(ctx, 'top', cx, 16, 'center');
     },
     challenge: {
       question: "A bead of mass $m$ slides without friction on a circular hoop of radius $R$ rotating at constant angular speed $\\omega$ about its vertical diameter. What is the critical angular frequency $\\omega_c$ above which a stable non-zero equilibrium angle $\\theta \\neq 0$ exists?",
@@ -813,7 +703,7 @@ Remarkably, the Euler-Lagrange formulation automatically eliminates all workless
         "E) Stable equilibria at $\\theta \\neq 0$ never occur for any rotation speed."
       ],
       correct: 0,
-      explanation: "From the Euler-Lagrange equation, the equilibrium condition $\\mathrm{d}U_{\\mathrm{eff}}/\\mathrm{d}\\theta = 0$ gives $(\\omega^{2} \\cos\\theta - g/R) \\sin\\theta = 0$. Non-zero equilibrium angles require $\\cos\\theta = g / (R \\omega^{2})$. Since $|\\cos\\theta| \\le 1$, a real solution for $\\theta \\neq 0$ exists if and only if $g / (R \\omega^{2}) < 1$, which means $\\omega > \\omega_c = \\sqrt{g / R}$. For $\\omega > \\omega_c$, the bottom position $\\theta = 0$ becomes an unstable local maximum, and two symmetric stable minima emerge at $\\cos\\theta_0 = g/(R \\omega^{2})$."
+      explanation: "With $\\theta$ measured from the bottom, equilibrium requires $(\\omega^{2}\\cos\\theta - g/R)\\sin\\theta = 0$. Nonzero roots need $\\cos\\theta = g/(R\\omega^{2})$, which is possible iff $\\omega > \\omega_c = \\sqrt{g/R}$. Above $\\omega_c$, $\\theta = 0$ is unstable and two symmetric minima sit at those latitudes."
     }
   };
 
@@ -823,110 +713,100 @@ Remarkably, the Euler-Lagrange formulation automatically eliminates all workless
     title: 'Canonical Momentum & Cyclic Coordinates: $p_i \\equiv \\frac{\\partial L}{\\partial \\dot{q}_i}$',
     formulaLatex: 'p_i \\equiv \\frac{\\partial L}{\\partial \\dot{q}_i}',
     physicalStory: `
-Canonical momentum $p_i$ is the conjugate momentum to coordinate $q_i$. Crucially, canonical momentum is NOT always equal to mechanical momentum $m\\mathbf{v}$.
-
-In polar coordinates, $p_\\theta = mr^2\\dot{\\theta}$ represents angular momentum (with units $\\text{kg}\\cdot\\text{m}^2/\\text{s}$, not $\\text{kg}\\cdot\\text{m}/\\text{s}$). In electrodynamics with a vector potential $\\mathbf{A}$, canonical momentum is $\\mathbf{p} = m\\mathbf{v} + q\\mathbf{A}$. If a coordinate $q_k$ is cyclic (absent from $L$), its conjugate momentum $p_k$ is strictly conserved!
+Canonical momentum $p_i = \\partial L/\\partial\\dot{q}_i$ is conjugate to $q_i$. It is not always $m\\mathbf{v}$. For a charge in a magnetic field,
+$$L = \\tfrac12 m v^{2} + q\\mathbf{A}\\cdot\\mathbf{v},\\qquad \\mathbf{p} = m\\mathbf{v} + q\\mathbf{A}.$$
+If $q_k$ is cyclic ($\\partial L/\\partial q_k = 0$), then $\\dot{p}_k = 0$. In the Landau gauge $\\mathbf{A} = (0, Bx, 0)$ the coordinate $y$ never appears, so
+$$p_y = m v_y + q B x = q B X_c$$
+is strictly constant: it is the $x$-coordinate of the cyclotron guiding center. Mechanical $m v_y$ still oscillates. In the symmetric gauge $\\mathbf{A} = \\frac12 B(-y,x)$ it is $p_\\theta$ that is conserved, not $p_y$. The orbit itself is gauge-invariant; which Cartesian $p_i$ is constant is not.
     `.trim(),
     derivationSteps: [
-      "1. Define generalized canonical momentum: $p_i \\equiv \\frac{\\partial L}{\\partial \\dot{q}_i}$.",
-      "2. Euler-Lagrange equation states: $\\dot{p}_i = \\frac{d}{dt}\\left(\\frac{\\partial L}{\\partial \\dot{q}_i}\\right) = \\frac{\\partial L}{\\partial q_i}$.",
-      "3. If coordinate $q_k$ does not appear in $L$ (cyclic/ignorable coordinate, $\\frac{\\partial L}{\\partial q_k} = 0$), then $\\dot{p}_k = 0 \\implies p_k = \\text{constant}$.",
-      "4. Charged particle in magnetic field has Lagrangian: $L = \\frac{1}{2}m\\mathbf{v}^2 - q\\phi + q\\mathbf{A}\\cdot\\mathbf{v}$.",
-      "5. Canonical momentum is: $\\mathbf{p} = \\frac{\\partial L}{\\partial \\mathbf{v}} = m\\mathbf{v} + q\\mathbf{A}$.",
-      "6. In Landau gauge $\\mathbf{A} = (0, Bx, 0)$, the coordinate $y$ is cyclic, which guarantees that $p_y = mv_y + qBx = \\text{constant}$ is strictly conserved throughout cyclotron motion."
+      "1. Define $p_i \\equiv \\partial L/\\partial\\dot{q}_i$.",
+      "2. Euler–Lagrange says $\\dot{p}_i = \\partial L/\\partial q_i$.",
+      "3. Cyclic $q_k$ ($\\partial L/\\partial q_k = 0$) $\\Rightarrow p_k$ constant.",
+      "4. Charge in $\\mathbf{B} = B\\hat{\\mathbf{z}}$: $L = \\frac12 m(v_x^{2}+v_y^{2}+v_z^{2}) + q\\mathbf{A}\\cdot\\mathbf{v}$.",
+      "5. Landau gauge $\\mathbf{A}=(0,Bx,0)$: $y$ is cyclic, $p_y = mv_y + qBx$.",
+      "6. Guiding center $X_c = x + v_y/\\omega_c = p_y/(qB)$ with $\\omega_c = qB/m$ is therefore invariant. Mechanical $mv_y$ is not."
     ],
     limitingCases: [
-      { condition: 'Standard Cartesian ($U$ velocity-independent)', result: 'p_x = m\\dot{x}', description: 'Canonical momentum equals standard Newtonian linear momentum.' },
-      { condition: 'Polar Coordinates ($q = \\theta$, central force)', result: 'p_\\theta = mr^2\\dot{\\theta} = L_z', description: 'Canonical momentum is orbital angular momentum.' },
-      { condition: 'Landau Gauge $\\mathbf{A} = (0, Bx, 0)$', result: 'p_y = mv_y + qBx = \\text{const}', description: 'Guiding center $X_0 = x + \\frac{v_y}{\\omega_c} = \\frac{p_y}{qB}$ is conserved.' }
+      { condition: 'No $\\mathbf{A}$', result: 'p_x = m\\dot{x}', description: 'Canonical momentum equals mechanical momentum.' },
+      { condition: 'Polar angle, central force', result: 'p_\\theta = m r^{2}\\dot{\\theta}', description: 'Canonical momentum is angular momentum.' },
+      { condition: 'Landau gauge', result: 'p_y = mv_y + qBx = const', description: 'Vertical line $x = X_c$ never moves.' },
+      { condition: 'Symmetric gauge', result: 'p_\\theta = L_z + \\tfrac12 q B r^{2} = const', description: '$L_z$ itself still oscillates unless the orbit is centered at the origin.' }
     ],
     greTraps: [
-      { trap: 'Canonical vs Mechanical Momentum in Magnetic Fields', description: 'Mechanical momentum $m\\mathbf{v} = \\mathbf{p} - q\\mathbf{A}$ changes direction during cyclotron orbits, but the canonical momentum $p_y$ in Landau gauge remains strictly invariant!' },
-      { trap: 'Dimensions of Canonical Momentum', description: 'The product $p_i q_i$ always has dimensions of Action ($\\text{J}\\cdot\\text{s}$). If $q_i$ is an angle (dimensionless), $p_i$ has dimensions of angular momentum.' }
+      { trap: 'Canonical vs mechanical', description: '$m\\mathbf{v} = \\mathbf{p} - q\\mathbf{A}$ turns with the cyclotron motion. In Landau gauge $p_y$ does not.' },
+      { trap: 'Gauge dependence', description: 'Which component of $\\mathbf{p}$ is conserved depends on the gauge, even though $\\mathbf{B}$ and the orbit do not.' },
+      { trap: 'Dimensions', description: 'If $q_i$ is an angle, $p_i$ has dimensions of angular momentum. The product $p_i q_i$ always has dimensions of action.' }
     ],
     parameters: [
       { id: 'B', label: 'Magnetic field $B$', type: 'range', min: 0.5, max: 3.0, step: 0.1, value: 1.5, default: 1.5, unit: 'T' },
       { id: 'q', label: 'Charge $q$', type: 'range', min: -2, max: 2, step: 1, value: 1, default: 1 },
       { id: 'gauge', label: 'Gauge choice', type: 'select', value: 'landau', default: 'landau', options: [
-        { value: 'landau', label: 'Landau gauge: $\\mathbf{A} = (0, Bx, 0)$' },
-        { value: 'symmetric', label: 'Symmetric gauge: $\\mathbf{A} = \\frac{1}{2}B(-y, x, 0)$' }
+        { value: 'landau', label: 'Landau: $\\mathbf{A} = (0, Bx, 0)$' },
+        { value: 'symmetric', label: 'Symmetric: $\\mathbf{A} = \\frac12 B(-y, x)$' }
       ]},
       SPEED_PARAM
     ],
-    init(container, state, redraw) {
-      state.B = state.B ?? 1.5;
-      state.q = state.q ?? 1;
-      state.gauge = state.gauge ?? 'landau';
+    init: function (container, state, redraw) {
+      state.B = num(state.B, 1.5);
+      state.q = num(state.q, 1);
+      state.gauge = state.gauge || 'landau';
       state.simSpeed = simSpeedOf(state);
-      state.x = num(state.x, -0.5);
-      state.y = num(state.y, 0);
-      state.vx = num(state.vx, 0);
-      state.vy = num(state.vy, 2.0);
-      state.trail = state.trail || [];
-      state.hist = state.hist || [];
-      state.tSim = num(state.tSim, 0);
-
-      const controls = [
-        { id: 'reset', label: 'Reset Trajectory', type: 'button', text: 'Reset Particle', onClick: () => {
-          state.x = -0.5; state.y = 0; state.vx = 0; state.vy = 2.0; state.trail = []; state.hist = []; state.tSim = 0;
-        }}
-      ];
-      U.createControlUI(container, controls, () => {
-        redraw();
-      });
-    },
-    onParamChange(id, val, state) {
-      if (id === 'B' || id === 'q' || id === 'gauge') {
-        state.x = -0.5;
-        state.y = 0;
-        state.vx = 0;
-        state.vy = 2.0;
-        state.trail = [];
-        state.hist = [];
-        state.tSim = 0;
+      if (!Number.isFinite(state.x)) resetCyclotron(state);
+      if (!Array.isArray(state.trail)) state.trail = [];
+      if (U && typeof U.createControlUI === 'function') {
+        U.createControlUI(container, [
+          { id: 'reset', label: 'Reset trajectory', type: 'button', text: 'Reset particle', onClick: function () { resetCyclotron(state); } }
+        ], function () { redraw(); });
       }
     },
-    draw(ctx, width, height, state, dt) {
+    onParamChange: function (id, val, state) {
+      if (id === 'B' || id === 'q' || id === 'gauge') resetCyclotron(state);
+    },
+    draw: function (ctx, width, height, state, dt) {
       fillStage(ctx, width, height);
       state = state || {};
-
-      const mass = 1.0;
-      const B = Math.max(0.05, num(state.B, 1.5));
-      const q = num(state.q, 1);
-      const gauge = state.gauge || 'landau';
-      if (!Number.isFinite(state.x)) state.x = -0.5;
+      var mass = 1.0;
+      var B = Math.max(0.05, num(state.B, 1.5));
+      var qCh = num(state.q, 1);
+      var gauge = state.gauge === 'symmetric' ? 'symmetric' : 'landau';
+      if (!Number.isFinite(state.x)) state.x = -0.55;
       if (!Number.isFinite(state.y)) state.y = 0;
       if (!Number.isFinite(state.vx)) state.vx = 0;
       if (!Number.isFinite(state.vy)) state.vy = 2.0;
       if (!Array.isArray(state.trail)) state.trail = [];
-      if (!Array.isArray(state.hist)) state.hist = [];
       if (!Number.isFinite(state.tSim)) state.tSim = 0;
 
-      const dtv = scaledDt(dt, state);
-      const omega_c = (q * B) / mass;
+      var dtv = scaledDt(dt, state);
+      var omegaC = (qCh * B) / mass;
+      var Xc = state.x;
+      var Yc = state.y;
+      if (Math.abs(omegaC) > 1e-8) {
+        Xc = state.x + state.vy / omegaC;
+        Yc = state.y - state.vx / omegaC;
+      }
 
       if (dtv > 0) {
-        if (Math.abs(omega_c) < 1e-8) {
+        if (Math.abs(omegaC) < 1e-8) {
           state.x += state.vx * dtv;
           state.y += state.vy * dtv;
         } else {
-          const Xc = state.x + state.vy / omega_c;
-          const Yc = state.y - state.vx / omega_c;
-          const c = Math.cos(omega_c * dtv);
-          const s = Math.sin(omega_c * dtv);
-          const vxNew = state.vx * c + state.vy * s;
-          const vyNew = -state.vx * s + state.vy * c;
+          var cyc = Math.cos(omegaC * dtv);
+          var syc = Math.sin(omegaC * dtv);
+          var vxNew = state.vx * cyc + state.vy * syc;
+          var vyNew = -state.vx * syc + state.vy * cyc;
           state.vx = vxNew;
           state.vy = vyNew;
-          state.x = Xc - vyNew / omega_c;
-          state.y = Yc + vxNew / omega_c;
+          state.x = Xc - vyNew / omegaC;
+          state.y = Yc + vxNew / omegaC;
         }
         state.tSim += dtv;
+        if (Math.hypot(state.x, state.y) > 4.5) resetCyclotron(state);
         state.trail.push({ x: state.x, y: state.y });
         if (state.trail.length > 220) state.trail.shift();
       }
 
-      let Ax = 0, Ay = 0;
+      var Ax, Ay;
       if (gauge === 'landau') {
         Ax = 0;
         Ay = B * state.x;
@@ -934,93 +814,82 @@ In polar coordinates, $p_\\theta = mr^2\\dot{\\theta}$ represents angular moment
         Ax = -0.5 * B * state.y;
         Ay = 0.5 * B * state.x;
       }
+      var pMechX = mass * state.vx;
+      var pMechY = mass * state.vy;
+      var pCanonX = pMechX + qCh * Ax;
+      var pCanonY = pMechY + qCh * Ay;
+      var pTheta = state.x * pCanonY - state.y * pCanonX;
+      var Lz = state.x * pMechY - state.y * pMechX;
+      var landau = gauge === 'landau';
+      var conserved = landau ? pCanonY : pTheta;
+      var oscillating = landau ? pMechY : Lz;
 
-      const pMechX = mass * state.vx;
-      const pMechY = mass * state.vy;
-      const pCanonX = pMechX + q * Ax;
-      const pCanonY = pMechY + q * Ay;
-      const pCanonTheta = state.x * pCanonY - state.y * pCanonX;
-      const LzMech = state.x * pMechY - state.y * pMechX;
-
-      if (dtv > 0) {
-        state.hist.push({
-          t: state.tSim,
-          py: pCanonY,
-          pth: pCanonTheta,
-          pvy: pMechY,
-          lz: LzMech
-        });
-        if (state.hist.length > 180) state.hist.shift();
-      }
-
-      const landau = gauge === 'landau';
-      const conserved = landau ? pCanonY : pCanonTheta;
-      const oscillating = landau ? pMechY : LzMech;
-
-      legend('Canonical momentum', [
-        { label: 'gauge', value: landau ? 'Landau  $\\mathbf{A} = (0, Bx, 0)$' : 'symmetric  $\\mathbf{A} = \\frac{1}{2}B(-y, x)$' },
-        { label: 'cyclic', value: landau ? '$y \\to P_y$ conserved' : '$\\theta \\to P_{\\theta}$ conserved' },
-        { label: landau ? '$P_y = mv_y + qBx$' : '$P_{\\theta} = L_z + \\frac{1}{2} q B r^{2}$', value: fmt(conserved, 3) },
-        { label: landau ? '$mv_y$' : '$L_z = x mv_y - y mv_x$', value: fmt(oscillating, 3) },
-        { label: '$|p_{\\mathrm{mech}}|$', value: fmt(Math.hypot(pMechX, pMechY), 3) },
-        { label: 'arrows', value: 'coral $m\\mathbf{v}$; gold $q\\mathbf{A}$; teal $\\mathbf{P} = m\\mathbf{v} + q\\mathbf{A}$' }
+      legend('Canonical $p = \\partial L/\\partial\\dot{q}$', [
+        { label: 'gauge', value: landau ? '$\\mathbf{A}=(0,Bx,0)$, $y$ cyclic' : '$\\mathbf{A}=\\frac12 B(-y,x)$, $\\theta$ cyclic' },
+        { label: landau ? '$p_y = mv_y + qBx$' : '$p_\\theta = L_z + \\frac12 q B r^{2}$', value: fmt(conserved, 3) },
+        { label: landau ? '$mv_y$' : '$L_z$', value: fmt(oscillating, 3) },
+        { label: '$|m\\mathbf{v}|$', value: fmt(Math.hypot(pMechX, pMechY), 3) },
+        { label: landau ? 'geometry' : 'orbit', value: landau ? '$x=X_c=p_y/(qB)$ is the gold line' : 'same cyclotron; different conserved $p$' }
       ]);
 
-      const splitX = Math.floor(width * 0.54);
-      divider(ctx, splitX, height);
-
-      const leftW = splitX - 16;
-      const cx = 8 + leftW * 0.5;
-      const cy = 24 + (height - 24 - 22) / 2;
-      const viewR = 2.55;
-      const scale = Math.max(12, Math.min(leftW / (2 * viewR), (height - 52) / (2 * viewR)));
-
-      titleBand(ctx, 'Cyclotron orbit', 14, 18);
-      haloLabel(ctx, splitX - 16, 18, 'P', TEAL, 'right');
-      haloLabel(ctx, splitX - 38, 18, 'qA', GOLD, 'right');
-      haloLabel(ctx, splitX - 68, 18, 'mv', CORAL, 'right');
+      var pad = 18;
+      var cx = width * 0.5;
+      var cy = 12 + (height - 28) * 0.5;
+      var viewR = 2.6;
+      var scale = Math.max(16, Math.min((width - 2 * pad) / (2 * viewR), (height - 40) / (2 * viewR)));
+      function sx(x) { return cx + x * scale; }
+      function sy(y) { return cy - y * scale; }
 
       ctx.save();
-      clipRect(ctx, 8, 22, leftW, height - 32);
+      clipRect(ctx, pad, 8, width - 2 * pad, height - 20);
 
       ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.22);
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(cx - viewR * scale, cy);
-      ctx.lineTo(cx + viewR * scale, cy);
-      ctx.moveTo(cx, cy - viewR * scale);
-      ctx.lineTo(cx, cy + viewR * scale);
+      ctx.moveTo(sx(-viewR), cy);
+      ctx.lineTo(sx(viewR), cy);
+      ctx.moveTo(cx, sy(-viewR));
+      ctx.lineTo(cx, sy(viewR));
       ctx.stroke();
 
-      for (let gx = -2.4; gx <= 2.4; gx += 0.8) {
-        for (let gy = -2.0; gy <= 2.0; gy += 0.8) {
-          let gax = 0, gay = 0;
-          if (landau) {
-            gay = B * gx * 0.22;
-          } else {
-            gax = -0.5 * B * gy * 0.22;
-            gay = 0.5 * B * gx * 0.22;
-          }
-          const sx1 = cx + gx * scale;
-          const sy1 = cy - gy * scale;
-          arrow(ctx, sx1, sy1, sx1 + gax * 16, sy1 - gay * 16, 'rgba(212, 160, 23, 0.38)', 1);
+      if (Math.abs(omegaC) > 1e-8) {
+        var rho = Math.hypot(state.x - Xc, state.y - Yc);
+        ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.16);
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(sx(Xc), sy(Yc), Math.max(2, rho * scale), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        drawDot(ctx, sx(Xc), sy(Yc), 3.2, GOLD, null);
+        if (landau) {
+          ctx.strokeStyle = 'rgba(212, 160, 23, 0.7)';
+          ctx.lineWidth = 1.6;
+          ctx.setLineDash([5, 4]);
+          ctx.beginPath();
+          ctx.moveTo(sx(Xc), sy(-viewR));
+          ctx.lineTo(sx(Xc), sy(viewR));
+          ctx.stroke();
+          ctx.setLineDash([]);
+          haloLabel(ctx, sx(Xc) + 8, sy(viewR) + 4, 'Xc', GOLD, 'left');
         }
       }
 
       if (state.trail.length > 1) {
-        const tPts = state.trail.map(pt => ({ x: cx + pt.x * scale, y: cy - pt.y * scale }));
-        strokePoly(ctx, tPts, 'rgba(204, 120, 92, 0.55)', 2);
+        strokePoly(ctx, state.trail.map(function (pt) {
+          return { x: sx(pt.x), y: sy(pt.y) };
+        }), 'rgba(204, 120, 92, 0.55)', 2);
       }
 
-      const px = cx + state.x * scale;
-      const py = cy - state.y * scale;
-      const vScale = 18;
-      const mx2 = px + pMechX * vScale;
-      const my2 = py - pMechY * vScale;
-      const ax2 = px + q * Ax * vScale;
-      const ay2 = py - q * Ay * vScale;
-      const Px2 = px + pCanonX * vScale;
-      const Py2 = py - pCanonY * vScale;
+      var px = sx(state.x);
+      var py = sy(state.y);
+      var vScale = 16;
+      var mx2 = px + pMechX * vScale;
+      var my2 = py - pMechY * vScale;
+      var ax2 = px + qCh * Ax * vScale;
+      var ay2 = py - qCh * Ay * vScale;
+      var Px2 = px + pCanonX * vScale;
+      var Py2 = py - pCanonY * vScale;
 
       ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.18);
       ctx.lineWidth = 1;
@@ -1033,74 +902,18 @@ In polar coordinates, $p_\\theta = mr^2\\dot{\\theta}$ represents angular moment
       ctx.setLineDash([]);
 
       arrow(ctx, px, py, mx2, my2, CORAL, 2.2);
-      arrow(ctx, px, py, ax2, ay2, GOLD, 2.2);
-      arrow(ctx, px, py, Px2, Py2, TEAL, 2.6);
-      if (Math.hypot(mx2 - px, my2 - py) > 14) {
-        haloLabel(ctx, mx2, my2 - 10, 'mv', CORAL, 'center');
-      }
-      if (Math.hypot(ax2 - px, ay2 - py) > 14) {
-        haloLabel(ctx, ax2, ay2 - 10, 'qA', GOLD, 'center');
-      }
-      if (Math.hypot(Px2 - px, Py2 - py) > 14) {
-        haloLabel(ctx, Px2, Py2 + 12, 'P', TEAL, 'center');
-      }
+      if (Math.hypot(qCh * Ax, qCh * Ay) > 0.04) arrow(ctx, px, py, ax2, ay2, GOLD, 2.2);
+      arrow(ctx, px, py, Px2, Py2, TEAL, 2.5);
+
+      if (Math.hypot(mx2 - px, my2 - py) > 14) haloLabel(ctx, mx2, my2 - 10, 'mv', CORAL, 'center');
+      if (Math.hypot(ax2 - px, ay2 - py) > 14) haloLabel(ctx, ax2, ay2 - 10, 'qA', GOLD, 'center');
+      if (Math.hypot(Px2 - px, Py2 - py) > 14) haloLabel(ctx, Px2, Py2 + 12, 'P', TEAL, 'center');
+
       drawDot(ctx, px, py, 6, CORAL, INK);
       ctx.restore();
 
-      axisText(ctx, 'x', cx + viewR * scale - 8, cy - 6, 'right');
-      axisText(ctx, 'y', cx + 8, cy - viewR * scale + 12, 'left');
-
-      const rPadL = 36;
-      const rx0 = splitX + 14;
-      const rx = rx0 + rPadL;
-      const ry = 28;
-      const rw = Math.max(12, width - rx - 14);
-      const rh = Math.max(12, height - ry - 26);
-
-      titleBand(ctx, landau ? 'P_y (conserved) vs mv_y' : 'P_θ (conserved) vs L_z', rx0, 18);
-      plotBox(ctx, rx, ry, rw, rh);
-      innerGrid(ctx, rx, ry, rw, rh, 4, 4);
-
-      const series = state.hist;
-      let yMin = Infinity, yMax = -Infinity;
-      for (let i = 0; i < series.length; i++) {
-        const a = landau ? series[i].py : series[i].pth;
-        const b = landau ? series[i].pvy : series[i].lz;
-        yMin = Math.min(yMin, a, b);
-        yMax = Math.max(yMax, a, b);
-      }
-      if (!Number.isFinite(yMin)) { yMin = -2; yMax = 2; }
-      const yPad = Math.max(0.4, (yMax - yMin) * 0.18);
-      yMin -= yPad;
-      yMax += yPad;
-      if (yMax <= yMin) { yMin -= 1; yMax += 1; }
-
-      const t0 = series.length ? series[0].t : 0;
-      const t1 = series.length ? series[series.length - 1].t : 1;
-      const tSpan = Math.max(0.2, t1 - t0);
-      const toTX = (t) => rx + ((t - t0) / tSpan) * rw;
-      const toHY = (v) => ry + rh * (1 - (v - yMin) / (yMax - yMin));
-
-      ctx.save();
-      clipRect(ctx, rx, ry, rw, rh);
-      if (yMin < 0 && yMax > 0) {
-        ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.22);
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(rx, toHY(0));
-        ctx.lineTo(rx + rw, toHY(0));
-        ctx.stroke();
-      }
-      if (series.length > 1) {
-        const consPts = series.map(s => ({ x: toTX(s.t), y: toHY(landau ? s.py : s.pth) }));
-        const oscPts = series.map(s => ({ x: toTX(s.t), y: toHY(landau ? s.pvy : s.lz) }));
-        strokePoly(ctx, oscPts, CORAL, 2);
-        strokePoly(ctx, consPts, GOOD, 2.4);
-      }
-      ctx.restore();
-
-      axisText(ctx, 't', rx + rw, height - 10, 'right');
-      axisText(ctx, landau ? 'P' : 'P_θ', rx0 + 2, ry + 12, 'left');
+      axisText(ctx, 'x', sx(viewR) - 6, cy - 6, 'right');
+      axisText(ctx, 'y', cx + 8, sy(viewR) + 12, 'left');
     },
     challenge: {
       question: "A particle of mass $m$ and charge $q$ moves in a uniform magnetic field $\\mathbf{B} = B \\hat{\\mathbf{z}}$ using the Landau gauge $\\mathbf{A} = (0, Bx, 0)$. Which quantity is an exact constant of motion?",
@@ -1112,9 +925,8 @@ In polar coordinates, $p_\\theta = mr^2\\dot{\\theta}$ represents angular moment
         "E) $m (v_x + v_y)$"
       ],
       correct: 1,
-      explanation: "The Lagrangian in Landau gauge is $L = \\frac{1}{2}m(\\dot{x}^{2} + \\dot{y}^{2} + \\dot{z}^{2}) + q B x \\dot{y}$. Since the coordinate $y$ does not appear explicitly in $L$ ($y$ is cyclic), the canonical conjugate momentum $p_y = \\partial L/\\partial \\dot{y} = m v_y + q B x$ is strictly conserved ($\\mathrm{d}p_y/\\mathrm{d}t = 0$). The quantity $p_y/(qB)$ represents the $x$-coordinate of the cyclotron guiding center."
+      explanation: "In Landau gauge $L = \\frac12 m(\\dot{x}^{2}+\\dot{y}^{2}+\\dot{z}^{2}) + q B x\\dot{y}$. The coordinate $y$ is cyclic, so $p_y = \\partial L/\\partial\\dot{y} = mv_y + qBx$ is strictly conserved. $p_y/(qB)$ is the $x$-coordinate of the cyclotron guiding center."
     }
   };
-
 
 })(typeof window !== 'undefined' ? window : globalThis);

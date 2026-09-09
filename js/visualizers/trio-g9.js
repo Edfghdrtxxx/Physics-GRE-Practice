@@ -1,4 +1,4 @@
-/* Formula visualizers — G9 Ohm / First Law / Heisenberg */
+/* Formula visualizers — G9 Ohm / First Law / Heisenberg / Cp */
 (function (global) {
   'use strict';
   global.PGRE = global.PGRE || {};
@@ -11,6 +11,7 @@
   function createStyleIfNotExists() { return; }
   function createControlStyles() { return; }
   var H = PGRE.VizH || {};
+
   function clamp(v, lo, hi) {
     v = Number(v);
     if (v !== v) v = lo;
@@ -19,6 +20,13 @@
   function numParam(state, key, fallback) {
     var n = parseFloat(state && state[key]);
     return isFinite(n) ? n : fallback;
+  }
+  function flagParam(state, key, fallback) {
+    var v = state ? state[key] : undefined;
+    if (v === undefined || v === null || v === '') return !!fallback;
+    if (v === true || v === 1 || v === '1' || v === 'true' || v === 'on') return true;
+    if (v === false || v === 0 || v === '0' || v === 'false' || v === 'off') return false;
+    return !!v;
   }
   function simDt(state, dt) {
     var speed = clamp(numParam(state, 'simSpeed', 1.0), 0.2, 3.0);
@@ -37,6 +45,14 @@
     if (typeof PGRE.appendVizLegend === 'function') {
       PGRE.appendVizLegend(title, rows || []);
     }
+  }
+  function canvasSize(width, height) {
+    var w = parseFloat(width);
+    var h = parseFloat(height);
+    return {
+      w: isFinite(w) && w > 0 ? w : 640,
+      h: isFinite(h) && h > 0 ? h : 420
+    };
   }
   var C = {
     get bg() { return PGRE.vizStageTheme().bg; },
@@ -58,34 +74,89 @@
     if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, r);
     else ctx.rect(x, y, w, h);
   }
-  function seedElectrons(state, n) {
-    n = n || 65;
-    state.electrons = [];
-    for (var i = 0; i < n; i++) {
-      var vth = 220 + Math.random() * 80;
-      var theta = Math.random() * 2 * Math.PI;
-      state.electrons.push({
-        x: Math.random() * 400,
-        y: 20 + Math.random() * 140,
-        vx: vth * Math.cos(theta),
-        vy: vth * Math.sin(theta),
-        trail: []
+  function haloLabel(ctx, text, x, y, opts) {
+    opts = opts || {};
+    ctx.save();
+    ctx.font = opts.font || '600 11px Inter, sans-serif';
+    ctx.textAlign = opts.align || 'center';
+    ctx.textBaseline = opts.baseline || 'middle';
+    var w = ctx.measureText ? ctx.measureText(text).width : String(text).length * 6.5;
+    var ax = opts.align === 'left' ? x : (opts.align === 'right' ? x - w : x - w / 2);
+    var ay = opts.baseline === 'top' ? y : (opts.baseline === 'bottom' ? y - 12 : y - 7);
+    var theme = PGRE.vizStageTheme();
+    ctx.fillStyle = theme.chipFade(0.92);
+    ctx.fillRect(ax - 3, ay - 1, w + 6, 14);
+    ctx.strokeStyle = theme.chipLine;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(ax - 3, ay - 1, w + 6, 14);
+    ctx.fillStyle = opts.color || C.ink;
+    ctx.fillText(text, x, y);
+    ctx.restore();
+  }
+  function creamFill(ctx, width, height) {
+    ctx.fillStyle = (CV && CV.colors && CV.colors.bg) || C.bg;
+    ctx.fillRect(0, 0, width, height);
+  }
+  function lightGrid(ctx, width, height, step) {
+    step = step || 40;
+    ctx.save();
+    ctx.strokeStyle = (CV && CV.colors && CV.colors.grid) || PGRE.vizStageTheme().inkFade(0.06);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (var x = 0; x <= width; x += step) {
+      ctx.moveTo(x + 0.5, 0);
+      ctx.lineTo(x + 0.5, height);
+    }
+    for (var y = 0; y <= height; y += step) {
+      ctx.moveTo(0, y + 0.5);
+      ctx.lineTo(width, y + 0.5);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+  function arrow(ctx, x0, y0, x1, y1, color, lw) {
+    if (CV && typeof CV.drawArrow === 'function') {
+      CV.drawArrow(ctx, x0, y0, x1, y1, color, '', lw || 2, 7);
+      return;
+    }
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = lw || 2;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function seedOhmCarriers(state, n) {
+    n = n || 52;
+    state._e = [];
+    var i, th;
+    for (i = 0; i < n; i++) {
+      th = Math.random() * 2 * Math.PI;
+      state._e.push({
+        x: Math.random(),
+        y: 0.08 + Math.random() * 0.84,
+        vx: Math.cos(th),
+        vy: Math.sin(th)
       });
     }
-  }
-  function seedLattice(state) {
-    state.lattice = [];
-    var cols = 12, rows = 4;
-    for (var r = 0; r < rows; r++) {
-      for (var c = 0; c < cols; c++) {
-        state.lattice.push({ x0: 25 + c * 32, y0: 30 + r * 38 });
+    state._ions = [];
+    var r, c;
+    for (r = 0; r < 3; r++) {
+      for (c = 0; c < 10; c++) {
+        state._ions.push({ fx: (c + 0.5) / 10, fy: (r + 0.5) / 3 });
       }
     }
   }
+
   function seedGas(state, n) {
-    n = n || 45;
+    n = n || 36;
     state._particles = [];
-    for (var i = 0; i < n; i++) {
+    var i;
+    for (i = 0; i < n; i++) {
       state._particles.push({
         x: Math.random(),
         y: Math.random(),
@@ -95,1430 +166,34 @@
     }
   }
 
-
-  PGRE.visualizers['cpgf-2.70'] = {
-    id: "cpgf-2.70",
-    topic: 'em',
-    title: "Ohm's Law: $V_R = IR$",
-    formulaLatex: "V_R = IR",
-    physicalStory: `Macroscopic Ohm's law $V_R = IR$ is the spatial integral of the fundamental microscopic constitutive relation for linear isotropic conductors:
-$$\\mathbf{J} = \\sigma \\mathbf{E} = \\frac{1}{\\rho_R}\\mathbf{E}$$
-
-In the Drude model of metallic conduction, valence electrons detach from parent atoms to form a free Fermi gas navigating a fixed crystal lattice of positive ions. The electrons undergo relentless thermal motion with enormous Fermi/thermal speeds ($v_{\\text{th}} \\sim 10^6\\text{ m/s}$), undergoing isotropic collisions with lattice vibrations (phonons) and impurities at a characteristic mean free collision time $\\tau$.
-
-When a macroscopic potential difference $V$ is applied across a conductor of length $L$, an internal electric field $\\mathbf{E} = -\\nabla V = (V/L)\\hat{\\mathbf{x}}$ accelerates electrons with $\\mathbf{a} = -e\\mathbf{E}/m_e$. Between collisions, this acceleration imparts a tiny net drift velocity:
-$$\\mathbf{v}_d = -\\frac{e\\tau}{m_e}\\mathbf{E} = -\\mu_e \\mathbf{E}$$
-
-Crucially, the electron drift speed is astonishingly sluggish ($v_d \\sim 10^{-4}\\text{ m/s} = 0.1\\text{ mm/s}$), taking hours for an electron to travel through a circuit! Yet when a switch is flipped, the bulb illuminates almost instantaneously because the electromagnetic field and Poynting energy vector $\\mathbf{S} = \\frac{1}{\\mu_0}\\mathbf{E}\\times\\mathbf{B}$ propagate through the surrounding dielectric at relativistic speeds ($v \\sim c$).
-
-Integrating current density over the cross-sectional area $A$ gives $I = J A = (n e v_d) A = \\left(\\frac{n e^2\\tau}{m_e}\\right)\\left(\\frac{V}{L}\\right)A$, which recovers $V = I \\left(\\rho_R \\frac{L}{A}\\right) = IR$.`,
-
-    derivationSteps: [
-      {
-        step: 1,
-        title: "Drude Equation of Motion",
-        latex: "m_e \\frac{d\\langle\\mathbf{v}\\rangle}{dt} = -e\\mathbf{E} - \\frac{m_e}{\\tau}\\langle\\mathbf{v}\\rangle",
-        description: "Newton's second law for an electron subject to electrostatic force $-e\\mathbf{E}$ and momentum relaxation drag from lattice collisions."
-      },
-      {
-        step: 2,
-        title: "Steady-State Drift Velocity",
-        latex: "\\frac{d\\langle\\mathbf{v}\\rangle}{dt} = 0 \\implies \\mathbf{v}_d = -\\frac{e\\tau}{m_e}\\mathbf{E}",
-        description: "In steady state, terminal drift velocity is proportional to electric field via electron mobility $\\mu_e = e\\tau / m_e$."
-      },
-      {
-        step: 3,
-        title: "Microscopic Current Density & Conductivity",
-        latex: "\\mathbf{J} = -n e \\mathbf{v}_d = \\left( \\frac{n e^2 \\tau}{m_e} \\right) \\mathbf{E} \\equiv \\sigma \\mathbf{E}",
-        description: "The Drude conductivity $\\sigma = \\frac{n e^2 \\tau}{m_e}$ and resistivity $\\rho_R = \\frac{m_e}{n e^2 \\tau}$ characterize the material."
-      },
-      {
-        step: 4,
-        title: "Spatial Integration over Conductor Geometry",
-        latex: "I = \\int_A \\mathbf{J}\\cdot d\\mathbf{A} = \\sigma E A = \\sigma \\left(\\frac{V_R}{L}\\right) A",
-        description: "For a uniform cylinder of length $L$ and cross-sectional area $A$, electric field is $E = V_R / L$ and current is $I = J A$."
-      },
-      {
-        step: 5,
-        title: "Macroscopic Ohm's Law & Resistance Formula",
-        latex: "V_R = I \\left( \\frac{L}{\\sigma A} \\right) = I \\left( \\rho_R \\frac{L}{A} \\right) = IR",
-        description: "Defining resistance $R = \\rho_R L / A = L / (\\sigma A)$ produces the macroscopic relation $V_R = IR$."
-      }
-    ],
-
-    limitingCases: [
-      {
-        name: "Ideal Conductor / Superconductor ($R \\to 0$)",
-        condition: "\\sigma \\to \\infty, \\quad \\rho_R \\to 0",
-        formula: "V_R = 0 \\quad (\\mathbf{E}_{\\text{in}} = 0 \\text{ for finite current})",
-        description: "In a superconductor below $T_c$, resistance is strictly zero; Cooper pairs flow without collision loss, yielding zero voltage drop."
-      },
-      {
-        name: "Ideal Insulator / Open Circuit ($R \\to \\infty$)",
-        condition: "\\sigma \\to 0, \\quad \\rho_R \\to \\infty",
-        formula: "I = 0, \\quad V_{\\text{gap}} = \\mathcal{E}",
-        description: "No current flows; the entire source EMF drops across the open circuit gap."
-      },
-      {
-        name: "Temperature Scaling in Metals (Phonon Scattering)",
-        condition: "T > T_{\\text{Debye}}",
-        formula: "\\rho(T) = \\rho_0 [1 + \\alpha (T - T_0)] \\propto T",
-        description: "As temperature rises, lattice vibrations (phonons) increase in amplitude, shortening mean free time $\\tau$ and increasing resistance."
-      },
-      {
-        name: "Semiconductors (Thermal Carrier Activation)",
-        condition: "n(T) \\propto e^{-E_g / (2 k_B T)}",
-        formula: "\\rho(T) \\propto e^{+E_g / (2 k_B T)}",
-        description: "Unlike metals, semiconductor resistivity decreases exponentially with temperature as valence electrons bridge the band gap $E_g$."
-      }
-    ],
-
-    greTraps: [
-      {
-        trap: "Wire Stretching Resistance Scaling (Constant Volume)",
-        explanation: "If a wire of length $L$ and radius $r$ is stretched to twice its length ($L' = 2L$) while keeping volume $V_{\\text{vol}} = A L$ constant, the cross-sectional area halves ($A' = A/2$). Thus $R' = \\rho \\frac{2L}{A/2} = 4 R_0$ (quadruples, not doubles!). High-yield PGRE favorite."
-      },
-      {
-        trap: "Drift Velocity vs Electromagnetic Signal Speed",
-        explanation: "Individual electrons drift at $v_d \\sim 0.1\\text{ mm/s}$, but energy travels via the Poynting vector $\\mathbf{S} = \\frac{1}{\\mu_0}\\mathbf{E}\\times\\mathbf{B}$ through the electromagnetic fields outside the wire at $\\sim c$."
-      },
-      {
-        trap: "Internal Resistance & Maximum Power Transfer Theorem",
-        explanation: "A real battery with EMF $\\mathcal{E}$ and internal resistance $r$ delivers maximum power $P_{\\text{max}} = \\frac{\\mathcal{E}^2}{4r}$ to an external load when $R_{\\text{load}} = r$ (impedance matching), at which point terminal voltage is $\\mathcal{E}/2$ and efficiency is $50\\%$."
-      },
-      {
-        trap: "Ohm's Law is NOT a Fundamental Universal Law",
-        explanation: "Ohm's law is an empirical constitutive approximation. Non-ohmic devices (diodes, vacuum tubes, transistors, filament lamps) do not exhibit constant resistance $V/I$."
-      }
-    ],
-
-    parameters: [
-      { id: "emf", label: "Battery EMF ($\\mathcal{E}$)", type: "slider", min: 1.0, max: 24.0, step: 0.5, default: 12.0 },
-      { id: "resistorR", label: "Load resistor ($R$)", type: "slider", min: 1.0, max: 20.0, step: 0.5, default: 6.0 },
-      { id: "internalR", label: "Internal resistance ($r$)", type: "slider", min: 0.0, max: 5.0, step: 0.2, default: 1.0 },
-      { id: "temperature", label: "Temperature ($T$)", type: "slider", min: 50, max: 600, step: 10, default: 300 },
-      { id: "material", label: "Wire Material", type: "select", options: ["Copper", "Aluminum", "Nichrome", "Carbon", "Superconductor"], default: "Copper" },
-      { id: "showTagged", label: "Track tagged electron", type: "toggle", default: true },
-      { id: "showPoynting", label: "Energy flow (Poynting $\\mathbf{S}$)", type: "toggle", default: true },
-      { id: "stretch2x", label: "Stretch wire $2\\times$ ($R \\to 4R$)", type: "toggle", default: false },
-      { id: "simSpeed", label: "Simulation Speed", min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: "x" }
-    ],
-
-    init: function(container, state, redraw) {
-      state = state || {};
-      state.emf = state.emf !== undefined ? state.emf : 12.0;
-      state.resistorR = state.resistorR !== undefined ? state.resistorR : 6.0;
-      state.internalR = state.internalR !== undefined ? state.internalR : 1.0;
-      state.temperature = state.temperature !== undefined ? state.temperature : 300;
-      state.material = state.material || "Copper";
-      state.showTagged = state.showTagged !== undefined ? state.showTagged : true;
-      state.showPoynting = state.showPoynting !== undefined ? state.showPoynting : true;
-      state.stretch2x = !!state.stretch2x;
-      seedElectrons(state);
-      seedLattice(state);
-    },
-
-    draw: function(ctx, width, height, state, dt) {
-      dt = simDt(state, dt);
-      state = state || {};
-      state.time = (state.time || 0) + dt;
-
-      state.emf = state.emf !== undefined ? state.emf : 12.0;
-      state.resistorR = state.resistorR !== undefined ? state.resistorR : 6.0;
-      state.internalR = state.internalR !== undefined ? state.internalR : 1.0;
-      state.temperature = state.temperature !== undefined ? state.temperature : 300;
-      state.material = state.material || "Copper";
-      state.showTagged = state.showTagged !== undefined ? state.showTagged : true;
-      state.showPoynting = state.showPoynting !== undefined ? state.showPoynting : true;
-      state.stretch2x = !!state.stretch2x;
-
-      if (!state.electrons) seedElectrons(state);
-      if (!state.lattice) seedLattice(state);
-
-      ctx.fillStyle = C.bg;
-      ctx.fillRect(0, 0, width, height);
-
-      var geoR = Number(state.resistorR) * (state.stretch2x ? 4 : 1);
-      var effectiveR = geoR;
-      if (state.material === "Copper") {
-        effectiveR *= 1 + 0.0039 * (state.temperature - 293);
-      } else if (state.material === "Aluminum") {
-        effectiveR *= 1 + 0.0043 * (state.temperature - 293);
-      } else if (state.material === "Nichrome") {
-        effectiveR *= 1 + 0.0004 * (state.temperature - 293);
-      } else if (state.material === "Carbon") {
-        effectiveR *= Math.exp(-0.0015 * (state.temperature - 293));
-      } else if (state.material === "Superconductor") {
-        effectiveR = state.temperature < 93 ? 0.00001 : effectiveR;
-      }
-      effectiveR = Math.max(0.001, effectiveR);
-
-      var totalR = effectiveR + Number(state.internalR);
-      var emf = Math.max(0.01, Number(state.emf));
-      var current = emf / totalR;
-      var vLoad = current * effectiveR;
-      var vInt = current * Number(state.internalR);
-      var power = current * vLoad;
-      var visI = clamp(current, 0, 18);
-      var nCu = 8.47e28;
-      var eCharge = 1.602e-19;
-      var Awire = 1.0e-6;
-      var vdPhys = current / (nCu * eCharge * Awire);
-      var vthPhys = 1.57e6;
-      var thermalAmp = Math.sqrt(state.temperature / 300.0) * 1.5;
-
-      legend("Ohm's law $V = I R$", [
-        { label: "$I$", value: "$" + current.toFixed(2) + "\\text{ A}$" },
-        { label: "$V_R$", value: "$" + vLoad.toFixed(2) + "\\text{ V}$" },
-        { label: "$P = I V_R$", value: "$" + power.toFixed(2) + "\\text{ W}$" },
-        { label: "$V_R / \\mathcal{E}$", value: "$" + ((vLoad / emf) * 100).toFixed(0) + "\\%$" },
-        { label: "$R_{\\text{eff}}$", value: "$" + effectiveR.toFixed(2) + "\\;\\Omega$" },
-        { label: "$r$", value: "$" + Number(state.internalR).toFixed(1) + "\\;\\Omega$" }
-      ]);
-      legend("Drude electrons", [
-        { label: "$v_{\\mathrm{d}}$", value: "$" + (vdPhys * 1e3).toFixed(4) + "\\text{ mm/s}$" },
-        { label: "$v_{\\mathrm{th}}$", value: "$" + (vthPhys / 1e3).toFixed(0) + "\\text{ km/s}$" },
-        { label: "$v_{\\mathrm{th}}/v_{\\mathrm{d}}$", value: vdPhys > 1e-12 ? "$" + (vthPhys / vdPhys).toExponential(1) + "$" : "—" },
-        { label: "Material", value: String(state.material) },
-        { label: "$T$", value: "$" + String(state.temperature) + "\\text{ K}$" }
-      ]);
-
-      var splitY = height * 0.50;
-
-      ctx.save();
-      var pad = 10;
-      var drudeLeft = pad;
-      var drudeTop = pad;
-      var drudeW = width - pad * 2;
-      var drudeH = splitY - pad - 6;
-      var headH = 20;
-      var stageTop = drudeTop + headH;
-      var stageH = drudeH - headH;
-
-      ctx.fillStyle = C.panel;
-      ctx.strokeStyle = C.line;
-      ctx.lineWidth = 1;
-      panelPath(ctx, drudeLeft, drudeTop, drudeW, drudeH, 8);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = C.ink;
-      ctx.font = "600 12px Inter, sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      ctx.fillText("Drude model", drudeLeft + 12, drudeTop + headH / 2);
-      if (drudeW > 420) {
-        ctx.fillStyle = C.muted;
-        ctx.font = "11px Inter, sans-serif";
-        ctx.textAlign = "right";
-        ctx.fillText("thermal motion dominates drift", drudeLeft + drudeW - 12, drudeTop + headH / 2);
-      }
-
-      ctx.fillStyle = "rgba(204, 120, 92, 0.28)";
-      ctx.fillRect(drudeLeft + drudeW - 14, stageTop + 4, 10, stageH - 10);
-      ctx.fillStyle = C.coral;
-      ctx.font = "bold 13px Inter, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("+", drudeLeft + drudeW - 9, stageTop + stageH / 2);
-
-      ctx.fillStyle = "rgba(93, 184, 166, 0.28)";
-      ctx.fillRect(drudeLeft + 4, stageTop + 4, 10, stageH - 10);
-      ctx.fillStyle = C.teal;
-      ctx.fillText("−", drudeLeft + 9, stageTop + stageH / 2);
-
-      var eY = stageTop + 10;
-      ctx.strokeStyle = C.coral;
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(drudeLeft + drudeW - 28, eY);
-      ctx.lineTo(drudeLeft + 28, eY);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(drudeLeft + 28, eY);
-      ctx.lineTo(drudeLeft + 36, eY - 4);
-      ctx.lineTo(drudeLeft + 36, eY + 4);
-      ctx.closePath();
-      ctx.fillStyle = C.coral;
-      ctx.fill();
-      ctx.font = "600 10px Inter, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.fillText("field", drudeLeft + drudeW / 2, eY + 3);
-
-      var ionR = 6;
-      var latticeTop = stageTop + 22;
-      var latticeH = Math.max(24, stageH - 30);
-      if (state.lattice) {
-        state.lattice.forEach(function(site, idx) {
-          var jitterX = Math.sin(state.time * 25 + idx * 1.7) * thermalAmp;
-          var jitterY = Math.cos(state.time * 23 + idx * 2.3) * thermalAmp;
-          var sx = drudeLeft + 24 + (site.x0 / 400) * (drudeW - 48) + jitterX;
-          var sy = latticeTop + (site.y0 / 140) * latticeH + jitterY;
-          ctx.fillStyle = C.gold;
-          ctx.beginPath();
-          ctx.arc(sx, sy, ionR, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = C.deep;
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          ctx.fillStyle = C.ink;
-          ctx.font = "bold 9px Inter, sans-serif";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText("+", sx, sy + 0.5);
-        });
-      }
-
-      if (state.electrons) {
-        var vthMag = 260 * Math.sqrt(Math.max(0.15, state.temperature / 300));
-        var isSuper = (state.material === "Superconductor" && state.temperature < 93);
-        var collisionLambda = isSuper ? 0.0 : (10 * (state.temperature / 300));
-        var visVd = isSuper ? 48 : clamp(5 + 1.6 * visI, 4, 14);
-        var visAccel = collisionLambda > 0.2 ? visVd * collisionLambda : 0;
-        state.electrons.forEach(function(el, idx) {
-          if (isSuper) {
-            el.vx = visVd;
-            el.vy *= 0.92;
-          } else {
-            el.vx += visAccel * dt;
-            if (collideP(collisionLambda, dt)) {
-              var phi = Math.random() * 2 * Math.PI;
-              el.vx = vthMag * Math.cos(phi);
-              el.vy = vthMag * Math.sin(phi);
-            }
-          }
-          el.x += el.vx * dt;
-          el.y += el.vy * dt;
-          if (el.x > drudeW - 40) el.x = 22;
-          if (el.x < 22) el.x = drudeW - 40;
-          if (el.y < 34) { el.y = 34; el.vy = Math.abs(el.vy); }
-          if (el.y > drudeH - 14) { el.y = drudeH - 14; el.vy = -Math.abs(el.vy); }
-
-          var sx = drudeLeft + el.x;
-          var sy = drudeTop + el.y;
-          var isTagged = (idx === 0 && state.showTagged);
-          if (isTagged) {
-            el.trail.push({ x: sx, y: sy });
-            if (el.trail.length > 40) el.trail.shift();
-            ctx.strokeStyle = C.gold;
-            ctx.lineWidth = 1.8;
-            ctx.beginPath();
-            el.trail.forEach(function(pt, ti) {
-              if (ti === 0) ctx.moveTo(pt.x, pt.y);
-              else ctx.lineTo(pt.x, pt.y);
-            });
-            ctx.stroke();
-            ctx.fillStyle = C.coral;
-            ctx.beginPath();
-            ctx.arc(sx, sy, 5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = C.gold;
-            ctx.lineWidth = 2;
-            ctx.stroke();
-          } else {
-            ctx.fillStyle = C.coral;
-            ctx.beginPath();
-            ctx.arc(sx, sy, 2.6, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        });
-      }
-
-      ctx.restore();
-
-      ctx.save();
-      var botTop = splitY + 4;
-      var botH = height - botTop - pad;
-      var botW = width - pad * 2;
-      var botLeft = pad;
-
-      ctx.fillStyle = C.panel;
-      ctx.strokeStyle = C.line;
-      ctx.lineWidth = 1;
-      panelPath(ctx, botLeft, botTop, botW, botH, 8);
-      ctx.fill();
-      ctx.stroke();
-
-      var circW = botW * 0.46;
-      var cLeft = botLeft + 8;
-      var cTop = botTop + 18;
-      var cWidth = circW - 12;
-      var cHeight = botH - 26;
-      var loopX = cLeft + 28;
-      var loopY = cTop + 14;
-      var loopW = Math.max(70, cWidth - 50);
-      var loopH = Math.max(50, cHeight - 28);
-
-      ctx.fillStyle = C.ink;
-      ctx.font = "600 11px Inter, sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillText("Circuit", cLeft + 8, botTop + 5);
-
-      ctx.strokeStyle = C.stone;
-      ctx.lineWidth = 3.5;
-      ctx.strokeRect(loopX, loopY, loopW, loopH);
-
-      var batX = loopX;
-      var batY = loopY + loopH / 2;
-      ctx.fillStyle = C.panel;
-      ctx.fillRect(batX - 12, batY - 24, 24, 48);
-      ctx.strokeStyle = C.coral;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(batX - 12, batY - 10);
-      ctx.lineTo(batX + 12, batY - 10);
-      ctx.stroke();
-      ctx.strokeStyle = C.teal;
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(batX - 7, batY + 10);
-      ctx.lineTo(batX + 7, batY + 10);
-      ctx.stroke();
-      ctx.fillStyle = C.coral;
-      ctx.font = "600 11px Inter, sans-serif";
-      ctx.textAlign = "right";
-      ctx.textBaseline = "middle";
-      ctx.fillText("emf", batX - 16, batY);
-
-      var resX = loopX + loopW;
-      var resY = loopY + loopH / 2;
-      ctx.fillStyle = C.panel;
-      ctx.fillRect(resX - 12, resY - 30, 24, 60);
-      ctx.strokeStyle = C.gold;
-      ctx.lineWidth = 2.4;
-      ctx.beginPath();
-      ctx.moveTo(resX, resY - 28);
-      var zigStep = 7;
-      for (var z = 0; z < 6; z++) {
-        ctx.lineTo(z % 2 === 0 ? resX - 8 : resX + 8, resY - 24 + z * zigStep);
-      }
-      ctx.lineTo(resX, resY + 28);
-      ctx.stroke();
-      ctx.fillStyle = C.gold;
-      ctx.font = "600 11px Inter, sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillText("R", resX + 14, resY);
-
-      if (Number(state.internalR) > 0.05) {
-        var rZigX = loopX + loopW * 0.45;
-        var rZigY = loopY + loopH;
-        ctx.fillStyle = C.panel;
-        ctx.fillRect(rZigX - 22, rZigY - 8, 44, 16);
-        ctx.strokeStyle = C.rose;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(rZigX - 18, rZigY);
-        for (var rz = 0; rz < 5; rz++) {
-          ctx.lineTo(rZigX - 14 + rz * 8, rZigY + (rz % 2 === 0 ? -6 : 6));
-        }
-        ctx.lineTo(rZigX + 18, rZigY);
-        ctx.stroke();
-        ctx.fillStyle = C.rose;
-        ctx.font = "600 10px Inter, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        ctx.fillText("r", rZigX, rZigY + 8);
-      }
-
-      if (power > 5) {
-        ctx.strokeStyle = "rgba(204, 120, 92, " + clamp(power / 80, 0.2, 0.7) + ")";
-        ctx.lineWidth = 1.2;
-        ctx.setLineDash([2, 3]);
-        ctx.beginPath();
-        ctx.arc(resX, resY, 18 + (state.time * 16) % 12, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-
-      if (state.showPoynting) {
-        ctx.strokeStyle = C.gold;
-        ctx.fillStyle = C.gold;
-        ctx.lineWidth = 1.6;
-        [-1, 1].forEach(function(side) {
-          var sx = resX + side * 26;
-          var sy = resY;
-          ctx.beginPath();
-          ctx.moveTo(sx, sy);
-          ctx.lineTo(resX + side * 12, sy);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(resX + side * 12, sy);
-          ctx.lineTo(resX + side * 16, sy - 3.5);
-          ctx.lineTo(resX + side * 16, sy + 3.5);
-          ctx.closePath();
-          ctx.fill();
-        });
-        ctx.font = "600 10px Inter, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "bottom";
-        ctx.fillText("energy", resX, resY - 32);
-      }
-
-      var w1 = loopW;
-      var h1 = loopH;
-      var loopLen = 2 * (w1 + h1);
-      var dotSpeed = visI * 48;
-      var numDots = 12;
-      for (var d = 0; d < numDots; d++) {
-        var prog = (state.time * dotSpeed + (d / numDots) * loopLen) % loopLen;
-        var dx = 0, dy = 0;
-        if (prog < w1) {
-          dx = loopX + prog;
-          dy = loopY;
-        } else if (prog < w1 + h1) {
-          dx = loopX + w1;
-          dy = loopY + (prog - w1);
-        } else if (prog < 2 * w1 + h1) {
-          dx = loopX + w1 - (prog - (w1 + h1));
-          dy = loopY + h1;
-        } else {
-          dx = loopX;
-          dy = loopY + h1 - (prog - (2 * w1 + h1));
-        }
-        ctx.fillStyle = C.gold;
-        ctx.beginPath();
-        ctx.arc(dx, dy, 2.6, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      var graphX = botLeft + circW + 6;
-      var graphW = botW - circW - 16;
-      var graphY = botTop + 22;
-      var graphH = botH - 30;
-
-      ctx.fillStyle = C.bg;
-      ctx.strokeStyle = C.line;
-      ctx.lineWidth = 1;
-      panelPath(ctx, graphX, graphY, graphW, graphH, 6);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = C.ink;
-      ctx.font = "600 11px Inter, sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "bottom";
-      ctx.fillText("potential around the loop", graphX + 8, graphY - 4);
-
-      var base0Y = graphY + graphH - 16;
-      var topPad = graphY + 16;
-      ctx.strokeStyle = C.line;
-      ctx.setLineDash([2, 3]);
-      ctx.beginPath();
-      ctx.moveTo(graphX + 10, base0Y);
-      ctx.lineTo(graphX + graphW - 10, base0Y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.font = "10px JetBrains Mono, monospace";
-      ctx.fillStyle = C.muted;
-      ctx.textAlign = "right";
-      ctx.textBaseline = "middle";
-      ctx.fillText("0", graphX + graphW - 8, base0Y);
-
-      var vScale = (base0Y - topPad) / Math.max(12, emf);
-      var yEmf = clamp(base0Y - emf * vScale, topPad, base0Y);
-      var yAfterInt = clamp(base0Y - vLoad * vScale, topPad, base0Y);
-      var p0 = { x: graphX + 14, y: base0Y };
-      var p1 = { x: graphX + 14 + graphW * 0.20, y: yEmf };
-      var p2 = { x: graphX + 14 + graphW * 0.36, y: yAfterInt };
-      var p3 = { x: graphX + 14 + graphW * 0.64, y: yAfterInt };
-      var p4 = { x: graphX + 14 + graphW * 0.82, y: base0Y };
-      var p5 = { x: graphX + graphW - 14, y: base0Y };
-
-      ctx.strokeStyle = C.teal;
-      ctx.lineWidth = 2.4;
-      ctx.beginPath();
-      ctx.moveTo(p0.x, p0.y);
-      ctx.lineTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.lineTo(p3.x, p3.y);
-      ctx.lineTo(p4.x, p4.y);
-      ctx.lineTo(p5.x, p5.y);
-      ctx.stroke();
-
-      ctx.font = "600 10px Inter, sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "bottom";
-      ctx.fillStyle = C.coral;
-      ctx.fillText("+emf", p1.x - 8, Math.max(topPad + 10, p1.y - 3));
-      var stacked = Math.abs(yEmf - yAfterInt) < 10 || vLoad < 0.25;
-      if (!stacked) {
-        ctx.fillStyle = C.rose;
-        ctx.textBaseline = "top";
-        ctx.fillText("-Ir", p2.x + 4, p2.y + 3);
-        ctx.fillStyle = C.gold;
-        ctx.textAlign = "right";
-        ctx.textBaseline = "bottom";
-        ctx.fillText("-IR", p4.x - 4, Math.min(p4.y, p3.y) - 4);
-      } else if (vInt > 0.15) {
-        ctx.fillStyle = C.rose;
-        ctx.textAlign = "left";
-        ctx.textBaseline = "top";
-        ctx.fillText("-Ir", p2.x + 10, Math.min(base0Y - 4, p2.y + 6));
-      }
-
-      ctx.restore();
-    },
-
-    challenge: {
-      question: "A cylindrical copper wire with initial resistance $R_0$ is uniformly drawn and stretched through a wire die such that its length increases by $100\\%$ ($L_{\\text{new}} = 2 L_0$) without changing its total mass or density. Next, this stretched wire is connected across a real battery of EMF $\\mathcal{E}$ and internal resistance $r = R_0$. What is the current $I$ drawn from the battery and the power $P$ dissipated in the stretched wire?",
-      options: [
-        "$I = \\frac{\\mathcal{E}}{3 R_0}, \\quad P = \\frac{2\\mathcal{E}^2}{9 R_0}$",
-        "$I = \\frac{\\mathcal{E}}{5 R_0}, \\quad P = \\frac{4\\mathcal{E}^2}{25 R_0}$",
-        "$I = \\frac{\\mathcal{E}}{8 R_0}, \\quad P = \\frac{\\mathcal{E}^2}{16 R_0}$",
-        "$I = \\frac{\\mathcal{E}}{4 R_0}, \\quad P = \\frac{\\mathcal{E}^2}{8 R_0}$",
-        "$I = \\frac{\\mathcal{E}}{5 R_0}, \\quad P = \\frac{2\\mathcal{E}^2}{25 R_0}$"
-      ],
-      correct: 1,
-      explanation: "Step 1: Wire stretching resistance scaling with constant volume:\n" +
-        "Volume $V = A L = \\text{const} \\implies$ when $L_{\\text{new}} = 2 L_0$, area $A_{\\text{new}} = A_0 / 2$.\n" +
-        "Resistance $R_{\\text{new}} = \\rho \\frac{L_{\\text{new}}}{A_{\\text{new}}} = \\rho \\frac{2 L_0}{A_0 / 2} = 4 \\rho \\frac{L_0}{A_0} = 4 R_0$.\n\n" +
-        "Step 2: Circuit analysis with internal resistance $r = R_0$:\n" +
-        "Total loop resistance $R_{\\text{total}} = R_{\\text{new}} + r = 4 R_0 + R_0 = 5 R_0$.\n" +
-        "Then current $I = \\frac{\\mathcal{E}}{5 R_0}$.\n" +
-        "Power dissipated in wire $P = I^2 R_{\\text{new}} = \\left(\\frac{\\mathcal{E}}{5 R_0}\\right)^2 (4 R_0) = \\frac{4 \\mathcal{E}^2}{25 R_0}$."
-    }
-  };
-
-  PGRE.visualizers['cpgf-4.14'] = {
-    id: 'cpgf-4.14',
-    topic: 'th',
-    title: 'First Law of Thermodynamics: $\\Delta U = Q - W$',
-    formulaLatex: '\\Delta U = Q - W = \\int \\delta Q - \\int P\\,dV',
-    physicalStory: `The First Law of Thermodynamics is the macroscopic statement of energy conservation for a closed thermodynamic system. Internal energy $U$ is a state function—dependent only on the equilibrium thermodynamic coordinates (for an ideal gas, $U(T) = n C_V T$). In contrast, heat $Q$ (thermal energy flux across the system boundary driven by a temperature gradient) and work $W$ (mechanical energy transferred via macroscopic boundary displacement, defined in physics as $W = \\int P dV$ done *by* the system) are path-dependent process quantities. Over any thermodynamic transformation, the difference $Q - W$ is invariant and exactly equals $\\Delta U$. Over a complete cyclic process ($\\oint dU = 0$), the net work output equals the net heat absorbed ($W_{\\text{net}} = Q_{\\text{net}}$), which equals the enclosed area on the $P-V$ diagram.`,
-    
-    derivationSteps: [
-      {
-        step: "1. Global Energy Conservation",
-        latex: "dE_{\\text{total}} = dE_{\\text{kinetic}} + dE_{\\text{potential}} + dU = \\delta Q - \\delta W",
-        explanation: "For a stationary system with no external center-of-mass motion or external potential shifts, all energy exchanges alter the microscopic internal kinetic and potential degrees of freedom ($dU$)."
-      },
-      {
-        step: "2. Reversible Mechanical Work",
-        latex: "\\delta W = \\mathbf{F}_{\\text{gas}} \\cdot d\\mathbf{x} = (P \\cdot A) dx = P\\, dV \\implies W = \\int_{V_i}^{V_f} P(V)\\, dV",
-        explanation: "Physics standard sign convention: $W > 0$ when the gas expands ($dV > 0$) doing positive work on its surroundings, which lowers internal energy if uncompensated."
-      },
-      {
-        step: "3. Ideal Gas Internal Energy & Heat Capacities",
-        latex: "U = n C_V T = \\frac{f}{2} n R T \\implies \\Delta U = n C_V \\Delta T = \\frac{f}{2}(P_f V_f - P_i V_i)",
-        explanation: "By Joule's experiment and equipartition, $U$ depends purely on $T$ (with $f=3$ for monatomic, $f=5$ for diatomic). Mayer's relation gives $C_P = C_V + R$, and adiabatic index $\\gamma = C_P / C_V$."
-      },
-      {
-        step: "4. Cyclic Processes & Enclosed Area",
-        latex: "\\oint dU = 0 \\implies Q_{\\text{net}} = W_{\\text{net}} = \\oint P\\, dV",
-        explanation: "For a clockwise cycle on a P-V indicator diagram, $W_{\\text{net}} > 0$ (heat engine operating between reservoirs). Counter-clockwise represents a refrigerator or heat pump consuming work."
-      }
-    ],
-
-    limitingCases: [
-      {
-        name: "Isochoric / Isometric Process ($V = \\text{const}$)",
-        condition: "dV = 0",
-        formula: "W = 0, \\quad \\Delta U = Q = n C_V \\Delta T",
-        explanation: "No boundary displacement occurs, so zero mechanical work is performed. All added heat directly increases the gas temperature and internal energy."
-      },
-      {
-        name: "Isobaric Process ($P = \\text{const}$)",
-        condition: "P = \\text{const}",
-        formula: "W = P\\Delta V = nR\\Delta T, \\quad Q = n C_P \\Delta T, \\quad \\frac{W}{Q} = \\frac{\\gamma - 1}{\\gamma}",
-        explanation: "Expansion at constant pressure requires heat input for both increasing internal energy and doing mechanical work against the external atmosphere."
-      },
-      {
-        name: "Isothermal Process ($T = \\text{const}$)",
-        condition: "T = \\text{const}",
-        formula: "\\Delta U = 0, \\quad Q = W = n R T \\ln\\left(\\frac{V_f}{V_i}\\right)",
-        explanation: "For an ideal gas, $\\Delta U = 0$. All absorbed heat is converted directly into mechanical expansion work without heating the system."
-      },
-      {
-        name: "Adiabatic Process ($Q = 0$)",
-        condition: "Q = 0 \\implies P V^\\gamma = \\text{const}",
-        formula: "W = \\frac{P_i V_i - P_f V_f}{\\gamma - 1}, \\quad \\Delta U = -W = n C_V (T_f - T_i) = \\frac{P_f V_f - P_i V_i}{\\gamma - 1}",
-        explanation: "In a thermally insulated chamber, gas expansion cools the gas ($\\Delta T < 0$) because work is done entirely at the expense of internal energy."
-      },
-      {
-        name: "Adiabatic Free Expansion (Joule Expansion)",
-        condition: "Q = 0, \\; W = 0 \\text{ (into vacuum)}",
-        formula: "\\Delta U = 0 \\implies T_f = T_i \\text{ (ideal gas)}, \\quad \\Delta S > 0",
-        explanation: "Expanding freely into a vacuum does no work ($P_{\\text{ext}} = 0$) and has no heat transfer; hence $\\Delta U = 0$, but the process is highly irreversible."
-      }
-    ],
-
-    greTraps: [
-      {
-        trap: "Physics vs Chemistry Work Sign Convention",
-        description: "Physics writes $\\Delta U = Q - W$ with $W = \\int P dV$ (work done BY gas). Chemistry writes $\\Delta U = Q + W$ with $W = -\\int P dV$ (work done ON gas).",
-        proTip: "Look for keywords: 'work done by the system' ($W > 0$ on expansion) vs 'work done on the gas'."
-      },
-      {
-        trap: "Internal Energy Depends ONLY on Initial & Final ($P,V,T$)",
-        description: "$\\Delta U$ is a state function: $\\Delta U = n C_V \\Delta T$ for any process between state 1 and 2, even irreversible ones. $W$ and $Q$ depend heavily on the path.",
-        proTip: "If $P_i V_i = P_f V_f$, then $T_i = T_f$ and $\\Delta U = 0$ for an ideal gas, regardless of the intermediate trajectory!"
-      },
-      {
-        trap: "Slope of Adiabat vs Isotherm on P-V Diagram",
-        description: "Adiabatic curves are steeper than isotherms by factor $\\gamma$: $(dP/dV)_{\\text{ad}} = -\\gamma (P/V)$ vs $(dP/dV)_{\\text{iso}} = -(P/V)$.",
-        proTip: "On PGRE cycle diagrams, the steeper curve is ALWAYS the adiabat ($\\gamma = 5/3$ or $7/5 > 1$). "
-      }
-    ],
-
-    parameters: [
-      { id: 'process', name: 'Process type', type: 'select', options: [
-        { value: 'isothermal', label: 'Isothermal ($\\Delta U = 0$)' },
-        { value: 'adiabatic', label: 'Adiabatic ($Q = 0$)' },
-        { value: 'isobaric', label: 'Isobaric ($P = \\text{const}$)' },
-        { value: 'isochoric', label: 'Isochoric ($W = 0$)' },
-        { value: 'carnot', label: 'Carnot cycle' }
-      ], default: 'isothermal' },
-      { id: 'vRatio', name: 'Volume ratio $V_f / V_i$', min: 1.2, max: 4.0, step: 0.1, default: 2.5, unit: 'x' },
-      { id: 'gasType', name: 'Gas type', type: 'select', options: [
-        { value: 'monatomic', label: 'Monatomic ($\\gamma = 5/3$)' },
-        { value: 'diatomic', label: 'Diatomic ($\\gamma = 7/5$)' }
-      ], default: 'monatomic' },
-      { id: 'progress', name: 'Process progress', min: 0, max: 1, step: 0.01, default: 0.7, unit: '' },
-      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
-    ],
-
-    init(container, state, redraw) {
-      state = state || {};
-      if (!state._particles) seedGas(state);
-    },
-
-    draw(ctx, width, height, state, dt) {
-      state = state || {};
-      const process = state.process || 'isothermal';
-      const vRatio = state.vRatio || 2.5;
-      const progress = state.progress !== undefined ? state.progress : 0.7;
-      const isMonatomic = (state.gasType || 'monatomic') === 'monatomic';
-      const gamma = isMonatomic ? 5/3 : 7/5;
-      const f = isMonatomic ? 3 : 5; // degrees of freedom: Cv = (f/2) R
-      var dtEff = simDt(state, dt);
-
-      ctx.fillStyle = C.bg;
-      ctx.fillRect(0, 0, width, height);
-      if (!state._particles) seedGas(state);
-
-      // Base thermodynamic state (n*R = 1)
-      const P1 = 3.5; // atm / bar scale
-      const V1 = 1.0;
-      const T1 = P1 * V1;
-      let V2 = V1 * vRatio;
-      let P2 = P1;
-      let T2 = T1;
-
-      // Calculate path curve P(V)
-      const curvePoints = [];
-      const numPts = 100;
-      let curP = P1;
-      let curV = V1;
-      let curT = T1;
-      let W_val = 0;
-      let DeltaU_val = 0;
-      let Q_val = 0;
-
-      if (process === 'isothermal') {
-        P2 = (P1 * V1) / V2;
-        T2 = T1;
-        curV = V1 + (V2 - V1) * progress;
-        curP = (P1 * V1) / curV;
-        curT = T1;
-        W_val = T1 * Math.log(curV / V1);
-        DeltaU_val = 0;
-        Q_val = W_val;
-        for (let i = 0; i <= numPts; i++) {
-          const v = V1 + (V2 - V1) * (i / numPts);
-          const p = (P1 * V1) / v;
-          curvePoints.push({ v, p });
-        }
-      } else if (process === 'adiabatic') {
-        P2 = P1 * Math.pow(V1 / V2, gamma);
-        T2 = P2 * V2;
-        curV = V1 + (V2 - V1) * progress;
-        curP = P1 * Math.pow(V1 / curV, gamma);
-        curT = curP * curV;
-        W_val = (P1 * V1 - curP * curV) / (gamma - 1);
-        DeltaU_val = (f / 2) * (curT - T1);
-        Q_val = 0;
-        for (let i = 0; i <= numPts; i++) {
-          const v = V1 + (V2 - V1) * (i / numPts);
-          const p = P1 * Math.pow(V1 / v, gamma);
-          curvePoints.push({ v, p });
-        }
-      } else if (process === 'isobaric') {
-        P2 = P1;
-        T2 = P2 * V2;
-        curV = V1 + (V2 - V1) * progress;
-        curP = P1;
-        curT = curP * curV;
-        W_val = P1 * (curV - V1);
-        DeltaU_val = (f / 2) * (curT - T1);
-        Q_val = DeltaU_val + W_val;
-        for (let i = 0; i <= numPts; i++) {
-          const v = V1 + (V2 - V1) * (i / numPts);
-          curvePoints.push({ v, p: P1 });
-        }
-      } else if (process === 'isochoric') {
-        V2 = V1;
-        P2 = P1 * (0.4 + (vRatio - 1.2) * (2.2 - 0.4) / (4.0 - 1.2));
-        curV = V1;
-        curP = P1 + (P2 - P1) * progress;
-        curT = curP * curV;
-        W_val = 0;
-        DeltaU_val = (f / 2) * (curT - T1);
-        Q_val = DeltaU_val;
-        for (let i = 0; i <= numPts; i++) {
-          const p = P1 + (P2 - P1) * (i / numPts);
-          curvePoints.push({ v: V1, p });
-        }
-      } else if (process === 'carnot') {
-        // 4-stage Carnot Cycle:
-        // A->B Isothermal at Th
-        // B->C Adiabatic expansion to Tc
-        // C->D Isothermal compression at Tc
-        // D->A Adiabatic compression to Th
-        const Th = 4.0;
-        const Tc = 2.0;
-        const Va = 1.0, Pa = Th / Va;
-        const Vb = Math.min(2.2, Math.max(1.2, vRatio)), Pb = Th / Vb;
-        const Vc = Vb * Math.pow(Th / Tc, 1 / (gamma - 1));
-        const Pc = Tc / Vc;
-        const Vd = Va * Math.pow(Th / Tc, 1 / (gamma - 1));
-        const Pd = Tc / Vd;
-
-        // Stage work & heat totals
-        const W_AB = Th * Math.log(Vb / Va);
-        const Q_AB = W_AB;
-        const W_BC = (Pb * Vb - Pc * Vc) / (gamma - 1); // = (Th - Tc)/(gamma - 1)
-        const W_CD = Tc * Math.log(Vd / Vc); // negative
-        const Q_CD = W_CD; // negative (heat expelled)
-        const W_DA = (Pd * Vd - Pa * Va) / (gamma - 1); // = (Tc - Th)/(gamma - 1) = -W_BC
-
-        const s = progress * 4; // 0 to 4
-        if (s <= 1) {
-          // Stage 1: A -> B
-          const t = s;
-          curV = Va + (Vb - Va) * t;
-          curP = Th / curV;
-          curT = Th;
-          W_val = Th * Math.log(curV / Va);
-          DeltaU_val = 0;
-          Q_val = W_val;
-        } else if (s <= 2) {
-          // Stage 2: B -> C
-          const t = s - 1;
-          curV = Vb + (Vc - Vb) * t;
-          curP = Pb * Math.pow(Vb / curV, gamma);
-          curT = curP * curV;
-          W_val = W_AB + (Pb * Vb - curP * curV) / (gamma - 1);
-          DeltaU_val = (f / 2) * (curT - Th);
-          Q_val = Q_AB;
-        } else if (s <= 3) {
-          // Stage 3: C -> D
-          const t = s - 2;
-          curV = Vc + (Vd - Vc) * t;
-          curP = Tc / curV;
-          curT = Tc;
-          const W_stage3 = Tc * Math.log(curV / Vc);
-          W_val = W_AB + W_BC + W_stage3;
-          DeltaU_val = (f / 2) * (Tc - Th);
-          Q_val = Q_AB + W_stage3;
-        } else {
-          // Stage 4: D -> A
-          const t = s - 3;
-          curV = Vd + (Va - Vd) * t;
-          curP = Pd * Math.pow(Vd / curV, gamma);
-          curT = curP * curV;
-          const W_stage4 = (Pd * Vd - curP * curV) / (gamma - 1);
-          W_val = W_AB + W_BC + W_CD + W_stage4;
-          DeltaU_val = (f / 2) * (curT - Th);
-          Q_val = Q_AB + Q_CD; // net heat
-        }
-
-        // Populate full cycle loop points for PV plotting
-        for (let i = 0; i <= 25; i++) { const v = Va + (Vb - Va)*(i/25); curvePoints.push({ v, p: Th/v }); }
-        for (let i = 0; i <= 25; i++) { const v = Vb + (Vc - Vb)*(i/25); curvePoints.push({ v, p: Pb * Math.pow(Vb/v, gamma) }); }
-        for (let i = 0; i <= 25; i++) { const v = Vc + (Vd - Vc)*(i/25); curvePoints.push({ v, p: Tc/v }); }
-        for (let i = 0; i <= 25; i++) { const v = Vd + (Va - Vd)*(i/25); curvePoints.push({ v, p: Pd * Math.pow(Vd/v, gamma) }); }
-      }
-
-      var stageName = process;
-      if (process === 'carnot') {
-        var sStage = progress * 4;
-        if (sStage <= 1) stageName = 'Carnot A→B isothermal (Th)';
-        else if (sStage <= 2) stageName = 'Carnot B→C adiabatic expand';
-        else if (sStage <= 3) stageName = 'Carnot C→D isothermal (Tc)';
-        else stageName = 'Carnot D→A adiabatic compress';
-      }
-      legend('First law $\\Delta U = Q - W$', [
-        { label: 'Process', value: stageName },
-        { label: '$P$', value: '$' + curP.toFixed(2) + ' P_0$' },
-        { label: '$V$', value: '$' + curV.toFixed(2) + ' V_0$' },
-        { label: '$T$', value: '$' + curT.toFixed(2) + ' T_0$' },
-        { label: '$Q$', value: '$' + (Q_val >= 0 ? '+' : '') + Q_val.toFixed(2) + '$' },
-        { label: '$W$', value: '$' + (W_val >= 0 ? '+' : '') + W_val.toFixed(2) + '$' },
-        { label: '$\\Delta U$', value: '$' + (DeltaU_val >= 0 ? '+' : '') + DeltaU_val.toFixed(2) + '$' },
-        { label: '$Q - W$', value: '$' + (Q_val - W_val).toFixed(2) + '$' },
-        { label: '$\\gamma$', value: isMonatomic ? '$5/3$' : '$7/5$' }
-      ]);
-
-      var pad = 12;
-      var splitX = Math.floor(width * 0.58);
-      var pvL = pad;
-      var pvT = pad;
-      var pvW = splitX - pad * 1.4;
-      var pvH = height - pad * 2;
-      var pvOriginX = pvL + 36;
-      var pvOriginY = pvT + pvH - 20;
-      var plotW = pvW - 48;
-      var plotH = pvH - 42;
-      var maxV = process === 'carnot' ? 6.2 : 4.8;
-      var maxP = 4.6;
-      function mapV(v) { return pvOriginX + (v / maxV) * plotW; }
-      function mapP(p) { return pvOriginY - (p / maxP) * plotH; }
-
-      ctx.fillStyle = C.panel;
-      ctx.strokeStyle = C.line;
-      ctx.lineWidth = 1;
-      panelPath(ctx, pvL, pvT, pvW, pvH, 8);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = C.ink;
-      ctx.font = '600 12px Inter, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText('P-V diagram', pvL + 10, pvT + 8);
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(pvL + 1, pvT + 24, pvW - 2, pvH - 28);
-      ctx.clip();
-
-      ctx.strokeStyle = C.ivory;
-      ctx.lineWidth = 1;
-      var maxVGrid = process === 'carnot' ? 6 : 4;
-      for (var vg = 1; vg <= maxVGrid; vg++) {
-        var gx = mapV(vg);
-        ctx.beginPath();
-        ctx.moveTo(gx, mapP(0));
-        ctx.lineTo(gx, mapP(maxP));
-        ctx.stroke();
-      }
-      for (var pg = 1; pg <= 4; pg++) {
-        var gy = mapP(pg);
-        ctx.beginPath();
-        ctx.moveTo(mapV(0), gy);
-        ctx.lineTo(mapV(maxV), gy);
-        ctx.stroke();
-      }
-
-      ctx.strokeStyle = 'rgba(212, 160, 23, 0.28)';
-      ctx.setLineDash([3, 4]);
-      [2.0, 3.5, 5.0].forEach(function(T_iso) {
-        ctx.beginPath();
-        var started = false;
-        for (var v = 0.8; v <= maxV; v += 0.1) {
-          var pIso = T_iso / v;
-          if (pIso <= maxP && pIso >= 0) {
-            var x = mapV(v), y = mapP(pIso);
-            if (!started) { ctx.moveTo(x, y); started = true; }
-            else ctx.lineTo(x, y);
-          }
-        }
-        ctx.stroke();
+  function seedPhase(state, n, sig0, p0) {
+    n = n || 40;
+    var sigP = 0.5 / Math.max(0.12, sig0);
+    state._phase = [];
+    var i;
+    for (i = 0; i < n; i++) {
+      state._phase.push({
+        x: (Math.random() * 2 - 1) * sig0 * 0.85 + randn() * sig0 * 0.55,
+        p: p0 + randn() * sigP
       });
-      ctx.setLineDash([]);
-
-      ctx.strokeStyle = C.stone;
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.moveTo(mapV(0), mapP(maxP));
-      ctx.lineTo(mapV(0), mapP(0));
-      ctx.lineTo(mapV(maxV), mapP(0));
-      ctx.stroke();
-
-      if (curvePoints.length > 1) {
-        ctx.beginPath();
-        if (process === 'carnot') {
-          curvePoints.forEach(function(pt, i) {
-            var x = mapV(pt.v), y = mapP(pt.p);
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-          });
-          ctx.closePath();
-          ctx.fillStyle = 'rgba(204, 120, 92, 0.22)';
-          ctx.fill();
-        } else {
-          var pt0 = curvePoints[0];
-          ctx.moveTo(mapV(pt0.v), mapP(0));
-          ctx.lineTo(mapV(pt0.v), mapP(pt0.p));
-          var activeCount = Math.max(2, Math.floor(curvePoints.length * progress));
-          for (var i = 1; i < activeCount; i++) {
-            ctx.lineTo(mapV(curvePoints[i].v), mapP(curvePoints[i].p));
-          }
-          var lastPt = curvePoints[activeCount - 1];
-          ctx.lineTo(mapV(lastPt.v), mapP(0));
-          ctx.closePath();
-          var gradWork = ctx.createLinearGradient(0, mapP(maxP), 0, mapP(0));
-          gradWork.addColorStop(0, 'rgba(204, 120, 92, 0.32)');
-          gradWork.addColorStop(1, 'rgba(204, 120, 92, 0.05)');
-          ctx.fillStyle = gradWork;
-          ctx.fill();
-        }
-
-        ctx.strokeStyle = C.coral;
-        ctx.lineWidth = 2.6;
-        ctx.beginPath();
-        curvePoints.forEach(function(pt, i) {
-          var x = mapV(pt.v), y = mapP(pt.p);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        });
-        if (process === 'carnot') ctx.closePath();
-        ctx.stroke();
-
-        var curX = mapV(curV);
-        var curY = mapP(curP);
-        ctx.fillStyle = C.ink;
-        ctx.strokeStyle = C.coral;
-        ctx.lineWidth = 2.4;
-        ctx.beginPath();
-        ctx.arc(curX, curY, 5.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      ctx.font = '10px JetBrains Mono, monospace';
-      ctx.fillStyle = C.muted;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      for (var vgTick = 1; vgTick <= (process === 'carnot' ? 6 : 4); vgTick++) {
-        ctx.fillText(String(vgTick), mapV(vgTick), pvOriginY + 4);
-      }
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-      for (var pgTick = 1; pgTick <= 4; pgTick++) {
-        ctx.fillText(String(pgTick), pvOriginX - 6, mapP(pgTick));
-      }
-
-      ctx.fillStyle = C.muted;
-      ctx.font = '11px Inter, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText('P', mapV(0) + 6, mapP(maxP) + 12);
-      ctx.textAlign = 'right';
-      ctx.fillText('V', mapV(maxV) - 4, pvOriginY - 4);
-
-      var rightX = splitX + 4;
-      var rightW = width - rightX - pad;
-      var cylW = Math.min(rightW - 8, 148);
-      var cylX = rightX + (rightW - cylW) / 2;
-      var cylY = pad + 8;
-      var cylH = Math.min(148, height * 0.36);
-
-      ctx.fillStyle = C.ivory;
-      ctx.strokeStyle = C.stone;
-      ctx.lineWidth = 2.4;
-      ctx.fillRect(cylX, cylY, cylW, cylH);
-      ctx.strokeRect(cylX, cylY, cylW, cylH);
-
-      var pistonFrac = clamp(curV / maxV, 0.12, 0.92);
-      var pistonY = cylY + cylH - (cylH - 28) * pistonFrac;
-      pistonY = clamp(pistonY, cylY + 16, cylY + cylH - 18);
-      var tempNormalized = clamp(curT / 4.5, 0, 1);
-      var hot = tempNormalized;
-      ctx.fillStyle = 'rgba(' +
-        Math.floor(204 * hot + 93 * (1 - hot)) + ', ' +
-        Math.floor(120 * hot + 184 * (1 - hot)) + ', ' +
-        Math.floor(92 * hot + 166 * (1 - hot)) + ', 0.42)';
-      ctx.fillRect(cylX + 2, pistonY, cylW - 4, cylY + cylH - pistonY - 2);
-
-      var gasH = cylY + cylH - pistonY - 8;
-      if (state._particles && gasH > 8) {
-        var pSpeed = Math.sqrt(Math.max(0.2, curT)) * 1.5;
-        ctx.fillStyle = tempNormalized > 0.55 ? C.gold : C.coral;
-        state._particles.forEach(function(p) {
-          p.x += p.vx * pSpeed * 0.6 * dtEff;
-          p.y += p.vy * pSpeed * 0.6 * dtEff;
-          if (p.x < 0) { p.x = 0; p.vx *= -1; }
-          if (p.x > 1) { p.x = 1; p.vx *= -1; }
-          if (p.y < 0) { p.y = 0; p.vy *= -1; }
-          if (p.y > 1) { p.y = 1; p.vy *= -1; }
-          var px = cylX + 6 + p.x * (cylW - 12);
-          var py = pistonY + 4 + p.y * gasH;
-          ctx.beginPath();
-          ctx.arc(px, py, 2.4, 0, Math.PI * 2);
-          ctx.fill();
-        });
-      }
-
-      ctx.fillStyle = C.stone;
-      ctx.fillRect(cylX + 2, pistonY - 11, cylW - 4, 11);
-      ctx.fillStyle = C.muted;
-      var rodTop = cylY + 2;
-      var rodH = Math.max(0, pistonY - 11 - rodTop);
-      if (rodH > 0) ctx.fillRect(cylX + cylW / 2 - 4, rodTop, 8, rodH);
-
-      var resY = cylY + cylH + 6;
-      if (process === 'adiabatic') {
-        ctx.fillStyle = C.line;
-        ctx.fillRect(cylX, resY, cylW, 18);
-        ctx.fillStyle = C.muted;
-        ctx.font = '10px Inter, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('insulated', cylX + cylW / 2, resY + 9);
-      } else {
-        var isHeating = Q_val >= 0;
-        ctx.fillStyle = isHeating ? 'rgba(204, 120, 92, 0.28)' : 'rgba(93, 184, 166, 0.28)';
-        ctx.fillRect(cylX, resY, cylW, 18);
-        ctx.fillStyle = isHeating ? C.coral : C.teal;
-        ctx.font = '10px Inter, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(isHeating ? 'heat in' : 'heat out', cylX + cylW / 2, resY + 9);
-      }
-
-      var meterX = rightX + 6;
-      var meterW = Math.max(40, rightW - 12);
-      var meterStartY = resY + 32;
-      ctx.fillStyle = C.ink;
-      ctx.font = '600 11px Inter, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText('Energy accounting', meterX, meterStartY);
-
-      var barItems = [
-        { label: 'Q', val: Q_val, color: C.gold, max: 8 },
-        { label: 'W', val: W_val, color: C.coral, max: 8 },
-        { label: 'U', val: DeltaU_val, color: C.teal, max: 8 }
-      ];
-      var barGap = Math.max(28, Math.min(40, (height - pad - meterStartY - 16) / 3));
-      barItems.forEach(function(b, idx) {
-        var y = meterStartY + 16 + idx * barGap;
-        if (y + 14 > height - pad) return;
-        ctx.fillStyle = C.muted;
-        ctx.font = '11px Inter, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText(b.label, meterX, y);
-        var barH = 9;
-        var barY = y + 5;
-        ctx.fillStyle = C.ivory;
-        ctx.fillRect(meterX, barY, meterW, barH);
-        var frac = clamp(b.val / b.max, -1, 1);
-        var fillW = Math.abs(frac) * (meterW / 2);
-        ctx.fillStyle = b.color;
-        if (frac >= 0) ctx.fillRect(meterX + meterW / 2, barY, fillW, barH);
-        else ctx.fillRect(meterX + meterW / 2 - fillW, barY, fillW, barH);
-        ctx.fillStyle = C.stone;
-        ctx.fillRect(meterX + meterW / 2, barY - 2, 1, barH + 4);
-      });
-    },
-
-    challenge: {
-      question: "One mole of a monatomic ideal gas ($C_V = \\frac{3}{2}R, \\; C_P = \\frac{5}{2}R$) undergoes an isobaric expansion at constant pressure $P_0$ from volume $V_0$ to $2V_0$. What fraction of the total heat $Q$ absorbed by the gas is converted into work $W$ done by the gas?",
-      options: [
-        "$2/3 \\; (66.7\\%)$",
-        "$2/5 \\; (40.0\\%)$",
-        "$3/5 \\; (60.0\\%)$",
-        "$1/2 \\; (50.0\\%)$",
-        "$5/2 \\; (250\\%)$"
-      ],
-      correct: 1,
-      explanation: "For an isobaric expansion: Work done $W = P_0 \\Delta V = P_0 (2V_0 - V_0) = P_0 V_0 = R \\Delta T$. Heat absorbed $Q = n C_P \\Delta T = \\frac{5}{2} R \\Delta T = \\frac{5}{2} P_0 V_0$. Change in internal energy $\\Delta U = n C_V \\Delta T = \\frac{3}{2} P_0 V_0$. Note that $\\Delta U = Q - W = \\frac{5}{2} P_0 V_0 - P_0 V_0 = \\frac{3}{2} P_0 V_0$. The fraction of heat converted to work is $W / Q = \\frac{R \\Delta T}{\\frac{5}{2} R \\Delta T} = \\frac{2}{5} = 40\\%$. The remaining $60\\%$ ($\\frac{3}{5}$) goes into increasing internal energy."
     }
-  };
+    state._sig0 = sig0;
+    state._p0 = p0;
+    state._tPack = 0;
+  }
 
-  PGRE.visualizers['cpgf-5.18'] = {
-    id: 'cpgf-5.18',
-    topic: 'qm',
-    title: 'Heisenberg Uncertainty Principle: $\\sigma_x \\sigma_p \\ge \\hbar/2$',
-    formulaLatex: '\\sigma_x \\sigma_p \\ge \\frac{\\hbar}{2}, \\qquad [\\hat{x}, \\hat{p}] = i\\hbar',
-    physicalStory: `The Heisenberg uncertainty principle is a mathematical consequence of the non-commutativity of conjugate quantum observables in Hilbert space and the wave nature of matter. Position space $\\psi(x)$ and momentum space $\\tilde{\\psi}(p)$ are connected by the Fourier transform: $\\tilde{\\psi}(p) = \\frac{1}{\\sqrt{2\\pi\\hbar}}\\int_{-\\infty}^\\infty \\psi(x) e^{-ipx/\\hbar} dx$. Squeezing a wavepacket in real space (reducing $\\sigma_x$) forces a wider superposition of spatial frequencies, inherently broadening $\\sigma_p$. The Gaussian wavepacket uniquely achieves the theoretical minimum uncertainty limit $\\sigma_x \\sigma_p = \\hbar/2$. Any non-Gaussian profile or phase chirp strictly increases the uncertainty product beyond $\\hbar/2$.`,
+  function randn() {
+    var u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
 
-    derivationSteps: [
-      {
-        step: "1. Canonical Commutation Relation",
-        latex: "[\\hat{x}, \\hat{p}] = \\hat{x}\\left(-i\\hbar \\frac{\\partial}{\\partial x}\\right) - \\left(-i\\hbar \\frac{\\partial}{\\partial x}\\right)\\hat{x} = i\\hbar \\hat{I}",
-        explanation: "Position and momentum operators do not commute, meaning a quantum state cannot simultaneously be an eigenstate of both operators."
-      },
-      {
-        step: "2. Robertson-Schrödinger Uncertainty Relation",
-        latex: "\\sigma_A^2 \\sigma_B^2 \\ge \\frac{1}{4} |\\langle [\\hat{A}, \\hat{B}] \\rangle|^2",
-        explanation: "Derived via the Cauchy-Schwarz inequality for state vectors $|\\alpha\\rangle = (\\hat{A} - \\langle A \\rangle)|\\psi\\rangle$ and $|\\beta\\rangle = (\\hat{B} - \\langle B \\rangle)|\\psi\\rangle$."
-      },
-      {
-        step: "3. Minimum Uncertainty Bound",
-        latex: "\\sigma_x^2 \\sigma_p^2 \\ge \\frac{1}{4} |\\langle i\\hbar \\rangle|^2 = \\frac{\\hbar^2}{4} \\implies \\sigma_x \\sigma_p \\ge \\frac{\\hbar}{2}",
-        explanation: "Taking the square root gives the universal lower bound $\\hbar/2$ on the product of root-mean-square standard deviations."
-      },
-      {
-        step: "4. Saturation by Gaussian Wavepackets",
-        latex: "\\psi(x) = \\left(\\frac{1}{2\\pi\\sigma_x^2}\\right)^{1/4} e^{-\\frac{(x-x_0)^2}{4\\sigma_x^2} + \\frac{i p_0 x}{\\hbar}} \\implies \\sigma_x \\sigma_p = \\frac{\\hbar}{2}",
-        explanation: "Equality $\\sigma_x \\sigma_p = \\hbar/2$ holds if and only if the wavefunction is a Gaussian with linear phase (e.g. the ground state of the simple harmonic oscillator)."
-      }
-    ],
-
-    limitingCases: [
-      {
-        name: "Extreme Spatial Localization (Dirac Delta)",
-        condition: "\\sigma_x \\to 0",
-        formula: "\\sigma_p \\to \\infty, \\quad \\langle \\hat{T} \\rangle = \\frac{\\langle p^2 \\rangle}{2m} \\to \\infty",
-        explanation: "Confining a particle to a pinpoint creates an infinite spread in momentum and infinite zero-point confinement kinetic energy."
-      },
-      {
-        name: "Momentum Eigenstate (Plane Wave)",
-        condition: "\\sigma_p \\to 0 \\implies p = p_0",
-        formula: "\\sigma_x \\to \\infty, \\quad |\\psi(x)|^2 = \\text{const}",
-        explanation: "A monochromatic de Broglie plane wave has perfectly known momentum $p = \\hbar k$, but is completely delocalized across the entire universe."
-      },
-      {
-        name: "Harmonic Oscillator Ground State",
-        condition: "\\sigma_x = \\sqrt{\\frac{\\hbar}{2m\\omega}}, \\; \\sigma_p = \\sqrt{\\frac{m\\hbar\\omega}{2}}",
-        formula: "\\sigma_x \\sigma_p = \\frac{\\hbar}{2}, \\quad E_0 = \\frac{1}{2}\\hbar\\omega",
-        explanation: "The ground state energy $E_0 = \\hbar\\omega/2$ of a harmonic oscillator represents the exact minimum zero-point energy permitted by the uncertainty principle."
-      },
-      {
-        name: "Energy-Time Uncertainty (Mandelstam-Tamm)",
-        condition: "\\Delta t = \\tau = \\frac{\\sigma_Q}{|d\\langle Q \\rangle/dt|}",
-        formula: "\\Delta E \\Delta t \\ge \\frac{\\hbar}{2}",
-        explanation: "Relates the resonance energy width $\\Gamma = \\Delta E$ of an unstable state to its mean decay lifetime $\\tau$: $\\Gamma \\tau \\sim \\hbar$."
-      }
-    ],
-
-    greTraps: [
-      {
-        trap: "Factor of 2: $\\hbar/2$ vs $\\hbar$ vs $h$",
-        description: "Standard quantum mechanics uses RMS standard deviations $\\sigma_x \\sigma_p \\ge \\hbar/2$. Heuristic order-of-magnitude estimates often use $\\Delta x \\Delta p \\approx \\hbar$ or $h$.",
-        proTip: "If a PGRE question asks for the rigorous quantum mechanical lower bound, choose $\\hbar/2$ (not $\\hbar$ or $h$)."
-      },
-      {
-        trap: "Confinement Energy Scaling",
-        description: "Confining a particle inside size $L$ means $\\Delta p \\approx \\hbar/L$, so non-relativistic kinetic energy scales as $E \\approx \\frac{\\hbar^2}{2m L^2}$, while ultra-relativistic energy scales as $E \\approx \\frac{\\hbar c}{L}$.",
-        proTip: "Use this trick to immediately estimate ground state energies of atoms, nuclei, and quantum dots."
-      },
-      {
-        trap: "Phase Chirping Increases Uncertainty",
-        description: "Adding a quadratic phase $e^{i \\alpha x^2}$ widens the momentum distribution without changing $|\\psi(x)|^2$, making $\\sigma_x \\sigma_p > \\hbar/2$.",
-        proTip: "Only unchirped Gaussian wavepackets saturate the minimum $\\hbar/2$ bound."
-      }
-    ],
-
-    parameters: [
-      { id: 'sigmaX', name: 'Position width $\\sigma_x$', min: 0.2, max: 2.5, step: 0.05, default: 0.8, unit: 'x_0' },
-      { id: 'p0', name: 'Central momentum $p_0 / \\hbar$', min: 0.0, max: 8.0, step: 0.5, default: 4.0, unit: 'k_0' },
-      { id: 'chirp', name: 'Phase chirp $\\alpha$', min: 0.0, max: 2.0, step: 0.1, default: 0.0, unit: '' }
-    ],
-
-    init: function(container, state, redraw) {
-      state = state || {};
-      if (state.sigmaX === undefined) state.sigmaX = 0.8;
-      if (state.p0 === undefined) state.p0 = 4.0;
-      if (state.chirp === undefined) state.chirp = 0.0;
-    },
-
-    draw: function(ctx, width, height, state, dt) {
-      state = state || {};
-      var sigmaX = Math.max(0.12, Number(state.sigmaX) || 0.8);
-      var p0 = state.p0 !== undefined ? Number(state.p0) : 4.0;
-      var chirp = Number(state.chirp) || 0.0;
-      var hbar = 1.0;
-      var sigmaP_min = hbar / (2 * sigmaX);
-      var sigmaP = Math.sqrt(sigmaP_min * sigmaP_min + Math.pow(2 * chirp * sigmaX, 2));
-      var product = sigmaX * sigmaP;
-      var isMin = Math.abs(product - 0.5) < 0.005;
-
-      ctx.fillStyle = C.bg;
-      ctx.fillRect(0, 0, width, height);
-
-      legend('Heisenberg $\\sigma_x \\sigma_p \\ge \\hbar/2$', [
-        { label: '$\\sigma_x$', value: '$' + sigmaX.toFixed(2) + '$' },
-        { label: '$\\sigma_p$', value: '$' + sigmaP.toFixed(2) + ' \\hbar$' },
-        { label: '$\\sigma_x \\sigma_p$', value: '$' + product.toFixed(3) + ' \\hbar$' },
-        { label: 'Bound $\\hbar/2$', value: '$0.500 \\hbar$' },
-        { label: 'Status', value: isMin ? 'Minimum saturated' : (chirp > 0 ? 'Above bound (chirp)' : 'Above bound') }
-      ]);
-
-      var pad = 12;
-      var gap = 12;
-      var subH = (height - pad * 2 - gap) / 2;
-      var subW = width - pad * 2;
-      var numPts = 280;
-
-      function drawPanel(x0, y0, w, h, title) {
-        ctx.fillStyle = C.panel;
-        ctx.strokeStyle = C.line;
-        ctx.lineWidth = 1;
-        panelPath(ctx, x0, y0, w, h, 8);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = C.ink;
-        ctx.font = '600 12px Inter, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(title, x0 + 10, y0 + 12);
-        return { bodyTop: y0 + 24, bodyBot: y0 + h - 8 };
-      }
-
-      var topY = pad;
-      var xRange = Math.max(6.0, 3.2 * sigmaX);
-      var pos = drawPanel(pad, topY, subW, subH, 'Position');
-      var yBase1 = pos.bodyTop + (pos.bodyBot - pos.bodyTop) * 0.62;
-      var yAmpUp1 = yBase1 - pos.bodyTop - 6;
-      var yAmpDown1 = pos.bodyBot - yBase1 - 14;
-      function mapX(x) { return pad + 8 + ((x + xRange) / (2 * xRange)) * (subW - 16); }
-      var normX = 1 / Math.pow(2 * Math.PI * sigmaX * sigmaX, 0.25);
-      var maxRe = 0;
-      var maxProb = 0;
-      var i, x, env, phase, re, prob;
-      for (i = 0; i <= numPts; i++) {
-        x = -xRange + (2 * xRange) * (i / numPts);
-        env = Math.exp(-(x * x) / (4 * sigmaX * sigmaX)) * normX;
-        re = Math.abs(env);
-        if (re > maxRe) maxRe = re;
-        prob = Math.exp(-(x * x) / (2 * sigmaX * sigmaX)) * (normX * normX);
-        if (prob > maxProb) maxProb = prob;
-      }
-      var scaleProb = yAmpUp1 / Math.max(maxProb, 1e-6);
-      var scaleRe = Math.min(yAmpUp1, yAmpDown1) / Math.max(maxRe, 1e-6);
-
-      ctx.strokeStyle = C.line;
-      ctx.beginPath();
-      ctx.moveTo(pad + 8, yBase1);
-      ctx.lineTo(pad + subW - 8, yBase1);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(mapX(-xRange), yBase1);
-      for (i = 0; i <= numPts; i++) {
-        x = -xRange + (2 * xRange) * (i / numPts);
-        prob = Math.exp(-(x * x) / (2 * sigmaX * sigmaX)) * (normX * normX);
-        ctx.lineTo(mapX(x), yBase1 - prob * scaleProb);
-      }
-      ctx.lineTo(mapX(xRange), yBase1);
-      ctx.closePath();
-      var gradX = ctx.createLinearGradient(0, pos.bodyTop, 0, pos.bodyBot);
-      gradX.addColorStop(0, 'rgba(204, 120, 92, 0.38)');
-      gradX.addColorStop(1, 'rgba(204, 120, 92, 0.03)');
-      ctx.fillStyle = gradX;
-      ctx.fill();
-
-      ctx.strokeStyle = C.coral;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (i = 0; i <= numPts; i++) {
-        x = -xRange + (2 * xRange) * (i / numPts);
-        env = Math.exp(-(x * x) / (4 * sigmaX * sigmaX)) * normX;
-        phase = p0 * x + chirp * x * x;
-        re = env * Math.cos(phase);
-        if (i === 0) ctx.moveTo(mapX(x), yBase1 - re * scaleRe);
-        else ctx.lineTo(mapX(x), yBase1 - re * scaleRe);
-      }
-      ctx.stroke();
-
-      var sxL = mapX(-sigmaX);
-      var sxR = mapX(sigmaX);
-      ctx.strokeStyle = C.gold;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(sxL, pos.bodyTop);
-      ctx.lineTo(sxL, pos.bodyBot);
-      ctx.moveTo(sxR, pos.bodyTop);
-      ctx.lineTo(sxR, pos.bodyBot);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = C.gold;
-      ctx.font = '600 10px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText('spread', clamp((sxL + sxR) / 2, pad + 24, pad + subW - 24), yBase1 + 3);
-
-      var botY = pad + subH + gap;
-      var mom = drawPanel(pad, botY, subW, subH, 'Momentum');
-      var pMin = Math.min(-3.0, p0 - 3.5 * sigmaP);
-      var pMax = Math.max(12.0, p0 + 3.5 * sigmaP);
-      var pSpan = Math.max(1e-6, pMax - pMin);
-      function mapPm(p) { return pad + 8 + ((p - pMin) / pSpan) * (subW - 16); }
-      var yBase2 = mom.bodyTop + (mom.bodyBot - mom.bodyTop) * 0.78;
-      var yAmp2 = yBase2 - mom.bodyTop - 6;
-      var normP = 1 / (Math.sqrt(2 * Math.PI) * Math.max(sigmaP, 1e-6));
-      var maxProbP = 0;
-      var p, probP;
-      for (i = 0; i <= numPts; i++) {
-        p = pMin + pSpan * (i / numPts);
-        probP = Math.exp(-Math.pow(p - p0, 2) / (2 * sigmaP * sigmaP)) * normP;
-        if (probP > maxProbP) maxProbP = probP;
-      }
-      var scaleP = yAmp2 / Math.max(maxProbP, 1e-6);
-
-      ctx.strokeStyle = C.line;
-      ctx.beginPath();
-      ctx.moveTo(pad + 8, yBase2);
-      ctx.lineTo(pad + subW - 8, yBase2);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(mapPm(pMin), yBase2);
-      for (i = 0; i <= numPts; i++) {
-        p = pMin + pSpan * (i / numPts);
-        probP = Math.exp(-Math.pow(p - p0, 2) / (2 * sigmaP * sigmaP)) * normP;
-        ctx.lineTo(mapPm(p), yBase2 - probP * scaleP);
-      }
-      ctx.lineTo(mapPm(pMax), yBase2);
-      ctx.closePath();
-      var gradP = ctx.createLinearGradient(0, mom.bodyTop, 0, mom.bodyBot);
-      gradP.addColorStop(0, 'rgba(93, 184, 166, 0.40)');
-      gradP.addColorStop(1, 'rgba(93, 184, 166, 0.03)');
-      ctx.fillStyle = gradP;
-      ctx.fill();
-
-      ctx.strokeStyle = C.teal;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (i = 0; i <= numPts; i++) {
-        p = pMin + pSpan * (i / numPts);
-        probP = Math.exp(-Math.pow(p - p0, 2) / (2 * sigmaP * sigmaP)) * normP;
-        if (i === 0) ctx.moveTo(mapPm(p), yBase2 - probP * scaleP);
-        else ctx.lineTo(mapPm(p), yBase2 - probP * scaleP);
-      }
-      ctx.stroke();
-
-      var spL = mapPm(p0 - sigmaP);
-      var spR = mapPm(p0 + sigmaP);
-      ctx.strokeStyle = C.gold;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(spL, mom.bodyTop);
-      ctx.lineTo(spL, mom.bodyBot);
-      ctx.moveTo(spR, mom.bodyTop);
-      ctx.lineTo(spR, mom.bodyBot);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = C.gold;
-      ctx.font = '600 10px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText('spread', clamp((spL + spR) / 2, pad + 24, pad + subW - 24), yBase2 + 3);
-    },
-
-    challenge: {
-      question: "A quantum particle of mass $m$ is in the ground state of a 1D simple harmonic oscillator of classical frequency $\\omega$, described by wavefunction $\\psi_0(x) = \\left(\\frac{m\\omega}{\\pi \\hbar}\\right)^{1/4} \\exp\\left(-\\frac{m\\omega x^2}{2\\hbar}\\right)$. What is the exact product of the standard deviations $\\sigma_x \\sigma_p$ for this state?",
-      options: [
-        "$\\hbar$",
-        "$\\hbar / 2$",
-        "$\\hbar / \\sqrt{2}$",
-        "$3\\hbar / 2$",
-        "$0$"
-      ],
-      correct: 1,
-      explanation: "The ground state of a quantum harmonic oscillator is a Gaussian wavepacket. For $\\psi_0(x)$, the position uncertainty is $\\sigma_x = \\sqrt{\\frac{\\hbar}{2m\\omega}}$ and momentum uncertainty is $\\sigma_p = \\sqrt{\\frac{m \\hbar \\omega}{2}}$. The product is $\\sigma_x \\sigma_p = \\sqrt{\\frac{\\hbar}{2m\\omega}} \\cdot \\sqrt{\\frac{m \\hbar \\omega}{2}} = \\frac{\\hbar}{2}$, which uniquely saturates the Heisenberg minimum uncertainty equality. Higher excited states $n$ have $\\sigma_x \\sigma_p = \\left(n + \\frac{1}{2}\\right)\\hbar > \\frac{\\hbar}{2}$."
-    }
-  };
-
-  /* Helper particle seeders for cpgf-4.32 */
   function seedGasP432(state, n) {
-    n = n || 24;
+    n = n || 22;
     state._particlesP = [];
-    for (var i = 0; i < n; i++) {
+    var i;
+    for (i = 0; i < n; i++) {
       state._particlesP.push({
         x: Math.random(),
         y: Math.random(),
@@ -1528,9 +203,10 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
     }
   }
   function seedGasV432(state, n) {
-    n = n || 24;
+    n = n || 22;
     state._particlesV = [];
-    for (var i = 0; i < n; i++) {
+    var i;
+    for (i = 0; i < n; i++) {
       state._particlesV.push({
         x: Math.random(),
         y: Math.random(),
@@ -1556,6 +232,35 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
   function mayerGapOverR(gasType, cvR) {
     if (gasType === 'solid_dulong') return 0.10 * (cvR / 3.0);
     return 1.0;
+  }
+  function bounceParticles(list, dt, speed) {
+    var i, p;
+    for (i = 0; i < list.length; i++) {
+      p = list[i];
+      p.x += p.vx * speed * dt;
+      p.y += p.vy * speed * dt;
+      if (p.x < 0) { p.x = 0; p.vx = Math.abs(p.vx); }
+      if (p.x > 1) { p.x = 1; p.vx = -Math.abs(p.vx); }
+      if (p.y < 0) { p.y = 0; p.vy = Math.abs(p.vy); }
+      if (p.y > 1) { p.y = 1; p.vy = -Math.abs(p.vy); }
+    }
+  }
+  function drawParticles(ctx, list, x, y, w, h, color, r) {
+    ctx.fillStyle = color;
+    var i, p;
+    for (i = 0; i < list.length; i++) {
+      p = list[i];
+      ctx.beginPath();
+      ctx.arc(x + p.x * w, y + p.y * h, r || 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  function tempFill(hot) {
+    hot = clamp(hot, 0, 1);
+    var r = Math.floor(204 * hot + 93 * (1 - hot));
+    var g = Math.floor(120 * hot + 184 * (1 - hot));
+    var b = Math.floor(92 * hot + 166 * (1 - hot));
+    return 'rgba(' + r + ', ' + g + ', ' + b + ', 0.42)';
   }
   function drawCrystalBlock(ctx, x, y, w, h, T, expandFrac, t, locked) {
     ctx.fillStyle = C.ivory;
@@ -1590,142 +295,951 @@ Integrating current density over the cross-sectional area $A$ gives $I = J A = (
   }
 
   /* -------------------------------------------------------------------------- */
-  /* cpgf-4.32: Heat Capacity at Constant Pressure $C_P = (\partial Q/\partial T)_P$ */
+  /* cpgf-2.70  Ohm  V_R = I R                                                   */
+  /* Picture: one wire. Lattice + thermal electrons with a tiny leftward drift.  */
+  /* -------------------------------------------------------------------------- */
+  PGRE.visualizers['cpgf-2.70'] = {
+    id: 'cpgf-2.70',
+    topic: 'em',
+    title: "Ohm's Law: $V_R = IR$",
+    formulaLatex: 'V_R = IR',
+    physicalStory: `Macroscopic Ohm's law $V_R = IR$ is the spatial integral of the linear isotropic constitutive relation $\\mathbf{J} = \\sigma \\mathbf{E}$.
+
+In the Drude picture, conduction electrons form a Fermi gas moving through a lattice of positive ions. Their thermal speeds are enormous ($v_{\\mathrm{th}} \\sim 10^6\\,\\mathrm{m/s}$), while the field-induced drift is sluggish ($v_d \\sim 10^{-4}\\,\\mathrm{m/s}$). Between collisions of mean time $\\tau$, the field accelerates electrons by $\\mathbf{a} = -e\\mathbf{E}/m_e$, leaving a net drift
+$$\\mathbf{v}_d = -\\frac{e\\tau}{m_e}\\mathbf{E}.$$
+Then $I = n e v_d A$ and $E = V_R/L$ recover $V_R = I(\\rho_R L/A) = IR$. Stretching a wire at constant volume ($L\\to 2L$, $A\\to A/2$) quadruples $R$ — a GRE favorite. Energy in the circuit is carried by the Poynting field, not by the crawling electrons.`,
+
+    derivationSteps: [
+      {
+        step: 1,
+        title: 'Drude equation of motion',
+        latex: "m_e \\frac{d\\langle\\mathbf{v}\\rangle}{dt} = -e\\mathbf{E} - \\frac{m_e}{\\tau}\\langle\\mathbf{v}\\rangle",
+        description: "Electrostatic force $-e\\mathbf{E}$ plus a momentum-relaxing drag from lattice collisions."
+      },
+      {
+        step: 2,
+        title: 'Steady-state drift',
+        latex: "\\mathbf{v}_d = -\\frac{e\\tau}{m_e}\\mathbf{E}",
+        description: "Terminal drift is linear in $\\mathbf{E}$. Mobility $\\mu_e = e\\tau/m_e$."
+      },
+      {
+        step: 3,
+        title: 'Current density',
+        latex: "\\mathbf{J} = -n e \\mathbf{v}_d = \\sigma \\mathbf{E},\\quad \\sigma = \\frac{n e^2 \\tau}{m_e}",
+        description: "Resistivity $\\rho_R = 1/\\sigma = m_e/(n e^2 \\tau)$."
+      },
+      {
+        step: 4,
+        title: 'Geometry',
+        latex: "I = \\sigma E A = \\sigma (V_R/L) A",
+        description: "Uniform cylinder: $E = V_R/L$ and $I = JA$."
+      },
+      {
+        step: 5,
+        title: "Ohm's law",
+        latex: "V_R = I\\,\\rho_R L/A = IR",
+        description: "Resistance $R = \\rho_R L/A$."
+      }
+    ],
+
+    limitingCases: [
+      {
+        name: 'Ideal conductor ($R \\to 0$)',
+        condition: '\\sigma \\to \\infty',
+        formula: 'V_R = 0 \\quad (\\mathbf{E}_{\\mathrm{in}} = 0\\ \\mathrm{for\\ finite}\\ I)',
+        description: 'A superconductor below $T_c$ carries current with strictly zero voltage drop.'
+      },
+      {
+        name: 'Open circuit ($R \\to \\infty$)',
+        condition: '\\sigma \\to 0',
+        formula: 'I = 0,\\quad V_{\\mathrm{gap}} = \\mathcal{E}',
+        description: 'No current; the source EMF appears entirely across the gap.'
+      },
+      {
+        name: 'Metal, $T \\gtrsim T_{\\mathrm{Debye}}$',
+        condition: '\\rho(T) \\propto T',
+        formula: '\\rho(T) = \\rho_0[1 + \\alpha(T - T_0)]',
+        description: 'Phonon amplitude grows with $T$, shortening $\\tau$ and raising $R$.'
+      },
+      {
+        name: 'Intrinsic semiconductor',
+        condition: 'n(T) \\propto e^{-E_g/(2k_B T)}',
+        formula: '\\rho(T) \\propto e^{+E_g/(2k_B T)}',
+        description: 'Carrier activation wins: resistivity falls as $T$ rises.'
+      }
+    ],
+
+    greTraps: [
+      {
+        trap: 'Wire stretch at constant volume',
+        description: 'If $L\\to 2L$ at fixed volume, $A\\to A/2$ and $R\\to 4R$, not $2R$.',
+        proTip: 'Always write $R = \\rho L/A$ and impose $AL = \\mathrm{const}$ before scaling.'
+      },
+      {
+        trap: 'Drift vs signal speed',
+        description: 'Electrons crawl at $v_d \\sim 0.1\\,\\mathrm{mm/s}$. The lamp lights because $\\mathbf{S} = \\mathbf{E}\\times\\mathbf{B}/\\mu_0$ travels at $\\sim c$.',
+        proTip: 'Never equate $v_d$ with the speed of electrical energy.'
+      },
+      {
+        trap: 'Internal resistance and max power',
+        description: 'A battery $\\mathcal{E}, r$ delivers $P_{\\max} = \\mathcal{E}^2/(4r)$ when $R = r$. Terminal voltage is then $\\mathcal{E}/2$.',
+        proTip: 'Matched load is 50% efficient; that is the power theorem, not a contradiction of Ohm.'
+      },
+      {
+        trap: "Ohm is constitutive, not Maxwell",
+        description: 'Diodes, filaments, and superconductors are non-ohmic: $V/I$ is not a constant.',
+        proTip: 'Apply $V = IR$ only where $\\mathbf{J} = \\sigma\\mathbf{E}$ with constant $\\sigma$.'
+      }
+    ],
+
+    parameters: [
+      { id: 'emf', label: 'Battery EMF ($\\mathcal{E}$)', min: 1.0, max: 24.0, step: 0.5, default: 12.0, unit: 'V' },
+      { id: 'resistorR', label: 'Load ($R_0$)', min: 1.0, max: 20.0, step: 0.5, default: 6.0, unit: '\\Omega' },
+      { id: 'internalR', label: 'Internal ($r$)', min: 0.0, max: 5.0, step: 0.2, default: 1.0, unit: '\\Omega' },
+      { id: 'temperature', label: 'Lattice $T$', min: 80, max: 600, step: 10, default: 300, unit: 'K' },
+      { id: 'stretch2x', label: 'Stretch $L\\to 2L$ ($R\\to 4R$)', type: 'toggle', default: false },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
+    ],
+
+    init: function (container, state) {
+      state = state || {};
+      seedOhmCarriers(state);
+    },
+
+    draw: function (ctx, width, height, state, dt) {
+      var size = canvasSize(width, height);
+      width = size.w;
+      height = size.h;
+      dt = simDt(state, dt);
+      state = state || {};
+      state.time = (state.time || 0) + dt;
+      if (!state._e || !state._ions) seedOhmCarriers(state);
+
+      var emf = Math.max(0.01, numParam(state, 'emf', 12));
+      var R0 = Math.max(0.2, numParam(state, 'resistorR', 6));
+      var rInt = Math.max(0, numParam(state, 'internalR', 1));
+      var T = clamp(numParam(state, 'temperature', 300), 40, 900);
+      var stretch = flagParam(state, 'stretch2x', false);
+      var geoR = R0 * (stretch ? 4 : 1);
+      var effectiveR = Math.max(0.05, geoR * (1 + 0.0039 * (T - 293)));
+      var current = emf / (effectiveR + rInt);
+      var vLoad = current * effectiveR;
+      var power = current * vLoad;
+      var nCu = 8.47e28;
+      var eCharge = 1.602e-19;
+      var Awire = 1.0e-6;
+      var vdPhys = current / (nCu * eCharge * Awire);
+      var vthPhys = 1.57e6 * Math.sqrt(T / 300);
+
+      legend("Ohm $V_R = I R$", [
+        { label: '$I$', value: '$' + current.toFixed(2) + '\\,\\mathrm{A}$' },
+        { label: '$V_R$', value: '$' + vLoad.toFixed(2) + '\\,\\mathrm{V}$' },
+        { label: '$R$', value: '$' + effectiveR.toFixed(2) + '\\,\\Omega$' },
+        { label: '$r$', value: '$' + rInt.toFixed(1) + '\\,\\Omega$' },
+        { label: '$P = I V_R$', value: '$' + power.toFixed(2) + '\\,\\mathrm{W}$' },
+        { label: '$v_d$', value: '$' + (vdPhys * 1e3).toFixed(3) + '\\,\\mathrm{mm/s}$' },
+        { label: '$v_{\\mathrm{th}}/v_d$', value: vdPhys > 1e-12 ? '$' + (vthPhys / vdPhys).toExponential(1) + '$' : '—' }
+      ]);
+
+      creamFill(ctx, width, height);
+
+      var pad = 18;
+      var wireW = width - pad * 2;
+      var wireH = clamp(height * (stretch ? 0.28 : 0.42), 70, height - 70);
+      if (stretch) {
+        wireW = width - pad * 2;
+      } else {
+        wireW = (width - pad * 2) * 0.72;
+      }
+      var wireX = (width - wireW) / 2;
+      var wireY = (height - wireH) / 2;
+
+      var grad = ctx.createLinearGradient(wireX, 0, wireX + wireW, 0);
+      grad.addColorStop(0, 'rgba(204, 120, 92, 0.38)');
+      grad.addColorStop(1, 'rgba(93, 184, 166, 0.30)');
+      ctx.fillStyle = grad;
+      panelPath(ctx, wireX, wireY, wireW, wireH, 12);
+      ctx.fill();
+      ctx.strokeStyle = C.line;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+
+      ctx.fillStyle = C.coral;
+      ctx.fillRect(wireX, wireY, 10, wireH);
+      ctx.fillStyle = C.teal;
+      ctx.fillRect(wireX + wireW - 10, wireY, 10, wireH);
+      haloLabel(ctx, '+', wireX + 5, wireY - 12, { color: C.coral });
+      haloLabel(ctx, '−', wireX + wireW - 5, wireY - 12, { color: C.teal });
+
+      var eY = wireY - 22;
+      if (eY > 16) {
+        arrow(ctx, wireX + 36, eY, wireX + wireW - 36, eY, C.coral, 1.8);
+        haloLabel(ctx, 'E', (wireX + wireX + wireW) / 2, eY - 12, { color: C.coral });
+      }
+
+      var innerX = wireX + 14;
+      var innerY = wireY + 8;
+      var innerW = wireW - 28;
+      var innerH = wireH - 16;
+      var thermalAmp = Math.sqrt(T / 300) * 2.2;
+      var ionR = stretch ? 4.2 : 5.5;
+      var i, site, sx, sy, jitterX, jitterY;
+      ctx.save();
+      panelPath(ctx, wireX + 10, wireY + 4, wireW - 20, wireH - 8, 8);
+      ctx.clip();
+
+      for (i = 0; i < state._ions.length; i++) {
+        site = state._ions[i];
+        jitterX = Math.sin(state.time * 22 + i * 1.7) * thermalAmp;
+        jitterY = Math.cos(state.time * 19 + i * 2.1) * thermalAmp;
+        sx = innerX + site.fx * innerW + jitterX;
+        sy = innerY + site.fy * innerH + jitterY;
+        ctx.fillStyle = C.gold;
+        ctx.beginPath();
+        ctx.arc(sx, sy, ionR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = C.deep;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      var vth = 1.6 * Math.sqrt(Math.max(0.2, T / 300));
+      var lambda = 6 * (T / 300);
+      var visVd = clamp(0.12 + 0.09 * current, 0.08, 0.7);
+      var el;
+      for (i = 0; i < state._e.length; i++) {
+        el = state._e[i];
+        if (collideP(lambda, dt)) {
+          var phi = Math.random() * 2 * Math.PI;
+          el.vx = Math.cos(phi);
+          el.vy = Math.sin(phi);
+        }
+        el.x += (el.vx * vth - visVd) * dt;
+        el.y += el.vy * vth * dt * 0.55;
+        if (el.x > 1) el.x -= 1;
+        if (el.x < 0) el.x += 1;
+        if (el.y < 0.06) { el.y = 0.06; el.vy = Math.abs(el.vy); }
+        if (el.y > 0.94) { el.y = 0.94; el.vy = -Math.abs(el.vy); }
+        sx = innerX + el.x * innerW;
+        sy = innerY + el.y * innerH;
+        ctx.fillStyle = C.coral;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      ctx.strokeStyle = C.ink;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(wireX, wireY + wireH + 16);
+      ctx.lineTo(wireX + wireW, wireY + wireH + 16);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(wireX, wireY + wireH + 12);
+      ctx.lineTo(wireX, wireY + wireH + 20);
+      ctx.moveTo(wireX + wireW, wireY + wireH + 12);
+      ctx.lineTo(wireX + wireW, wireY + wireH + 20);
+      ctx.stroke();
+      haloLabel(ctx, stretch ? '2L' : 'L', wireX + wireW / 2, wireY + wireH + 28, { color: C.muted });
+    },
+
+    challenge: {
+      question: "A cylindrical copper wire with initial resistance $R_0$ is uniformly drawn so that its length doubles ($L_{\\mathrm{new}} = 2 L_0$) at constant mass and density. It is then connected across a real battery of EMF $\\mathcal{E}$ and internal resistance $r = R_0$. What are the current $I$ and the power $P$ dissipated in the stretched wire?",
+      options: [
+        "$I = \\frac{\\mathcal{E}}{3 R_0}, \\quad P = \\frac{2\\mathcal{E}^2}{9 R_0}$",
+        "$I = \\frac{\\mathcal{E}}{5 R_0}, \\quad P = \\frac{4\\mathcal{E}^2}{25 R_0}$",
+        "$I = \\frac{\\mathcal{E}}{8 R_0}, \\quad P = \\frac{\\mathcal{E}^2}{16 R_0}$",
+        "$I = \\frac{\\mathcal{E}}{4 R_0}, \\quad P = \\frac{\\mathcal{E}^2}{8 R_0}$",
+        "$I = \\frac{\\mathcal{E}}{5 R_0}, \\quad P = \\frac{2\\mathcal{E}^2}{25 R_0}$"
+      ],
+      correct: 1,
+      explanation: "Constant volume: $L\\to 2L_0$ implies $A\\to A_0/2$, so $R_{\\mathrm{new}} = \\rho (2L_0)/(A_0/2) = 4R_0$. Loop resistance $4R_0 + R_0 = 5R_0$, hence $I = \\mathcal{E}/(5R_0)$ and $P = I^2 R_{\\mathrm{new}} = 4\\mathcal{E}^2/(25 R_0)$."
+    }
+  };
+
+  /* -------------------------------------------------------------------------- */
+  /* cpgf-4.14  First law  ΔU = Q − W                                            */
+  /* Picture: one P–V plane. Shaded area is W; the state point walks the path.   */
+  /* -------------------------------------------------------------------------- */
+  PGRE.visualizers['cpgf-4.14'] = {
+    id: 'cpgf-4.14',
+    topic: 'th',
+    title: 'First Law of Thermodynamics: $\\Delta U = Q - W$',
+    formulaLatex: '\\Delta U = Q - W = \\int \\delta Q - \\int P\\,dV',
+    physicalStory: `The First Law is energy conservation for a closed system. Internal energy $U$ is a state function (for an ideal gas, $U = n C_V T$). Heat $Q$ and work $W = \\int P\\,dV$ (physics sign: work *by* the system) are path-dependent. Their difference is not:
+$$\\Delta U = Q - W.$$
+On a $P$–$V$ diagram the work is the area under the path. Clockwise cycles enclose $W_{\\mathrm{net}} > 0$ (engines); counterclockwise cycles are refrigerators. Adiabats ($Q=0$) fall steeper than isotherms by a factor $\\gamma$.`,
+
+    derivationSteps: [
+      {
+        step: '1. Energy accounting',
+        latex: 'dU = \\delta Q - \\delta W',
+        explanation: 'For a stationary closed system, all transfers change the microscopic internal energy.'
+      },
+      {
+        step: '2. $P\\,dV$ work',
+        latex: '\\delta W = P\\,dV,\\qquad W = \\int_{V_i}^{V_f} P(V)\\,dV',
+        explanation: '$W>0$ on expansion. Chemistry uses the opposite sign in $\\Delta U = Q + W$.'
+      },
+      {
+        step: '3. Ideal gas',
+        latex: 'U = n C_V T = \\tfrac{f}{2} n R T,\\qquad C_P = C_V + R',
+        explanation: 'Joule: $U=U(T)$ only. Equipartition fixes $f=3$ (monatomic) or $5$ (diatomic, room $T$).'
+      },
+      {
+        step: '4. Cycles',
+        latex: '\\oint dU = 0 \\implies Q_{\\mathrm{net}} = W_{\\mathrm{net}} = \\oint P\\,dV',
+        explanation: 'Enclosed area on the indicator diagram is the net work of the cycle.'
+      }
+    ],
+
+    limitingCases: [
+      {
+        name: 'Isochoric',
+        condition: 'dV = 0',
+        formula: 'W = 0,\\quad \\Delta U = Q = n C_V \\Delta T',
+        explanation: 'No boundary displacement: every joule of heat stays as $\\Delta U$.'
+      },
+      {
+        name: 'Isobaric',
+        condition: 'P = \\mathrm{const}',
+        formula: 'W = P\\Delta V = nR\\Delta T,\\quad Q = n C_P \\Delta T',
+        explanation: 'Heat pays for both $\\Delta U$ and expansion work. $W/Q = (\\gamma-1)/\\gamma$.'
+      },
+      {
+        name: 'Isothermal (ideal gas)',
+        condition: 'T = \\mathrm{const}',
+        formula: '\\Delta U = 0,\\quad Q = W = nRT\\ln(V_f/V_i)',
+        explanation: 'All absorbed heat leaves as work.'
+      },
+      {
+        name: 'Adiabatic',
+        condition: 'Q = 0',
+        formula: 'P V^{\\gamma} = \\mathrm{const},\\quad \\Delta U = -W',
+        explanation: 'Expansion cools the gas: work is paid from $U$.'
+      },
+      {
+        name: 'Free expansion',
+        condition: 'Q = 0,\\ W = 0',
+        formula: '\\Delta U = 0 \\implies T_f = T_i\\ (\\mathrm{ideal}),\\quad \\Delta S > 0',
+        explanation: 'Into vacuum $P_{\\mathrm{ext}}=0$, so $W=0$. Irreversible, but $U$ is unchanged.'
+      }
+    ],
+
+    greTraps: [
+      {
+        trap: 'Physics vs chemistry sign',
+        description: 'Physics: $\\Delta U = Q - W$ with $W=\\int P\\,dV$ by the system. Chemistry: $\\Delta U = Q + W$ with $W=-\\int P\\,dV$.',
+        proTip: "Read the words: 'work done by' vs 'work done on'."
+      },
+      {
+        trap: '$U$ depends only on the endpoints',
+        description: 'For an ideal gas $\\Delta U = n C_V \\Delta T$ on *any* path, reversible or not. $Q$ and $W$ do not.',
+        proTip: 'If $P_i V_i = P_f V_f$ then $T_i=T_f$ and $\\Delta U=0$, whatever the wiggly path.'
+      },
+      {
+        trap: 'Adiabat vs isotherm slope',
+        description: '$(dP/dV)_{\\mathrm{ad}} = -\\gamma P/V$ vs $(dP/dV)_{\\mathrm{iso}} = -P/V$.',
+        proTip: 'The steeper curve is the adiabat ($\\gamma=5/3$ or $7/5$).'
+      }
+    ],
+
+    parameters: [
+      {
+        id: 'process',
+        label: 'Process',
+        type: 'select',
+        options: [
+          { value: 'isothermal', label: 'Isothermal ($\\Delta U = 0$)' },
+          { value: 'adiabatic', label: 'Adiabatic ($Q = 0$)' },
+          { value: 'isobaric', label: 'Isobaric ($P$ const)' },
+          { value: 'isochoric', label: 'Isochoric ($W = 0$)' }
+        ],
+        default: 'isothermal'
+      },
+      { id: 'vRatio', label: 'Extent ($V_f/V_i$ or $P_f/P_i$)', min: 1.2, max: 4.0, step: 0.1, default: 2.5, unit: 'x' },
+      {
+        id: 'gasType',
+        label: 'Gas',
+        type: 'select',
+        options: [
+          { value: 'monatomic', label: 'Monatomic ($\\gamma = 5/3$)' },
+          { value: 'diatomic', label: 'Diatomic ($\\gamma = 7/5$)' }
+        ],
+        default: 'monatomic'
+      },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
+    ],
+
+    init: function (container, state) {
+      state = state || {};
+      state._phi = 0;
+    },
+
+    draw: function (ctx, width, height, state, dt) {
+      var size = canvasSize(width, height);
+      width = size.w;
+      height = size.h;
+      state = state || {};
+      var dtEff = simDt(state, dt);
+      state._phi = (state._phi || 0) + dtEff * 0.42;
+      var progress = 0.5 - 0.5 * Math.cos(state._phi);
+
+      var process = state.process || 'isothermal';
+      var vRatio = clamp(numParam(state, 'vRatio', 2.5), 1.2, 4.0);
+      var isMonatomic = (state.gasType || 'monatomic') === 'monatomic';
+      var gamma = isMonatomic ? 5 / 3 : 7 / 5;
+      var f = isMonatomic ? 3 : 5;
+
+      var P1 = 3.2;
+      var V1 = 1.0;
+      var T1 = P1 * V1;
+      var V2 = V1 * vRatio;
+      var P2, T2, curV, curP, curT, W_val, DeltaU_val, Q_val;
+      var curve = [];
+      var nPts = 80;
+      var i, v, p, tFrac;
+
+      if (process === 'isothermal') {
+        P2 = (P1 * V1) / V2;
+        T2 = T1;
+        curV = V1 + (V2 - V1) * progress;
+        curP = (P1 * V1) / curV;
+        curT = T1;
+        W_val = T1 * Math.log(curV / V1);
+        DeltaU_val = 0;
+        Q_val = W_val;
+        for (i = 0; i <= nPts; i++) {
+          v = V1 + (V2 - V1) * (i / nPts);
+          curve.push({ v: v, p: (P1 * V1) / v });
+        }
+      } else if (process === 'adiabatic') {
+        P2 = P1 * Math.pow(V1 / V2, gamma);
+        T2 = P2 * V2;
+        curV = V1 + (V2 - V1) * progress;
+        curP = P1 * Math.pow(V1 / curV, gamma);
+        curT = curP * curV;
+        W_val = (P1 * V1 - curP * curV) / (gamma - 1);
+        DeltaU_val = (f / 2) * (curT - T1);
+        Q_val = 0;
+        for (i = 0; i <= nPts; i++) {
+          v = V1 + (V2 - V1) * (i / nPts);
+          curve.push({ v: v, p: P1 * Math.pow(V1 / v, gamma) });
+        }
+      } else if (process === 'isobaric') {
+        P2 = P1;
+        T2 = P2 * V2;
+        curV = V1 + (V2 - V1) * progress;
+        curP = P1;
+        curT = curP * curV;
+        W_val = P1 * (curV - V1);
+        DeltaU_val = (f / 2) * (curT - T1);
+        Q_val = DeltaU_val + W_val;
+        for (i = 0; i <= nPts; i++) {
+          v = V1 + (V2 - V1) * (i / nPts);
+          curve.push({ v: v, p: P1 });
+        }
+      } else {
+        V2 = V1;
+        P2 = P1 * vRatio;
+        curV = V1;
+        curP = P1 + (P2 - P1) * progress;
+        curT = curP * curV;
+        W_val = 0;
+        DeltaU_val = (f / 2) * (curT - T1);
+        Q_val = DeltaU_val;
+        for (i = 0; i <= nPts; i++) {
+          p = P1 + (P2 - P1) * (i / nPts);
+          curve.push({ v: V1, p: p });
+        }
+      }
+
+      var procName = process;
+      legend('First law $\\Delta U = Q - W$', [
+        { label: 'Path', value: procName },
+        { label: '$P$', value: '$' + curP.toFixed(2) + '\\,P_0$' },
+        { label: '$V$', value: '$' + curV.toFixed(2) + '\\,V_0$' },
+        { label: '$T$', value: '$' + curT.toFixed(2) + '\\,T_0$' },
+        { label: '$Q$', value: '$' + (Q_val >= 0 ? '+' : '') + Q_val.toFixed(2) + '$' },
+        { label: '$W$', value: '$' + (W_val >= 0 ? '+' : '') + W_val.toFixed(2) + '$' },
+        { label: '$\\Delta U$', value: '$' + (DeltaU_val >= 0 ? '+' : '') + DeltaU_val.toFixed(2) + '$' },
+        { label: '$\\gamma$', value: isMonatomic ? '$5/3$' : '$7/5$' }
+      ]);
+
+      creamFill(ctx, width, height);
+      lightGrid(ctx, width, height, 40);
+
+      var padL = 48;
+      var padR = 22;
+      var padT = 28;
+      var padB = 36;
+      var originX = padL;
+      var originY = height - padB;
+      var plotW = width - padL - padR;
+      var plotH = height - padT - padB;
+      var maxV = 4.8;
+      var maxP = 4.6;
+      function mapV(vv) { return originX + (vv / maxV) * plotW; }
+      function mapP(pp) { return originY - (pp / maxP) * plotH; }
+
+      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.10);
+      ctx.lineWidth = 1;
+      for (i = 1; i <= 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(mapV(i), mapP(0));
+        ctx.lineTo(mapV(i), mapP(maxP));
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(mapV(0), mapP(i));
+        ctx.lineTo(mapV(maxV), mapP(i));
+        ctx.stroke();
+      }
+
+      ctx.save();
+      ctx.strokeStyle = 'rgba(212, 160, 23, 0.28)';
+      ctx.setLineDash([4, 4]);
+      ctx.lineWidth = 1.2;
+      [2.0, 3.2, 4.4].forEach(function (Tiso) {
+        ctx.beginPath();
+        var started = false;
+        for (v = 0.7; v <= maxV; v += 0.08) {
+          p = Tiso / v;
+          if (p > maxP || p < 0) continue;
+          if (!started) { ctx.moveTo(mapV(v), mapP(p)); started = true; }
+          else ctx.lineTo(mapV(v), mapP(p));
+        }
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+      ctx.restore();
+
+      if (process === 'adiabatic') {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(93, 184, 166, 0.45)';
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        for (v = V1; v <= V2; v += 0.05) {
+          p = (P1 * V1) / v;
+          if (v === V1) ctx.moveTo(mapV(v), mapP(p));
+          else ctx.lineTo(mapV(v), mapP(p));
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.strokeStyle = C.ink;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(mapV(0), mapP(maxP));
+      ctx.lineTo(mapV(0), mapP(0));
+      ctx.lineTo(mapV(maxV), mapP(0));
+      ctx.stroke();
+      haloLabel(ctx, 'P', mapV(0) + 14, mapP(maxP) + 4, { color: C.muted });
+      haloLabel(ctx, 'V', mapV(maxV) - 8, originY - 14, { color: C.muted, align: 'right' });
+
+      var activeN = Math.max(2, Math.floor(curve.length * progress));
+      if (process !== 'isochoric' && curve.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(mapV(curve[0].v), mapP(0));
+        ctx.lineTo(mapV(curve[0].v), mapP(curve[0].p));
+        for (i = 1; i < activeN; i++) ctx.lineTo(mapV(curve[i].v), mapP(curve[i].p));
+        ctx.lineTo(mapV(curve[activeN - 1].v), mapP(0));
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(204, 120, 92, 0.22)';
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = C.coral;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      for (i = 0; i < curve.length; i++) {
+        if (i === 0) ctx.moveTo(mapV(curve[i].v), mapP(curve[i].p));
+        else ctx.lineTo(mapV(curve[i].v), mapP(curve[i].p));
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = C.gold;
+      ctx.strokeStyle = C.deep;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(mapV(curV), mapP(curP), 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = C.muted;
+      ctx.font = '10px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      for (i = 1; i <= 4; i++) ctx.fillText(String(i), mapV(i), originY + 6);
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (i = 1; i <= 4; i++) ctx.fillText(String(i), originX - 8, mapP(i));
+    },
+
+    challenge: {
+      question: "One mole of a monatomic ideal gas ($C_V = \\frac{3}{2}R,\\; C_P = \\frac{5}{2}R$) expands isobarically from $V_0$ to $2V_0$. What fraction of the heat $Q$ absorbed is converted into work $W$ done by the gas?",
+      options: [
+        "$2/3\\ (66.7\\%)$",
+        "$2/5\\ (40.0\\%)$",
+        "$3/5\\ (60.0\\%)$",
+        "$1/2\\ (50.0\\%)$",
+        "$5/2\\ (250\\%)$"
+      ],
+      correct: 1,
+      explanation: "Isobaric: $W = P_0\\Delta V = R\\Delta T$ and $Q = C_P\\Delta T = \\tfrac{5}{2} R\\Delta T$. Thus $W/Q = 2/5$. The rest, $3/5$, is $\\Delta U = C_V\\Delta T$."
+    }
+  };
+
+  /* -------------------------------------------------------------------------- */
+  /* cpgf-5.18  Heisenberg  σx σp ≥ ħ/2                                          */
+  /* Picture: one phase-space ellipse. Squeeze x, it grows in p. Free shear.     */
+  /* -------------------------------------------------------------------------- */
+  PGRE.visualizers['cpgf-5.18'] = {
+    id: 'cpgf-5.18',
+    topic: 'qm',
+    title: 'Heisenberg Uncertainty Principle: $\\sigma_x \\sigma_p \\ge \\hbar/2$',
+    formulaLatex: '\\sigma_x \\sigma_p \\ge \\frac{\\hbar}{2}, \\qquad [\\hat{x}, \\hat{p}] = i\\hbar',
+    physicalStory: `The bound $\\sigma_x \\sigma_p \\ge \\hbar/2$ is Cauchy–Schwarz on the commutator $[\\hat{x},\\hat{p}]=i\\hbar$. A Gaussian saturates it. In phase space that state is an untilted ellipse of area $\\pi\\hbar$.
+
+Free evolution shears the ellipse: $\\dot x = p/m$, $\\dot p = 0$. The momentum width $\\sigma_p$ is frozen, but $\\sigma_x(t) = \\sigma_x(0)\\sqrt{1+(t/\\tau)^2}$ with $\\tau = 2m\\sigma_x(0)^2/\\hbar$, so the product rises. The shear is a position–momentum correlation (chirp). Squeezing $\\sigma_x(0)$ makes a tall thin ellipse: you cannot flatten the blob below $\\hbar/2$.`,
+
+    derivationSteps: [
+      {
+        step: '1. Canonical commutator',
+        latex: '[\\hat{x},\\hat{p}] = i\\hbar',
+        explanation: 'No common eigenstate of position and momentum exists.'
+      },
+      {
+        step: '2. Robertson relation',
+        latex: '\\sigma_A^2\\sigma_B^2 \\ge \\tfrac{1}{4}|\\langle[\\hat A,\\hat B]\\rangle|^2',
+        explanation: 'Cauchy–Schwarz on $|\\alpha\\rangle=(\\hat A-\\langle A\\rangle)|\\psi\\rangle$ and $|\\beta\\rangle=(\\hat B-\\langle B\\rangle)|\\psi\\rangle$.'
+      },
+      {
+        step: '3. Bound',
+        latex: '\\sigma_x\\sigma_p \\ge \\hbar/2',
+        explanation: 'The rigorous RMS statement. Heuristic estimates often write $\\hbar$ or $h$.'
+      },
+      {
+        step: '4. Gaussian saturation',
+        latex: '\\psi(x)\\propto e^{-(x-x_0)^2/(4\\sigma_x^2)+i p_0 x/\\hbar} \\implies \\sigma_x\\sigma_p=\\hbar/2',
+        explanation: 'Equality iff the wavefunction is an unchirped Gaussian (SHO ground state).'
+      }
+    ],
+
+    limitingCases: [
+      {
+        name: 'Spatial pinch',
+        condition: '\\sigma_x \\to 0',
+        formula: '\\sigma_p \\to \\infty,\\quad \\langle T\\rangle \\to \\infty',
+        explanation: 'A Dirac packet has infinite kinetic energy.'
+      },
+      {
+        name: 'Plane wave',
+        condition: '\\sigma_p \\to 0',
+        formula: '\\sigma_x \\to \\infty,\\quad |\\psi(x)|^2 = \\mathrm{const}',
+        explanation: 'Sharp momentum is complete delocalization.'
+      },
+      {
+        name: 'SHO ground state',
+        condition: '\\sigma_x=\\sqrt{\\hbar/(2m\\omega)}',
+        formula: '\\sigma_x\\sigma_p = \\hbar/2,\\quad E_0=\\hbar\\omega/2',
+        explanation: 'Zero-point energy is the uncertainty floor in a well.'
+      },
+      {
+        name: 'Energy–time (Mandelstam–Tamm)',
+        condition: '\\Delta t = \\sigma_Q/|d\\langle Q\\rangle/dt|',
+        formula: '\\Delta E\\,\\Delta t \\ge \\hbar/2',
+        explanation: 'A resonance of width $\\Gamma$ lives a time $\\sim\\hbar/\\Gamma$.'
+      }
+    ],
+
+    greTraps: [
+      {
+        trap: '$\\hbar/2$ vs $\\hbar$ vs $h$',
+        description: 'The theorem is $\\sigma_x\\sigma_p\\ge\\hbar/2$ for RMS deviations. Order-of-magnitude estimates use $\\hbar$ or $h$.',
+        proTip: 'If the question says "rigorous lower bound", pick $\\hbar/2$.'
+      },
+      {
+        trap: 'Confinement energy',
+        description: 'Size $L$ implies $\\Delta p\\sim\\hbar/L$, so $E\\sim\\hbar^2/(2m L^2)$ (nonrel) or $\\hbar c/L$ (ultrarel).',
+        proTip: 'This estimates ground states of wells, nuclei, and dots in one line.'
+      },
+      {
+        trap: 'Chirp raises the product',
+        description: 'A quadratic phase $e^{i\\alpha x^2}$ leaves $|\\psi(x)|^2$ alone but widens $\\sigma_p$.',
+        proTip: 'Only unchirped Gaussians sit on the bound. Free evolution generates chirp.'
+      }
+    ],
+
+    parameters: [
+      { id: 'sigmaX', label: 'Prepared width $\\sigma_x(0)$', min: 0.25, max: 1.8, step: 0.05, default: 0.7, unit: 'x_0' },
+      { id: 'evolve', label: 'Free evolution (shear)', type: 'toggle', default: true },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
+    ],
+
+    init: function (container, state) {
+      state = state || {};
+      seedPhase(state, 44, 0.7, 0);
+    },
+
+    draw: function (ctx, width, height, state, dt) {
+      var size = canvasSize(width, height);
+      width = size.w;
+      height = size.h;
+      state = state || {};
+      var dtEff = simDt(state, dt);
+      var sigma0 = clamp(numParam(state, 'sigmaX', 0.7), 0.2, 2.2);
+      var evolve = flagParam(state, 'evolve', true);
+      var hbar = 1;
+      var m = 1;
+      var sigmaP = hbar / (2 * sigma0);
+      var tau = 2 * m * sigma0 * sigma0 / hbar;
+
+      if (!state._phase || state._sig0 !== sigma0) seedPhase(state, 44, sigma0, 0);
+      if (evolve) {
+        state._tPack = (state._tPack || 0) + dtEff;
+        if (state._tPack > 5.5 * tau) {
+          seedPhase(state, 44, sigma0, 0);
+        }
+      } else {
+        if ((state._tPack || 0) !== 0) seedPhase(state, 44, sigma0, 0);
+      }
+
+      var t = state._tPack || 0;
+      var xi = t / Math.max(tau, 1e-6);
+      var sigmaX = sigma0 * Math.sqrt(1 + xi * xi);
+      var product = sigmaX * sigmaP;
+      var isMin = product < 0.51;
+      var Sxx = sigmaX * sigmaX;
+      var Spp = sigmaP * sigmaP;
+      var Sxp = xi / 2;
+
+      legend('Heisenberg $\\sigma_x\\sigma_p\\ge\\hbar/2$', [
+        { label: '$\\sigma_x$', value: '$' + sigmaX.toFixed(2) + '$' },
+        { label: '$\\sigma_p$', value: '$' + sigmaP.toFixed(2) + '\\,\\hbar$' },
+        { label: '$\\sigma_x\\sigma_p$', value: '$' + product.toFixed(3) + '\\,\\hbar$' },
+        { label: 'Bound', value: '$\\hbar/2 = 0.500\\,\\hbar$' },
+        { label: 'State', value: isMin ? 'minimum (Gaussian)' : 'sheared (chirped)' }
+      ]);
+
+      creamFill(ctx, width, height);
+      lightGrid(ctx, width, height, 40);
+
+      var padL = 44;
+      var padR = 20;
+      var padT = 24;
+      var padB = 28;
+      var ox = padL + (width - padL - padR) / 2;
+      var oy = padT + (height - padT - padB) / 2;
+      var xRange = 6.4;
+      var pRange = 3.6;
+      var sx = ((width - padL - padR) / 2) / xRange;
+      var sy = ((height - padT - padB) / 2) / pRange;
+      function X(x) { return ox + x * sx; }
+      function P(p) { return oy - p * sy; }
+
+      ctx.strokeStyle = C.ink;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(padL, oy);
+      ctx.lineTo(width - padR, oy);
+      ctx.moveTo(ox, height - padB);
+      ctx.lineTo(ox, padT);
+      ctx.stroke();
+      haloLabel(ctx, 'x', width - padR - 6, oy + 14, { color: C.muted, align: 'right' });
+      haloLabel(ctx, 'p', ox + 14, padT + 8, { color: C.muted, align: 'left' });
+
+      function drawCovEllipse(sxx, spp, sxp, stroke, fill, dash) {
+        var a = Math.max(sxx, 1e-8);
+        var c = sxp;
+        var b = Math.max(spp, 1e-8);
+        var l21 = c / Math.sqrt(a);
+        var l22 = Math.sqrt(Math.max(1e-8, b - (c * c) / a));
+        var l11 = Math.sqrt(a);
+        ctx.save();
+        ctx.beginPath();
+        var k, ang, ux, up, px, py;
+        for (k = 0; k <= 64; k++) {
+          ang = (k / 64) * 2 * Math.PI;
+          ux = Math.cos(ang);
+          up = Math.sin(ang);
+          px = l11 * ux;
+          py = l21 * ux + l22 * up;
+          if (k === 0) ctx.moveTo(X(px), P(py));
+          else ctx.lineTo(X(px), P(py));
+        }
+        ctx.closePath();
+        if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fill();
+        }
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 2.2;
+        if (dash) ctx.setLineDash(dash);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      drawCovEllipse(sigma0 * sigma0, sigmaP * sigmaP, 0, 'rgba(93, 184, 166, 0.70)', null, [5, 4]);
+      drawCovEllipse(Sxx, Spp, Sxp, C.coral, 'rgba(204, 120, 92, 0.16)', null);
+
+      var j, pt, xNew;
+      ctx.fillStyle = C.gold;
+      for (j = 0; j < state._phase.length; j++) {
+        pt = state._phase[j];
+        if (evolve) {
+          xNew = pt.x + (pt.p / m) * dtEff;
+          pt.x = xNew;
+        }
+        ctx.beginPath();
+        ctx.arc(X(pt.x), P(pt.p), 2.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    },
+
+    challenge: {
+      question: "A particle of mass $m$ is in the ground state of a 1D harmonic oscillator of frequency $\\omega$, $\\psi_0(x) = \\bigl(m\\omega/(\\pi\\hbar)\\bigr)^{1/4}\\exp(-m\\omega x^2/(2\\hbar))$. What is $\\sigma_x\\sigma_p$?",
+      options: [
+        "$\\hbar$",
+        "$\\hbar/2$",
+        "$\\hbar/\\sqrt{2}$",
+        "$3\\hbar/2$",
+        "$0$"
+      ],
+      correct: 1,
+      explanation: "The SHO ground state is an unchirped Gaussian with $\\sigma_x=\\sqrt{\\hbar/(2m\\omega)}$ and $\\sigma_p=\\sqrt{m\\hbar\\omega/2}$. The product is exactly $\\hbar/2$, saturating Heisenberg. Excited states have $\\sigma_x\\sigma_p=(n+1/2)\\hbar$."
+    }
+  };
+
+  /* -------------------------------------------------------------------------- */
+  /* cpgf-4.32  Cp = (∂Q/∂T)_P                                                   */
+  /* Picture: same heat, two chambers. Free piston stays cooler; locked runs hot.*/
   /* -------------------------------------------------------------------------- */
   PGRE.visualizers['cpgf-4.32'] = {
     id: 'cpgf-4.32',
     topic: 'th',
     title: 'Heat Capacity at Constant Pressure: $C_P = (\\partial Q/\\partial T)_P$',
     formulaLatex: 'C_P = \\left(\\frac{\\partial Q}{\\partial T}\\right)_P = \\left(\\frac{\\partial H}{\\partial T}\\right)_P = T \\left(\\frac{\\partial S}{\\partial T}\\right)_P',
-    physicalStory: `Heat capacity $C \\equiv \\delta Q / dT$ quantifies a thermodynamic system's thermal inertia—the amount of thermal energy required to produce a unit increase in temperature. Because heat $\\delta Q$ is path-dependent, the heat capacity depends crucially on the external constraints maintained during heating.
-
-At constant volume ($C_V = (\\partial Q/\\partial T)_V = (\\partial U/\\partial T)_V$), rigid boundaries prevent volume changes ($dV = 0$). Zero mechanical work is performed on the surroundings ($W = 0$). Consequently, by the First Law ($dU = \\delta Q - \\delta W$), 100% of the injected thermal energy directly fuels the microscopic kinetic degrees of freedom of the particles, raising internal energy and temperature.
-
-At constant pressure ($C_P = (\\partial Q/\\partial T)_P$), the system is free to expand against the constant external pressure ($dV > 0$). In expanding, the gas performs positive boundary work on the environment: $W = \\int P\\, dV = P\\Delta V = n R \\Delta T$. Therefore, added heat must simultaneously increase the internal thermal energy *and* supply the mechanical energy needed to push back the surroundings:
-$$\\delta Q_P = dU + P\\,dV = d(U + PV) = dH$$
-where $H \\equiv U + PV$ is the thermodynamic enthalpy.
-
-Because energy is siphoned into mechanical expansion work, a larger heat input is required to achieve the exact same $1\\text{ K}$ temperature rise under constant pressure than under constant volume. Hence, $C_P > C_V$ is guaranteed for all normal matter. For an ideal gas, Mayer's relation gives $C_P - C_V = n R$. For arbitrary substances, the universal thermodynamic identity $C_P - C_V = \\frac{V T \\beta^2}{\\kappa_T} \\ge 0$ guarantees this inequality as a direct consequence of thermodynamic stability ($\kappa_T > 0, T > 0$).`,
+    physicalStory: `Heat capacity $C=\\delta Q/dT$ depends on the constraint. At fixed volume, $W=0$ and $C_V=(\\partial U/\\partial T)_V$: every joule becomes temperature. At fixed pressure the piston is free, so part of the heat is spent as $P\\,dV$ work:
+$$\\delta Q_P = dU + P\\,dV = dH,\\qquad C_P = (\\partial H/\\partial T)_P.$$
+Hence $C_P>C_V$. For an ideal gas Mayer's relation is $C_P-C_V=nR$. For any stable substance $C_P-C_V = VT\\beta^2/\\kappa_T\\ge 0$. Equal heat therefore raises $T$ more in the locked chamber than in the free one.`,
 
     derivationSteps: [
       {
-        step: "1. Heat Differential & First Law Decomposition",
-        latex: "\\delta Q = dU + \\delta W = dU + P\\,dV",
-        explanation: "Express internal energy as a function of temperature and volume $U(T, V)$: $dU = \\left(\\frac{\\partial U}{\\partial T}\\right)_V dT + \\left(\\frac{\\partial U}{\\partial V}\\right)_T dV$. Substituting into the First Law gives $\\delta Q = \\left(\\frac{\\partial U}{\\partial T}\\right)_V dT + \\left[P + \\left(\\frac{\\partial U}{\\partial V}\\right)_T\\right] dV$."
+        step: '1. First law',
+        latex: '\\delta Q = dU + P\\,dV',
+        explanation: 'Decompose $dU=(\\partial U/\\partial T)_V dT + (\\partial U/\\partial V)_T dV$.'
       },
       {
-        step: "2. Constant Pressure Constraint & Enthalpy Equivalence",
-        latex: "C_P \\equiv \\left(\\frac{\\partial Q}{\\partial T}\\right)_P = \\left(\\frac{\\partial U}{\\partial T}\\right)_V + \\left[P + \\left(\\frac{\\partial U}{\\partial V}\\right)_T\\right] \\left(\\frac{\\partial V}{\\partial T}\\right)_P = \\left(\\frac{\\partial H}{\\partial T}\\right)_P",
-        explanation: "Dividing by $dT$ at constant $P$ yields $C_P$. Enthalpy $H \\equiv U + PV$ has differential $dH = dU + P dV + V dP = \\delta Q + V dP$. At constant pressure $dP = 0$, so $dH_P = \\delta Q_P$, confirming $C_P = (\\partial H/\\partial T)_P = T(\\partial S/\\partial T)_P$."
+        step: '2. Enthalpy at constant $P$',
+        latex: 'C_P = (\\partial H/\\partial T)_P,\\quad H\\equiv U+PV',
+        explanation: '$dH=\\delta Q + V\\,dP$. At $dP=0$, $\\delta Q_P=dH$.'
       },
       {
-        step: "3. Ideal Gas & Mayer's Relation",
-        latex: "C_P - C_V = n R \\implies C_{P,m} - C_{V,m} = R",
-        explanation: "For an ideal gas, Joule's free expansion experiment confirms $(\\partial U/\\partial V)_T = 0$. The ideal gas equation $PV = nRT$ gives $P(\\partial V/\\partial T)_P = nR$. Substituting into Step 2 yields $C_P = C_V + nR$, or molar $C_{P,m} = \\frac{f+2}{2}R$ where $f$ is the active degrees of freedom."
+        step: "3. Mayer",
+        latex: 'C_P - C_V = nR',
+        explanation: 'Ideal gas: $(\\partial U/\\partial V)_T=0$ and $P(\\partial V/\\partial T)_P=nR$.'
       },
       {
-        step: "4. Universal Thermodynamic Relation for Arbitrary Matter",
-        latex: "C_P - C_V = T \\left(\\frac{\\partial P}{\\partial T}\\right)_V \\left(\\frac{\\partial V}{\\partial T}\\right)_P = \\frac{V T \\beta^2}{\\kappa_T} \\ge 0",
-        explanation: "Using Maxwell relations and the triple product rule, the difference depends on the thermal expansion coefficient $\\beta = \\frac{1}{V}\\left(\\frac{\\partial V}{\\partial T}\\right)_P$ and isothermal compressibility $\\kappa_T = -\\frac{1}{V}\\left(\\frac{\\partial V}{\\partial P}\\right)_T$. Since mechanical stability requires $\\kappa_T > 0$, $C_P \\ge C_V$ unconditionally."
+        step: '4. Identity',
+        latex: 'C_P - C_V = VT\\beta^2/\\kappa_T \\ge 0',
+        explanation: 'Stability $\\kappa_T>0$ forbids $C_P<C_V$, even when $\\beta<0$ (water near $4^\\circ\\mathrm{C}$).'
       }
     ],
 
     limitingCases: [
       {
-        name: "Monatomic Ideal Gas (He, Ne, Ar)",
-        condition: "f = 3 \\text{ (pure translation)}",
-        formula: "C_V = \\frac{3}{2}R, \\quad C_P = \\frac{5}{2}R, \\quad \\gamma = \\frac{C_P}{C_V} = \\frac{5}{3} \\approx 1.667",
-        explanation: "At all accessible temperatures, only the 3 translational degrees of freedom are active ($U = \\frac{3}{2}nRT$)."
+        name: 'Monatomic ideal gas',
+        condition: 'f=3',
+        formula: 'C_V=\\tfrac{3}{2}R,\\ C_P=\\tfrac{5}{2}R,\\ \\gamma=5/3',
+        explanation: 'Translation only at all ordinary $T$.'
       },
       {
-        name: "Diatomic Ideal Gas at Room Temp (N₂, O₂, Air)",
-        condition: "f = 5 \\text{ (3 trans + 2 rot, vib frozen)}",
-        formula: "C_V = \\frac{5}{2}R, \\quad C_P = \\frac{7}{2}R, \\quad \\gamma = \\frac{7}{5} = 1.400",
-        explanation: "Rotational levels are thermally excited ($\\Theta_{\\text{rot}} \\sim 2-85\\text{ K}$), but vibrational excitation requires $T \\gg \\Theta_{\\text{vib}} \\sim 1000-3000\\text{ K}$ and remains frozen in the quantum ground state."
+        name: 'Diatomic, room $T$',
+        condition: 'f=5',
+        formula: 'C_V=\\tfrac{5}{2}R,\\ C_P=\\tfrac{7}{2}R,\\ \\gamma=7/5',
+        explanation: 'Rotation on, vibration frozen ($\\Theta_{\\mathrm{vib}}\\sim 10^3\\,\\mathrm{K}$).'
       },
       {
-        name: "Diatomic Ideal Gas at High Temperature",
-        condition: "f = 7 \\text{ (3 trans + 2 rot + 1 vib mode)}",
-        formula: "C_V = \\frac{7}{2}R, \\quad C_P = \\frac{9}{2}R, \\quad \\gamma = \\frac{9}{7} \\approx 1.286",
-        explanation: "At high temperatures, the vibrational mode activates, contributing $R$ ($\\frac{1}{2}R$ kinetic + $\\frac{1}{2}R$ potential) to molar heat capacity."
+        name: 'Diatomic, high $T$',
+        condition: 'f=7',
+        formula: 'C_V=\\tfrac{7}{2}R,\\ C_P=\\tfrac{9}{2}R,\\ \\gamma=9/7',
+        explanation: 'One vib mode contributes a full $R$ (kinetic plus potential).'
       },
       {
-        name: "Incompressible Solid or Liquid",
-        condition: "\\beta \\to 0, \\; \\Delta V \\approx 0",
-        formula: "C_P \\approx C_V \\approx 3R \\text{ (Dulong-Petit limit for solids)}",
-        explanation: "Because the expansion work $P\\Delta V$ is negligible in dense condensed phases, isobaric and isochoric heat capacities nearly coincide."
-      },
-      {
-        name: "Isothermal and Reversible Adiabatic Processes",
-        condition: "dT = 0 \\text{ or } \\delta Q = 0",
-        formula: "C_{\\text{iso}} = \\pm \\infty, \\quad C_{\\text{ad}} = 0",
-        explanation: "Along an isotherm, heat enters without changing temperature ($C = \\delta Q / 0 = \\infty$). Along a reversible adiabat, zero heat enters ($C = 0 / dT = 0$)."
+        name: 'Incompressible solid',
+        condition: '\\beta\\to 0',
+        formula: 'C_P\\approx C_V\\approx 3R\\ (\\mathrm{Dulong–Petit})',
+        explanation: 'Expansion work is negligible; the two capacities coincide.'
       }
     ],
 
     greTraps: [
       {
-        trap: "Enthalpy vs Internal Energy Association",
-        description: "$C_P$ is the temperature derivative of enthalpy $H$ at constant $P$: $C_P = (\\partial H/\\partial T)_P$. $C_V$ is the temperature derivative of internal energy $U$ at constant $V$: $C_V = (\\partial U/\\partial T)_V$.",
-        proTip: "Remember: at constant pressure $dH = \\delta Q$; at constant volume $dU = \\delta Q$. Pair $P$ with $H$ and $V$ with $U$ on Physics GRE questions."
+        trap: '$H$ with $P$, $U$ with $V$',
+        description: '$C_P=(\\partial H/\\partial T)_P$ and $C_V=(\\partial U/\\partial T)_V$.',
+        proTip: 'Constant $P$ means $dH=\\delta Q$; constant $V$ means $dU=\\delta Q$.'
       },
       {
-        trap: "Vibrational Degree of Freedom Adds R, Not (1/2)R",
-        description: "Translation and rotation contribute $\\frac{1}{2}R$ per quadratic term. A 1D vibrational harmonic oscillator has two quadratic terms (kinetic $p^2/(2m)$ + potential $\\frac{1}{2}kx^2$), adding a full $R$ to molar heat capacity.",
-        proTip: "For diatomic gas with active vibrations: $C_V = \\frac{3}{2}R\\text{ (trans)} + \\frac{2}{2}R\\text{ (rot)} + \\frac{2}{2}R\\text{ (vib)} = \\frac{7}{2}R$, giving $C_P = \\frac{9}{2}R$."
+        trap: 'Vibration adds $R$, not $R/2$',
+        description: 'A harmonic vib mode has two quadratic terms.',
+        proTip: 'Diatomic with vib: $C_V=7R/2$, $C_P=9R/2$.'
       },
       {
-        trap: "Physical Reason Why $C_P > C_V$",
-        description: "Isobaric heating allows gas expansion, performing work $W = P\\Delta V$ on the surroundings. Extra heat is required to perform this boundary work in addition to raising temperature.",
-        proTip: "For identical heat $\\Delta Q$ injected, $\\Delta T_V > \\Delta T_P$ because no energy is lost to work in the constant-volume chamber."
+        trap: 'Why $C_P>C_V$',
+        description: 'The free piston does $W=P\\Delta V$. That energy does not raise $T$.',
+        proTip: 'Same $\\Delta Q$ $\\Rightarrow$ $\\Delta T_V>\\Delta T_P$.'
       },
       {
-        trap: "Water Anomaly Between $0^\\circ\\text{C}$ and $4^\\circ\\text{C}$",
-        description: "Water contracts upon heating between $0^\\circ\\text{C}$ and $4^\\circ\\text{C}$ ($\\beta < 0$). However, $C_P - C_V = \\frac{V T \\beta^2}{\\kappa_T}$ is proportional to $\\beta^2$, so $C_P \\ge C_V$ is STILL strictly positive!",
-        proTip: "$C_P$ is never less than $C_V$ for any thermodynamically stable single-phase equilibrium substance."
+        trap: 'Water $0$–$4^\\circ\\mathrm{C}$',
+        description: '$\\beta<0$ but $C_P-C_V\\propto\\beta^2$, so the inequality survives.',
+        proTip: '$C_P\\ge C_V$ for every stable single-phase equilibrium.'
       }
     ],
 
     parameters: [
-      { id: 'gasType', name: 'Gas model', type: 'select', options: [
-        { value: 'monatomic', label: 'Monatomic (He, Ar): $\\gamma = 5/3$' },
-        { value: 'diatomic_rt', label: 'Diatomic room temp: $\\gamma = 7/5$' },
-        { value: 'diatomic_high', label: 'Diatomic high temp (+vib): $\\gamma = 9/7$' },
-        { value: 'solid_dulong', label: 'Solid (Dulong-Petit): $C \\approx 3R$' }
-      ], default: 'diatomic_rt' },
-      { id: 'heatInput', name: 'Heat input $\\Delta Q$', min: 100, max: 1000, step: 50, default: 500, unit: 'J' },
-      { id: 'tempK', name: 'Base temperature $T_0$', min: 20, max: 1500, step: 10, default: 300, unit: 'K' },
-      { id: 'rightView', name: 'Right panel view', type: 'select', options: [
-        { value: 'energy_bars', label: 'Energy partitioning ($\\Delta U$ vs $W$)' },
-        { value: 'cp_curve', label: '$C(T)$ Quantum staircase' }
-      ], default: 'energy_bars' },
-      { id: 'animate', name: 'Particle animation', type: 'toggle', default: true },
+      {
+        id: 'gasType',
+        label: 'Substance',
+        type: 'select',
+        options: [
+          { value: 'monatomic', label: 'Monatomic ($\\gamma=5/3$)' },
+          { value: 'diatomic_rt', label: 'Diatomic room $T$ ($\\gamma=7/5$)' },
+          { value: 'diatomic_high', label: 'Diatomic + vib ($\\gamma=9/7$)' },
+          { value: 'solid_dulong', label: 'Solid (Dulong–Petit)' }
+        ],
+        default: 'diatomic_rt'
+      },
+      { id: 'heatInput', label: 'Heat pulse $\\Delta Q$', min: 100, max: 1000, step: 50, default: 500, unit: 'J' },
+      { id: 'tempK', label: 'Base $T_0$', min: 40, max: 1500, step: 10, default: 300, unit: 'K' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
 
-    init(container, state, redraw) {
+    init: function (container, state) {
       state = state || {};
       if (!state._particlesP) seedGasP432(state);
       if (!state._particlesV) seedGasV432(state);
+      state._phi = 0;
     },
 
-    draw(ctx, width, height, state, dt) {
+    draw: function (ctx, width, height, state, dt) {
+      var size = canvasSize(width, height);
+      width = size.w;
+      height = size.h;
       state = state || {};
-      var gasType = state.gasType || 'diatomic_rt';
-      var heatInput = Number(state.heatInput != null ? state.heatInput : 500);
-      var T0 = Number(state.tempK != null ? state.tempK : 300);
-      var rightView = state.rightView || 'energy_bars';
-      var animate = state.animate !== false;
       var dtEff = simDt(state, dt);
-      if (animate) state.time = (state.time || 0) + dtEff;
-      var tAnim = state.time || 0;
-
-      ctx.fillStyle = C.bg;
-      ctx.fillRect(0, 0, width, height);
+      state._phi = (state._phi || 0) + dtEff * 0.38;
+      var heatFrac = 0.5 - 0.5 * Math.cos(state._phi);
+      var tAnim = state._phi;
 
       if (!state._particlesP) seedGasP432(state);
       if (!state._particlesV) seedGasV432(state);
 
+      var gasType = state.gasType || 'diatomic_rt';
+      var heatInput = numParam(state, 'heatInput', 500) * heatFrac;
+      var T0 = numParam(state, 'tempK', 300);
       var R = 8.314;
       var n = 1.0;
       var isSolid = gasType === 'solid_dulong';
@@ -1734,470 +1248,132 @@ Because energy is siphoned into mechanical expansion work, a larger heat input i
       var Cp_m = (cvR + gapR) * R;
       var Cv_m = cvR * R;
       var gamma = Cp_m / Cv_m;
-      var gasLabel = 'Diatomic (room temp)';
-      if (gasType === 'monatomic') gasLabel = 'Monatomic (He, Ar)';
-      else if (gasType === 'diatomic_high') gasLabel = 'Diatomic (vibrations on)';
-      else if (isSolid) gasLabel = 'Solid (Debye / Dulong-Petit)';
-
       var CP = n * Cp_m;
       var CV = n * Cv_m;
-      var DeltaT_P = heatInput / CP;
+      var DeltaT_P = heatInput / Math.max(CP, 1e-6);
+      var DeltaT_V = heatInput / Math.max(CV, 1e-6);
       var T_P = T0 + DeltaT_P;
+      var T_V = T0 + DeltaT_V;
       var W_P = isSolid ? (heatInput * gapR / (cvR + gapR)) : (n * R * DeltaT_P);
       var DeltaU_P = heatInput - W_P;
-      var vRatio_P = 1 + (DeltaT_P / Math.max(50, T0)) * (isSolid ? 0.12 : 0.75);
-      var DeltaT_V = heatInput / CV;
-      var T_V = T0 + DeltaT_V;
-      var pRatio_V = 1 + (DeltaT_V / Math.max(50, T0)) * 0.75;
+      var vRatio_P = 1 + (DeltaT_P / Math.max(40, T0)) * (isSolid ? 0.12 : 0.7);
+      var gasLabel = 'diatomic';
+      if (gasType === 'monatomic') gasLabel = 'monatomic';
+      else if (gasType === 'diatomic_high') gasLabel = 'diatomic + vib';
+      else if (isSolid) gasLabel = 'solid';
 
-      legend('Heat capacity $C_P = (\\partial Q/\\partial T)_P$', [
+      legend('Heat capacity $C_P=(\\partial Q/\\partial T)_P$', [
         { label: 'Model', value: gasLabel },
-        { label: '$C_P$', value: '$' + (Cp_m / R).toFixed(2) + ' R = ' + Cp_m.toFixed(1) + '\\text{ J/(mol}\\cdot\\text{K)}$' },
-        { label: '$C_V$', value: '$' + (Cv_m / R).toFixed(2) + ' R = ' + Cv_m.toFixed(1) + '\\text{ J/(mol}\\cdot\\text{K)}$' },
-        { label: '$C_P - C_V$', value: '$' + gapR.toFixed(2) + ' R = ' + (Cp_m - Cv_m).toFixed(1) + '\\text{ J/(mol}\\cdot\\text{K)}$' },
-        { label: '$\\gamma = C_P/C_V$', value: '$' + gamma.toFixed(3) + '$' }
+        { label: '$C_P$', value: '$' + (Cp_m / R).toFixed(2) + '\\,R$' },
+        { label: '$C_V$', value: '$' + (Cv_m / R).toFixed(2) + '\\,R$' },
+        { label: '$\\gamma$', value: '$' + gamma.toFixed(3) + '$' },
+        { label: '$\\Delta T_P$', value: '$+' + DeltaT_P.toFixed(1) + '\\,\\mathrm{K}$' },
+        { label: '$\\Delta T_V$', value: '$+' + DeltaT_V.toFixed(1) + '\\,\\mathrm{K}$' },
+        { label: '$W_P$', value: '$' + W_P.toFixed(0) + '\\,\\mathrm{J}$' },
+        { label: '$\\Delta U_P$', value: '$' + DeltaU_P.toFixed(0) + '\\,\\mathrm{J}$' }
       ]);
-      var gapRow = isSolid
-        ? { label: '$C_P - C_V = VT\\beta^2/\\kappa_T$', value: '$' + (n * (Cp_m - Cv_m)).toFixed(2) + '\\text{ J/K}$' }
-        : { label: "Mayer $C_P - C_V$", value: '$n R = ' + (n * R).toFixed(2) + '\\text{ J/K}$' };
-      legend('Isobaric vs isochoric ($\\Delta Q = ' + heatInput.toFixed(0) + '\\text{ J}$)', [
-        { label: 'Isobaric $\\Delta T_P$', value: '$+' + DeltaT_P.toFixed(1) + '\\text{ K} \\quad (T_P = ' + T_P.toFixed(1) + '\\text{ K})$' },
-        { label: 'Isochoric $\\Delta T_V$', value: '$+' + DeltaT_V.toFixed(1) + '\\text{ K} \\quad (T_V = ' + T_V.toFixed(1) + '\\text{ K})$' },
-        { label: 'Isobaric work $W_P$', value: '$+' + W_P.toFixed(1) + '\\text{ J}$' },
-        { label: 'Isobaric $\\Delta U_P$', value: '$+' + DeltaU_P.toFixed(1) + '\\text{ J}$' },
-        gapRow
-      ]);
-      if (rightView === 'cp_curve') {
-        legend('Heat-capacity curves', [
-          { label: 'Coral', value: '$C_P(T)$' },
-          { label: 'Teal', value: '$C_V(T)$' },
-          { label: 'Gold band', value: isSolid ? '$C_P - C_V \\ll R$' : '$C_P - C_V = R$' }
-        ]);
+
+      creamFill(ctx, width, height);
+
+      var pad = 16;
+      var gap = 18;
+      var colW = (width - pad * 2 - gap) / 2;
+      var colH = height - pad * 2;
+      var leftX = pad;
+      var rightX = pad + colW + gap;
+      var top = pad;
+
+      function chamber(x, locked) {
+        ctx.fillStyle = C.panel;
+        ctx.strokeStyle = C.line;
+        ctx.lineWidth = 1;
+        panelPath(ctx, x, top, colW, colH, 8);
+        ctx.fill();
+        ctx.stroke();
+        haloLabel(ctx, locked ? 'V locked' : 'P free', x + colW / 2, top + 14, {
+          color: locked ? C.teal : C.coral
+        });
       }
+      chamber(leftX, false);
+      chamber(rightX, true);
 
-      var pad = 12;
-      var leftW = Math.floor(width * 0.54);
-      var leftH = height - pad * 2;
-      var rightX = pad + leftW + 10;
-      var rightW = width - rightX - pad;
-
-      ctx.fillStyle = C.panel;
-      ctx.strokeStyle = C.line;
-      ctx.lineWidth = 1;
-      panelPath(ctx, pad, pad, leftW, leftH, 8);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = C.ink;
-      ctx.font = '600 12px Inter, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText(isSolid ? 'Lattice: free expansion vs locked volume' : 'Constant pressure vs constant volume', pad + 10, pad + 8);
-
-      var subW = Math.floor((leftW - 32) / 2);
-      var cylH = Math.min(136, Math.floor(leftH * 0.48));
-      var cylY = pad + 38;
-      var c1X = pad + 10;
-      var c2X = pad + 10 + subW + 12;
-
-      ctx.fillStyle = C.coral;
-      ctx.font = '600 11px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(isSolid ? 'Isobaric (expands slightly)' : 'Isobaric (free piston)', c1X + subW / 2, cylY - 14);
-      ctx.fillStyle = C.teal;
-      ctx.fillText(isSolid ? 'Isochoric (clamped lattice)' : 'Isochoric (locked volume)', c2X + subW / 2, cylY - 14);
+      var cylW = Math.min(colW - 28, 160);
+      var cylH = Math.min(colH - 70, 220);
+      var cylY = top + 36;
+      var c1X = leftX + (colW - cylW) / 2;
+      var c2X = rightX + (colW - cylW) / 2;
 
       if (isSolid) {
-        var expP = clamp(vRatio_P, 1.0, 1.18);
-        drawCrystalBlock(ctx, c1X, cylY, subW, cylH, T_P, expP, tAnim, false);
-        drawCrystalBlock(ctx, c2X, cylY, subW, cylH, T_V, 1.0, tAnim, true);
+        var expP = clamp(vRatio_P, 1.0, 1.16);
+        drawCrystalBlock(ctx, c1X, cylY, cylW, cylH, T_P, expP, tAnim, false);
+        drawCrystalBlock(ctx, c2X, cylY, cylW, cylH, T_V, 1.0, tAnim, true);
         ctx.fillStyle = C.deep;
-        ctx.fillRect(c2X - 3, cylY + 8, 8, 6);
-        ctx.fillRect(c2X + subW - 5, cylY + 8, 8, 6);
-        ctx.fillRect(c2X - 3, cylY + cylH - 14, 8, 6);
-        ctx.fillRect(c2X + subW - 5, cylY + cylH - 14, 8, 6);
+        ctx.fillRect(c2X - 4, cylY + 10, 8, 7);
+        ctx.fillRect(c2X + cylW - 4, cylY + 10, 8, 7);
+        ctx.fillRect(c2X - 4, cylY + cylH - 16, 8, 7);
+        ctx.fillRect(c2X + cylW - 4, cylY + cylH - 16, 8, 7);
       } else {
-        ctx.fillStyle = C.ivory;
-        ctx.strokeStyle = C.stone;
-        ctx.lineWidth = 1.6;
-        ctx.fillRect(c1X, cylY, subW, cylH);
-        ctx.strokeRect(c1X, cylY, subW, cylH);
-
-        var baseGasH = cylH * 0.52;
-        var expandH = baseGasH * clamp(vRatio_P, 1.0, 1.65);
+        var baseGasH = cylH * 0.48;
+        var expandH = baseGasH * clamp(vRatio_P, 1.0, 1.7);
         var pistonY1 = cylY + cylH - expandH;
         var gasH1 = cylY + cylH - pistonY1;
-
-        var normTP = clamp((T_P - 100) / 700, 0, 1);
-        ctx.fillStyle = 'rgba(' +
-          Math.floor(204 * normTP + 93 * (1 - normTP)) + ', ' +
-          Math.floor(120 * normTP + 184 * (1 - normTP)) + ', ' +
-          Math.floor(92 * normTP + 166 * (1 - normTP)) + ', 0.35)';
-        ctx.fillRect(c1X + 2, pistonY1, subW - 4, gasH1 - 2);
-
-        if (state._particlesP && gasH1 > 6) {
-          var spdP = Math.sqrt(Math.max(0.2, T_P / 300)) * (animate ? 1.4 : 0);
-          ctx.fillStyle = normTP > 0.5 ? C.gold : C.coral;
-          state._particlesP.forEach(function(p) {
-            p.x += p.vx * spdP * 0.75 * dtEff;
-            p.y += p.vy * spdP * 0.75 * dtEff;
-            if (p.x < 0) { p.x = 0; p.vx *= -1; }
-            if (p.x > 1) { p.x = 1; p.vx *= -1; }
-            if (p.y < 0) { p.y = 0; p.vy *= -1; }
-            if (p.y > 1) { p.y = 1; p.vy *= -1; }
-            var px = c1X + 4 + p.x * (subW - 8);
-            var py = pistonY1 + 3 + p.y * (gasH1 - 6);
-            ctx.beginPath();
-            ctx.arc(px, py, 2.2, 0, Math.PI * 2);
-            ctx.fill();
-          });
-        }
-
-        ctx.fillStyle = C.stone;
-        ctx.fillRect(c1X + 2, pistonY1 - 9, subW - 4, 9);
-        ctx.fillStyle = C.muted;
-        var shaftH1 = Math.max(4, pistonY1 - 9 - (cylY + 4));
-        ctx.fillRect(c1X + subW / 2 - 3, cylY + 4, 6, shaftH1);
-        ctx.fillStyle = C.deep;
-        ctx.fillRect(c1X + subW / 2 - 18, cylY + 2, 36, 8);
-
-        if (W_P > 5) {
-          ctx.strokeStyle = C.coral;
-          ctx.fillStyle = C.coral;
-          ctx.lineWidth = 2;
-          var ax1 = c1X + subW - 10;
-          var ay1Bot = pistonY1 - 12;
-          var ay1Top = Math.max(cylY + 12, ay1Bot - 16);
-          ctx.beginPath();
-          ctx.moveTo(ax1, ay1Bot);
-          ctx.lineTo(ax1, ay1Top);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(ax1, ay1Top);
-          ctx.lineTo(ax1 - 3, ay1Top + 5);
-          ctx.lineTo(ax1 + 3, ay1Top + 5);
-          ctx.fill();
-        }
+        var pistonY2 = cylY + cylH - baseGasH;
+        var gasH2 = baseGasH;
 
         ctx.fillStyle = C.ivory;
         ctx.strokeStyle = C.stone;
         ctx.lineWidth = 1.6;
-        ctx.fillRect(c2X, cylY, subW, cylH);
-        ctx.strokeRect(c2X, cylY, subW, cylH);
+        ctx.fillRect(c1X, cylY, cylW, cylH);
+        ctx.strokeRect(c1X, cylY, cylW, cylH);
+        ctx.fillRect(c2X, cylY, cylW, cylH);
+        ctx.strokeRect(c2X, cylY, cylW, cylH);
 
-        var pistonY2 = cylY + cylH - baseGasH;
-        var gasH2 = cylH - (pistonY2 - cylY);
-        var normTV = clamp((T_V - 100) / 700, 0, 1);
-        ctx.fillStyle = 'rgba(' +
-          Math.floor(204 * normTV + 93 * (1 - normTV)) + ', ' +
-          Math.floor(120 * normTV + 184 * (1 - normTV)) + ', ' +
-          Math.floor(92 * normTV + 166 * (1 - normTV)) + ', 0.45)';
-        ctx.fillRect(c2X + 2, pistonY2, subW - 4, gasH2 - 2);
+        ctx.fillStyle = tempFill(clamp((T_P - T0) / 80, 0, 1) * 0.7 + 0.25);
+        ctx.fillRect(c1X + 2, pistonY1, cylW - 4, gasH1 - 2);
+        ctx.fillStyle = tempFill(clamp((T_V - T0) / 80, 0, 1) * 0.7 + 0.25);
+        ctx.fillRect(c2X + 2, pistonY2, cylW - 4, gasH2 - 2);
 
-        if (state._particlesV && gasH2 > 6) {
-          var spdV = Math.sqrt(Math.max(0.2, T_V / 300)) * (animate ? 1.4 : 0);
-          ctx.fillStyle = normTV > 0.5 ? C.gold : C.coral;
-          state._particlesV.forEach(function(p) {
-            p.x += p.vx * spdV * 0.75 * dtEff;
-            p.y += p.vy * spdV * 0.75 * dtEff;
-            if (p.x < 0) { p.x = 0; p.vx *= -1; }
-            if (p.x > 1) { p.x = 1; p.vx *= -1; }
-            if (p.y < 0) { p.y = 0; p.vy *= -1; }
-            if (p.y > 1) { p.y = 1; p.vy *= -1; }
-            var px = c2X + 4 + p.x * (subW - 8);
-            var py = pistonY2 + 3 + p.y * (gasH2 - 6);
-            ctx.beginPath();
-            ctx.arc(px, py, 2.2, 0, Math.PI * 2);
-            ctx.fill();
-          });
-        }
+        var spdP = Math.sqrt(Math.max(0.2, T_P / 300)) * 1.35;
+        var spdV = Math.sqrt(Math.max(0.2, T_V / 300)) * 1.35;
+        bounceParticles(state._particlesP, dtEff, spdP);
+        bounceParticles(state._particlesV, dtEff, spdV);
+        drawParticles(ctx, state._particlesP, c1X + 6, pistonY1 + 4, cylW - 12, Math.max(8, gasH1 - 8), T_P > T0 + 20 ? C.gold : C.coral, 2.3);
+        drawParticles(ctx, state._particlesV, c2X + 6, pistonY2 + 4, cylW - 12, Math.max(8, gasH2 - 8), T_V > T0 + 20 ? C.gold : C.coral, 2.3);
 
         ctx.fillStyle = C.stone;
-        ctx.fillRect(c2X + 2, pistonY2 - 9, subW - 4, 9);
+        ctx.fillRect(c1X + 2, pistonY1 - 9, cylW - 4, 9);
+        ctx.fillRect(c2X + 2, pistonY2 - 9, cylW - 4, 9);
+        ctx.fillStyle = C.muted;
+        var shaftH = Math.max(4, pistonY1 - 9 - (cylY + 6));
+        ctx.fillRect(c1X + cylW / 2 - 3, cylY + 6, 6, shaftH);
         ctx.fillStyle = C.deep;
-        ctx.fillRect(c2X - 3, pistonY2 - 12, 8, 6);
-        ctx.fillRect(c2X + subW - 5, pistonY2 - 12, 8, 6);
+        ctx.fillRect(c1X + cylW / 2 - 16, cylY + 4, 32, 8);
+        ctx.fillRect(c2X - 4, pistonY2 - 12, 8, 7);
+        ctx.fillRect(c2X + cylW - 4, pistonY2 - 12, 8, 7);
 
-        var gaugeX = c2X + subW - 16;
-        var gaugeY = cylY + cylH - 24;
-        ctx.beginPath();
-        ctx.arc(gaugeX, gaugeY, 9, 0, Math.PI * 2);
-        ctx.fillStyle = C.ivory;
-        ctx.fill();
-        ctx.strokeStyle = C.stone;
-        ctx.stroke();
-        var needleAngle = -Math.PI * 0.7 + clamp(pRatio_V - 1, 0, 1) * Math.PI * 0.8;
-        ctx.beginPath();
-        ctx.moveTo(gaugeX, gaugeY);
-        ctx.lineTo(gaugeX + 7 * Math.cos(needleAngle), gaugeY + 7 * Math.sin(needleAngle));
-        ctx.strokeStyle = C.rose;
-        ctx.lineWidth = 1.4;
-        ctx.stroke();
+        if (W_P > 8) {
+          arrow(ctx, c1X + cylW - 12, pistonY1 - 6, c1X + cylW - 12, Math.max(cylY + 16, pistonY1 - 22), C.coral, 2);
+        }
       }
 
-      var coilY1 = cylY + cylH + 2;
-      ctx.fillStyle = 'rgba(204, 120, 92, 0.35)';
-      ctx.fillRect(c1X, coilY1, subW, 14);
-      ctx.fillStyle = C.coral;
-      ctx.font = '600 9px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('heater', c1X + subW / 2, coilY1 + 7);
-
-      ctx.fillStyle = 'rgba(93, 184, 166, 0.35)';
-      ctx.fillRect(c2X, coilY1, subW, 14);
-      ctx.fillStyle = C.teal;
-      ctx.fillText('heater', c2X + subW / 2, coilY1 + 7);
-
-      var bannerY = pad + leftH - 28;
-      ctx.fillStyle = C.ivory;
-      ctx.strokeStyle = C.line;
-      ctx.lineWidth = 1;
-      panelPath(ctx, pad + 10, bannerY, leftW - 20, 22, 4);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = C.deep;
-      ctx.font = '600 10px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('Equal heat: locked chamber ends hotter', pad + leftW / 2, bannerY + 11);
-
-      ctx.fillStyle = C.panel;
-      ctx.strokeStyle = C.line;
-      ctx.lineWidth = 1;
-      panelPath(ctx, rightX, pad, rightW, leftH, 8);
-      ctx.fill();
-      ctx.stroke();
-
-      if (rightView === 'energy_bars') {
-        ctx.fillStyle = C.ink;
-        ctx.font = '600 12px Inter, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.fillText('Energy partitioning', rightX + 10, pad + 8);
-
-        ctx.fillStyle = C.muted;
-        ctx.font = '10px Inter, sans-serif';
-        ctx.fillText('Heat into internal energy vs work', rightX + 10, pad + 24);
-
-        var barPanelY = pad + 44;
-        var barPanelW = rightW - 20;
-        var qP_w = Math.floor(barPanelW * 0.95);
-        var barH = 12;
-
-        ctx.fillStyle = C.coral;
-        ctx.font = '600 11px Inter, sans-serif';
-        ctx.fillText('Isobaric', rightX + 10, barPanelY);
-
-        var by1 = barPanelY + 16;
-        ctx.fillStyle = C.muted;
-        ctx.font = '9px Inter, sans-serif';
-        ctx.fillText('Heat in', rightX + 10, by1);
-        ctx.fillStyle = C.gold;
-        ctx.fillRect(rightX + 10, by1 + 12, qP_w, barH);
-
-        var by2 = by1 + 30;
-        var fracU_P = clamp(DeltaU_P / heatInput, 0, 1);
-        var wU_P = Math.floor(qP_w * fracU_P);
-        var wW_P = qP_w - wU_P;
-
-        ctx.fillStyle = C.muted;
-        ctx.fillText('Thermal', rightX + 10, by2);
-        ctx.textAlign = 'right';
-        ctx.fillText('Work', rightX + 10 + qP_w, by2);
-        ctx.textAlign = 'left';
-
-        ctx.fillStyle = C.teal;
-        ctx.fillRect(rightX + 10, by2 + 12, wU_P, barH);
-        ctx.fillStyle = C.coral;
-        ctx.fillRect(rightX + 10 + wU_P, by2 + 12, wW_P, barH);
-
-        var barPanel2Y = by2 + 38;
-        ctx.fillStyle = C.teal;
-        ctx.font = '600 11px Inter, sans-serif';
-        ctx.fillText('Isochoric', rightX + 10, barPanel2Y);
-
-        var by3 = barPanel2Y + 16;
-        ctx.fillStyle = C.muted;
-        ctx.font = '9px Inter, sans-serif';
-        ctx.fillText('Heat in', rightX + 10, by3);
-        ctx.fillStyle = C.gold;
-        ctx.fillRect(rightX + 10, by3 + 12, qP_w, barH);
-
-        var by4 = by3 + 30;
-        ctx.fillStyle = C.muted;
-        ctx.fillText('Thermal (no expansion work)', rightX + 10, by4);
-        ctx.fillStyle = C.teal;
-        ctx.fillRect(rightX + 10, by4 + 12, qP_w, barH);
-      } else {
-        ctx.fillStyle = C.ink;
-        ctx.font = '600 12px Inter, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.fillText('Heat capacity vs temperature', rightX + 10, pad + 8);
-
-        ctx.fillStyle = C.muted;
-        ctx.font = '10px Inter, sans-serif';
-        ctx.fillText(isSolid ? 'Debye rise to Dulong-Petit' : (gasType === 'monatomic' ? 'Equipartition (translation only)' : 'Degree-of-freedom freeze-out'), rightX + 10, pad + 24);
-
-        var plotX = rightX + 34;
-        var plotY = pad + 44;
-        var plotW = rightW - 48;
-        var plotH = leftH - 74;
-
-        ctx.fillStyle = C.ivory;
-        ctx.fillRect(plotX, plotY, plotW, plotH);
-        ctx.strokeStyle = C.line;
-        ctx.strokeRect(plotX, plotY, plotW, plotH);
-
-        var minLogT = 1.0;
-        var maxLogT = 3.3;
-        var maxC = isSolid ? 3.6 : (gasType === 'monatomic' ? 3.2 : 5.5);
-
-        function mapT_X(t) {
-          var logVal = Math.log10(Math.max(10, t));
-          return plotX + ((logVal - minLogT) / (maxLogT - minLogT)) * plotW;
-        }
-        function mapC_Y(cR) {
-          return plotY + plotH - (cR / maxC) * plotH;
-        }
-
-        ctx.strokeStyle = 'rgba(230, 223, 216, 0.7)';
-        ctx.lineWidth = 1;
-        ctx.fillStyle = C.muted;
-        ctx.font = '9px "JetBrains Mono", monospace';
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'middle';
-
-        var gridC = isSolid ? [1.0, 2.0, 3.0] : (gasType === 'monatomic' ? [1.5, 2.5] : [1.5, 2.5, 3.5, 4.5]);
-        gridC.forEach(function(val) {
-          var gy = mapC_Y(val);
-          ctx.beginPath();
-          ctx.moveTo(plotX, gy);
-          ctx.lineTo(plotX + plotW, gy);
-          ctx.stroke();
-          ctx.fillText(val.toFixed(1), plotX - 4, gy);
-        });
-
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        [50, 300, 1000].forEach(function(tVal) {
-          var gx = mapT_X(tVal);
-          ctx.beginPath();
-          ctx.moveTo(gx, plotY);
-          ctx.lineTo(gx, plotY + plotH);
-          ctx.stroke();
-          ctx.fillText(tVal >= 1000 ? (tVal / 1000) + 'k' : String(tVal), gx, plotY + plotH + 4);
-        });
-
-        var numCurvePts = 60;
-        ctx.beginPath();
-        var i, logT, t, cvVal, cpVal, x, y;
-        for (i = 0; i <= numCurvePts; i++) {
-          logT = minLogT + (maxLogT - minLogT) * (i / numCurvePts);
-          t = Math.pow(10, logT);
-          cvVal = cvOverR(gasType, t);
-          cpVal = cvVal + mayerGapOverR(gasType, cvVal);
-          x = plotX + (i / numCurvePts) * plotW;
-          y = mapC_Y(cpVal);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        for (i = numCurvePts; i >= 0; i--) {
-          logT = minLogT + (maxLogT - minLogT) * (i / numCurvePts);
-          t = Math.pow(10, logT);
-          cvVal = cvOverR(gasType, t);
-          x = plotX + (i / numCurvePts) * plotW;
-          y = mapC_Y(cvVal);
-          ctx.lineTo(x, y);
-        }
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(212, 160, 23, 0.16)';
-        ctx.fill();
-
-        ctx.strokeStyle = C.coral;
-        ctx.lineWidth = 2.2;
-        ctx.beginPath();
-        for (i = 0; i <= numCurvePts; i++) {
-          logT = minLogT + (maxLogT - minLogT) * (i / numCurvePts);
-          t = Math.pow(10, logT);
-          cvVal = cvOverR(gasType, t);
-          cpVal = cvVal + mayerGapOverR(gasType, cvVal);
-          x = plotX + (i / numCurvePts) * plotW;
-          y = mapC_Y(cpVal);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-
-        ctx.strokeStyle = C.teal;
-        ctx.lineWidth = 2.2;
-        ctx.beginPath();
-        for (i = 0; i <= numCurvePts; i++) {
-          logT = minLogT + (maxLogT - minLogT) * (i / numCurvePts);
-          t = Math.pow(10, logT);
-          cvVal = cvOverR(gasType, t);
-          x = plotX + (i / numCurvePts) * plotW;
-          y = mapC_Y(cvVal);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-
-        ctx.fillStyle = C.stone;
-        ctx.font = '8px Inter, sans-serif';
-        ctx.textAlign = 'center';
-        if (gasType === 'monatomic') {
-          ctx.fillText('translation only', mapT_X(300), plotY + 10);
-        } else if (isSolid) {
-          ctx.fillText('low T', mapT_X(50), plotY + 10);
-          ctx.fillText('Dulong-Petit', mapT_X(800), plotY + 10);
-        } else if (gasType === 'diatomic_high') {
-          ctx.fillText('trans', mapT_X(25), plotY + 10);
-          ctx.fillText('rotation', mapT_X(300), plotY + 10);
-          ctx.fillText('vibration', mapT_X(1400), plotY + 10);
-        } else {
-          ctx.fillText('trans', mapT_X(25), plotY + 10);
-          ctx.fillText('rotation', mapT_X(300), plotY + 10);
-        }
-
-        var curCvR = cvOverR(gasType, T0);
-        var curCpR = curCvR + mayerGapOverR(gasType, curCvR);
-        var opX = mapT_X(T0);
-        var opYp = mapC_Y(curCpR);
-        var opYv = mapC_Y(curCvR);
-
-        ctx.strokeStyle = C.stone;
-        ctx.setLineDash([2, 3]);
-        ctx.beginPath();
-        ctx.moveTo(opX, plotY);
-        ctx.lineTo(opX, plotY + plotH);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        ctx.fillStyle = C.coral;
-        ctx.strokeStyle = C.bg;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(opX, opYp, 4.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = C.teal;
-        ctx.beginPath();
-        ctx.arc(opX, opYv, 4.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      }
+      var coilY = cylY + cylH + 8;
+      var glow = 0.18 + 0.45 * heatFrac;
+      ctx.fillStyle = 'rgba(204, 120, 92, ' + glow + ')';
+      ctx.fillRect(c1X, coilY, cylW, 10);
+      ctx.fillRect(c2X, coilY, cylW, 10);
     },
+
     challenge: {
-      question: "A cylinder contains $2.0\\text{ moles}$ of an ideal diatomic gas at room temperature ($C_V = \\frac{5}{2}R, \\; C_P = \\frac{7}{2}R$). An electric heating element supplies $\\Delta Q = 700\\text{ J}$ of heat to the gas under constant atmospheric pressure ($P = 1.0\\text{ atm}$). How much mechanical work $W$ is done by the gas on the surroundings, and what is the increase in internal energy $\\Delta U$?",
+      question: "A cylinder holds $2.0$ moles of ideal diatomic gas at room temperature ($C_V=\\tfrac{5}{2}R$, $C_P=\\tfrac{7}{2}R$). A heater delivers $\\Delta Q=700\\,\\mathrm{J}$ at constant pressure. Find $W$ and $\\Delta U$.",
       options: [
-        "$W = 200\\text{ J}, \\quad \\Delta U = 500\\text{ J}$",
-        "$W = 0\\text{ J}, \\quad \\Delta U = 700\\text{ J}$",
-        "$W = 280\\text{ J}, \\quad \\Delta U = 420\\text{ J}$",
-        "$W = 500\\text{ J}, \\quad \\Delta U = 200\\text{ J}$",
-        "$W = 700\\text{ J}, \\quad \\Delta U = 0\\text{ J}$"
+        "$W = 200\\,\\mathrm{J},\\quad \\Delta U = 500\\,\\mathrm{J}$",
+        "$W = 0\\,\\mathrm{J},\\quad \\Delta U = 700\\,\\mathrm{J}$",
+        "$W = 280\\,\\mathrm{J},\\quad \\Delta U = 420\\,\\mathrm{J}$",
+        "$W = 500\\,\\mathrm{J},\\quad \\Delta U = 200\\,\\mathrm{J}$",
+        "$W = 700\\,\\mathrm{J},\\quad \\Delta U = 0\\,\\mathrm{J}$"
       ],
       correct: 0,
-      explanation: "For an isobaric process: Heat added is $Q = n C_P \\Delta T = 700\\text{ J}$. Work done by expanding gas is $W = P \\Delta V = n R \\Delta T = \\left(\\frac{R}{C_P}\\right) Q = \\left(\\frac{R}{\\frac{7}{2} R}\\right) \\times 700\\text{ J} = \\frac{2}{7} \\times 700\\text{ J} = 200\\text{ J}$. Increase in internal energy is $\\Delta U = n C_V \\Delta T = \\left(\\frac{C_V}{C_P}\\right) Q = \\left(\\frac{\\frac{5}{2} R}{\\frac{7}{2} R}\\right) \\times 700\\text{ J} = \\frac{5}{7} \\times 700\\text{ J} = 500\\text{ J}$. Note that $\\Delta U + W = 500\\text{ J} + 200\\text{ J} = 700\\text{ J} = Q$, exactly conserving energy under the First Law."
+      explanation: "Isobaric: $W = nR\\Delta T = (R/C_P)Q = (2/7)\\times 700\\,\\mathrm{J} = 200\\,\\mathrm{J}$ and $\\Delta U = (C_V/C_P)Q = (5/7)\\times 700\\,\\mathrm{J} = 500\\,\\mathrm{J}$."
     }
   };
 

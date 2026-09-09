@@ -17,7 +17,3 @@
 ## 2026-08-19
 ### Lessons
 - With-document: the disk brief must not clone the clipboard prompt. Prompt = mental model (why, pointers, success, facts, principles). Document = residue only (already patched, leftover risk, exact extras, where FINDINGS go). Do not repeat Why / Success / Principles / Non-document facts in the file.
-
-## 2026-08-24
-### Lessons
-- When the follow-up AI’s job is to **coordinate** (orchestrate-v3 parent, especially in goal mode), put a **## Role** block first in the clipboard prompt. Goal mode’s default is implement-in-parent; without an explicit “orchestrator, not implementer” identity, the agent skips dispatch and does the work itself. State that a prior session was stopped for this. Keep Role as identity (who this agent is), not a procedure. Residue may name parent vs child writers; it must not clone the Role paragraph.

@@ -1,6 +1,8 @@
 # Personal Context
 I have little background in computer science. When a decision is required of me, please explain the options clearly and in plain terms so that I can respond meaningfully.
 
+`$HOME` is `/Users/leyi`. `/Users/Reid Hu` is the project parent, not home.
+
 # Repository Structure & Placement
 
 - `index.html`: SPA entry shell (hash-routed, offline KaTeX/marked).

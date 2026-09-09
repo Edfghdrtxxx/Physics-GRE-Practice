@@ -776,6 +776,28 @@ function dispatchKeydown(env, opts) {
   return e;
 }
 
+function fireChange(el) {
+  var ev = {
+    type: 'change', target: el, currentTarget: el,
+    preventDefault: function () {}, stopPropagation: function () {}
+  };
+  ((el.listeners && el.listeners.change) || []).slice().forEach(function (fn) { fn(ev); });
+}
+
+function fireInput(el) {
+  var ev = {
+    type: 'input', target: el, currentTarget: el,
+    preventDefault: function () {}, stopPropagation: function () {}
+  };
+  ((el.listeners && el.listeners.input) || []).slice().forEach(function (fn) { fn(ev); });
+}
+
+function boxesChecked(list) {
+  var on = 0;
+  for (var i = 0; i < list.length; i++) if (list[i].checked) on++;
+  return on;
+}
+
 function ensureView(env, html) {
   var view = env.document.getElementById('view');
   if (!view) {
@@ -1179,6 +1201,10 @@ function runAsync() {
        and checkpoint overlay (focused Finish must not Keep going). */
     console.log('\nformulas: type undo + overlay (shipped document key listener)');
     ix.location.hash = '#/formulas';
+    /* Cloze earlier in this file calls reviewCard → gradeCard on shuffled cards.
+       Clear the log so Type undo asserts the row it just wrote, not a leftover
+       same-id review from that prior game. */
+    PGRE.store.state.cardReviews = [];
     ensureView(ix, PGRE.views.formulas.render());
     PGRE.views.formulas.mount();
     return Promise.resolve()
@@ -1205,14 +1231,13 @@ function runAsync() {
     var reviews = PGRE.store.state.cardReviews;
     assert(reviews.length > 0, 'gradeCard wrote a cardReviews entry (click path about to undo it)');
     var reviewsBefore = reviews.length;
-    var clickUndoId = reviews[reviews.length - 1].id;
+    var clickRow = reviews[reviews.length - 1];
     undoBtn.click();
     assert(!ix.document.getElementById('flash-undo'), 'click on #flash-undo calls undoLast (link removed)');
     assert(PGRE.store.state.cardReviews.length === reviewsBefore - 1,
       'click undoLast popped the same cardReviews entry gradeCard wrote');
-    assert(PGRE.store.state.cardReviews.every(function (r) { return r.id !== clickUndoId; }) ||
-      PGRE.store.state.cardReviews[PGRE.store.state.cardReviews.length - 1].id !== clickUndoId,
-      'click undoLast restored SRS (trailing review for that card is gone)');
+    assert(PGRE.store.state.cardReviews.indexOf(clickRow) === -1,
+      'click undoLast restored SRS (the review object gradeCard just wrote is gone)');
 
     var inp2 = ix.document.getElementById('flash-input');
     if (inp2) { inp2.value = 'stillnope'; inp2.focus(); }
@@ -1224,7 +1249,7 @@ function runAsync() {
     var undo2 = ix.document.getElementById('flash-undo');
     assert(!!undo2, 'second grade restored an #flash-undo for the keyboard path');
     var reviewsBefore2 = PGRE.store.state.cardReviews.length;
-    var keyUndoId = PGRE.store.state.cardReviews[reviewsBefore2 - 1].id;
+    var keyRow = PGRE.store.state.cardReviews[reviewsBefore2 - 1];
     var inp3 = ix.document.getElementById('flash-input');
     if (inp3) inp3.focus();
     dispatchKeydown(ix, {
@@ -1236,9 +1261,7 @@ function runAsync() {
       'Ctrl+Z while INPUT focused reaches shipped undoLast (same as click)');
     assert(PGRE.store.state.cardReviews.length === reviewsBefore2 - 1,
       'keyboard undoLast popped the same cardReviews entry the click path pops');
-    assert(keyUndoId && (PGRE.store.state.cardReviews.length === 0 ||
-      PGRE.store.state.cardReviews[PGRE.store.state.cardReviews.length - 1].id !== keyUndoId ||
-      reviewsBefore2 === 1),
+    assert(keyRow && PGRE.store.state.cardReviews.indexOf(keyRow) === -1,
       'keyboard undoLast restored the same SRS state the click path restored');
 
     /* Overlay: drive study to a checkpoint via Easy × 10 with cards remaining */
@@ -1310,6 +1333,8 @@ function runAsync() {
       assert(peekViz.textContent === 'Open Simulation', 'peek CTA uses the Lab label');
       assert(peekViz.getAttribute('aria-haspopup') === 'dialog',
         'Open Simulation declares it opens a dialog');
+      assert(!!peekViz.closest('.viz-open-strip'), 'peek Open Simulation uses the designed strip');
+      assert(!peekViz.closest('.session-peek-bar'), 'peek Open Simulation is not in the resume-bar');
       openedViz = [];
       peekViz.click();
       assert(openedViz.length === 1 && openedViz[0] === peekViz.getAttribute('data-viz-open'),
@@ -1319,6 +1344,214 @@ function runAsync() {
       assert(closedViz > closedBeforeResume, 'Resume study closes an open visualizer modal');
       assert(!vz.document.getElementById('peek-resume'),
         'Resume returns to the live study card');
+    });
+  }).then(function () {
+    console.log('\nformulas: study flip Open Simulation, no inline canvas');
+    var st = loadShipped(true, { views: true });
+    var SP = st.sandbox.PGRE;
+    var openedStudy = [];
+    var si;
+    for (si = 0; si < 12; si++) {
+      SP.visualizers['f' + si] = { draw: function () {} };
+    }
+    SP.openVisualizerModal = function (id) { openedStudy.push(id); };
+    st.location.hash = '#/formulas';
+    ensureView(st, SP.views.formulas.render());
+    SP.views.formulas.mount();
+    return wait(0).then(function () {
+      st.document.getElementById('study-btn').click();
+      st.document.getElementById('flip-btn').click();
+      assert(!st.document.querySelector('.viz-inline-container'),
+        'study flip does not mount inline visualizer');
+      assert(!st.document.getElementById('viz-inline-canvas'),
+        'study flip does not mount inline canvas');
+      var studyViz = st.document.getElementById('study-viz');
+      assert(!!studyViz, 'flipped viz card shows Open Simulation');
+      assert(studyViz.textContent === 'Open Simulation', 'study CTA uses Open Simulation');
+      assert(!!studyViz.closest('#fcard-back'), 'Open Simulation sits on the card back');
+      assert(!!studyViz.closest('.viz-open-strip'), 'study Open Simulation uses the designed strip');
+      var grades = st.document.querySelectorAll('#fcard-actions [data-grade]');
+      assert(grades.length === 4, 'grade row is Again/Hard/Good/Easy only');
+      assert(!st.document.querySelector('#fcard-actions [data-viz-open]'),
+        'Open Simulation is not in the grade row');
+      openedStudy = [];
+      studyViz.click();
+      assert(openedStudy.length === 1 && openedStudy[0] === studyViz.getAttribute('data-viz-open'),
+        'study Open Simulation calls openVisualizerModal');
+      assert(!!st.document.getElementById('study-viz') &&
+        st.document.querySelectorAll('#fcard-actions [data-grade]').length === 4,
+        'Open Simulation click does not grade or leave the card');
+    });
+  }).then(function () {
+    console.log('\nformulas: study flip omits Open Simulation without a sim');
+    var nv = loadShipped(true, { views: true });
+    var NP = nv.sandbox.PGRE;
+    nv.location.hash = '#/formulas';
+    ensureView(nv, NP.views.formulas.render());
+    NP.views.formulas.mount();
+    return wait(0).then(function () {
+      nv.document.getElementById('study-btn').click();
+      nv.document.getElementById('flip-btn').click();
+      assert(!nv.document.getElementById('study-viz'),
+        'non-viz study card has no Open Simulation');
+      assert(!nv.document.querySelector('#fcard-back .viz-open-strip'),
+        'non-viz card back has no simulation strip');
+      assert(nv.document.querySelectorAll('#fcard-actions [data-grade]').length === 4,
+        'non-viz grade row is still Again/Hard/Good/Easy only');
+    });
+  }).then(function () {
+    console.log('\nformulas: F5 reverse Open Simulation on card back');
+    var rv = loadShipped(true, { views: true });
+    var RV = rv.sandbox.PGRE;
+    RV.store.state.settings.formulaReverse = true;
+    var ri;
+    for (ri = 0; ri < 12; ri++) {
+      RV.visualizers['f' + ri] = { draw: function () {} };
+    }
+    var openedRev = [];
+    RV.openVisualizerModal = function (id) { openedRev.push(id); };
+    rv.location.hash = '#/formulas';
+    ensureView(rv, RV.views.formulas.render());
+    RV.views.formulas.mount();
+    return wait(0).then(function () {
+      rv.document.getElementById('study-btn').click();
+      rv.document.getElementById('flip-btn').click();
+      var revViz = rv.document.getElementById('study-viz');
+      assert(!!revViz, 'F5 reverse flipped viz card shows Open Simulation');
+      assert(!!revViz.closest('#fcard-back'), 'F5 reverse Open Simulation sits on the card back');
+      assert(!rv.document.querySelector('#fcard-actions [data-viz-open]'),
+        'F5 reverse keeps Open Simulation out of the grade row');
+      assert(!rv.document.querySelector('.viz-inline-container'),
+        'F5 reverse flip does not mount inline visualizer');
+      openedRev = [];
+      revViz.click();
+      assert(openedRev.length === 1 && openedRev[0] === revViz.getAttribute('data-viz-open'),
+        'F5 reverse Open Simulation calls openVisualizerModal');
+    });
+  }).then(function () {
+    console.log('\nformulas: search Open Simulation vs Complete view');
+    var sr = loadShipped(true, { views: true });
+    var RP = sr.sandbox.PGRE;
+    RP.srs.isInFormulaDay = function () { return false; };
+    RP.visualizers = { f0: { draw: function () {} } };
+    vm.runInContext(
+      fs.readFileSync(path.join(root, 'js/formula-search.js'), 'utf8'),
+      sr.sandbox,
+      { filename: 'js/formula-search.js' }
+    );
+    sr.location.hash = '#/formulas';
+    ensureView(sr, RP.views.formulas.render());
+    RP.views.formulas.mount();
+    return wait(0).then(function () {
+      var searchTab = sr.document.querySelector('.flash-tab[data-mode="search"]');
+      assert(!!searchTab, 'Search tab rendered');
+      searchTab.click();
+      var vizBtn = sr.document.querySelector('[data-fs-modal="f0"]');
+      var plainBtn = sr.document.querySelector('[data-fs-modal="f1"]');
+      assert(!!vizBtn && vizBtn.textContent === 'Open Simulation',
+        'search viz card labels Open Simulation');
+      assert(vizBtn.getAttribute('aria-haspopup') === 'dialog',
+        'search viz CTA declares it opens a dialog');
+      assert(!!plainBtn && plainBtn.textContent === 'Complete view',
+        'search non-viz card keeps Complete view');
+    });
+  }).then(function () {
+    console.log('\nformulas: picker heading is section-local');
+    var pk = loadShipped(true, { views: true });
+    var P = pk.sandbox.PGRE;
+    pk.cardStates.f0 = { due: '2026-09-07', interval: 1, reps: 1 };
+    pk.cardStates.f1 = { due: '2026-09-07', interval: 1, reps: 1 };
+    pk.cardStates.f2 = { due: '2026-09-10', interval: 3, reps: 2 };
+    pk.cardStates.f3 = { due: '2026-09-11', interval: 3, reps: 2 };
+    P.srs.formulaDay = function () {
+      return { reviewIds: [], newIds: [], softIds: [] };
+    };
+    P.srs.formulaDayRemaining = function () { return []; };
+    P.srs.buildMemHistory = function () { return null; };
+    pk.location.hash = '#/formulas';
+    ensureView(pk, P.views.formulas.render());
+    P.views.formulas.mount();
+    return wait(0).then(function () {
+      var pick = pk.document.getElementById('landing-pick-btn') ||
+        pk.document.getElementById('pick-btn');
+      assert(!!pick, 'picker entry rendered');
+      pick.click();
+      var topics = pk.document.querySelectorAll('.picker-topic');
+      assert(topics.length >= 2, 'Due now and Upcoming each have a CM group');
+      var due = topics[0], upcoming = topics[1], rest = topics[2];
+      var dueHead = due.querySelector('.picker-selall-box');
+      var upHead = upcoming.querySelector('.picker-selall-box');
+      var dueBoxes = due.querySelectorAll('.picker-box');
+      var upBoxes = upcoming.querySelectorAll('.picker-box');
+      var restBoxes = rest ? rest.querySelectorAll('.picker-box') : [];
+      assert(dueBoxes.length === 2, 'Due now CM has two cards');
+      assert(upBoxes.length === 2, 'Upcoming CM has two cards');
+      assert(!dueHead.checked && !upHead.checked, 'empty batch: headings start empty');
+      assert(boxesChecked(dueBoxes) === 0 && boxesChecked(upBoxes) === 0,
+        'empty batch: no CM cards pre-checked');
+
+      dueHead.checked = true;
+      fireChange(dueHead);
+      assert(boxesChecked(dueBoxes) === 2, 'Due now heading checks Due now CM cards');
+      assert(boxesChecked(upBoxes) === 0, 'Upcoming CM cards stay off');
+      assert(boxesChecked(restBoxes) === 0, 'New CM cards stay off');
+      assert(dueHead.checked, 'Due now heading stays checked after filling its group');
+      assert(!upHead.checked, 'Upcoming heading stays empty');
+
+      dueBoxes[0].checked = false;
+      fireChange(dueBoxes[0]);
+      assert(!dueHead.checked, 'heading empties when any visible card is off');
+
+      dueHead.checked = true;
+      fireChange(dueHead);
+      assert(boxesChecked(dueBoxes) === 2, 'empty heading fills remaining Due now cards');
+      assert(boxesChecked(upBoxes) === 0, 'fill does not touch Upcoming');
+
+      dueHead.checked = false;
+      fireChange(dueHead);
+      assert(boxesChecked(dueBoxes) === 0, 'full heading clears Due now cards');
+      assert(boxesChecked(upBoxes) === 0, 'clear does not touch Upcoming');
+
+      dueBoxes[0].checked = true;
+      fireChange(dueBoxes[0]);
+      var filter = pk.document.getElementById('picker-filter');
+      filter.value = 'Card 0';
+      fireInput(filter);
+      var dueItems = due.querySelectorAll('.picker-item');
+      assert(!dueItems[0].hidden, 'matching Due now row stays visible');
+      assert(!!dueItems[1].hidden, 'non-matching Due now row hides');
+      assert(!!upcoming.hidden, 'Upcoming group hides when no names match');
+      assert(dueHead.checked, 'heading checked when every visible unlocked card is on');
+
+      dueHead.checked = false;
+      fireChange(dueHead);
+      assert(!dueBoxes[0].checked, 'filtered heading click turns off the visible card');
+      assert(!dueBoxes[1].checked, 'hidden Card 1 is not changed');
+
+      dueHead.checked = true;
+      fireChange(dueHead);
+      assert(dueBoxes[0].checked && !dueBoxes[1].checked,
+        'filtered heading fills only visible rows');
+
+      filter.value = '';
+      fireInput(filter);
+      assert(!dueHead.checked, 'clearing filter re-syncs heading against the full group');
+      assert(dueBoxes[0].checked && !dueBoxes[1].checked,
+        'hidden row was not silently picked');
+
+      var peek0 = dueItems[0].querySelector('.browse-peek');
+      assert(!!peek0 && !!peek0.hidden, 'flashcard peek starts closed');
+      due.querySelectorAll('.picker-row')[0].click();
+      assert(peek0 && !peek0.hidden, 'clicking the row body opens the flashcard');
+      assert(String(peek0.textContent).indexOf('Prompt 0') !== -1,
+        'peek shows that card’s front');
+      var checkedBeforePeek = dueBoxes[0].checked;
+      due.querySelectorAll('.picker-row')[0].click();
+      assert(!!peek0.hidden, 'second body click closes the peek');
+      assert(dueBoxes[0].checked === checkedBeforePeek,
+        'body click does not change the checkbox');
+      dueBoxes[0].click();
+      assert(!!peek0.hidden, 'checkbox click does not open the peek');
     });
   });
 }

@@ -227,7 +227,18 @@ PGRE.views.library = (function () {
           '<button class="btn btn-ghost" id="import-progress-btn">Restore from backup…</button>' +
           '<input type="file" id="progress-input" accept=".json" hidden>' +
           '<button class="btn btn-ghost" id="reset-formulas-btn">Reset formula cards</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card danger-zone"><h2>Danger zone</h2>' +
+        '<p class="muted">Erases every bit of progress on this machine: XP, achievements, streaks, ' +
+        'the mistake book and plan check-offs. There is no undo. Export a backup first if in doubt.</p>' +
+        '<div class="btn-row" id="reset-row">' +
           '<button class="btn btn-danger-ghost" id="reset-btn">Reset all progress</button>' +
+        '</div>' +
+        '<div class="btn-row danger-confirm" id="reset-confirm" hidden>' +
+          '<span class="danger-confirm-text">Erase all progress on this machine?</span>' +
+          '<button class="btn btn-danger" id="reset-yes">Yes, erase everything</button>' +
+          '<button class="btn btn-ghost" id="reset-no">Cancel</button>' +
         '</div>' +
       '</div>';
     },
@@ -291,14 +302,24 @@ PGRE.views.library = (function () {
         }
       });
 
-      document.getElementById('reset-btn').addEventListener('click', function () {
-        if (confirm('Reset ALL progress — XP, achievements, streaks and plan check-offs? This cannot be undone.') &&
-            confirm('Really sure? Consider exporting a backup first.')) {
-          PGRE.store.reset();
-          PGRE.applyTheme(PGRE.store.state.settings.theme);
-          PGRE.toast('Progress reset.', 'info');
-          PGRE.route();
-        }
+      // Two-step, inline: the first click only swaps the button for an explicit
+      // confirm row, so a stray click never erases anything and no browser
+      // dialog is needed.
+      var resetRow = document.getElementById('reset-row');
+      var resetConfirm = document.getElementById('reset-confirm');
+      function showResetConfirm(on) {
+        resetRow.hidden = on;
+        resetConfirm.hidden = !on;
+        if (on) document.getElementById('reset-yes').focus();
+        else document.getElementById('reset-btn').focus();
+      }
+      document.getElementById('reset-btn').addEventListener('click', function () { showResetConfirm(true); });
+      document.getElementById('reset-no').addEventListener('click', function () { showResetConfirm(false); });
+      document.getElementById('reset-yes').addEventListener('click', function () {
+        PGRE.store.reset();
+        PGRE.applyTheme(PGRE.store.state.settings.theme);
+        PGRE.toast('Progress reset.', 'info');
+        PGRE.route();
       });
     }
   };

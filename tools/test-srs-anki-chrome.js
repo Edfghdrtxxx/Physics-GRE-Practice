@@ -297,10 +297,14 @@ async function main() {
   await evaluate("location.hash = '#/formulas'");
   await sleep(500);
   for (var n = 0; n < 20; n++) {
-    if (await evaluate("!!document.getElementById('study-btn')")) break;
+    if (await evaluate("!!document.getElementById('fill-study-btn') || !!document.getElementById('study-btn')")) break;
     await sleep(150);
   }
-  await evaluate("document.getElementById('study-btn').click()");
+  await evaluate(`(function () {
+    var b = document.getElementById('fill-study-btn') || document.getElementById('study-btn');
+    if (!b) throw new Error('Study control missing for new card (expected #fill-study-btn landing CTA)');
+    b.click();
+  })()`);
   await sleep(300);
   await evaluate("document.getElementById('flip-btn') && document.getElementById('flip-btn').click()");
   await sleep(200);

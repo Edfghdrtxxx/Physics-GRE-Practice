@@ -30,6 +30,7 @@
   var LINE = '#e6dfd8';
   var ROSE = '#e05666';
   var GOOD = '#4e9b6f';
+  var DEEP = '#964b32';
 
   function syncStageTheme() {
     var t = PGRE.vizStageTheme ? PGRE.vizStageTheme() : null;
@@ -41,6 +42,19 @@
     syncStageTheme();
     ctx.fillStyle = (CV && CV.colors && CV.colors.bg) ? CV.colors.bg : CREAM;
     ctx.fillRect(0, 0, w, h);
+  }
+
+  function lightGrid(ctx, w, h, step) {
+    step = step || 40;
+    ctx.save();
+    ctx.strokeStyle = (CV && CV.colors && CV.colors.grid) || (PGRE.vizStageTheme && PGRE.vizStageTheme().inkFade(0.06)) || LINE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    var x, y;
+    for (x = 0; x <= w; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+    for (y = 0; y <= h; y += step) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+    ctx.stroke();
+    ctx.restore();
   }
 
   function vizLegend(title, rows) {
@@ -66,23 +80,13 @@
     ctx.restore();
   }
 
-  function panelRect(ctx, x, y, w, h) {
-    ctx.save();
-    ctx.fillStyle = PANEL;
-    ctx.strokeStyle = LINE;
-    ctx.lineWidth = 1;
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeRect(x, y, w, h);
-    ctx.restore();
-  }
-
   function findVizCanvas(container) {
     var canvas = null;
     if (container && container.tagName === 'CANVAS') canvas = container;
     else if (container && typeof container.querySelector === 'function') {
       canvas = container.querySelector('canvas');
     }
-    if (!canvas && typeof document !== 'undefined') {
+    if (!canvas && typeof document !== 'undefined' && document && typeof document.getElementById === 'function') {
       canvas = document.getElementById('viz-canvas') || document.getElementById('viz-inline-canvas');
     }
     return canvas;
@@ -112,36 +116,91 @@
     return unit ? ('$' + s + '\\,' + unit + '$') : ('$' + s + '$');
   }
 
-  function drawRollingGlyph(ctx, x, y, kind, color, r) {
+  function safeDt(dt) {
+    var n = parseFloat(dt);
+    if (!isFinite(n) || n < 0) return 0;
+    if (n > 0.05) n = 0.05;
+    return n;
+  }
+
+  function ringDot(ctx, x, y, r, fill, stroke) {
     ctx.save();
-    if (kind === 'hoop') {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = Math.max(2, r * 0.32);
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (kind === 'sphere') {
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = PGRE.vizStageTheme().chipFade(0.38);
-      ctx.beginPath();
-      ctx.ellipse(x - r * 0.22, y - r * 0.28, r * 0.42, r * 0.30, -0.45, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = CREAM;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(x - r * 0.62, y);
-      ctx.lineTo(x + r * 0.62, y);
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    if (stroke) {
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
     }
     ctx.restore();
+  }
+
+  function glowBob(ctx, x, y, r, fill, glow) {
+    if (CV && typeof CV.drawGlowCircle === 'function') {
+      CV.drawGlowCircle(ctx, x, y, r, fill, glow || 'rgba(204, 120, 92, 0.45)', r * 1.8);
+      return;
+    }
+    ringDot(ctx, x, y, r, fill, DEEP);
+  }
+
+  function shaft(ctx, x0, y0, x1, y1, color, width, dash) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width || 2;
+    ctx.lineCap = 'round';
+    if (dash) ctx.setLineDash(dash);
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawCeiling(ctx, width, y) {
+    ctx.save();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(10, y);
+    ctx.lineTo(width - 10, y);
+    ctx.stroke();
+    ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.28);
+    ctx.lineWidth = 1.2;
+    var x;
+    for (x = 16; x < width - 8; x += 9) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 7, y - 9);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+
+  /* Complete elliptic K(m), m = k^2. AGM. Pendulum T = T0 * (2/pi) K(sin^2(theta0/2)). */
+  function ellipticK(m) {
+    if (m >= 0.999999) return Infinity;
+    if (m <= 0) return Math.PI / 2;
+    var a = 1;
+    var b = Math.sqrt(1 - m);
+    var i;
+    for (i = 0; i < 16; i++) {
+      var an = 0.5 * (a + b);
+      var bn = Math.sqrt(a * b);
+      a = an;
+      b = bn;
+    }
+    return Math.PI / (2 * a);
+  }
+
+  function pendulumPeriodRatio(theta0) {
+    var k2 = Math.sin(Math.abs(theta0) / 2);
+    k2 = k2 * k2;
+    var K = ellipticK(k2);
+    if (!isFinite(K)) return Infinity;
+    return (2 / Math.PI) * K;
   }
 
 
@@ -152,7 +211,7 @@
     formulaLatex:
       '$$\\ddot{\\theta} + \\frac{g}{L}\\sin\\theta = 0 \\xrightarrow{\\theta \\ll 1} \\omega_0 = \\sqrt{\\frac{g}{L}},\\quad T(\\theta_0) \\approx 2\\pi\\sqrt{\\frac{L}{g}}\\left(1 + \\frac{1}{16}\\theta_0^2 + \\frac{11}{3072}\\theta_0^4\\right)$$',
     physicalStory:
-      'A simple pendulum consists of a point mass $m$ suspended by a massless rigid rod of length $L$. The restoring torque is provided by the tangential component of gravity $\\tau = -mgL\\sin\\theta$. For small angles ($\\sin\\theta \\approx \\theta$), the equation linearizes to a simple harmonic oscillator with frequency $\\omega = \\sqrt{g/L}$, which is strictly independent of the mass $m$ (Galilean equivalence principle). At large release angles, the softening of $\\sin\\theta < \\theta$ prolongs the oscillation period (anharmonicity), diverging logarithmically to infinity at $\\theta_0 = \\pi$ (separatrix).',
+      'A simple pendulum is a point mass $m$ on a rigid massless rod of length $L$. Gravity supplies the restoring torque $\\tau = -mgL\\sin\\theta$. Because $\\sin\\theta < \\theta$ for $\\theta > 0$, the exact restoring torque is weaker than the small-angle estimate $-mgL\\theta$: large-amplitude swings run slow. The small-angle linearization $\\sin\\theta\\approx\\theta$ is isochronous, $T_0=2\\pi\\sqrt{L/g}$, independent of $m$ (Galilean equivalence). The exact period is the complete elliptic integral $T=T_0\\,(2/\\pi)K(\\sin^2(\\theta_0/2))$, which diverges as $\\theta_0\\to\\pi$. A uniform rod pivoted at one end is the same equation with $L_{\\mathrm{eff}}=2L/3$.',
     derivationSteps: [
       {
         step: 1,
@@ -219,13 +278,13 @@
       {
         trap: 'Large Angle Anharmonic Period Increase',
         warning: 'Assuming T is strictly constant for large release angles like 60°.',
-        strategy: 'Large-angle period expands as $T \\approx T_0(1 + \\frac1{16}\\theta_0^2)$. At $60^\\circ$ ($\\pi/3\\,\\mathrm{rad}$), the period is about $7\\%$ longer than $T_0$.'
+        strategy: 'Large-angle period expands as $T \\approx T_0(1 + \\frac1{16}\\theta_0^2)$. At $60^\\circ$ ($\\pi/3\\,\\mathrm{rad}$), the period is about $7\\%$ longer than $T_0$. The exact factor is $(2/\\pi)K(\\sin^2(\\theta_0/2))$.'
       }
     ],
     parameters: [
       { id: 'L', label: 'Length ($L$)', min: 0.2, max: 2.5, step: 0.05, default: 1.0, unit: 'm' },
       { id: 'g', label: 'Gravity ($g$)', min: 1.0, max: 25.0, step: 0.1, default: 9.8, unit: 'm/s²' },
-      { id: 'theta0_deg', label: 'Initial Angle ($\\theta_0$)', min: 5, max: 170, step: 5, default: 45, unit: 'deg' },
+      { id: 'theta0_deg', label: 'Initial Angle ($\\theta_0$)', min: 5, max: 170, step: 5, default: 75, unit: 'deg' },
       { id: 'isRod', label: 'Uniform rod (physical pendulum)', type: 'toggle', default: false },
       { id: 'damping', label: 'Damping ($\\gamma$)', min: 0.0, max: 0.2, step: 0.01, default: 0.0, unit: 's⁻¹' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
@@ -245,15 +304,15 @@
         'For a physical pendulum, the angular frequency is ω = √(Mg d / I). For a uniform rod pivoted at one end, the moment of inertia is I = (1/3)ML² and the center of mass is at d = L/2. Substituting these gives ω = √(Mg(L/2) / ((1/3)ML²)) = √(3g / 2L). Comparing this to a simple pendulum ω = √(g / L_simple), we set g / L_simple = 3g / 2L, which yields L_simple = (2/3)L. Option B is correct.'
     },
 
-    init(container, state, redraw) {
+    init: function (container, state, redraw) {
       state.L = state.L !== undefined ? state.L : 1.0;
       state.g = state.g !== undefined ? state.g : 9.8;
-      state.theta0_deg = state.theta0_deg !== undefined ? state.theta0_deg : 45;
+      state.theta0_deg = state.theta0_deg !== undefined ? state.theta0_deg : 75;
       state.isRod = isOn(state.isRod, false);
       state.damping = state.damping !== undefined ? state.damping : 0.0;
       if (state.simSpeed === undefined) state.simSpeed = 1.0;
 
-      const initRad = (state.theta0_deg * Math.PI) / 180;
+      var initRad = (Number(state.theta0_deg) * Math.PI) / 180;
       state.sim = {
         theta: initRad,
         omega: 0.0,
@@ -261,8 +320,8 @@
         omega_lin: 0.0,
         t: 0.0,
         isDragging: false,
-        phaseHistory: [],
-        maxHistoryLen: 240
+        trail: [],
+        amp: Math.abs(initRad)
       };
 
       var canvas = findVizCanvas(container);
@@ -275,18 +334,13 @@
                     ((e.changedTouches && e.changedTouches.length > 0) ? e.changedTouches[0] : null);
           var clientX = t ? t.clientX : e.clientX;
           var clientY = t ? t.clientY : e.clientY;
-          var cssW = rect.width || 1;
-          var cssH = rect.height || 1;
-          return {
-            x: (clientX - rect.left) * (cssW / cssW),
-            y: (clientY - rect.top) * (cssH / cssH)
-          };
+          return { x: clientX - rect.left, y: clientY - rect.top };
         };
 
         var onDown = function (e) {
           var pos = getPos(e);
           var bob = state.sim.bobScreenPos;
-          if (bob && Math.hypot(pos.x - bob.x, pos.y - bob.y) < bob.radius * 1.8) {
+          if (bob && Math.hypot(pos.x - bob.x, pos.y - bob.y) < bob.radius * 2.2) {
             state.sim.isDragging = true;
             state.sim.omega = 0;
             state.sim.omega_lin = 0;
@@ -304,6 +358,7 @@
             state.sim.omega = 0;
             state.sim.omega_lin = 0;
             state.sim.amp = Math.abs(state.sim.theta);
+            state.sim.trail = [];
             if (e.cancelable) e.preventDefault();
           }
         };
@@ -335,279 +390,186 @@
       }
     },
 
-    draw(ctx, width, height, state, dt) {
+    draw: function (ctx, width, height, state, dt) {
       if (!state.sim) this.init(null, state);
-      const sim = state.sim;
+      var sim = state.sim;
 
-      if (sim.lastTheta0 !== undefined && (sim.lastTheta0 !== state.theta0_deg || sim.lastIsRod !== state.isRod) && !sim.isDragging) {
-        const initRad = (Number(state.theta0_deg) * Math.PI) / 180;
+      var L = Math.max(0.2, numParam(state, 'L', 1.0));
+      var g = Math.max(0.5, numParam(state, 'g', 9.8));
+      var isRod = isOn(state.isRod, false);
+      var damping = Math.max(0.0, numParam(state, 'damping', 0.0));
+      var speed = simSpeedOf(state);
+      var theta0deg = numParam(state, 'theta0_deg', 75);
+
+      var sig = L + '|' + g + '|' + theta0deg + '|' + (isRod ? 1 : 0);
+      if (sim.lastSig !== undefined && sim.lastSig !== sig && !sim.isDragging) {
+        var initRad = (theta0deg * Math.PI) / 180;
         sim.theta = initRad;
         sim.theta_lin = initRad;
         sim.omega = 0.0;
         sim.omega_lin = 0.0;
         sim.t = 0.0;
         sim.amp = Math.abs(initRad);
-        sim.phaseHistory = [];
+        sim.trail = [];
       }
-      sim.lastTheta0 = state.theta0_deg;
-      sim.lastIsRod = state.isRod;
+      sim.lastSig = sig;
       if (sim.amp === undefined) sim.amp = Math.abs(sim.theta);
 
-      const L = Math.max(0.2, Number(state.L) || 1.0);
-      const g = Math.max(0.5, Number(state.g) || 9.8);
-      const isRod = isOn(state.isRod, false);
-      const damping = Math.max(0.0, Number(state.damping) || 0.0);
-      const speed = simSpeedOf(state);
+      var Leff = isRod ? (2 / 3) * L : L;
+      var omega0 = Math.sqrt(g / Leff);
+      var T0 = (2 * Math.PI) / omega0;
+      var thetaAmp = Math.max(sim.amp || 0, Math.abs(sim.theta));
+      var ratio = pendulumPeriodRatio(thetaAmp);
+      var T_exact = isFinite(ratio) ? T0 * ratio : Infinity;
+      var series = T0 * (1 + (1 / 16) * thetaAmp * thetaAmp + (11 / 3072) * Math.pow(thetaAmp, 4));
 
-      const Leff = isRod ? (2 / 3) * L : L;
-      const omega0 = Math.sqrt(g / Leff);
-      const T0 = (2 * Math.PI) / omega0;
-
-      const thetaAmp = Math.max(sim.amp || 0, Math.abs(sim.theta));
-      const T_exact_approx = T0 * (1 + (1 / 16) * thetaAmp * thetaAmp + (11 / 3072) * Math.pow(thetaAmp, 4));
-
-      const subSteps = 12;
-      var dtEff = (isFinite(dt) && dt > 0 ? dt : 0.016) * speed;
-      if (dtEff > 0.2) dtEff = 0.2;
-      const stepDt = dtEff / subSteps;
+      var dtEff = safeDt(dt) * speed;
+      if (dtEff > 0.12) dtEff = 0.12;
+      var subSteps = 10;
+      var stepDt = dtEff / subSteps;
+      var s;
 
       if (!sim.isDragging) {
-        for (let s = 0; s < subSteps; s++) {
-          const f_nonlin = (th, om) => -(g / Leff) * Math.sin(th) - damping * om;
-          const k1_th = sim.omega;
-          const k1_om = f_nonlin(sim.theta, sim.omega);
-
-          const k2_th = sim.omega + 0.5 * stepDt * k1_om;
-          const k2_om = f_nonlin(sim.theta + 0.5 * stepDt * k1_th, sim.omega + 0.5 * stepDt * k1_om);
-
-          const k3_th = sim.omega + 0.5 * stepDt * k2_om;
-          const k3_om = f_nonlin(sim.theta + 0.5 * stepDt * k2_th, sim.omega + 0.5 * stepDt * k2_om);
-
-          const k4_th = sim.omega + stepDt * k3_om;
-          const k4_om = f_nonlin(sim.theta + stepDt * k3_th, sim.omega + stepDt * k3_om);
-
+        for (s = 0; s < subSteps; s++) {
+          var f_nonlin = function (th, om) { return -(g / Leff) * Math.sin(th) - damping * om; };
+          var k1_th = sim.omega;
+          var k1_om = f_nonlin(sim.theta, sim.omega);
+          var k2_th = sim.omega + 0.5 * stepDt * k1_om;
+          var k2_om = f_nonlin(sim.theta + 0.5 * stepDt * k1_th, sim.omega + 0.5 * stepDt * k1_om);
+          var k3_th = sim.omega + 0.5 * stepDt * k2_om;
+          var k3_om = f_nonlin(sim.theta + 0.5 * stepDt * k2_th, sim.omega + 0.5 * stepDt * k2_om);
+          var k4_th = sim.omega + stepDt * k3_om;
+          var k4_om = f_nonlin(sim.theta + stepDt * k3_th, sim.omega + stepDt * k3_om);
           sim.theta += (stepDt / 6) * (k1_th + 2 * k2_th + 2 * k3_th + k4_th);
           sim.omega += (stepDt / 6) * (k1_om + 2 * k2_om + 2 * k3_om + k4_om);
 
-          const a_lin = -(g / Leff) * sim.theta_lin - damping * sim.omega_lin;
+          var a_lin = -(g / Leff) * sim.theta_lin - damping * sim.omega_lin;
           sim.omega_lin += a_lin * stepDt;
           sim.theta_lin += sim.omega_lin * stepDt;
-
           sim.t += stepDt;
         }
       }
 
-      sim.phaseHistory.push({ theta: sim.theta, omega: sim.omega });
-      if (sim.phaseHistory.length > sim.maxHistoryLen) {
-        sim.phaseHistory.shift();
-      }
-
       creamFill(ctx, width, height);
+      lightGrid(ctx, width, height, 40);
 
-      const splitX = Math.round(width * 0.58);
-      const leftW = splitX;
-      const bobRadius = isRod ? 8 : 15;
-      const pad = 18;
-      const pivotX = leftW * 0.5;
-      const pivotY = height * 0.5;
-      const maxArm = Math.min(
-        pivotX - pad - bobRadius,
-        leftW - pivotX - pad - bobRadius,
-        pivotY - pad - bobRadius,
-        height - pivotY - pad - bobRadius
-      );
-      const armLengthPx = Math.max(48, maxArm * (L / 2.5));
+      var ceilY = 22;
+      drawCeiling(ctx, width, ceilY);
 
+      var bobR = isRod ? 7 : 14;
+      var pad = 18;
+      var pivotX = width * 0.5;
+      var pivotY = ceilY + 10;
+      var maxArm = Math.min(pivotX - pad - bobR, width - pivotX - pad - bobR, height - pivotY - pad - bobR);
+      var armLengthPx = Math.max(52, maxArm * (L / 2.5));
       sim.pivotPos = { x: pivotX, y: pivotY };
 
       ctx.save();
-      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.10);
+      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.12);
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 5]);
       ctx.beginPath();
-      ctx.arc(pivotX, pivotY, armLengthPx, 0, Math.PI * 2);
+      ctx.arc(pivotX, pivotY, armLengthPx, Math.PI * 0.08, Math.PI - Math.PI * 0.08);
       ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(pivotX, pivotY);
-      ctx.lineTo(pivotX, pivotY + armLengthPx + 6);
+      ctx.lineTo(pivotX, pivotY + armLengthPx + 8);
       ctx.stroke();
       ctx.restore();
 
-      const ghostBobX = pivotX + armLengthPx * Math.sin(sim.theta_lin);
-      const ghostBobY = pivotY + armLengthPx * Math.cos(sim.theta_lin);
+      var ghostX = pivotX + armLengthPx * Math.sin(sim.theta_lin);
+      var ghostY = pivotY + armLengthPx * Math.cos(sim.theta_lin);
+      var bobX = pivotX + armLengthPx * Math.sin(sim.theta);
+      var bobY = pivotY + armLengthPx * Math.cos(sim.theta);
+      sim.bobScreenPos = { x: bobX, y: bobY, radius: isRod ? 22 : bobR };
 
-      ctx.save();
-      ctx.strokeStyle = TEAL;
-      ctx.globalAlpha = 0.55;
-      ctx.lineWidth = 1.6;
-      ctx.setLineDash([5, 4]);
-      ctx.beginPath();
-      ctx.moveTo(pivotX, pivotY);
-      ctx.lineTo(ghostBobX, ghostBobY);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = TEAL;
-      ctx.beginPath();
-      ctx.arc(ghostBobX, ghostBobY, isRod ? 6 : 9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-
-      const bobX = pivotX + armLengthPx * Math.sin(sim.theta);
-      const bobY = pivotY + armLengthPx * Math.cos(sim.theta);
-      sim.bobScreenPos = { x: bobX, y: bobY, radius: bobRadius };
-
-      ctx.save();
-      ctx.strokeStyle = isRod ? CORAL : INK;
-      ctx.globalAlpha = isRod ? 1 : 0.55;
-      ctx.lineWidth = isRod ? 7 : 2;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(pivotX, pivotY);
-      ctx.lineTo(bobX, bobY);
-      ctx.stroke();
-      ctx.restore();
-
-      if (!isRod) {
+      if (!sim.trail) sim.trail = [];
+      if (!sim.isDragging) {
+        sim.trail.push({ x: bobX, y: bobY });
+        if (sim.trail.length > 56) sim.trail.shift();
+      }
+      if (sim.trail.length > 1) {
         ctx.save();
-        ctx.fillStyle = CORAL;
-        ctx.strokeStyle = '#964b32';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(bobX, bobY, bobRadius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-      } else {
-        ctx.save();
-        ctx.fillStyle = CORAL;
-        ctx.beginPath();
-        ctx.arc(bobX, bobY, 5, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        var ti;
+        for (ti = 1; ti < sim.trail.length; ti++) {
+          ctx.strokeStyle = 'rgba(204, 120, 92, ' + (ti / sim.trail.length) * 0.45 + ')';
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(sim.trail[ti - 1].x, sim.trail[ti - 1].y);
+          ctx.lineTo(sim.trail[ti].x, sim.trail[ti].y);
+          ctx.stroke();
+        }
         ctx.restore();
       }
 
+      shaft(ctx, pivotX, pivotY, ghostX, ghostY, TEAL, isRod ? 5 : 1.8, [5, 4]);
       ctx.save();
-      ctx.fillStyle = INK;
-      ctx.strokeStyle = CREAM;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(pivotX, pivotY, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      ctx.globalAlpha = 0.55;
+      if (isRod) {
+        ringDot(ctx, ghostX, ghostY, 4, TEAL, null);
+      } else {
+        ringDot(ctx, ghostX, ghostY, 9, TEAL, null);
+      }
       ctx.restore();
 
-      const arcRadius = Math.min(36, armLengthPx * 0.28);
+      if (isRod) {
+        ctx.save();
+        ctx.translate(pivotX, pivotY);
+        ctx.rotate(-sim.theta);
+        ctx.fillStyle = 'rgba(204, 120, 92, 0.42)';
+        ctx.strokeStyle = CORAL;
+        ctx.lineWidth = 2;
+        ctx.fillRect(-7, -6, 14, armLengthPx + 12);
+        ctx.strokeRect(-7, -6, 14, armLengthPx + 12);
+        ctx.restore();
+        var cmX = pivotX + (armLengthPx * 0.5) * Math.sin(sim.theta);
+        var cmY = pivotY + (armLengthPx * 0.5) * Math.cos(sim.theta);
+        ringDot(ctx, cmX, cmY, 4, GOOD, CREAM);
+        pill(ctx, 'CM', cmX + 12, cmY, GOOD, 'left');
+      } else {
+        shaft(ctx, pivotX, pivotY, bobX, bobY, PGRE.vizStageTheme().inkFade(0.55), 2);
+        glowBob(ctx, bobX, bobY, bobR, CORAL, 'rgba(204, 120, 92, 0.4)');
+        ctx.save();
+        ctx.strokeStyle = DEEP;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(bobX, bobY, bobR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      ringDot(ctx, pivotX, pivotY, 5, INK, CREAM);
+      pill(ctx, 'pivot', pivotX + 12, pivotY + 1, MUTED, 'left');
+
+      var arcR = Math.min(42, armLengthPx * 0.32);
       if (Math.abs(sim.theta) > 0.04) {
         ctx.save();
         ctx.strokeStyle = GOLD;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.2;
         ctx.beginPath();
-        if (sim.theta >= 0) {
-          ctx.arc(pivotX, pivotY, arcRadius, Math.PI / 2, Math.PI / 2 + sim.theta, false);
-        } else {
-          ctx.arc(pivotX, pivotY, arcRadius, Math.PI / 2 + sim.theta, Math.PI / 2, false);
-        }
+        if (sim.theta >= 0) ctx.arc(pivotX, pivotY, arcR, Math.PI / 2, Math.PI / 2 + sim.theta, false);
+        else ctx.arc(pivotX, pivotY, arcR, Math.PI / 2 + sim.theta, Math.PI / 2, false);
         ctx.stroke();
         ctx.restore();
-        const mid = sim.theta / 2;
-        const lx = pivotX + (arcRadius + 14) * Math.sin(mid);
-        const ly = pivotY + (arcRadius + 14) * Math.cos(mid);
-        pill(ctx, 'θ', lx, ly, GOLD, 'center');
+        var mid = sim.theta / 2;
+        pill(ctx, 'theta', pivotX + (arcR + 16) * Math.sin(mid), pivotY + (arcR + 16) * Math.cos(mid), GOLD, 'center');
       }
 
-      pill(ctx, 'pivot', pivotX + 12, pivotY - 14, MUTED, 'left');
-
-      const cardX = splitX + 10;
-      const cardY = 12;
-      const cardW = width - cardX - 12;
-      const cardH = height - 24;
-      panelRect(ctx, cardX, cardY, cardW, cardH);
-
-      ctx.save();
-      ctx.fillStyle = MUTED;
-      ctx.font = '600 11px Inter, -apple-system, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText('Phase portrait', cardX + 12, cardY + 10);
-      ctx.restore();
-
-      const phaseCx = cardX + cardW * 0.5;
-      const phaseCy = cardY + cardH * 0.54;
-      const phaseW = Math.min(cardW * 0.38, cardH * 0.32);
-      const maxOmegaSep = Math.max(2 * omega0, 0.4);
-      const thetaScale = phaseW / Math.PI;
-      const omegaScale = (phaseW * 0.85) / maxOmegaSep;
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(cardX + 8, cardY + 28, cardW - 16, cardH - 36);
-      ctx.clip();
-
-      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.12);
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(phaseCx - phaseW - 8, phaseCy);
-      ctx.lineTo(phaseCx + phaseW + 8, phaseCy);
-      ctx.moveTo(phaseCx, phaseCy - phaseW - 8);
-      ctx.lineTo(phaseCx, phaseCy + phaseW + 8);
-      ctx.stroke();
-      pill(ctx, 'θ', phaseCx + phaseW + 4, phaseCy - 12, MUTED, 'left');
-      pill(ctx, 'θ̇', phaseCx + 10, phaseCy - phaseW - 4, MUTED, 'left');
-
-      ctx.save();
-      ctx.strokeStyle = 'rgba(224, 86, 102, 0.40)';
-      ctx.lineWidth = 1.4;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      let firstSep = true;
-      for (let th = -Math.PI + 0.05; th <= Math.PI - 0.05; th += 0.08) {
-        const omSep = 2 * omega0 * Math.cos(th / 2);
-        const px = phaseCx + th * thetaScale;
-        const py = phaseCy - omSep * omegaScale;
-        if (firstSep) { ctx.moveTo(px, py); firstSep = false; }
-        else ctx.lineTo(px, py);
-      }
-      for (let th = Math.PI - 0.05; th >= -Math.PI + 0.05; th -= 0.08) {
-        const omSep = -2 * omega0 * Math.cos(th / 2);
-        const px = phaseCx + th * thetaScale;
-        const py = phaseCy - omSep * omegaScale;
-        ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      ctx.stroke();
-      ctx.restore();
-
-      if (sim.phaseHistory.length > 1) {
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        for (let i = 1; i < sim.phaseHistory.length; i++) {
-          const pt0 = sim.phaseHistory[i - 1];
-          const pt1 = sim.phaseHistory[i];
-          const alpha = (i / sim.phaseHistory.length) * 0.9;
-          ctx.strokeStyle = 'rgba(204, 120, 92, ' + alpha + ')';
-          ctx.beginPath();
-          ctx.moveTo(phaseCx + pt0.theta * thetaScale, phaseCy - pt0.omega * omegaScale);
-          ctx.lineTo(phaseCx + pt1.theta * thetaScale, phaseCy - pt1.omega * omegaScale);
-          ctx.stroke();
-        }
-      }
-
-      ctx.fillStyle = GOLD;
-      ctx.beginPath();
-      ctx.arc(phaseCx + sim.theta * thetaScale, phaseCy - sim.omega * omegaScale, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-
-      const pctShift = Math.max(0, ((T_exact_approx - T0) / T0) * 100);
+      var pct = isFinite(T_exact) ? Math.max(0, ((T_exact - T0) / T0) * 100) : Infinity;
+      var tExactStr = isFinite(T_exact)
+        ? ('$' + T_exact.toFixed(3) + '\\,\\mathrm{s}\\ (+' + pct.toFixed(1) + '\\%)$')
+        : 'diverges ($\\theta_0\\to\\pi$)';
       vizLegend('Pendulum', [
         { label: 'Type', value: isRod ? 'Uniform rod,  $L_{\\mathrm{eff}}=2L/3$' : 'Simple pendulum,  $L_{\\mathrm{eff}}=L$' },
         { label: '$\\omega_0=\\sqrt{g/L_{\\mathrm{eff}}}$', value: latexNum(omega0, 2, '\\mathrm{rad/s}') },
         { label: '$T_0=2\\pi/\\omega_0$', value: latexNum(T0, 3, '\\mathrm{s}') },
-        { label: '$T(\\theta_0)$ anharmonic', value: '$' + T_exact_approx.toFixed(3) + '\\,\\mathrm{s}\\ (+' + pctShift.toFixed(1) + '\\%)$' },
-        { label: '$\\theta(t)$', value: '$' + ((sim.theta * 180) / Math.PI).toFixed(1) + '^\\circ$' },
-        { label: 'Traces', value: 'coral = exact $\\sin\\theta$;  teal dashed = linear $\\theta$' },
-        { label: 'Drag', value: sim.isDragging ? 'setting release angle' : 'drag the bob to set $\\theta$' }
+        { label: '$T(\\theta_0)=(2/\\pi)K\\,T_0$', value: tExactStr },
+        { label: 'Series $T_0(1+\\theta_0^2/16+\\cdots)$', value: latexNum(series, 3, '\\mathrm{s}') },
+        { label: '$\\theta(t)$ exact / linear', value: '$' + ((sim.theta * 180) / Math.PI).toFixed(1) + '^\\circ$ / $' + ((sim.theta_lin * 180) / Math.PI).toFixed(1) + '^\\circ$' },
+        { label: 'Traces', value: 'coral = $\\sin\\theta$;  teal dashed = linear $\\theta$' },
+        { label: 'Drag', value: sim.isDragging ? 'setting release angle' : 'drag the bob to set $\\theta_0$' }
       ]);
     }
   };
@@ -617,11 +579,8 @@
     topic: 'cm',
     title: 'Continuous Moment of Inertia & Mass Distribution',
     formulaLatex: 'I = \\int r^2 dm',
-    physicalStory: `
-      Moment of inertia ($I$) is the rotational analogue of inertial mass. It quantifies a body's resistance to angular acceleration. Unlike scalar translational mass ($M = \\int dm$), the moment of inertia depends quadratically on the perpendicular distance ($r_\\perp$) of each infinitesimal mass element ($dm$) from the chosen axis of rotation.
-
-      Because of the $r^2$ weighting, mass distributed further from the rotation axis contributes vastly more rotational inertia than mass packed near the center. This governs why a hollow cylindrical hoop ($I = MR^2$) rolls significantly slower down an incline than a solid cylinder ($I = \\frac{1}{2}MR^2$) or a solid sphere ($I = \\frac{2}{5}MR^2$).
-    `,
+    physicalStory:
+      'Moment of inertia is the rotational analogue of mass: $K_{\\mathrm{rot}}=\\frac12 I\\omega^2$ with $I=\\int r_\\perp^2\\,dm$. The $r_\\perp^2$ weight means mass far from the axis counts far more than mass near it — that is why a thin hoop ($I=MR^2$) resists spin more than a solid cylinder ($I=\\frac12 MR^2$) of the same $M$ and $R$. The $r$ in the integral is the perpendicular distance to the chosen axis, not the spherical radial coordinate. For a power-law rod $\\lambda\\propto x^n$ about $x=0$, $I=\\frac{n+1}{n+3}ML^2$.',
     derivationSteps: [
       {
         step: 1,
@@ -686,11 +645,12 @@
       { id: 'radVal', label: 'Radius / Length ($R$ or $L$)', min: 0.5, max: 3.0, step: 0.1, default: 1.5, unit: 'm' },
       { id: 'powerN', label: 'Density Exponent ($n$)', min: 0, max: 6, step: 1, default: 2, unit: 'power' },
       { id: 'numSlices', label: 'Integration Slices ($N$)', min: 4, max: 64, step: 4, default: 24, unit: 'elements' },
-      { id: 'raceActive', label: 'Incline race', type: 'toggle', default: false },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     onParamChange: function (id, val, state) {
-      if (id === 'raceActive') state.raceTime = 0;
+      if (id === 'shapeType' || id === 'radVal' || id === 'numSlices' || id === 'powerN') {
+        state._trails = null;
+      }
     },
     init: function (container, state, redraw) {
       state.shapeType = state.shapeType || 'Solid Disk / Cylinder';
@@ -698,35 +658,24 @@
       state.radVal = state.radVal !== undefined ? state.radVal : 1.5;
       state.powerN = state.powerN !== undefined ? state.powerN : 2;
       state.numSlices = state.numSlices !== undefined ? state.numSlices : 24;
-      state.raceActive = !!state.raceActive;
-      state.raceTime = state.raceTime || 0;
       if (state.simSpeed === undefined) state.simSpeed = 1.0;
+      state.spin = state.spin || 0;
+      state._trails = state._trails || null;
     },
     draw: function (ctx, width, height, state, dt) {
-      if (dt === undefined) dt = 0.016;
-      if (dt > 0.1) dt = 0.1;
-      var speed = simSpeedOf(state);
-      var dtEff = dt * speed;
-      if (dtEff > 0.2) dtEff = 0.2;
-
-      state.massVal = state.massVal !== undefined ? state.massVal : 2.0;
-      state.radVal = state.radVal !== undefined ? state.radVal : 1.5;
-      state.numSlices = state.numSlices !== undefined ? state.numSlices : 24;
-      state.powerN = state.powerN !== undefined ? state.powerN : 2;
       state.shapeType = state.shapeType || 'Solid Disk / Cylinder';
-      state.raceTime = state.raceTime || 0;
+      var M = numParam(state, 'massVal', 2.0);
+      var R = numParam(state, 'radVal', 1.5);
+      var N = Math.max(4, numParam(state, 'numSlices', 24) | 0);
+      var nPow = Math.max(0, numParam(state, 'powerN', 2));
+      var speed = simSpeedOf(state);
+      var dtEff = safeDt(dt) * speed;
 
-      creamFill(ctx, width, height);
-
-      var M = state.massVal;
-      var R = state.radVal;
-      var N = Math.max(4, state.numSlices | 0);
       var isDisk = state.shapeType === 'Solid Disk / Cylinder';
       var isHoop = state.shapeType === 'Thin Hoop / Ring';
       var isSphere = state.shapeType === 'Solid Sphere';
       var isRod = state.shapeType === 'Uniform Thin Rod';
       var isPowerRod = state.shapeType === 'Non-Uniform Power Rod (x^n)';
-      var isRolling = isDisk || isHoop || isSphere;
 
       var cFactor = 0.5;
       var formulaTex = '\\frac{1}{2} M R^2';
@@ -739,54 +688,53 @@
         cFactor = 1.0;
         formulaTex = 'M R^2';
         I_exact = M * R * R;
-        dmTex = '$\\mathrm{d}m = \\lambda R\\,\\mathrm{d}\\theta$  (all mass at $r=R$)';
+        dmTex = '$\\mathrm{d}m$ all at $r_\\perp = R$';
       } else if (isSphere) {
         cFactor = 0.4;
         formulaTex = '\\frac{2}{5} M R^2';
         I_exact = 0.4 * M * R * R;
-        axisNote = 'axis through center (dashed)';
-        dmTex = '$r_\\perp$ to the axis, not the radial $r$';
+        axisNote = 'diameter axis (vertical)';
+        dmTex = '$r_\\perp = R\\sin\\vartheta$, not spherical $r$';
       } else if (isRod) {
         cFactor = 1 / 12;
         formulaTex = '\\frac{1}{12} M L^2';
         cLabel = '$c = I/(M L^2)$ about CM';
         I_exact = (1 / 12) * M * R * R;
-        axisNote = 'axis through CM, perpendicular to rod';
+        axisNote = 'axis through CM, out of page';
         dmTex = '$\\mathrm{d}m = \\lambda\\,\\mathrm{d}x$';
       } else if (isPowerRod) {
-        var n = state.powerN;
-        cFactor = (n + 1) / (n + 3);
-        formulaTex = '\\frac{' + n + '+1}{' + n + '+3} M L^2';
+        cFactor = (nPow + 1) / (nPow + 3);
+        formulaTex = '\\frac{' + nPow + '+1}{' + nPow + '+3} M L^2';
         cLabel = '$c = I/(M L^2)$ about $x=0$';
         I_exact = cFactor * M * R * R;
         axisNote = 'axis at x = 0 (light end)';
-        dmTex = '$\\lambda(x)\\propto x^{' + n + '}$';
+        dmTex = '$\\lambda(x)\\propto x^{' + nPow + '}$';
       }
 
-      var leftW = Math.round(width * 0.52);
-      var captionH = 36;
-      var centerX = leftW * 0.5;
-      var centerY = 22 + (height - captionH - 22) * 0.5;
-      var maxRender = Math.min(leftW * 0.38, (height - captionH - 36) * 0.42);
-      var renderRad = Math.max(28, maxRender * (R / 3.0));
+      state.spin = (state.spin || 0) + 0.62 * dtEff;
+      var phi = state.spin;
 
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, 0, leftW, height);
-      ctx.clip();
+      creamFill(ctx, width, height);
+      lightGrid(ctx, width, height, 40);
 
-      var highlightIdx = Math.min(N - 1, Math.max(0, Math.floor(N * 0.65)));
+      var cx = width * 0.5;
+      var cy = height * 0.52;
+      var maxR = Math.min(width * 0.38, height * 0.38);
+      var renderRad = Math.max(36, maxR * (R / 3.0));
+
+      var tracers = [];
+      var i;
 
       if (isSphere) {
         var grd = ctx.createRadialGradient(
-          centerX - renderRad * 0.28, centerY - renderRad * 0.32, renderRad * 0.08,
-          centerX, centerY, renderRad
+          cx - renderRad * 0.28, cy - renderRad * 0.32, renderRad * 0.08,
+          cx, cy, renderRad
         );
-        grd.addColorStop(0, 'rgba(93, 184, 166, 0.62)');
-        grd.addColorStop(1, 'rgba(93, 184, 166, 0.16)');
+        grd.addColorStop(0, 'rgba(93, 184, 166, 0.58)');
+        grd.addColorStop(1, 'rgba(93, 184, 166, 0.14)');
         ctx.fillStyle = grd;
         ctx.beginPath();
-        ctx.arc(centerX, centerY, renderRad, 0, Math.PI * 2);
+        ctx.arc(cx, cy, renderRad, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = TEAL;
         ctx.lineWidth = 2;
@@ -795,265 +743,175 @@
         ctx.save();
         ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.16);
         ctx.lineWidth = 1;
-        for (var sh = 1; sh <= 3; sh++) {
+        for (i = 1; i <= 4; i++) {
+          var lat = (i / 5) * Math.PI;
+          var ry = renderRad * Math.sin(lat);
+          var yy = cy - renderRad * Math.cos(lat);
           ctx.beginPath();
-          ctx.ellipse(centerX, centerY, renderRad * (sh / 4), renderRad, 0, 0, Math.PI * 2);
+          ctx.ellipse(cx, yy, Math.max(2, ry), Math.max(1.2, ry * 0.22), 0, 0, Math.PI * 2);
           ctx.stroke();
         }
         ctx.restore();
 
-        ctx.save();
-        ctx.strokeStyle = INK;
-        ctx.lineWidth = 1.4;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(centerX, centerY - renderRad - 10);
-        ctx.lineTo(centerX, centerY + renderRad + 10);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
+        shaft(ctx, cx, cy - renderRad - 14, cx, cy + renderRad + 14, INK, 1.4, [4, 4]);
+        ringDot(ctx, cx, cy, 4, INK, CREAM);
+        pill(ctx, 'axis', cx + 12, cy - renderRad - 8, INK, 'left');
 
-        var phi = 0.95;
-        var elX = centerX + renderRad * Math.sin(phi);
-        var elY = centerY - renderRad * Math.cos(phi);
-        ctx.strokeStyle = MUTED;
-        ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        ctx.moveTo(centerX, centerY);
-        ctx.lineTo(elX, elY);
-        ctx.stroke();
-        ctx.strokeStyle = CORAL;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(centerX, elY);
-        ctx.lineTo(elX, elY);
-        ctx.stroke();
-        ctx.fillStyle = GOLD;
-        ctx.beginPath();
-        ctx.arc(elX, elY, 4, 0, Math.PI * 2);
-        ctx.fill();
-        pill(ctx, 'r', (centerX + elX) * 0.5 + 10, (centerY + elY) * 0.5, MUTED, 'left');
-        pill(ctx, 'r_perp', (centerX + elX) * 0.5, elY + 12, CORAL, 'center');
+        var thS = 1.05;
+        var elX = cx + renderRad * Math.sin(thS) * Math.sin(phi);
+        var elY = cy - renderRad * Math.cos(thS);
+        var rPerp = Math.abs(elX - cx);
+        shaft(ctx, cx, cy, elX, elY, MUTED, 1.5);
+        shaft(ctx, cx, elY, elX, elY, CORAL, 2.2);
+        glowBob(ctx, elX, elY, 5, GOLD, 'rgba(212, 160, 23, 0.4)');
+        pill(ctx, 'r', (cx + elX) * 0.5 + 10, (cy + elY) * 0.5, MUTED, 'left');
+        if (rPerp > 10) pill(ctx, 'r_perp', (cx + elX) * 0.5, elY + 14, CORAL, 'center');
 
-        ctx.fillStyle = INK;
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = CREAM;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        pill(ctx, 'axis', centerX + 10, centerY - renderRad - 4, INK, 'left');
+        tracers = [
+          { x: cx + renderRad * Math.sin(0.45) * Math.cos(phi), y: cy - renderRad * Math.cos(0.45) },
+          { x: cx + renderRad * Math.sin(1.05) * Math.cos(phi), y: cy - renderRad * Math.cos(1.05) },
+          { x: cx + renderRad * Math.sin(Math.PI / 2) * Math.cos(phi), y: cy }
+        ];
       } else if (isDisk || isHoop) {
-        var dr = renderRad / Math.max(1, N);
-
         if (isHoop) {
-          var hoopThick = Math.max(10, renderRad * 0.12);
-          ctx.fillStyle = 'rgba(204, 120, 92, 0.35)';
+          var hoopThick = Math.max(10, renderRad * 0.13);
+          ctx.fillStyle = 'rgba(204, 120, 92, 0.38)';
           ctx.strokeStyle = CORAL;
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.arc(centerX, centerY, renderRad, 0, Math.PI * 2);
-          ctx.arc(centerX, centerY, renderRad - hoopThick, 0, Math.PI * 2, true);
+          ctx.arc(cx, cy, renderRad, 0, Math.PI * 2);
+          ctx.arc(cx, cy, Math.max(4, renderRad - hoopThick), 0, Math.PI * 2, true);
           ctx.fill();
           ctx.stroke();
-
-          var dAngle = (2 * Math.PI) / N;
+          var dAng = (2 * Math.PI) / Math.max(8, N);
+          ctx.save();
           ctx.fillStyle = GOLD;
           ctx.beginPath();
-          ctx.arc(centerX, centerY, renderRad, -0.15, dAngle - 0.15);
-          ctx.arc(centerX, centerY, renderRad - hoopThick, dAngle - 0.15, -0.15, true);
+          ctx.arc(cx, cy, renderRad, phi, phi + dAng);
+          ctx.arc(cx, cy, Math.max(4, renderRad - hoopThick), phi + dAng, phi, true);
           ctx.closePath();
           ctx.fill();
+          ctx.restore();
         } else {
-          for (var i = 0; i < N; i++) {
+          var dr = renderRad / N;
+          for (i = 0; i < N; i++) {
             var rInner = i * dr;
             var rOuter = (i + 1) * dr;
-            var frac = (i + 0.5) / N;
-            var alpha = 0.10 + 0.70 * frac;
-            ctx.fillStyle = 'rgba(93, 184, 166, ' + alpha + ')';
-            ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.10);
+            var rMid = (rInner + rOuter) * 0.5;
+            var wgt = (rMid / renderRad) * (rMid / renderRad);
+            ctx.fillStyle = 'rgba(93, 184, 166, ' + (0.08 + 0.72 * wgt) + ')';
+            ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.08);
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.arc(centerX, centerY, rOuter, 0, Math.PI * 2);
-            if (rInner > 0) ctx.arc(centerX, centerY, rInner, 0, Math.PI * 2, true);
+            ctx.arc(cx, cy, rOuter, 0, Math.PI * 2);
+            if (rInner > 0) ctx.arc(cx, cy, rInner, 0, Math.PI * 2, true);
             ctx.fill();
             ctx.stroke();
-
-            if (i === highlightIdx) {
-              ctx.fillStyle = 'rgba(212, 160, 23, 0.45)';
-              ctx.fill();
-              ctx.strokeStyle = GOLD;
-              ctx.lineWidth = 2;
-              ctx.stroke();
-            }
           }
+          var hi = Math.min(N - 1, Math.max(0, Math.floor(N * (0.55 + 0.35 * Math.sin(phi)))));
+          ctx.save();
+          ctx.strokeStyle = GOLD;
+          ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          ctx.arc(cx, cy, (hi + 0.5) * dr, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
         }
 
-        ctx.fillStyle = INK;
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = CREAM;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        shaft(ctx, cx, cy, cx + renderRad * Math.cos(phi), cy + renderRad * Math.sin(phi), CORAL, 2);
+        ringDot(ctx, cx, cy, 4, INK, CREAM);
+        pill(ctx, 'R', cx + renderRad * 0.55 * Math.cos(phi + 0.4), cy + renderRad * 0.55 * Math.sin(phi + 0.4), CORAL, 'center');
 
-        ctx.strokeStyle = CORAL;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(centerX, centerY);
-        ctx.lineTo(centerX + renderRad, centerY);
-        ctx.stroke();
-
-        pill(ctx, 'R', centerX + renderRad * 0.55, centerY + 14, CORAL, 'center');
+        if (isHoop) {
+          tracers = [
+            { x: cx + renderRad * Math.cos(phi), y: cy + renderRad * Math.sin(phi) },
+            { x: cx + renderRad * Math.cos(phi + 2.1), y: cy + renderRad * Math.sin(phi + 2.1) },
+            { x: cx + renderRad * Math.cos(phi + 4.2), y: cy + renderRad * Math.sin(phi + 4.2) }
+          ];
+        } else {
+          tracers = [0.35, 0.65, 1.0].map(function (f) {
+            return { x: cx + renderRad * f * Math.cos(phi), y: cy + renderRad * f * Math.sin(phi) };
+          });
+        }
       } else {
-        var rodLenPx = Math.min(leftW - 48, renderRad * 2.4);
-        var rodThick = 26;
-        var rodStartX = centerX - rodLenPx * 0.5;
-        var rodY = centerY - rodThick * 0.5;
-        var dx = rodLenPx / Math.max(1, N);
+        var rodLenPx = Math.min(width - 56, renderRad * 2.55);
+        var rodThick = 28;
+        var rodStartX = isPowerRod ? (cx - rodLenPx * 0.42) : (cx - rodLenPx * 0.5);
+        var rodY = cy - rodThick * 0.5;
+        var dx = rodLenPx / N;
+        var axisX = isRod ? cx : rodStartX;
 
-        for (var ri = 0; ri < N; ri++) {
-          var xFrac = (ri + 0.5) / N;
-          var xPos = rodStartX + ri * dx;
-          var rodAlpha = 0.18 + 0.72 * (isRod ? 0.55 : Math.pow(xFrac, state.powerN));
-          ctx.fillStyle = 'rgba(204, 120, 92, ' + rodAlpha + ')';
+        ctx.save();
+        ctx.translate(axisX, cy);
+        ctx.rotate(isPowerRod || isRod ? phi * 0.35 : 0);
+        ctx.translate(-axisX, -cy);
+        for (i = 0; i < N; i++) {
+          var xFrac = (i + 0.5) / N;
+          var xPos = rodStartX + i * dx;
+          var dens = isRod ? 0.55 : Math.pow(xFrac, nPow);
+          var rW = isRod ? Math.abs(xFrac - 0.5) * 2 : xFrac;
+          var alpha = 0.16 + 0.78 * dens * (0.35 + 0.65 * rW * rW);
+          ctx.fillStyle = 'rgba(204, 120, 92, ' + alpha + ')';
           ctx.fillRect(xPos, rodY, Math.max(1, dx - 1), rodThick);
           ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.10);
           ctx.strokeRect(xPos, rodY, Math.max(1, dx - 1), rodThick);
-
-          if (ri === Math.floor(N * 0.75)) {
-            ctx.fillStyle = GOLD;
-            ctx.fillRect(xPos, rodY, Math.max(1, dx - 1), rodThick);
-            ctx.strokeStyle = GOLD;
-            ctx.lineWidth = 2;
-            ctx.strokeRect(xPos, rodY, Math.max(1, dx - 1), rodThick);
-          }
         }
+        var goldI = isRod ? Math.floor(N * 0.78) : Math.floor(N * 0.82);
+        ctx.fillStyle = GOLD;
+        ctx.fillRect(rodStartX + goldI * dx, rodY, Math.max(1, dx - 1), rodThick);
+        ctx.restore();
 
-        var axisX = isRod ? centerX : rodStartX;
-        ctx.fillStyle = INK;
-        ctx.beginPath();
-        ctx.arc(axisX, centerY, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = CREAM;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        ringDot(ctx, axisX, cy, 5, INK, CREAM);
+        pill(ctx, isRod ? 'CM axis' : 'axis x=0', axisX + 10, cy - rodThick * 0.5 - 12, INK, 'left');
+
+        var rEnds = isRod
+          ? [0.15, 0.5, 0.85]
+          : [0.25, 0.55, 0.92];
+        tracers = rEnds.map(function (f) {
+          var px = rodStartX + f * rodLenPx - axisX;
+          var py = 0;
+          var cosp = Math.cos(phi * 0.35);
+          var sinp = Math.sin(phi * 0.35);
+          return { x: axisX + px * cosp - py * sinp, y: cy + px * sinp + py * cosp };
+        });
       }
 
+      if (!state._trails || state._trails.length !== tracers.length) {
+        state._trails = tracers.map(function () { return []; });
+      }
+      for (i = 0; i < tracers.length; i++) {
+        state._trails[i].push(tracers[i]);
+        if (state._trails[i].length > 22) state._trails[i].shift();
+      }
+      ctx.save();
+      ctx.lineCap = 'round';
+      for (i = 0; i < state._trails.length; i++) {
+        var tr = state._trails[i];
+        var k;
+        for (k = 1; k < tr.length; k++) {
+          ctx.strokeStyle = 'rgba(212, 160, 23, ' + (k / tr.length) * 0.7 + ')';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(tr[k - 1].x, tr[k - 1].y);
+          ctx.lineTo(tr[k].x, tr[k].y);
+          ctx.stroke();
+        }
+      }
       ctx.restore();
-
-      pill(ctx, axisNote, 14, height - 18, MUTED, 'left');
-
-      ctx.strokeStyle = LINE;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(leftW, 12);
-      ctx.lineTo(leftW, height - 12);
-      ctx.stroke();
-
-      var rightX = leftW + 12;
-      var rightW = width - rightX - 12;
-      var keyH = 52;
-      var rampStartX = rightX + 10;
-      var rampStartY = 64;
-      var rampLen = rightW - 20;
-      var rampHeight = Math.min(height - keyH - rampStartY - 20, height * 0.42);
-      var rampEndX = rampStartX + rampLen;
-      var rampEndY = rampStartY + rampHeight;
-
-      ctx.fillStyle = MUTED;
-      ctx.font = '600 12px Inter, -apple-system, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText(isRolling ? 'Incline race' : 'Not a rolling body', rightX + 4, 10);
-
-      ctx.beginPath();
-      ctx.moveTo(rampStartX, rampStartY);
-      ctx.lineTo(rampEndX, rampEndY);
-      ctx.lineTo(rampStartX, rampEndY);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(239, 233, 222, 0.7)';
-      ctx.fill();
-      ctx.strokeStyle = MUTED;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      var thetaIncline = Math.atan2(rampHeight, rampLen);
-      var gSinTheta = 9.81 * Math.sin(thetaIncline);
-
-      var racers = [
-        { kind: 'sphere', name: 'sphere', c: 0.40, color: GOOD, letter: 'S', match: isSphere },
-        { kind: 'disk', name: 'disk', c: 0.50, color: CORAL, letter: 'D', match: isDisk },
-        { kind: 'hoop', name: 'hoop', c: 1.00, color: ROSE, letter: 'R', match: isHoop }
-      ];
-
-      if (isRolling && state.raceActive) {
-        state.raceTime += dtEff;
-      } else if (!isRolling || !state.raceActive) {
-        state.raceTime = 0;
+      for (i = 0; i < tracers.length; i++) {
+        ringDot(ctx, tracers[i].x, tracers[i].y, 3.5, GOLD, CREAM);
       }
 
-      var maxTrackPx = Math.max(8, rampLen - 28);
-      var pxScale = maxTrackPx / 2.0;
-
-      if (isRolling) {
-        racers.forEach(function (rc, idx) {
-          var aLin = gSinTheta / (1 + rc.c);
-          var distMeters = 0.5 * aLin * (state.raceTime * state.raceTime);
-          var distPx = Math.min(maxTrackPx, distMeters * pxScale);
-          var u = distPx / maxTrackPx;
-          var startX = rampStartX + 16;
-          var startY = rampStartY + 18 + idx * 22;
-          var endX = rampEndX - 14;
-          var endY = rampEndY - 16 - (2 - idx) * 6;
-          var rX = startX + u * (endX - startX);
-          var rY = startY + u * (endY - startY);
-          var glyphR = rc.match ? 11 : 7;
-          ctx.save();
-          if (!rc.match) ctx.globalAlpha = 0.38;
-          drawRollingGlyph(ctx, rX, rY, rc.kind, rc.color, glyphR);
-          ctx.restore();
-          if (rc.match) {
-            ctx.strokeStyle = INK;
-            ctx.lineWidth = 1.4;
-            ctx.beginPath();
-            ctx.arc(rX, rY, glyphR + 3, 0, Math.PI * 2);
-            ctx.stroke();
-          }
-        });
-
-        var keyY = height - keyH + 10;
-        var colW = rightW / 3;
-        racers.forEach(function (rc, idx) {
-          var kx = rightX + colW * (idx + 0.5);
-          drawRollingGlyph(ctx, kx - 18, keyY, rc.kind, rc.color, rc.match ? 6 : 5);
-          ctx.fillStyle = rc.match ? INK : MUTED;
-          ctx.font = (rc.match ? '700 ' : '500 ') + '10px Inter, -apple-system, sans-serif';
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(rc.name, kx - 8, keyY);
-        });
-      } else {
-        pill(ctx, 'toggle race only for disk / hoop / sphere', rightX + 8, rampStartY + rampHeight * 0.45, MUTED, 'left');
-      }
-
-      var raceVal;
-      if (!isRolling) {
-        raceVal = 'not a rolling body';
-      } else if (state.raceActive) {
-        raceVal = latexNum(state.raceTime, 2, '\\mathrm{s}');
-      } else {
-        raceVal = 'off (toggle to start)';
-      }
+      pill(ctx, axisNote, 14, height - 16, MUTED, 'left');
 
       vizLegend('Continuous $I$', [
         { label: 'Geometry', value: state.shapeType },
-        { label: '$I$', value: latexNum(I_exact, 3, '\\mathrm{kg\\,m}^2') },
+        { label: '$I = \\int r_\\perp^2\\,\\mathrm{d}m$', value: latexNum(I_exact, 3, '\\mathrm{kg\\,m}^2') },
         { label: 'Formula', value: '$I = ' + formulaTex + '$' },
         { label: cLabel, value: '$' + cFactor.toFixed(3) + '$' },
-        { label: '$a/(g\\sin\\theta)$', value: isRolling ? '$' + (1 / (1 + cFactor)).toFixed(3) + '$' : 'N/A (does not roll)' },
-        { label: 'Race', value: raceVal },
-        { label: '$\\mathrm{d}m$', value: dmTex }
+        { label: '$\\mathrm{d}m$', value: dmTex },
+        { label: 'Paint', value: isDisk ? 'ring opacity $\\propto r^2$' : (isPowerRod ? 'opacity $\\propto \\lambda(x)\\,x^2$' : 'gold tracers: $v=\\omega r_\\perp$') },
+        { label: 'Slices $N$', value: '$' + N + '$' }
       ]);
     },
     challenge: {
@@ -1084,13 +942,8 @@
     topic: 'cm',
     title: 'Parallel-Axis (Steiner) Theorem & Physical Pendulum',
     formulaLatex: 'I = I_{\\text{CM}} + M d^2',
-    physicalStory: `
-      Calculating the moment of inertia about every possible axis from direct integration is tedious. The Parallel-Axis Theorem (Steiner's Theorem) states that the moment of inertia $I$ about any axis parallel to an axis through the Center of Mass (CM) equals $I_{\\mathrm{CM}}$ plus the mass $M$ multiplied by the square of the perpendicular shift distance $d^2$.
-
-      Two foundational physical insights emerge:
-      1. $I_{\\mathrm{CM}}$ is the absolute global minimum: for a given axis direction, the moment of inertia is strictly minimized when passing through the Center of Mass ($d=0$).
-      2. Physical pendulum period: when pivoted at distance $d$ from the CM, the oscillation period is $T = 2\\pi \\sqrt{(I_{\\mathrm{CM}} + M d^2)/(M g d)}$. As $d \\to 0$, $T \\to \\infty$ (no restoring gravitational torque); as $d \\to \\infty$, $T \\to \\infty$ (large rotational inertia). Hence there exists a unique optimal pivot distance $d = \\sqrt{I_{\\mathrm{CM}}/M} = k_g$ (radius of gyration) that minimizes the oscillation period.
-    `,
+    physicalStory:
+      'Steiner\'s theorem: the moment of inertia about any axis parallel to one through the center of mass is $I_P = I_{\\mathrm{CM}} + Md^2$. Equivalently $k_P^2 = k_g^2 + d^2$, a right triangle whose legs are the radius of gyration $k_g=\\sqrt{I_{\\mathrm{CM}}/M}$ and the shift $d$. $I_{\\mathrm{CM}}$ is the minimum for that axis direction. The extra $Md^2$ is the CM treated as a point mass orbiting the new axis. For a physical pendulum, $T=2\\pi\\sqrt{I_P/(Mgd)}$ is smallest at $d=k_g$.',
     derivationSteps: [
       {
         step: 1,
@@ -1150,17 +1003,12 @@
       { id: 'bodyMass', label: 'Mass ($M$)', min: 0.5, max: 4.0, step: 0.1, default: 1.5, unit: 'kg' },
       { id: 'bodyDim', label: 'Size ($L$ or $R$)', min: 0.5, max: 2.5, step: 0.1, default: 1.2, unit: 'm' },
       { id: 'pivotShift', label: 'Shift Distance ($d$)', min: 0, max: 2.5, step: 0.02, default: 0.35, unit: 'm' },
-      { id: 'paused', label: 'Pause swing', type: 'toggle', default: false },
+      { id: 'paused', label: 'Pause rotation', type: 'toggle', default: false },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     onParamChange: function (id, val, state) {
-      if (id === 'bodyShape' || id === 'pivotShift' || id === 'bodyDim' || id === 'bodyMass') {
-        state.pendulumAngle = 0.40;
-        state.pendulumOmega = 0;
-      }
-      if (id === 'paused' && !val) {
-        state.pendulumAngle = 0.40;
-        state.pendulumOmega = 0;
+      if (id === 'bodyShape' || id === 'bodyDim') {
+        state.spin = 0;
       }
     },
     init: function (container, state, redraw) {
@@ -1168,273 +1016,163 @@
       state.bodyMass = state.bodyMass !== undefined ? state.bodyMass : 1.5;
       state.bodyDim = state.bodyDim !== undefined ? state.bodyDim : 1.2;
       state.pivotShift = state.pivotShift !== undefined ? state.pivotShift : 0.35;
-      state.pendulumAngle = state.pendulumAngle !== undefined ? state.pendulumAngle : 0.35;
-      state.pendulumOmega = state.pendulumOmega || 0;
       state.paused = !!state.paused;
       if (state.simSpeed === undefined) state.simSpeed = 1.0;
+      state.spin = state.spin || 0;
     },
     draw: function (ctx, width, height, state, dt) {
-      if (dt === undefined) dt = 0.016;
-      if (dt > 0.1) dt = 0.1;
+      var M = numParam(state, 'bodyMass', 1.5);
+      var L = Math.max(0.2, numParam(state, 'bodyDim', 1.2));
+      var d = Math.max(0, numParam(state, 'pivotShift', 0.35));
       var speed = simSpeedOf(state);
-      var dtEff = dt * speed;
-      if (dtEff > 0.2) dtEff = 0.2;
-
-      state.bodyMass = state.bodyMass !== undefined ? state.bodyMass : 1.5;
-      state.bodyDim = state.bodyDim !== undefined ? state.bodyDim : 1.2;
-      state.pivotShift = state.pivotShift !== undefined ? state.pivotShift : 0.35;
+      var dtEff = safeDt(dt) * speed;
       state.bodyShape = state.bodyShape || 'Uniform Thin Rod (L)';
-      state.pendulumAngle = state.pendulumAngle !== undefined ? state.pendulumAngle : 0.35;
-      state.pendulumOmega = state.pendulumOmega || 0;
-
-      creamFill(ctx, width, height);
-
-      var M = state.bodyMass;
-      var L = Math.max(0.2, state.bodyDim);
       var isRodBody = state.bodyShape === 'Uniform Thin Rod (L)';
       var isDiskBody = state.bodyShape === 'Solid Disk (R)';
       var isRingBody = state.bodyShape === 'Hollow Ring (R)';
-      var dMax = isRodBody ? (L * 0.5) : L;
-      var d = Math.min(Math.max(0, Number(state.pivotShift) || 0), dMax);
-      state.pivotShift = d;
-      if (typeof document !== 'undefined') {
-        var dBadge = document.getElementById('viz-val-pivotShift') || document.getElementById('viz-inline-val-pivotShift');
-        if (dBadge) dBadge.textContent = d.toFixed(2) + ' m';
-        var dSlider = document.getElementById('viz-ctrl-pivotShift') || document.getElementById('viz-inline-ctrl-pivotShift');
-        if (dSlider && Math.abs(Number(dSlider.value) - d) > 0.001) dSlider.value = String(d);
-      }
-      var g = 9.81;
+      var paused = isOn(state.paused, false);
 
       var I_cm = (1 / 12) * M * L * L;
-      if (isDiskBody) {
-        I_cm = 0.5 * M * L * L;
-      } else if (isRingBody) {
-        I_cm = M * L * L;
-      }
+      if (isDiskBody) I_cm = 0.5 * M * L * L;
+      else if (isRingBody) I_cm = M * L * L;
 
       var I_p = I_cm + M * d * d;
       var k_g = Math.sqrt(Math.max(0, I_cm / M));
+      var k_p = Math.sqrt(k_g * k_g + d * d);
+      var g = 9.81;
       var curT = (d > 0.01) ? 2 * Math.PI * Math.sqrt(I_p / (M * g * d)) : Infinity;
       var minT = 2 * Math.PI * Math.sqrt((2 * k_g) / g);
 
-      if (!state.paused && d > 0.005 && I_p > 1e-9) {
-        var alphaP = -(M * g * d * Math.sin(state.pendulumAngle)) / I_p;
-        state.pendulumOmega += alphaP * dtEff;
-        state.pendulumAngle += state.pendulumOmega * dtEff;
-      }
+      if (!paused) state.spin = (state.spin || 0) + 0.55 * dtEff;
+      var ang = state.spin || 0;
 
-      var leftW = Math.round(width * 0.46);
-      var pivotPxX = leftW * 0.5;
-      var pxScale = Math.min(leftW, height) * 0.36;
-      var halfBody = isRodBody ? pxScale * 0.45 : pxScale * 0.42;
-      var pivotPxY = Math.max(18, halfBody + 14);
-      var dPx = (dMax > 1e-9) ? (d / dMax) * halfBody : 0;
-      var cmPxY = dPx;
-      var ang = state.pendulumAngle;
-      var cmX = pivotPxX - Math.sin(ang) * cmPxY;
-      var cmY = pivotPxY + Math.cos(ang) * cmPxY;
+      creamFill(ctx, width, height);
+      lightGrid(ctx, width, height, 40);
 
-      if (dPx > 10) {
-        DrawUtils.drawHatchedWall(ctx, pivotPxX - 26, pivotPxY - 10, 52, 10, 'horizontal-top');
-      }
+      var halfBody = isRodBody ? L * 0.5 : L;
+      var need = d + halfBody + 0.08;
+      var padFit = 40;
+      var scale = Math.min(width - 2 * padFit, height - 2 * padFit) * 0.48 / Math.max(need, 0.4);
+      var px = width * 0.50;
+      var py = height * 0.50;
+
+      var cmx = px + d * scale * Math.sin(ang);
+      var cmy = py + d * scale * Math.cos(ang);
+      var kgPx = k_g * scale;
+      var dPx = d * scale;
+
+      var vx = cmx - px;
+      var vy = cmy - py;
+      var vlen = Math.hypot(vx, vy) || 1;
+      var ux = vx / vlen;
+      var uy = vy / vlen;
+      var gx = cmx - uy * kgPx;
+      var gy = cmy + ux * kgPx;
 
       ctx.save();
-      ctx.translate(pivotPxX, pivotPxY);
-      ctx.rotate(ang);
+      ctx.translate(px, py);
+      ctx.rotate(-ang);
 
-      if (state.bodyShape === 'Uniform Thin Rod (L)') {
-        var rodLenPx = pxScale * 0.9;
-        var rodTopY = cmPxY - rodLenPx * 0.5;
-        ctx.fillStyle = 'rgba(204, 120, 92, 0.38)';
+      if (isRodBody) {
+        var rodLenPx = L * scale;
+        var rodTop = dPx - rodLenPx * 0.5;
+        ctx.fillStyle = 'rgba(204, 120, 92, 0.28)';
         ctx.strokeStyle = CORAL;
-        ctx.lineWidth = 2.5;
-        ctx.fillRect(-9, rodTopY, 18, rodLenPx);
-        ctx.strokeRect(-9, rodTopY, 18, rodLenPx);
+        ctx.lineWidth = 2;
+        ctx.fillRect(-8, rodTop, 16, rodLenPx);
+        ctx.strokeRect(-8, rodTop, 16, rodLenPx);
       } else {
-        var diskRadPx = pxScale * 0.42;
+        var diskRadPx = L * scale;
         ctx.strokeStyle = CORAL;
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 2.2;
         ctx.beginPath();
-        ctx.arc(0, cmPxY, diskRadPx, 0, Math.PI * 2);
-        if (state.bodyShape === 'Hollow Ring (R)') {
+        ctx.arc(0, dPx, diskRadPx, 0, Math.PI * 2);
+        if (isRingBody) {
           ctx.stroke();
-          ctx.lineWidth = 7;
-          ctx.globalAlpha = 0.45;
+          ctx.lineWidth = 8;
+          ctx.globalAlpha = 0.35;
           ctx.stroke();
           ctx.globalAlpha = 1;
         } else {
-          ctx.fillStyle = 'rgba(204, 120, 92, 0.32)';
+          ctx.fillStyle = 'rgba(204, 120, 92, 0.22)';
           ctx.fill();
           ctx.stroke();
         }
       }
+      ctx.restore();
+
+      if (kgPx > 8) {
+        ctx.save();
+        ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.22);
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([3, 4]);
+        ctx.beginPath();
+        ctx.arc(cmx, cmy, kgPx, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
 
       if (dPx > 6) {
-        ctx.strokeStyle = GOLD;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(0, cmPxY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-
-      ctx.fillStyle = GOOD;
-      ctx.beginPath();
-      ctx.arc(0, cmPxY, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = CREAM;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      ctx.fillStyle = INK;
-      ctx.beginPath();
-      ctx.arc(0, 0, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = CREAM;
-      ctx.stroke();
-      ctx.restore();
-
-      if (dPx < 14) {
-        pill(ctx, 'pivot = CM', pivotPxX + 12, pivotPxY - 2, INK, 'left');
-      } else {
-        pill(ctx, 'pivot', pivotPxX + 12, pivotPxY - 2, INK, 'left');
-        var cmAlign = cmX > leftW * 0.55 ? 'right' : 'left';
-        var cmLabelX = cmAlign === 'right' ? cmX - 12 : cmX + 12;
-        pill(ctx, 'CM', cmLabelX, cmY, GOOD, cmAlign);
-
-        var mx = (pivotPxX + cmX) / 2;
-        var my = (pivotPxY + cmY) / 2;
-        var vx = cmX - pivotPxX;
-        var vy = cmY - pivotPxY;
-        var vlen = Math.hypot(vx, vy) || 1;
-        var lx = mx - (vy / vlen) * 16;
-        var ly = my + (vx / vlen) * 16;
-        if (lx < 18) lx = 18;
-        if (lx > leftW - 18) lx = leftW - 18;
-        pill(ctx, 'd', lx, ly, GOLD, 'center');
-      }
-
-      ctx.strokeStyle = LINE;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(leftW, 12);
-      ctx.lineTo(leftW, height - 12);
-      ctx.stroke();
-
-      var rightX = leftW + 10;
-      var rightW = width - rightX - 10;
-      var g1Y = 10;
-      var g1H = (height - 28) * 0.48;
-      var g2Y = g1Y + g1H + 8;
-      var g2H = height - g2Y - 10;
-      var maxD = dMax;
-      var maxI = I_cm + M * maxD * maxD;
-
-      function plotBox(x, y, w, h, title, xLab, yLab) {
-        panelRect(ctx, x, y, w, h);
         ctx.save();
-        ctx.fillStyle = MUTED;
-        ctx.font = '600 11px Inter, -apple-system, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.fillText(title, x + 10, y + 8);
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(xLab, x + w - 8, y + h - 5);
-        ctx.restore();
-        return { x: x + 16, y: y + 26, w: w - 28, h: h - 42 };
-      }
-
-      var inner1 = plotBox(rightX, g1Y, rightW, g1H, 'I versus d', 'd', 'I');
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(inner1.x, inner1.y, inner1.w, inner1.h);
-      ctx.clip();
-      ctx.strokeStyle = CORAL;
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      for (var s = 0; s <= 50; s++) {
-        var dStep = (s / 50) * maxD;
-        var iStep = I_cm + M * dStep * dStep;
-        var gx = inner1.x + (maxD > 0 ? (dStep / maxD) * inner1.w : 0);
-        var gy = inner1.y + inner1.h - (maxI > 0 ? (iStep / (maxI * 1.05)) * inner1.h : 0);
-        if (s === 0) ctx.moveTo(gx, gy);
-        else ctx.lineTo(gx, gy);
-      }
-      ctx.stroke();
-      var curGx = inner1.x + (maxD > 0 ? (d / maxD) * inner1.w : 0);
-      var curGy = inner1.y + inner1.h - (maxI > 0 ? (I_p / (maxI * 1.05)) * inner1.h : 0);
-      ctx.fillStyle = GOLD;
-      ctx.beginPath();
-      ctx.arc(curGx, curGy, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-
-      var inner2 = plotBox(rightX, g2Y, rightW, g2H, 'T versus d', 'd', 'T');
-      var tMinY = minT * 0.75;
-      var tMaxY = minT * 2.6;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(inner2.x, inner2.y, inner2.w, inner2.h);
-      ctx.clip();
-      ctx.strokeStyle = GOOD;
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      var firstPt = true;
-      for (var s2 = 1; s2 <= 60; s2++) {
-        var dS = (s2 / 60) * maxD;
-        if (dS < 0.01) continue;
-        var iS = I_cm + M * dS * dS;
-        var tS = 2 * Math.PI * Math.sqrt(iS / (M * g * dS));
-        if (tS > tMaxY) continue;
-        var tx = inner2.x + (maxD > 0 ? (dS / maxD) * inner2.w : 0);
-        var ty = inner2.y + inner2.h - ((tS - tMinY) / (tMaxY - tMinY)) * inner2.h;
-        if (firstPt) { ctx.moveTo(tx, ty); firstPt = false; }
-        else ctx.lineTo(tx, ty);
-      }
-      ctx.stroke();
-
-      if (maxD > 0 && k_g <= maxD) {
-        var kgX = inner2.x + (k_g / maxD) * inner2.w;
-        ctx.strokeStyle = ROSE;
-        ctx.lineWidth = 1.2;
-        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.16);
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 5]);
         ctx.beginPath();
-        ctx.moveTo(kgX, inner2.y);
-        ctx.lineTo(kgX, inner2.y + inner2.h);
+        ctx.arc(px, py, dPx, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = ROSE;
-        ctx.beginPath();
-        ctx.arc(kgX, inner2.y + inner2.h - ((minT - tMinY) / (tMaxY - tMinY)) * inner2.h, 4, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.restore();
       }
 
-      if (d > 0.01 && isFinite(curT) && curT < tMaxY) {
-        var curTx = inner2.x + (maxD > 0 ? (d / maxD) * inner2.w : 0);
-        var curTy = inner2.y + inner2.h - ((curT - tMinY) / (tMaxY - tMinY)) * inner2.h;
-        ctx.fillStyle = GOLD;
-        ctx.beginPath();
-        ctx.arc(curTx, curTy, 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      ctx.save();
+      ctx.fillStyle = 'rgba(212, 160, 23, 0.14)';
+      ctx.strokeStyle = GOLD;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(cmx, cmy);
+      ctx.lineTo(gx, gy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
       ctx.restore();
 
-      if (maxD > 0 && k_g <= maxD) {
-        var kgLabelX = inner2.x + (k_g / maxD) * inner2.w;
-        var kgAlign = kgLabelX > rightX + rightW - 36 ? 'right' : 'center';
-        pill(ctx, 'k_g', kgLabelX, g2Y + g2H - 10, ROSE, kgAlign);
+      shaft(ctx, px, py, cmx, cmy, GOLD, 2.4);
+      shaft(ctx, cmx, cmy, gx, gy, TEAL, 2.2);
+      shaft(ctx, px, py, gx, gy, CORAL, 2.2);
+
+      ringDot(ctx, px, py, 6, INK, CREAM);
+      ringDot(ctx, cmx, cmy, 6, GOOD, CREAM);
+      ringDot(ctx, gx, gy, 5, GOLD, CREAM);
+
+      pill(ctx, 'P', px + 12, py - 2, INK, 'left');
+      if (dPx > 14) {
+        var cmAlign = cmx > width * 0.58 ? 'right' : 'left';
+        pill(ctx, 'CM', cmAlign === 'right' ? cmx - 12 : cmx + 12, cmy, GOOD, cmAlign);
+        var mx = (px + cmx) / 2;
+        var my = (py + cmy) / 2;
+        var lx = mx - uy * 14;
+        var ly = my + ux * 14;
+        lx = Math.max(18, Math.min(width - 18, lx));
+        ly = Math.max(16, Math.min(height - 14, ly));
+        pill(ctx, 'd', lx, ly, GOLD, 'center');
+      } else {
+        pill(ctx, 'P = CM', px + 12, py + 16, INK, 'left');
+      }
+      if (kgPx > 16) {
+        pill(ctx, 'k_g', (cmx + gx) / 2 + 10, (cmy + gy) / 2, TEAL, 'left');
+      }
+      if (Math.hypot(gx - px, gy - py) > 28 && dPx > 12) {
+        pill(ctx, 'k_P', (px + gx) / 2 - 8, (py + gy) / 2 - 10, CORAL, 'center');
       }
 
       vizLegend('Parallel-axis theorem', [
         { label: 'Body', value: state.bodyShape },
         { label: '$I_{\\mathrm{CM}}$', value: latexNum(I_cm, 3, '\\mathrm{kg\\,m}^2') },
-        { label: '$d$', value: latexNum(d, 2, '\\mathrm{m}') },
-        { label: '$I_P = I_{\\mathrm{CM}} + M d^2$', value: latexNum(I_p, 3, '\\mathrm{kg\\,m}^2') },
-        { label: '$k_g = \\sqrt{I_{\\mathrm{CM}}/M}$', value: latexNum(k_g, 3, '\\mathrm{m}') },
-        { label: '$T(d)$', value: isFinite(curT) ? latexNum(curT, 2, '\\mathrm{s}') : 'infinite ($d = 0$)' },
+        { label: '$Md^2$', value: latexNum(M * d * d, 3, '\\mathrm{kg\\,m}^2') },
+        { label: '$I_P = I_{\\mathrm{CM}} + Md^2$', value: latexNum(I_p, 3, '\\mathrm{kg\\,m}^2') },
+        { label: '$k_g,\\ d,\\ k_P$', value: '$' + k_g.toFixed(3) + ',\\ ' + d.toFixed(2) + ',\\ ' + k_p.toFixed(3) + '\\,\\mathrm{m}$' },
+        { label: '$k_P^2 = k_g^2 + d^2$', value: latexNum(k_p * k_p, 3, '\\mathrm{m}^2') },
+        { label: '$T(d)$ physical pendulum', value: isFinite(curT) ? latexNum(curT, 2, '\\mathrm{s}') : 'infinite ($d = 0$)' },
         { label: '$T_{\\min}$ at $d = k_g$', value: latexNum(minT, 2, '\\mathrm{s}') }
       ]);
     },
@@ -1460,6 +1198,5 @@
       `
     }
   };
-
 
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -95,6 +95,22 @@ PGRE.studyTime = (function () {
       return this.daySec(dayStr(studyDayStart(new Date())));
     },
 
+    /* Display-only. committed todaySec plus the open gap the next heartbeat
+       (or focus credit) will bank. Passive gap capped at GAP_MAX so the chip
+       matches what a click would write. Never writes studyLog. */
+    liveTodaySec: function () {
+      var base = this.todaySec();
+      var t = PGRE.store.state.timer;
+      if (t && t.on && !t.paused && t.lastCredit) {
+        var focusGap = (Date.now() - t.lastCredit) / 1000;
+        return base + (focusGap > 0 ? focusGap : 0);
+      }
+      if (document.hidden || !lastBeat) return base;
+      var gap = (Date.now() - lastBeat) / 1000;
+      if (gap <= 0) return base;
+      return base + Math.min(gap, GAP_MAX);
+    },
+
     /* Monday-based study-week: seconds from this week's Monday 03:00 through
        the current study-day (same keys todaySec() reads). */
     weekSec: function () {

@@ -33,7 +33,17 @@
   var ROSE = '#e05666';
   var GRID = 'rgba(20, 20, 19, 0.08)';
   var SANS = '11px Inter, -apple-system, sans-serif';
-  var MONO = '11px "JetBrains Mono", ui-monospace, monospace';
+  var SANS_B = '600 11px Inter, -apple-system, sans-serif';
+
+  function stageTheme() {
+    if (PGRE.vizStageTheme) return PGRE.vizStageTheme();
+    return {
+      bg: CREAM, ink: INK, muted: MUTED, line: LINE, panel: PANEL,
+      gridMid: GRID,
+      inkFade: function (a) { return 'rgba(20, 20, 19, ' + a + ')'; },
+      chipFade: function (a) { return 'rgba(250, 249, 245, ' + a + ')'; }
+    };
+  }
 
   function syncStageTheme() {
     var t = PGRE.vizStageTheme ? PGRE.vizStageTheme() : null;
@@ -51,13 +61,93 @@
     if (PGRE.appendVizLegend) PGRE.appendVizLegend(title, rows);
   }
 
+  function numParam(state, key, fallback) {
+    var n = parseFloat(state && state[key]);
+    return isFinite(n) ? n : fallback;
+  }
+
+  function flagParam(state, key, fallback) {
+    var v = state ? state[key] : undefined;
+    if (v === undefined || v === null || v === '') return !!fallback;
+    if (v === true || v === 1 || v === '1' || v === 'true' || v === 'on') return true;
+    if (v === false || v === 0 || v === '0' || v === 'false' || v === 'off') return false;
+    return !!v;
+  }
+
+  function safeDt(dt) {
+    var n = parseFloat(dt);
+    if (!isFinite(n) || n < 0) return 0;
+    if (n > 0.05) return 0.05;
+    return n;
+  }
+
+  function canvasSize(width, height) {
+    var w = parseFloat(width);
+    var h = parseFloat(height);
+    return {
+      w: isFinite(w) && w > 0 ? w : 640,
+      h: isFinite(h) && h > 0 ? h : 420
+    };
+  }
+
+  function inkFade(a) {
+    var t = stageTheme();
+    return t.inkFade ? t.inkFade(a) : ('rgba(20, 20, 19, ' + a + ')');
+  }
+
+  function haloLabel(ctx, text, x, y, opts) {
+    opts = opts || {};
+    ctx.save();
+    ctx.font = opts.font || SANS_B;
+    ctx.textAlign = opts.align || 'center';
+    ctx.textBaseline = opts.baseline || 'middle';
+    var w = ctx.measureText ? ctx.measureText(text).width : String(text).length * 6.5;
+    var ax = opts.align === 'left' ? x : (opts.align === 'right' ? x - w : x - w / 2);
+    var ay = opts.baseline === 'top' ? y : (opts.baseline === 'bottom' ? y - 12 : y - 7);
+    var th = stageTheme();
+    ctx.fillStyle = th.chipFade ? th.chipFade(0.92) : 'rgba(250, 249, 245, 0.92)';
+    ctx.fillRect(ax - 3, ay - 1, w + 6, 14);
+    ctx.fillStyle = opts.color || INK;
+    ctx.fillText(text, x, y);
+    ctx.restore();
+  }
+
+  function shaftArrow(ctx, x0, y0, x1, y1, color, lw) {
+    lw = lw == null ? 2.2 : lw;
+    if (CV && typeof CV.drawArrow === 'function') {
+      CV.drawArrow(ctx, x0, y0, x1, y1, color, '', lw, 7);
+      return;
+    }
+    var dx = x1 - x0;
+    var dy = y1 - y0;
+    var len = Math.hypot(dx, dy);
+    if (len < 2) return;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+    var ux = dx / len;
+    var uy = dy / len;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x1 - ux * 8 + uy * 4, y1 - uy * 8 - ux * 4);
+    ctx.lineTo(x1 - ux * 8 - uy * 4, y1 - uy * 8 + ux * 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
 
   PGRE.visualizers['cpgf-5.27'] = {
     id: 'cpgf-5.27',
     topic: 'qm',
     title: 'Free Particle Quantum Wave & Energy: $\\psi(x) = e^{\\pm ikx}, \\; E = \\hbar^2 k^2/(2m)$',
     formulaLatex: '\\psi(x) = e^{\\pm ikx}, \\qquad E = \\frac{\\hbar^2 k^2}{2m} = \\hbar \\omega',
-    physicalStory: `For a free quantum particle ($V(x) = 0$), the time-independent Schrödinger equation yields complex plane-wave energy eigenstates $\\psi(x) = e^{\\pm ikx}$. The probability density $|\\psi(x)|^2 = 1$ is uniform throughout all space, reflecting absolute spatial delocalization in exchange for exact de Broglie momentum $p = \\hbar k$. The quantum dispersion relation $\\omega(k) = \\frac{\\hbar k^2}{2m}$ is quadratic in wavenumber $k$, creating a fundamental quantum phenomenon: the phase velocity $v_p = \\frac{\\omega}{k} = \\frac{\\hbar k}{2m} = \\frac{1}{2} v_{\\text{particle}}$ travels at exactly HALF the speed of the classical particle and group velocity $v_g = \\frac{d\\omega}{dk} = \\frac{\\hbar k}{m} = v_{\\text{particle}}$.`,
+    physicalStory: `For a free quantum particle ($V(x) = 0$), energy eigenstates are plane waves $\\psi(x) = e^{\\pm ikx}$ with exact momentum $p = \\hbar k$ and uniform $|\\psi|^2$. A localized particle is a packet of those waves. The Schrödinger dispersion $\\omega(k) = \\hbar k^2/(2m)$ is quadratic, so the envelope (group) rides at the classical speed $v_g = d\\omega/dk = p/m$ while every phase crest travels at half that speed: $v_p = \\omega/k = v_g/2$. Watch the tagged crest slip backward through the packet — that factor of two is the whole picture. Envelope width is held fixed so the slip stays readable; a free packet also spreads as $\\Delta k$ components drift.`,
 
     derivationSteps: [
       {
@@ -128,49 +218,76 @@
     ],
 
     parameters: [
-      { id: 'mode', label: 'Wave Mode', type: 'select', options: [
-        { value: 'plane', label: 'Plane wave $e^{i(kx-\\omega t)}$' },
-        { value: 'packet', label: 'Dispersive packet ($v_g$ vs $v_p$)' },
-        { value: 'standing', label: 'Standing wave $\\cos(kx)$' }
-      ], default: 'packet' },
-      { id: 'k', label: 'Wavenumber $k$', min: 1.0, max: 6.0, step: 0.2, default: 3.0, unit: 'rad/m' },
+      { id: 'k', label: 'Wavenumber $k$', min: 1.6, max: 5.6, step: 0.2, default: 3.2, unit: '' },
+      { id: 'sigma', label: 'Packet width $\\sigma$', min: 0.7, max: 2.2, step: 0.1, default: 1.2, unit: '' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
 
-    init(container, state, redraw) {
-      if (state._animTime === undefined) state._animTime = 0;
+    init: function (container, state) {
+      if (state._t === undefined) state._t = 0;
     },
 
-    draw(ctx, width, height, state, dt) {
-      const mode = state.mode || 'packet';
-      const k = state.k || 3.0;
-      let simSpeed = parseFloat(state.simSpeed);
-      if (isNaN(simSpeed)) simSpeed = 1.0;
+    onParamChange: function (id, val, state) {
+      if (!state) return;
+      if (id === 'k' || id === 'sigma') state._t = 0;
+    },
 
-      state._animTime = (state._animTime || 0) + (dt || 0.016) * simSpeed;
-      const t = state._animTime;
-
-      const omega = 0.5 * k * k;
-      const vp = omega / k;
-      const vg = k;
-
+    draw: function (ctx, width, height, state, dt) {
+      state = state || {};
+      var size = canvasSize(width, height);
+      width = size.w;
+      height = size.h;
       fillStage(ctx, width, height);
+
+      var k = Math.max(0.4, numParam(state, 'k', 3.2));
+      var sigma = Math.max(0.35, numParam(state, 'sigma', 1.2));
+      var speed = numParam(state, 'simSpeed', 1.0);
+      if (!isFinite(speed) || speed <= 0) speed = 1;
+      dt = safeDt(dt);
+
+      // Units ħ = m = 1: ω = k²/2, v_p = k/2, v_g = k.
+      var omega = 0.5 * k * k;
+      var vp = 0.5 * k;
+      var vg = k;
+
+      var xMin = 0;
+      var xMax = 12;
+      var xSpan = xMax - xMin;
+      var x0 = 2.2 * sigma;
+      if (x0 < 1.4) x0 = 1.4;
+      var travel = Math.max(2.5, xMax - x0 - 2.4 * sigma);
+      var loopT = travel / Math.max(vg, 0.05);
+      state._t = (state._t || 0) + dt * speed;
+      var tLoop = state._t % loopT;
+      if (tLoop < 0) tLoop += loopT;
+
+      var xc = x0 + vg * tLoop;
+      var xcr = x0 + vp * tLoop;
+      var phase0 = k * x0;
+
+      var padL = 18;
+      var padR = 18;
+      var padT = 14;
+      var padB = 44;
+      var plotX = padL;
+      var plotW = Math.max(40, width - padL - padR);
+      var plotY = padT;
+      var plotH = Math.max(40, height - padT - padB);
+      var midY = plotY + plotH * 0.58;
+      var amp = plotH * 0.40;
+
+      function mapX(x) {
+        return plotX + ((x - xMin) / xSpan) * plotW;
+      }
+      function envAt(x) {
+        var d = (x - xc) / sigma;
+        return Math.exp(-0.5 * d * d);
+      }
+      function psiR(x) {
+        return envAt(x) * Math.cos(k * x - omega * tLoop - phase0);
+      }
+
       ctx.save();
-
-      const padL = 28;
-      const padR = 100;
-      const padT = 30;
-      const padB = 52;
-      const plotX = padL;
-      const plotY = padT;
-      const plotW = Math.max(48, width - padL - padR);
-      const plotH = Math.max(48, height - padT - padB);
-      const midY = plotY + plotH * 0.52;
-      const amp = plotH * 0.34;
-      const numPts = 320;
-      const xSpan = 10;
-
-      function mapX(xNorm) { return plotX + xNorm * plotW; }
 
       ctx.strokeStyle = LINE;
       ctx.lineWidth = 1;
@@ -179,294 +296,103 @@
       ctx.lineTo(plotX + plotW, midY);
       ctx.stroke();
 
-      ctx.fillStyle = MUTED;
-      ctx.font = SANS;
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'top';
-      ctx.fillText('x', plotX + plotW, midY + 5);
-
-      function keyItem(x, y, color, dashed, label) {
-        ctx.save();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = dashed ? 1.5 : 2.2;
-        if (dashed) ctx.setLineDash([4, 3]);
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + 16, y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = INK;
-        ctx.font = SANS;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(label, x + 20, y);
-        const tw = ctx.measureText ? ctx.measureText(label).width : label.length * 6;
-        ctx.restore();
-        return x + 20 + tw + 16;
-      }
-
-      function keyDot(x, y, color, label) {
-        ctx.save();
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(x + 8, y, 3.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = INK;
-        ctx.font = SANS;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(label, x + 18, y);
-        const tw = ctx.measureText ? ctx.measureText(label).width : label.length * 6;
-        ctx.restore();
-        return x + 18 + tw + 16;
-      }
-
-      if (mode === 'plane') {
-        ctx.strokeStyle = CORAL;
-        ctx.lineWidth = 2.4;
-        ctx.beginPath();
-        for (let i = 0; i <= numPts; i++) {
-          const xNorm = i / numPts;
-          const phase = k * (xNorm * xSpan) - omega * t;
-          const py = midY - Math.cos(phase) * amp;
-          const px = mapX(xNorm);
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-
-        ctx.strokeStyle = TEAL;
-        ctx.setLineDash([4, 4]);
-        ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        for (let i = 0; i <= numPts; i++) {
-          const xNorm = i / numPts;
-          const phase = k * (xNorm * xSpan) - omega * t;
-          const py = midY - Math.sin(phase) * amp;
-          const px = mapX(xNorm);
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        ctx.strokeStyle = GOLD;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(plotX, midY - amp);
-        ctx.lineTo(plotX + plotW, midY - amp);
-        ctx.stroke();
-
-        let kx = plotX + 4;
-        const ky = plotY + 10;
-        kx = keyItem(kx, ky, CORAL, false, 'Re psi');
-        kx = keyItem(kx, ky, TEAL, true, 'Im psi');
-        keyItem(kx, ky, GOLD, false, '|psi|^2 = 1');
-      } else if (mode === 'standing') {
-        ctx.strokeStyle = 'rgba(212, 160, 23, 0.55)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        for (let i = 0; i <= numPts; i++) {
-          const xNorm = i / numPts;
-          const prob = Math.pow(Math.cos(k * xNorm * xSpan), 2);
-          const px = mapX(xNorm);
-          const py = midY - prob * amp;
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-
-        ctx.strokeStyle = CORAL;
-        ctx.lineWidth = 2.4;
-        ctx.beginPath();
-        for (let i = 0; i <= numPts; i++) {
-          const xNorm = i / numPts;
-          const val = Math.cos(k * xNorm * xSpan) * Math.cos(omega * t);
-          const px = mapX(xNorm);
-          const py = midY - val * amp;
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-
-        ctx.fillStyle = GOLD;
-        for (let n = 0; n < 20; n++) {
-          const xNode = (Math.PI / 2 + n * Math.PI) / k;
-          if (xNode < 0 || xNode > xSpan) continue;
-          const px = mapX(xNode / xSpan);
-          ctx.beginPath();
-          ctx.arc(px, midY, 2.4, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        let kx = plotX + 4;
-        const ky = plotY + 10;
-        kx = keyItem(kx, ky, CORAL, false, 'Standing wave');
-        kx = keyItem(kx, ky, GOLD, false, '|psi|^2');
-        keyDot(kx, ky, GOLD, 'nodes');
-      } else {
-        const sigma = 1.2;
-        const timeScale = 0.25;
-        const L = xSpan;
-        const packetCenter = ((vg * t * timeScale) % L + L) % L;
-        const phaseCrest = ((vp * t * timeScale) % L + L) % L;
-
-        function envAt(xVal) {
-          const d = xVal - packetCenter;
-          return Math.exp(-(d * d) / (2 * sigma * sigma));
-        }
-
-        ctx.beginPath();
-        ctx.moveTo(mapX(0), midY);
-        for (let i = 0; i <= numPts; i++) {
-          const xNorm = i / numPts;
-          ctx.lineTo(mapX(xNorm), midY - envAt(xNorm * L) * amp);
-        }
-        ctx.lineTo(mapX(1), midY);
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(93, 184, 166, 0.20)';
-        ctx.fill();
-
-        ctx.strokeStyle = CORAL;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        for (let i = 0; i <= numPts; i++) {
-          const xNorm = i / numPts;
-          const xVal = xNorm * L;
-          const val = envAt(xVal) * Math.cos(k * (xVal - vp * t * timeScale));
-          const px = mapX(xNorm);
-          const py = midY - val * amp;
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-
-        const peakX = mapX(packetCenter / L);
-        const peakY = midY - amp - 6;
-        ctx.fillStyle = GOLD;
-        ctx.beginPath();
-        ctx.arc(peakX, Math.max(plotY + 4, peakY), 4.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = CORAL_DEEP;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        const trackY = plotY + plotH + 16;
-        ctx.strokeStyle = LINE;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(plotX, trackY);
-        ctx.lineTo(plotX + plotW, trackY);
-        ctx.stroke();
-
-        const crestX = mapX(phaseCrest / L);
-        ctx.fillStyle = TEAL;
-        ctx.beginPath();
-        ctx.arc(crestX, trackY, 4, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = MUTED;
-        ctx.font = SANS;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('Phase Crest', plotX, trackY + 16);
-
-        let kx = plotX + 4;
-        const ky = plotY + 10;
-        ctx.save();
-        ctx.fillStyle = 'rgba(93, 184, 166, 0.40)';
-        ctx.beginPath();
-        ctx.moveTo(kx, ky + 6);
-        ctx.lineTo(kx + 9, ky - 6);
-        ctx.lineTo(kx + 18, ky + 6);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = GOLD;
-        ctx.beginPath();
-        ctx.arc(kx + 9, ky - 6, 3.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = INK;
-        ctx.font = SANS;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('envelope / vg', kx + 22, ky);
-        const twEnv = ctx.measureText ? ctx.measureText('envelope / vg').width : 80;
-        kx = kx + 22 + twEnv + 14;
-        kx = keyItem(kx, ky, CORAL, false, 'phase ripples');
-        keyDot(kx, ky, TEAL, 'phase crest / vp');
-        ctx.restore();
-      }
-
-      const wheelX = width - padR / 2;
-      const wheelY = padT + 42;
-      const wheelR = 32;
-
-      ctx.fillStyle = PANEL;
-      ctx.strokeStyle = LINE;
-      ctx.lineWidth = 1.5;
+      var nPts = 280;
       ctx.beginPath();
-      ctx.arc(wheelX, wheelY, wheelR, 0, Math.PI * 2);
+      ctx.moveTo(mapX(xMin), midY);
+      var i;
+      for (i = 0; i <= nPts; i++) {
+        var x = xMin + (i / nPts) * xSpan;
+        ctx.lineTo(mapX(x), midY - envAt(x) * amp);
+      }
+      ctx.lineTo(mapX(xMax), midY);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(93, 184, 166, 0.18)';
       ctx.fill();
-      ctx.stroke();
 
-      ctx.strokeStyle = LINE;
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(93, 184, 166, 0.55)';
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.moveTo(wheelX - wheelR + 4, wheelY);
-      ctx.lineTo(wheelX + wheelR - 4, wheelY);
-      ctx.moveTo(wheelX, wheelY - wheelR + 4);
-      ctx.lineTo(wheelX, wheelY + wheelR - 4);
+      for (i = 0; i <= nPts; i++) {
+        x = xMin + (i / nPts) * xSpan;
+        var ey = midY - envAt(x) * amp;
+        if (i === 0) ctx.moveTo(mapX(x), ey);
+        else ctx.lineTo(mapX(x), ey);
+      }
       ctx.stroke();
-
-      const phasorAngle = -omega * t;
-      const tipX = wheelX + wheelR * Math.cos(phasorAngle);
-      const tipY = wheelY + wheelR * Math.sin(phasorAngle);
 
       ctx.strokeStyle = CORAL;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.3;
       ctx.beginPath();
-      ctx.moveTo(wheelX, wheelY);
-      ctx.lineTo(tipX, tipY);
+      for (i = 0; i <= nPts; i++) {
+        x = xMin + (i / nPts) * xSpan;
+        var py = midY - psiR(x) * amp;
+        if (i === 0) ctx.moveTo(mapX(x), py);
+        else ctx.lineTo(mapX(x), py);
+      }
       ctx.stroke();
 
-      ctx.fillStyle = INK;
-      ctx.beginPath();
-      ctx.arc(tipX, tipY, 3, 0, Math.PI * 2);
-      ctx.fill();
+      var peakX = mapX(xc);
+      var peakY = midY - amp;
+      var crestX = mapX(xcr);
+      var crestY = midY - psiR(xcr) * amp;
 
-      ctx.fillStyle = MUTED;
-      ctx.font = SANS;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText('Phasor', wheelX, wheelY + wheelR + 8);
-      ctx.fillText('Re', wheelX + wheelR - 4, wheelY + 4);
-      ctx.textAlign = 'left';
-      ctx.fillText('Im', wheelX + 4, wheelY - wheelR + 2);
+      ctx.strokeStyle = inkFade(0.18);
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.moveTo(peakX, peakY);
+      ctx.lineTo(peakX, midY + 10);
+      ctx.moveTo(crestX, crestY);
+      ctx.lineTo(crestX, midY + 10);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.strokeStyle = GOLD;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(peakX, midY + 8);
+      ctx.lineTo(crestX, midY + 8);
+      ctx.stroke();
+
+      ctx.fillStyle = GOLD;
+      ctx.strokeStyle = CORAL_DEEP;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(peakX, peakY, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = TEAL;
+      ctx.strokeStyle = '#3d8f82';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(crestX, crestY, 4.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      var baseY = plotY + plotH + 18;
+      var vgLen = 46;
+      var vpLen = 23;
+      var ax0 = plotX + 6;
+      shaftArrow(ctx, ax0, baseY, ax0 + vgLen, baseY, GOLD, 2.4);
+      shaftArrow(ctx, ax0, baseY + 14, ax0 + vpLen, baseY + 14, TEAL, 2.2);
+      haloLabel(ctx, 'group', ax0 + vgLen + 20, baseY, { color: GOLD, align: 'left' });
+      haloLabel(ctx, 'phase', ax0 + vpLen + 20, baseY + 14, { color: TEAL, align: 'left' });
+
+      haloLabel(ctx, 'x', plotX + plotW - 2, midY + 10, { color: MUTED, align: 'right', baseline: 'top' });
 
       ctx.restore();
 
-      var legendRows = [
-        { label: 'Mode', value: mode },
-        { label: '$k$', value: '$' + k.toFixed(1) + '\\text{ rad/m}$' },
-        { label: '$E = \\hbar^2 k^2/(2m)$', value: '$' + omega.toFixed(2) + '$' },
-        { label: '$v_p = \\omega/k$', value: '$' + vp.toFixed(2) + '$' },
-        { label: '$v_g = d\\omega/dk$', value: '$' + vg.toFixed(2) + '$' },
+      vizLegend('Free-particle packet', [
+        { label: 'Units', value: '$\\hbar = m = 1$' },
+        { label: '$k$', value: '$' + k.toFixed(1) + '$' },
+        { label: '$\\omega = k^2/2$', value: '$' + omega.toFixed(2) + '$' },
+        { label: 'Gold peak / long arrow', value: 'envelope at $v_g = k$' },
+        { label: 'Teal crest / short arrow', value: 'phase at $v_p = k/2$' },
+        { label: '$v_g$', value: '$' + vg.toFixed(2) + '$' },
+        { label: '$v_p$', value: '$' + vp.toFixed(2) + '$' },
         { label: '$v_g / v_p$', value: '$2$' }
-      ];
-      if (mode === 'packet') {
-        legendRows.push(
-          { label: 'Teal fill + gold peak', value: 'envelope / $v_g$' },
-          { label: 'Coral stroke', value: 'phase ripples' },
-          { label: 'Teal track bead', value: 'phase crest / $v_p$' }
-        );
-      } else if (mode === 'standing') {
-        legendRows.push(
-          { label: 'Gold curve', value: '$|\\psi|^2$' },
-          { label: 'Gold dots', value: 'nodes' }
-        );
-      } else {
-        legendRows.push(
-          { label: 'Coral', value: '$\\mathrm{Re}\\,\\psi$' },
-          { label: 'Teal dashed', value: '$\\mathrm{Im}\\,\\psi$' },
-          { label: 'Gold', value: '$|\\psi|^2 = 1$' }
-        );
-      }
-      vizLegend('Free-particle wave', legendRows);
+      ]);
     },
 
     challenge: {
@@ -488,7 +414,7 @@
     topic: 'sr',
     title: 'Relativistic Kinetic Energy: $T = (\\gamma - 1)mc^2$',
     formulaLatex: 'T = E - mc^2 = (\\gamma - 1)mc^2, \\qquad \\gamma = \\frac{1}{\\sqrt{1 - v^2/c^2}}',
-    physicalStory: `In special relativity, accelerating a particle with constant force does not produce infinite linear velocity because its relativistic inertia increases asymptotically as $v \\to c$. Total relativistic energy is $E = \\gamma mc^2 = \\sqrt{p^2 c^2 + m^2 c^4}$. Kinetic energy $T$ is defined as the work required to accelerate the particle from rest to speed $v$, which equals total energy minus rest energy: $T = E - mc^2 = (\\gamma - 1)mc^2$. In the non-relativistic limit $v \\ll c$, Taylor expanding $\\gamma$ recovers classical Newtonian kinetic energy $\\frac{1}{2}mv^2$ plus higher-order corrections. As $\\beta = v/c \\to 1$, $T \\to \\infty$, establishing the speed of light $c$ as an impassable cosmic speed limit for all massive bodies.`,
+    physicalStory: `Kinetic energy is the work that lifts a massive particle up its mass shell. On the $(pc, E)$ plane the allowed states are the hyperbola $E^2 - (pc)^2 = (mc^2)^2$; $T$ is the vertical rise above rest energy $mc^2$. As $\\beta \\to 1$ that rise diverges and the worldline only asymptotes the light cone. The same speed in Newtonian mechanics traces a short curve that dies at $(pc, E) = (mc^2,\\, 1.5\\, mc^2)$ — it never reaches $c$, and it never pays the true energy cost.`,
 
     derivationSteps: [
       {
@@ -559,87 +485,159 @@
     ],
 
     parameters: [
-      { id: 'beta', label: 'Velocity Ratio $\\beta = v/c$', min: 0.0, max: 0.99, step: 0.01, default: 0.80, unit: 'c' },
-      { id: 'particle', label: 'Particle Type', type: 'select', options: [
-        { value: 'electron', label: '$e^-\\ (0.511\\,\\mathrm{MeV})$' },
-        { value: 'muon', label: '$\\mu^-\\ (105.7\\,\\mathrm{MeV})$' },
-        { value: 'proton', label: '$p\\ (938.3\\,\\mathrm{MeV})$' }
+      { id: 'beta', label: 'Velocity ratio $\\beta = v/c$', min: 0.0, max: 0.99, step: 0.01, default: 0.80, unit: '' },
+      { id: 'particle', label: 'Particle', type: 'select', options: [
+        { value: 'electron', label: '$e^-$ $(0.511\\,\\mathrm{MeV})$' },
+        { value: 'muon', label: '$\\mu^-$ $(105.7\\,\\mathrm{MeV})$' },
+        { value: 'proton', label: '$p$ $(938.3\\,\\mathrm{MeV})$' }
       ], default: 'electron' }
     ],
 
-    draw(ctx, width, height, state, dt) {
-      const beta = state.beta !== undefined ? state.beta : 0.80;
-      const particle = state.particle || 'electron';
+    draw: function (ctx, width, height, state) {
+      state = state || {};
+      var size = canvasSize(width, height);
+      width = size.w;
+      height = size.h;
+      fillStage(ctx, width, height);
 
-      let restMassMeV = 0.511;
+      var beta = numParam(state, 'beta', 0.80);
+      if (beta < 0) beta = 0;
+      if (beta > 0.99) beta = 0.99;
+      var particle = (state.particle || 'electron');
+
+      var restMassMeV = 0.511;
       if (particle === 'proton') restMassMeV = 938.3;
       if (particle === 'muon') restMassMeV = 105.7;
 
-      const gamma = 1 / Math.sqrt(Math.max(0.0001, 1 - beta * beta));
-      const T_rel = (gamma - 1) * restMassMeV;
-      const T_class = 0.5 * beta * beta * restMassMeV;
-      const pc_MeV = Math.sqrt(Math.max(0, T_rel * (T_rel + 2 * restMassMeV)));
-      const newtonRelErr = T_class > 1e-9 ? ((T_rel - T_class) / T_class) * 100 : 0;
+      var oneMinus = Math.max(1e-8, 1 - beta * beta);
+      var gamma = 1 / Math.sqrt(oneMinus);
+      var uRel = gamma * beta;
+      var eRel = gamma;
+      var tRel = gamma - 1;
+      var uN = beta;
+      var eN = 1 + 0.5 * beta * beta;
+      var tN = 0.5 * beta * beta;
+      var T_rel = tRel * restMassMeV;
+      var T_class = tN * restMassMeV;
+      var pc_MeV = Math.sqrt(Math.max(0, T_rel * (T_rel + 2 * restMassMeV)));
+      var newtonRelErr = tN > 1e-9 ? ((tRel - tN) / tN) * 100 : 0;
 
-      fillStage(ctx, width, height);
+      var padL = 50;
+      var padR = 16;
+      var padT = 18;
+      var padB = 36;
+      var originX = padL;
+      var originY = height - padB;
+      var plotW = Math.max(40, width - padL - padR);
+      var plotH = Math.max(40, originY - padT);
+
+      var uMax = Math.max(1.45, uRel * 1.22);
+      var eMax = Math.max(1.85, eRel * 1.18);
+
+      function mapU(u) { return originX + (u / uMax) * plotW; }
+      function mapE(e) { return originY - (e / eMax) * plotH; }
+
       ctx.save();
-
-      const margin = 16;
-      const stackW = 118;
-      const splitX = width - margin - stackW;
-      const originX = margin + 42;
-      const originY = height - margin - 32;
-      const plotW = Math.max(40, splitX - originX - 12);
-      const plotH = Math.max(40, originY - (margin + 28));
-
-      const maxT_norm = Math.max(1.0, (gamma - 1) * 1.45, 0.6);
-      function mapB(b) { return originX + (b / 1.0) * plotW; }
-      function mapT(t_norm) { return originY - (t_norm / maxT_norm) * plotH; }
 
       ctx.strokeStyle = GRID;
       ctx.lineWidth = 1;
-      ctx.fillStyle = MUTED;
-      ctx.font = MONO;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      for (let b = 0; b <= 1.001; b += 0.2) {
-        const gx = mapB(Math.min(b, 1));
+      var gi;
+      for (gi = 1; gi <= 4; gi++) {
+        var gv = (gi / 4) * uMax;
         ctx.beginPath();
-        ctx.moveTo(gx, originY);
-        ctx.lineTo(gx, originY - plotH);
+        ctx.moveTo(mapU(gv), originY);
+        ctx.lineTo(mapU(gv), originY - plotH);
         ctx.stroke();
-        ctx.fillText(b >= 0.99 ? 'c' : b.toFixed(1), gx, originY + 6);
+        var ge = (gi / 4) * eMax;
+        ctx.beginPath();
+        ctx.moveTo(originX, mapE(ge));
+        ctx.lineTo(originX + plotW, mapE(ge));
+        ctx.stroke();
       }
 
-      const yTicks = 4;
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-      for (let i = 0; i <= yTicks; i++) {
-        const tVal = (i / yTicks) * maxT_norm;
-        const gy = mapT(tVal);
-        ctx.beginPath();
-        ctx.moveTo(originX, gy);
-        ctx.lineTo(originX + plotW, gy);
-        ctx.stroke();
-        ctx.fillText(tVal.toFixed(2), originX - 6, gy);
-      }
-
-      const cX = mapB(1);
-      ctx.strokeStyle = ROSE;
-      ctx.setLineDash([4, 4]);
-      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.moveTo(cX, originY);
-      ctx.lineTo(cX, originY - plotH);
+      ctx.rect(originX, originY - plotH, plotW, plotH);
+      ctx.clip();
+
+      var lightX = mapU(Math.min(uMax, eMax));
+      var lightY = mapE(Math.min(uMax, eMax));
+      ctx.strokeStyle = ROSE;
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(mapU(0), mapE(0));
+      ctx.lineTo(lightX, lightY);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      ctx.fillStyle = ROSE;
-      ctx.font = SANS;
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText('v = c', cX - 6, originY - plotH - 4);
+      ctx.strokeStyle = TEAL;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(originX, mapE(1));
+      ctx.lineTo(originX + plotW, mapE(1));
+      ctx.stroke();
 
+      ctx.strokeStyle = GOLD;
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      var nB = 80;
+      var bi;
+      for (bi = 0; bi <= nB; bi++) {
+        var b = (bi / nB) * 0.999;
+        var px = mapU(b);
+        var py = mapE(1 + 0.5 * b * b);
+        if (bi === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.strokeStyle = CORAL;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      var nU = 140;
+      var ui;
+      for (ui = 0; ui <= nU; ui++) {
+        var u = (ui / nU) * uMax;
+        var eH = Math.sqrt(1 + u * u);
+        var hx = mapU(u);
+        var hy = mapE(eH);
+        if (ui === 0) ctx.moveTo(hx, hy);
+        else ctx.lineTo(hx, hy);
+      }
+      ctx.stroke();
+
+      var xR = mapU(uRel);
+      var yR = mapE(eRel);
+      var yRest = mapE(1);
+      if (tRel > 0.02) {
+        ctx.strokeStyle = CORAL_DEEP;
+        ctx.lineWidth = 3.2;
+        ctx.beginPath();
+        ctx.moveTo(xR, yRest);
+        ctx.lineTo(xR, yR);
+        ctx.stroke();
+      }
+
+      var xC = mapU(uN);
+      var yC = mapE(eN);
+      ctx.fillStyle = GOLD;
+      ctx.beginPath();
+      ctx.arc(xC, yC, 4.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = CREAM;
+      ctx.strokeStyle = CORAL;
+      ctx.lineWidth = 2.3;
+      ctx.beginPath();
+      ctx.arc(xR, yR, 5.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.restore();
+
+      ctx.save();
       ctx.strokeStyle = AXIS;
       ctx.lineWidth = 1.6;
       ctx.beginPath();
@@ -647,138 +645,30 @@
       ctx.lineTo(originX, originY);
       ctx.lineTo(originX + plotW, originY);
       ctx.stroke();
-
-      ctx.fillStyle = MUTED;
-      ctx.font = SANS;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText('T / mc^2', originX + 8, originY - plotH - 4);
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'top';
-      ctx.fillText('β = v/c', originX + plotW - 10, originY + 20);
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(originX, originY - plotH, plotW, plotH);
-      ctx.clip();
-
-      ctx.strokeStyle = GOLD;
-      ctx.setLineDash([5, 4]);
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (let i = 0; i <= 100; i++) {
-        const b = (i / 100) * 0.999;
-        const px = mapB(b);
-        const py = mapT(0.5 * b * b);
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      ctx.strokeStyle = CORAL;
-      ctx.lineWidth = 2.6;
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      for (let i = 0; i <= 120; i++) {
-        const b = (i / 120) * 0.999;
-        const g = 1 / Math.sqrt(Math.max(1e-6, 1 - b * b));
-        const px = mapB(b);
-        const py = mapT(g - 1);
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.stroke();
-
-      ctx.save();
-      ctx.setLineDash([3, 3]);
-      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.28);
-      ctx.lineWidth = 1;
-      const curX = mapB(Math.min(beta, 1));
-      const curY = mapT(gamma - 1);
-      ctx.beginPath();
-      ctx.moveTo(curX, originY);
-      ctx.lineTo(curX, curY);
-      ctx.stroke();
       ctx.restore();
 
-      ctx.fillStyle = CREAM;
-      ctx.strokeStyle = CORAL;
-      ctx.lineWidth = 2.4;
-      ctx.beginPath();
-      ctx.arc(curX, curY, 5.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-
-      const keyX = originX + 10;
-      const keyY = originY - plotH + 16;
-      ctx.strokeStyle = CORAL;
-      ctx.lineWidth = 2.4;
-      ctx.beginPath();
-      ctx.moveTo(keyX, keyY);
-      ctx.lineTo(keyX + 18, keyY);
-      ctx.stroke();
-      ctx.fillStyle = INK;
-      ctx.font = SANS;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('Relativistic Kinetic Energy', keyX + 24, keyY);
-
-      ctx.strokeStyle = GOLD;
-      ctx.setLineDash([5, 4]);
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(keyX, keyY + 16);
-      ctx.lineTo(keyX + 18, keyY + 16);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = INK;
-      ctx.fillText('Classical Kinetic Energy', keyX + 24, keyY + 16);
-
-      const barX = splitX + 8;
-      const barY = originY - plotH + 8;
-      const barW = 36;
-      const maxBarH = plotH - 16;
-      const e0H = Math.max(10, maxBarH / gamma);
-      const tH = Math.max(0, maxBarH - e0H);
-
-      ctx.fillStyle = TEAL;
-      ctx.fillRect(barX, barY + maxBarH - e0H, barW, e0H);
-      ctx.strokeStyle = '#3d8f82';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(barX, barY + maxBarH - e0H, barW, e0H);
-
-      if (tH > 1) {
-        ctx.fillStyle = CORAL;
-        ctx.fillRect(barX, barY, barW, tH);
-        ctx.strokeStyle = CORAL_DEEP;
-        ctx.strokeRect(barX, barY, barW, tH);
+      haloLabel(ctx, 'pc', originX + plotW - 4, originY + 14, { color: MUTED, align: 'right' });
+      haloLabel(ctx, 'E', originX - 14, originY - plotH + 2, { color: MUTED, align: 'right', baseline: 'top' });
+      if (tRel * plotH / eMax > 28) {
+        haloLabel(ctx, 'T', xR + 12, (yR + yRest) / 2, { color: CORAL_DEEP, align: 'left' });
       }
+      var restLabelX = originX + 10;
+      haloLabel(ctx, 'rest', restLabelX, mapE(1) - 10, { color: TEAL, align: 'left' });
+      var lightLabelU = Math.min(uMax * 0.72, eMax * 0.72);
+      haloLabel(ctx, 'light', mapU(lightLabelU) + 10, mapE(lightLabelU) - 8, { color: ROSE, align: 'left' });
 
-      ctx.font = SANS;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      const labX = barX + barW + 8;
-      if (tH > 18) {
-        ctx.fillStyle = CORAL_DEEP;
-        ctx.fillText('T', labX, barY + tH / 2);
-      }
-      if (e0H > 18) {
-        ctx.fillStyle = MUTED;
-        ctx.fillText('mc²', labX, barY + maxBarH - e0H / 2);
-      }
-
-      ctx.restore();
-
-      vizLegend('Relativistic kinetic energy', [
+      vizLegend('Mass shell', [
         { label: 'Particle', value: particle },
-        { label: 'Plot', value: '$T/mc^2$ vs $\\beta$' },
+        { label: 'Coral curve', value: '$E^2 - (pc)^2 = (mc^2)^2$' },
+        { label: 'Coral riser', value: '$T = E - mc^2$' },
+        { label: 'Gold curve / dot', value: 'same $\\beta$, $T_N = \\frac{1}{2}mv^2$' },
         { label: '$\\beta = v/c$', value: '$' + beta.toFixed(2) + '$' },
         { label: '$\\gamma$', value: '$' + gamma.toFixed(3) + '$' },
-        { label: '$E_0 = mc^2$', value: '$' + restMassMeV.toFixed(3) + '\\text{ MeV}$' },
-        { label: '$T = (\\gamma - 1)mc^2$', value: '$' + T_rel.toFixed(3) + '\\text{ MeV}$' },
+        { label: '$mc^2$', value: '$' + restMassMeV.toFixed(3) + '\\text{ MeV}$' },
+        { label: '$T = (\\gamma-1)mc^2$', value: '$' + T_rel.toFixed(3) + '\\text{ MeV}$' },
         { label: '$T_N = \\frac{1}{2}mv^2$', value: '$' + T_class.toFixed(3) + '\\text{ MeV}$' },
         { label: '$pc$', value: '$' + pc_MeV.toFixed(3) + '\\text{ MeV}$' },
-        { label: 'Newton relative error $(T-T_N)/T_N$', value: '$' + newtonRelErr.toFixed(1) + '\\%$' }
+        { label: '$(T - T_N)/T_N$', value: '$' + newtonRelErr.toFixed(1) + '\\%$' }
       ]);
     },
 
@@ -796,12 +686,28 @@
     }
   };
 
+  function seedDecay(state, n0) {
+    var n = Math.max(8, Math.round(n0));
+    state._nuclei = [];
+    var i;
+    for (i = 0; i < n; i++) {
+      state._nuclei.push({
+        alive: true,
+        x: (i + 0.5 + (Math.random() - 0.5) * 0.35) / n,
+        j: (Math.random() - 0.5)
+      });
+    }
+    state._simTime = 0;
+    state._hist = [{ t: 0, n: n }];
+    state._n0 = n;
+  }
+
   PGRE.visualizers['cpgf-7.17'] = {
     id: 'cpgf-7.17',
     topic: 'lb',
     title: 'Radioactive Decay Law: $N(t) = N_0 e^{-t/\\tau}$',
     formulaLatex: 'N(t) = N_0 e^{-t/\\tau} = N_0 e^{-\\lambda t} = N_0 \\left(\\frac{1}{2}\\right)^{t/t_{1/2}}',
-    physicalStory: `Radioactive decay is a memoryless Poisson stochastic process where every unstable parent nucleus possesses a fixed transition probability per unit time $\\lambda$ of spontaneously decaying into a daughter nucleus, regardless of its previous age. For a large macroscopic ensemble $N_0$, the statistical aggregate follows a smooth exponential curve $N(t) = N_0 e^{-\\lambda t} = N_0 e^{-t/\\tau}$. The mean lifetime $\\tau = 1/\\lambda$ represents the average survival duration of a nucleus before decay (when $N(\\tau) = N_0/e \\approx 36.8\\% N_0$). The half-life $t_{1/2} = \\tau \\ln 2 \\approx 0.693 \\tau$ is the time elapsed when exactly half the original sample has decayed.`,
+    physicalStory: `Each nucleus waits an exponential time with rate $\\lambda$, memorylessly. The ensemble is $N(t) = N_0 e^{-t/\\tau}$ with $\\tau = 1/\\lambda$. Half-life $t_{1/2} = \\tau \\ln 2$ is earlier: the curve hits $N_0/2$ first (gold) and $N_0/e$ later (teal). Mean life is always longer than half-life. The staircase is one finite sample; the smooth exponential is the expectation.`,
 
     derivationSteps: [
       {
@@ -872,206 +778,170 @@
     ],
 
     parameters: [
-      { id: 'tHalf', label: 'Half-Life $t_{1/2}$', min: 2.0, max: 15.0, step: 0.5, default: 5.0, unit: 's' },
-      { id: 'decayType', label: 'Decay Particle', type: 'select', options: [
-        { value: 'alpha', label: 'Alpha ($\\alpha$)' },
-        { value: 'beta', label: 'Beta ($\\beta^-$)' },
-        { value: 'gamma', label: 'Gamma ($\\gamma$)' }
-      ], default: 'alpha' },
-      { id: 'playing', label: 'Simulation Active', type: 'boolean', default: true },
+      { id: 'tHalf', label: 'Half-life $t_{1/2}$', min: 2.0, max: 12.0, step: 0.5, default: 5.0, unit: 's' },
+      { id: 'n0', label: 'Sample $N_0$', min: 24, max: 96, step: 8, default: 64, unit: '' },
+      { id: 'playing', label: 'Run decay', type: 'toggle', default: true },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' },
-      { id: 'reseed', label: 'Reset sample', type: 'boolean', default: false }
+      { id: 'reseed', label: 'Reset sample', type: 'toggle', default: false }
     ],
 
-    init(container, state, redraw) {
-      initAtomLattice(state);
-      state._simTime = 0;
+    init: function (container, state) {
+      seedDecay(state, numParam(state, 'n0', 64));
     },
 
     onParamChange: function (id, val, state) {
       if (!state) return;
-      if (id === 'tHalf' || id === 'decayType' || id === 'reseed') {
-        initAtomLattice(state);
-        state._simTime = 0;
+      if (id === 'tHalf' || id === 'n0' || id === 'reseed') {
+        seedDecay(state, numParam(state, 'n0', 64));
       }
     },
 
-    draw(ctx, width, height, state, dt) {
-      const tHalf = state.tHalf || 5.0;
-      const tau = tHalf / Math.LN2;
-      const lambda = 1 / tau;
-      const isPlaying = state.playing !== false;
-      const decayType = state.decayType || 'alpha';
-      let simSpeed = parseFloat(state.simSpeed);
-      if (isNaN(simSpeed)) simSpeed = 1.0;
+    draw: function (ctx, width, height, state, dt) {
+      state = state || {};
+      var size = canvasSize(width, height);
+      width = size.w;
+      height = size.h;
 
-      if (!state._atoms) initAtomLattice(state);
-      if (!state._ejections) state._ejections = [];
+      var tHalf = Math.max(0.4, numParam(state, 'tHalf', 5.0));
+      var n0Wanted = Math.max(8, Math.round(numParam(state, 'n0', 64)));
+      var isPlaying = flagParam(state, 'playing', true);
+      var simSpeed = numParam(state, 'simSpeed', 1.0);
+      if (!isFinite(simSpeed) || simSpeed <= 0) simSpeed = 1;
+      dt = safeDt(dt);
 
-      if (isPlaying) {
-        const step = (dt || 0.016) * simSpeed;
+      var tau = tHalf / Math.LN2;
+      var lambda = 1 / tau;
+
+      if (!state._nuclei || state._nuclei.length !== n0Wanted) seedDecay(state, n0Wanted);
+      if (!state._hist) state._hist = [{ t: 0, n: state._nuclei.length }];
+
+      var totalAtoms = state._nuclei.length || 1;
+      if (isPlaying && (state._simTime || 0) < 6 * tHalf) {
+        var step = dt * simSpeed;
         state._simTime = (state._simTime || 0) + step;
-        const decayProbPerStep = 1 - Math.exp(-lambda * step);
-
-        state._atoms.forEach(atom => {
-          if (!atom.decayed && Math.random() < decayProbPerStep) {
-            atom.decayed = true;
-            atom.decayTime = state._simTime;
-            const angle = Math.random() * Math.PI * 2;
-            const speed = decayType === 'gamma' ? 160 : 80;
-            state._ejections.push({
-              x: atom.x,
-              y: atom.y,
-              vx: Math.cos(angle) * speed,
-              vy: Math.sin(angle) * speed,
-              life: 1.0,
-              type: decayType
-            });
+        var decayProb = 1 - Math.exp(-lambda * step);
+        var nBefore = 0;
+        var ai;
+        for (ai = 0; ai < state._nuclei.length; ai++) {
+          if (state._nuclei[ai].alive) nBefore++;
+        }
+        for (ai = 0; ai < state._nuclei.length; ai++) {
+          if (state._nuclei[ai].alive && Math.random() < decayProb) {
+            state._nuclei[ai].alive = false;
           }
-        });
-
-        state._ejections.forEach(p => {
-          p.life -= step * 1.5;
-        });
-        state._ejections = state._ejections.filter(p => p.life > 0);
+        }
+        var nAfter = 0;
+        for (ai = 0; ai < state._nuclei.length; ai++) {
+          if (state._nuclei[ai].alive) nAfter++;
+        }
+        var last = state._hist[state._hist.length - 1];
+        if (!last || nAfter !== last.n || state._simTime - last.t > 0.12) {
+          state._hist.push({ t: state._simTime, n: nAfter });
+          if (state._hist.length > 360) state._hist.shift();
+        }
       }
-      const curTime = state._simTime || 0;
+
+      var curTime = state._simTime || 0;
+      var surviving = 0;
+      var si;
+      for (si = 0; si < state._nuclei.length; si++) {
+        if (state._nuclei[si].alive) surviving++;
+      }
+      var nTheory = totalAtoms * Math.exp(-curTime / tau);
+      var daughters = totalAtoms - surviving;
+      var ratio = surviving > 0 ? daughters / surviving : Infinity;
+      var activity = lambda * surviving;
 
       fillStage(ctx, width, height);
-      ctx.save();
 
-      const margin = 14;
-      const graphTop = 10;
-      const graphH = Math.max(120, height * 0.48);
-      const latticeTop = graphTop + graphH + 8;
-      const latticeH = Math.max(80, height - latticeTop - margin);
-      const latticeX = margin;
-      const latticeW = width - margin * 2;
-
-      let survivingCount = 0;
-      state._atoms.forEach(a => { if (!a.decayed) survivingCount++; });
-      const totalAtoms = state._atoms.length || 1;
-      const curTheoryN = totalAtoms * Math.exp(-curTime / tau);
-      const simActivity = lambda * survivingCount;
-
-      const originX = margin + 40;
-      const originY = graphTop + graphH - 28;
-      const plotW = Math.max(40, width - originX - margin - 8);
-      const plotH = Math.max(40, originY - (graphTop + 18));
-      const maxTime = Math.max(tHalf * 3.5, curTime * 1.15, 0.5);
+      var padL = 44;
+      var padR = 16;
+      var padT = 14;
+      var padB = 50;
+      var originX = padL;
+      var originY = height - padB;
+      var plotW = Math.max(40, width - padL - padR);
+      var plotH = Math.max(40, originY - padT);
+      var maxTime = Math.max(3.4 * tHalf, curTime * 1.08, tau * 1.25);
 
       function mapT(tVal) { return originX + (tVal / maxTime) * plotW; }
       function mapN(n) { return originY - (n / totalAtoms) * plotH; }
 
+      ctx.save();
+
       ctx.strokeStyle = GRID;
       ctx.lineWidth = 1;
-      const fracLabels = [
-        { frac: 0.5, text: '1/2' },
-        { frac: 1 / Math.E, text: '1/e' },
-        { frac: 0.25, text: '1/4' },
-        { frac: 0.125, text: '1/8' }
-      ];
-      ctx.font = MONO;
-      ctx.fillStyle = MUTED;
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-      fracLabels.forEach(item => {
-        const ny = mapN(totalAtoms * item.frac);
-        ctx.setLineDash([3, 4]);
-        ctx.beginPath();
-        ctx.moveTo(originX, ny);
-        ctx.lineTo(originX + plotW, ny);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillText(item.text, originX - 6, ny);
-      });
+      ctx.beginPath();
+      ctx.moveTo(originX, mapN(totalAtoms * 0.5));
+      ctx.lineTo(originX + plotW, mapN(totalAtoms * 0.5));
+      ctx.moveTo(originX, mapN(totalAtoms / Math.E));
+      ctx.lineTo(originX + plotW, mapN(totalAtoms / Math.E));
+      ctx.stroke();
 
-      const halfLabels = [];
-      [1, 2, 3, 4].forEach(mult => {
-        const tMark = mult * tHalf;
-        const tx = mapT(tMark);
-        if (tx > originX + 8 && tx < originX + plotW - 8) {
-          ctx.setLineDash([]);
-          ctx.strokeStyle = GRID;
-          ctx.beginPath();
-          ctx.moveTo(tx, originY);
-          ctx.lineTo(tx, originY - plotH);
-          ctx.stroke();
-          halfLabels.push({ x: tx, text: (mult === 1 ? 'half-life' : (mult + ' half-lives')) });
-        }
-      });
+      var tHalfX = mapT(tHalf);
+      var tauX = mapT(tau);
+      var yHalf = mapN(totalAtoms * 0.5);
+      var yTau = mapN(totalAtoms / Math.E);
 
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.font = SANS;
-      ctx.fillStyle = MUTED;
-      const tauX = mapT(tau);
-      const tauY = mapN(totalAtoms / Math.E);
-      const tauLabelW = ctx.measureText ? ctx.measureText('tau').width : 20;
-      let lastRight = originX;
-      halfLabels.forEach(lab => {
-        const tw = ctx.measureText ? ctx.measureText(lab.text).width : 24;
-        const overlapsTau = Math.abs(lab.x - tauX) < (tw + tauLabelW) / 2 + 8;
-        if (lab.x - tw / 2 > lastRight + 4 && lab.x + tw / 2 < originX + plotW && !overlapsTau) {
-          ctx.fillText(lab.text, lab.x, originY + 6);
-          lastRight = lab.x + tw / 2;
-        }
-      });
-
-      if (tauX <= originX + plotW) {
-        ctx.strokeStyle = TEAL;
-        ctx.setLineDash([3, 3]);
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(tauX, originY);
-        ctx.lineTo(tauX, tauY);
-        ctx.lineTo(originX, tauY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = TEAL;
-        ctx.font = SANS;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        if (tauX - tauLabelW / 2 > originX && tauX + tauLabelW / 2 < originX + plotW) {
-          ctx.fillText('tau', tauX, originY + 6);
-        }
+      if (tauX > tHalfX) {
+        ctx.fillStyle = 'rgba(93, 184, 166, 0.10)';
+        ctx.fillRect(tHalfX, originY - plotH, tauX - tHalfX, plotH);
       }
 
-      ctx.strokeStyle = AXIS;
-      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = GOLD;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(originX, yHalf);
+      ctx.lineTo(tHalfX, yHalf);
+      ctx.lineTo(tHalfX, originY);
+      ctx.stroke();
+
+      ctx.strokeStyle = TEAL;
+      ctx.beginPath();
+      ctx.moveTo(originX, yTau);
+      ctx.lineTo(tauX, yTau);
+      ctx.lineTo(tauX, originY);
+      ctx.stroke();
       ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.moveTo(originX, originY - plotH);
-      ctx.lineTo(originX, originY);
-      ctx.lineTo(originX + plotW, originY);
-      ctx.stroke();
 
-      ctx.fillStyle = MUTED;
-      ctx.font = SANS;
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText('N', originX - 6, originY - plotH + 2);
+      if (state._hist && state._hist.length > 1) {
+        ctx.strokeStyle = inkFade(0.28);
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        var hi;
+        ctx.moveTo(mapT(state._hist[0].t), mapN(state._hist[0].n));
+        for (hi = 1; hi < state._hist.length; hi++) {
+          var ht = Math.min(state._hist[hi].t, maxTime);
+          ctx.lineTo(mapT(ht), mapN(state._hist[hi - 1].n));
+          ctx.lineTo(mapT(ht), mapN(state._hist[hi].n));
+        }
+        ctx.lineTo(mapT(Math.min(curTime, maxTime)), mapN(surviving));
+        ctx.stroke();
+      }
 
       ctx.strokeStyle = CORAL;
-      ctx.lineWidth = 2.4;
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
-      const numPts = 160;
-      for (let i = 0; i <= numPts; i++) {
-        const timeVal = (i / numPts) * maxTime;
-        const gx = mapT(timeVal);
-        const gy = mapN(totalAtoms * Math.exp(-timeVal / tau));
-        if (i === 0) ctx.moveTo(gx, gy); else ctx.lineTo(gx, gy);
+      var nPts = 160;
+      var pi;
+      for (pi = 0; pi <= nPts; pi++) {
+        var tv = (pi / nPts) * maxTime;
+        var gx = mapT(tv);
+        var gy = mapN(totalAtoms * Math.exp(-tv / tau));
+        if (pi === 0) ctx.moveTo(gx, gy);
+        else ctx.lineTo(gx, gy);
       }
       ctx.stroke();
 
-      const curX = mapT(Math.min(curTime, maxTime));
-      const curY = mapN(curTheoryN);
-      ctx.strokeStyle = CORAL;
+      var nowX = mapT(Math.min(curTime, maxTime));
+      var nowY = mapN(nTheory);
+      ctx.strokeStyle = inkFade(0.2);
       ctx.setLineDash([3, 3]);
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(curX, originY);
-      ctx.lineTo(curX, curY);
+      ctx.moveTo(nowX, originY);
+      ctx.lineTo(nowX, nowY);
       ctx.stroke();
       ctx.setLineDash([]);
 
@@ -1079,87 +949,57 @@
       ctx.strokeStyle = CORAL;
       ctx.lineWidth = 2.2;
       ctx.beginPath();
-      ctx.arc(curX, curY, 5, 0, Math.PI * 2);
+      ctx.arc(nowX, nowY, 5, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = PANEL;
-      ctx.strokeStyle = LINE;
-      ctx.lineWidth = 1;
-      ctx.fillRect(latticeX, latticeTop, latticeW, latticeH);
-      ctx.strokeRect(latticeX, latticeTop, latticeW, latticeH);
-
-      ctx.fillStyle = INK;
-      ctx.font = SANS;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      const keyY = latticeTop + 12;
-      ctx.fillStyle = CORAL;
+      ctx.strokeStyle = AXIS;
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.arc(latticeX + 14, keyY, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = INK;
-      ctx.fillText('parent', latticeX + 22, keyY);
-      ctx.fillStyle = AXIS;
-      ctx.beginPath();
-      ctx.arc(latticeX + 78, keyY, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = INK;
-      ctx.fillText('daughter', latticeX + 86, keyY);
-      const ejectColor = decayType === 'gamma' ? GOLD : (decayType === 'alpha' ? ROSE : TEAL);
-      ctx.fillStyle = ejectColor;
-      ctx.beginPath();
-      ctx.arc(latticeX + 158, keyY, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = INK;
-      ctx.fillText(decayType, latticeX + 166, keyY);
+      ctx.moveTo(originX, originY - plotH);
+      ctx.lineTo(originX, originY);
+      ctx.lineTo(originX + plotW, originY);
+      ctx.stroke();
 
-      const atomLeft = latticeX + 10;
-      const atomTop = latticeTop + 24;
-      const atomW = latticeW - 20;
-      const atomH = latticeH - 32;
+      ctx.restore();
 
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(latticeX, latticeTop, latticeW, latticeH);
-      ctx.clip();
-      ctx.shadowBlur = 0;
+      haloLabel(ctx, 't', originX + plotW - 2, originY + 12, { color: MUTED, align: 'right' });
+      haloLabel(ctx, 'N', originX - 12, originY - plotH + 4, { color: MUTED, align: 'right', baseline: 'top' });
+      if (tHalfX > originX + 18 && tHalfX < originX + plotW - 18) {
+        haloLabel(ctx, 'half', tHalfX, originY + 12, { color: GOLD });
+      }
+      if (tauX > originX + 18 && tauX < originX + plotW - 18 && Math.abs(tauX - tHalfX) > 36) {
+        haloLabel(ctx, 'mean', tauX, originY + 12, { color: TEAL });
+      }
 
-      state._atoms.forEach(a => {
-        const ax = atomLeft + a.x * atomW;
-        const ay = atomTop + a.y * atomH;
+      var stripY = originY + 28;
+      var dotR = Math.max(1.8, Math.min(3.4, plotW / (totalAtoms * 1.35)));
+      for (si = 0; si < state._nuclei.length; si++) {
+        var a = state._nuclei[si];
+        var ax = originX + a.x * plotW;
+        var ay = stripY + a.j * 6;
         ctx.beginPath();
-        if (!a.decayed) {
+        if (a.alive) {
           ctx.fillStyle = CORAL;
-          ctx.arc(ax, ay, 3.6, 0, Math.PI * 2);
+          ctx.arc(ax, ay, dotR, 0, Math.PI * 2);
         } else {
-          ctx.fillStyle = '#c8c2b8';
-          ctx.arc(ax, ay, 2.8, 0, Math.PI * 2);
+          ctx.fillStyle = inkFade(0.14);
+          ctx.arc(ax, ay, dotR * 0.75, 0, Math.PI * 2);
         }
         ctx.fill();
-      });
-
-      state._ejections.forEach(p => {
-        const px = atomLeft + p.x * atomW + p.vx * (1 - p.life) * 0.5;
-        const py = atomTop + p.y * atomH + p.vy * (1 - p.life) * 0.5;
-        ctx.fillStyle = p.type === 'gamma' ? GOLD : (p.type === 'alpha' ? ROSE : TEAL);
-        ctx.beginPath();
-        ctx.arc(px, py, p.type === 'alpha' ? 3.2 : 2, 0, Math.PI * 2);
-        ctx.fill();
-      });
-      ctx.restore();
-
-      ctx.restore();
+      }
 
       vizLegend('Radioactive decay', [
+        { label: 'Gold corner', value: '$N_0/2$ at $t_{1/2}$' },
+        { label: 'Teal corner', value: '$N_0/e$ at $\\tau$' },
+        { label: 'Coral curve', value: '$N_0 e^{-t/\\tau}$' },
+        { label: 'Ink staircase', value: 'one finite sample' },
         { label: '$t$', value: '$' + curTime.toFixed(2) + '\\text{ s}$' },
         { label: '$t_{1/2}$', value: '$' + tHalf.toFixed(1) + '\\text{ s}$' },
-        { label: '$\\tau = t_{1/2} / \\ln 2$', value: '$' + tau.toFixed(2) + '\\text{ s}$' },
-        { label: 'Teal drop on $t$-axis', value: '$\\tau$' },
-        { label: '$N_{\\text{parent}}$', value: '$' + survivingCount + ' / ' + totalAtoms + '$' },
-        { label: '$N_{\\text{theory}}$', value: '$' + curTheoryN.toFixed(1) + '$' },
-        { label: 'Activity $\\lambda N$', value: '$' + simActivity.toFixed(1) + '\\text{ Bq}$' },
-        { label: 'Radiation Mode', value: decayType }
+        { label: '$\\tau = t_{1/2}/\\ln 2$', value: '$' + tau.toFixed(2) + '\\text{ s}$' },
+        { label: '$N_{\\text{parent}}$', value: '$' + surviving + '/' + totalAtoms + '$' },
+        { label: '$N_Y/N_X$', value: isFinite(ratio) ? '$' + ratio.toFixed(2) + '$' : '$\\infty$' },
+        { label: '$A = \\lambda N$', value: '$' + activity.toFixed(1) + '\\text{ Bq}$' }
       ]);
     },
 

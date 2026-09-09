@@ -172,10 +172,7 @@ PGRE.views.plan = (function () {
       PGRE.typesetMath(document.getElementById('plan-root'));
       wire();
       if (PGRE.motion && !PGRE.motion.reduced) {
-        var cd = document.querySelector('#plan-root .countdown-num');
-        if (cd && /^\d+$/.test(cd.textContent.trim())) {
-          PGRE.motion.countUp(cd, parseInt(cd.textContent, 10), { duration: 700 });
-        }
+        // the countdown paints at its final value — never tweened from 0
         var note = document.querySelector('#plan-root .hero-xp-note');
         if (note && PGRE.motion.countUp) {
           var nm = note.textContent.trim().match(/^(\d+)\s*\/\s*(\d+)(.*)$/);

@@ -727,7 +727,7 @@ console.log('formula visualizer aesthetics (shipped engine + trio-g1…g10)\n');
 
 console.log('index.html classic script tags');
 var indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-assert(/<script src="js\/visualizer-engine\.js[^"]*"><\/script>/.test(indexHtml),
+assert(/<script src="js\/visualizer-engine\.js[^"]*"(?: defer)?><\/script>/.test(indexHtml),
   'index.html loads js/visualizer-engine.js as a classic <script src>');
 assert(!/<script[^>]*type\s*=\s*["']module["'][^>]*visualizer-engine/.test(indexHtml) &&
   !/<script[^>]*visualizer-engine[^>]*type\s*=\s*["']module["']/.test(indexHtml),
@@ -737,7 +737,7 @@ var engineIdx = indexHtml.search(/<script src="js\/visualizer-engine\.js/);
 var lastTrioIdx = engineIdx;
 var triosInOrder = true;
 for (var n = 1; n <= 10; n++) {
-  var tagRe = new RegExp('<script src="js/visualizers/trio-g' + n + '\\.js[^"]*"><\\/script>');
+  var tagRe = new RegExp('<script src="js/visualizers/trio-g' + n + '\\.js[^"]*"(?: defer)?><\\/script>');
   assert(tagRe.test(indexHtml), 'index.html loads trio-g' + n + '.js as classic <script src>');
   assert(!(new RegExp('<script[^>]*type\\s*=\\s*["\']module["\'][^>]*trio-g' + n)).test(indexHtml),
     'trio-g' + n + '.js is not type="module"');

@@ -55,23 +55,26 @@ PGRE.timer = (function () {
     return h > 0 ? h + ':' + p(m) + ':' + p(s) : m + ':' + p(s);
   }
 
-  /* Same figure as the dashboard Study time card "active today":
-     Math.round(PGRE.studyTime.todaySec() / 60). One source — studyLog. */
+  /* Top-bar TODAY chip: floor minutes + remainder seconds from
+     liveTodaySec (committed studyLog plus the open heartbeat / focus
+     gap). Dashboard card still uses the committed figure. */
   function fmtActiveToday(sec) {
-    sec = Math.max(0, sec || 0);
-    var todayMin = Math.round(sec / 60);
-    return (sec > 0 && todayMin === 0) ? '<1 min' : todayMin + ' min';
+    sec = Math.max(0, Math.floor(sec || 0));
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return m + ' min ' + s + ' s';
   }
 
   function paintToday() {
-    if (!PGRE.studyTime || typeof PGRE.studyTime.todaySec !== 'function') return;
+    if (!PGRE.studyTime || typeof PGRE.studyTime.liveTodaySec !== 'function') return;
+    var liveSec = PGRE.studyTime.liveTodaySec();
     var todaySec = PGRE.studyTime.todaySec();
-    var label = fmtActiveToday(todaySec);
+    var label = fmtActiveToday(liveSec);
     var todayEl = document.getElementById('today-learn-time');
     var todayWrap = document.getElementById('today-learn');
     if (todayEl) {
       todayEl.textContent = label;
-      todayEl.classList.toggle('has-time', todaySec > 0);
+      todayEl.classList.toggle('has-time', liveSec > 0);
     }
     if (todayWrap) {
       todayWrap.setAttribute('aria-label', 'Active today: ' + label);

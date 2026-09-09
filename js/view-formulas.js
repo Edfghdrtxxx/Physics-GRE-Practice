@@ -67,8 +67,10 @@ PGRE.views.formulas = (function () {
     if (!hasInteractiveVisualizer(id)) return '';
     var cls = 'btn btn-ghost viz-nav-btn' + (extraClass ? ' ' + extraClass : '');
     var idAttr = btnId ? ' id="' + btnId + '"' : '';
-    return '<button type="button" class="' + cls + '"' + idAttr +
-      ' data-viz-open="' + PGRE.ui.esc(id) + '" aria-haspopup="dialog">Open Simulation</button>';
+    return '<div class="viz-open-strip">' +
+      '<button type="button" class="' + cls + '"' + idAttr +
+      ' data-viz-open="' + PGRE.ui.esc(id) + '" aria-haspopup="dialog">Open Simulation</button>' +
+      '</div>';
   }
 
   function wireVizNav(scope) {
@@ -241,6 +243,16 @@ PGRE.views.formulas = (function () {
     html += '</div>';
     html += '<div id="flash-body"></div>';
     root().innerHTML = html;
+    // The strip is a single scrollable row on narrow screens; keep the chosen
+    // tab visible by scrolling the strip itself, never the page.
+    function revealTab(tab) {
+      var strip = tab && tab.parentNode;
+      if (!strip || !strip.clientWidth) return;
+      var left = tab.offsetLeft, right = left + tab.offsetWidth;
+      if (left < strip.scrollLeft) strip.scrollLeft = left - 3;
+      else if (right > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = right - strip.clientWidth + 3;
+    }
+    revealTab(root().querySelector('.flash-tab.active'));
     root().querySelectorAll('.flash-tab').forEach(function (b) {
       if (b.disabled) return;
       b.addEventListener('click', function () {
@@ -251,6 +263,7 @@ PGRE.views.formulas = (function () {
           tab.setAttribute('aria-selected', on ? 'true' : 'false');
           tab.tabIndex = on ? 0 : -1;
         });
+        revealTab(b);
         switchMode(m);
       });
     });
@@ -541,7 +554,7 @@ PGRE.views.formulas = (function () {
     var html = '<div class="card"><h1>Formula recall</h1>' +
       '<p class="muted">Flip cards the way vocabulary apps do it: see the prompt, recall the ' +
       'formula, flip, then grade yourself — <strong>Again / Hard / Good / Easy</strong> sets ' +
-      'when the card returns. Each day <strong>you pick</strong> which cards to recall. ' +
+      'when the card returns. Each day a short batch is due — start with unseen cards, or pick them yourself. ' +
       'The tabs above add <strong>Match</strong>, <strong>Type</strong> and <strong>Quiz</strong> ' +
       'drills over the same deck.</p></div>';
 
@@ -569,13 +582,32 @@ PGRE.views.formulas = (function () {
       PGRE.refreshNavBadges();
       return;
     }
-
     var batch = srs.formulaDay(deck);
     var T = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
     var M = srs.formulaDayRemaining(deck).length;
     var reviewsN = batch.reviewIds.length, newN = batch.newIds.length;
     var pickedN = reviewsN + newN;            // the batch is fully user-curated
     var postponed = srs.formulaDayPostponed(deck);
+    var resumeCards = rehydrateSavedStudy();
+
+    // Empty-day landing: nothing picked, nothing mid-flight, unseen cards left.
+    // Offers the dashboard's fill-then-study path (fillFormulaDayIfEmpty +
+    // studyFromFill) right under the intro so a direct visit to #/formulas
+    // never lands on settings and a picker wall with no way to just start.
+    var fillable = 0;
+    fresh.forEach(function (c) { if (!srs.isSuspended(c.id)) fillable++; });
+    var fillN = Math.min(T, fillable);
+    var landing = !resumeCards && M === 0 && !pickedN && fillN > 0;
+    if (landing) {
+      html += '<div class="card fm-landing">' +
+        '<h2>Nothing picked for today yet</h2>' +
+        '<p class="muted">Start with ' + fillN + ' formula' + (fillN === 1 ? '' : 's') +
+        ' you have not seen, or choose the cards yourself.</p>' +
+        '<div class="btn-row">' +
+          '<button class="btn btn-primary" id="fill-study-btn">Study ' + fillN + ' today</button>' +
+          '<button class="btn btn-ghost" id="landing-pick-btn">Pick cards myself</button>' +
+        '</div></div>';
+    }
 
     html += '<div class="stat-row stat-row-4">' +
       ui.statTile('Cards in the deck', ui.fmt(deck.length)) +
@@ -640,7 +672,11 @@ PGRE.views.formulas = (function () {
     var comp = pickedN
       ? reviewsN + ' review' + (reviewsN === 1 ? '' : 's') + ' + ' +
         newN + ' new picked for today.'
-      : 'Nothing picked yet — choose today’s cards below.';
+      : (landing ? 'Nothing picked yet — start from the buttons above.'
+                 : (postponed > 0
+                    ? postponed + ' due review' + (postponed === 1 ? ' is' : 's are') +
+                      ' waiting — study them, or pick today’s cards below.'
+                    : 'Nothing picked yet — choose today’s cards below.'));
     if (pickedN && postponed > 0) {
       comp += ' ' + postponed + ' more review' + (postponed === 1 ? ' is' : 's are') +
         ' due but not picked.';
@@ -654,23 +690,29 @@ PGRE.views.formulas = (function () {
     }
 
     // Primary action: resume a mid-flight session, study what remains of the
-    // picked batch, or — when the batch is empty or done — point at the picker.
-    var resumeCards = rehydrateSavedStudy();
+    // picked batch, study due reviews that were never picked, or — when the
+    // batch is empty or done — point at the picker. The landing card above
+    // already carries both actions for an empty day of unseen cards.
     if (resumeCards) {
       html += '<div class="btn-row"><button class="btn btn-primary" id="resume-btn">' +
-        'Resume session — ' + resumeCards.length + ' left</button>';
+        'Resume session — ' + resumeCards.length + ' left</button>' +
+        '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div>';
     } else if (M > 0) {
       html += '<div class="btn-row"><button class="btn btn-primary" id="study-btn">Study ' +
-        M + ' remaining</button>';
-    } else {
+        M + ' remaining</button>' +
+        '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div>';
+    } else if (postponed > 0) {
+      html += '<div class="btn-row"><button class="btn btn-primary" id="study-btn">Study ' +
+        postponed + ' due</button>' +
+        '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div>';
+    } else if (!landing) {
       html += '<h3 class="caught-up">' + (pickedN ? 'You’re all caught up' : 'Nothing picked yet') + '</h3>' +
         '<p class="muted">' + (pickedN
           ? 'Today’s picks are done — the next cards return on their schedule.'
           : 'Pick the formulas you want to recall today — nothing is chosen for you.') + '</p>' +
-        '<div class="btn-row">';
+        '<div class="btn-row"><button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div>';
     }
-    html += '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button>';
-    html += '</div></div>';
+    html += '</div>';
 
     // ——— Memory stats (F10) — collapsed by default ———
     html += '<div class="card mem-stats-card"><div class="mem-stats-head">' +
@@ -697,7 +739,28 @@ PGRE.views.formulas = (function () {
 
     var sb = document.getElementById('study-btn');
     if (sb) sb.addEventListener('click', function () {
-      startStudy(PGRE.srs.formulaDayRemaining(deck));
+      var cards = PGRE.srs.formulaDayRemaining(deck);
+      if (!cards.length) {
+        var batchNow = PGRE.srs.formulaDay(deck);
+        var inB = {};
+        batchNow.reviewIds.concat(batchNow.newIds).forEach(function (id) { inB[id] = 1; });
+        var t = PGRE.srs.today();
+        var dueIds = [];
+        deck.forEach(function (c) {
+          var st = PGRE.srs.cardState(c.id);
+          if (st && !PGRE.srs.isSuspended(c.id) && st.due <= t && !inB[c.id]) dueIds.push(c.id);
+        });
+        if (dueIds.length) {
+          if (PGRE.srs.addFormulaDaySoft) PGRE.srs.addFormulaDaySoft(deck, dueIds);
+          cards = PGRE.srs.formulaDayRemaining(deck);
+          if (!cards.length) {
+            var byId = {};
+            deck.forEach(function (c) { byId[c.id] = c; });
+            cards = dueIds.map(function (id) { return byId[id]; }).filter(Boolean);
+          }
+        }
+      }
+      startStudy(cards);
     });
     // ITEM 2: resume the persisted session (re-rehydrate at click time in case
     // the deck/session shifted; fall back to a home refresh if it vanished).
@@ -721,8 +784,15 @@ PGRE.views.formulas = (function () {
       PGRE.store.save();
       renderHome();
     });
-    var pb = document.getElementById('pick-btn');
+    var pb = document.getElementById('pick-btn') || document.getElementById('landing-pick-btn');
     if (pb) pb.addEventListener('click', renderPicker);
+    // Landing CTA: same fill-then-study path the dashboard's Study button arms.
+    var fsb = document.getElementById('fill-study-btn');
+    if (fsb) fsb.addEventListener('click', function () {
+      PGRE.srs.fillFormulaDayIfEmpty(deck);
+      studyFromFill = true;
+      renderHome();
+    });
     // F2: drill the leeches — a normal-grading session independent of the daily
     // batch (these cards may already be studied today; they still surface here).
     // Put-away cards are excluded: a shelved card is very often also a leech,
@@ -1048,40 +1118,45 @@ PGRE.views.formulas = (function () {
   }
 
   /* Row click toggles a view-only peek (front + back + note); the schedule is
-     never touched. The peek is typeset lazily on first open. */
+     never touched. The peek is typeset lazily on first open. Shared by Browse
+     and the daily picker so a name click shows the card without changing picks. */
+  function openPeekFor(row, peek, id) {
+    if (!peek) return;
+    if (!peek.hidden) { peek.hidden = true; row.classList.remove('open'); return; }
+    if (!peek.getAttribute('data-filled')) {
+      var c = deckById(id);
+      if (c) {
+        // HTML attributes use PGRE.ui.esc (not cssAttr — that is only for
+        // querySelector). History slot needs no data-id; row id is passed in.
+        peek.innerHTML = '<div class="fcard-front">' + formulaHTML(c.front) + '</div>' +
+          '<div class="fcard-back">' + backHTML(c) +
+          (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') +
+          vizNavButtonHTML(c.id, 'btn-sm') + '</div>' +
+          '<div class="peek-history"></div>' +
+          '<div class="peek-suspend" data-susp-for="' + PGRE.ui.esc(c.id) + '"></div>' +
+          '<div class="peek-mnemonic" data-mnem-for="' + PGRE.ui.esc(c.id) + '"></div>';
+        peek.setAttribute('data-filled', '1');
+        PGRE.typesetMath(peek);
+        wireVizNav(peek);
+        // F2: mnemonic editor lives below the card body (plain text, no math).
+        wireMnemonic(peek.querySelector('.peek-mnemonic'), c.id);
+      }
+    }
+    // Redrawn on every open (not just the first fill) so the control tracks
+    // the card’s current suspended state rather than the state at fill time.
+    wireRestore(peek.querySelector('.peek-suspend'), id, row);
+    // History is view-only over the durable log + current due — refresh each open.
+    wireMemHistory(peek.querySelector('.peek-history'), id);
+    peek.hidden = false;
+    row.classList.add('open');
+  }
+
   function wirePeek(box) {
     box.querySelectorAll('.browse-row').forEach(function (row) {
       row.addEventListener('click', function () {
         var id = row.getAttribute('data-cardid');
         var peek = box.querySelector('.browse-peek[data-peek="' + cssAttr(id) + '"]');
-        if (!peek) return;
-        if (!peek.hidden) { peek.hidden = true; row.classList.remove('open'); return; }
-        if (!peek.getAttribute('data-filled')) {
-          var c = deckById(id);
-          if (c) {
-            // HTML attributes use PGRE.ui.esc (not cssAttr — that is only for
-            // querySelector). History slot needs no data-id; row id is passed in.
-            peek.innerHTML = '<div class="fcard-front">' + formulaHTML(c.front) + '</div>' +
-              '<div class="fcard-back">' + backHTML(c) +
-              (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') + '</div>' +
-              vizNavButtonHTML(c.id, 'btn-sm') +
-              '<div class="peek-history"></div>' +
-              '<div class="peek-suspend" data-susp-for="' + PGRE.ui.esc(c.id) + '"></div>' +
-              '<div class="peek-mnemonic" data-mnem-for="' + PGRE.ui.esc(c.id) + '"></div>';
-            peek.setAttribute('data-filled', '1');
-            PGRE.typesetMath(peek);
-            wireVizNav(peek);
-            // F2: mnemonic editor lives below the card body (plain text, no math).
-            wireMnemonic(peek.querySelector('.peek-mnemonic'), c.id);
-          }
-        }
-        // Redrawn on every open (not just the first fill) so the control tracks
-        // the card’s current suspended state rather than the state at fill time.
-        wireRestore(peek.querySelector('.peek-suspend'), id, row);
-        // History is view-only over the durable log + current due — refresh each open.
-        wireMemHistory(peek.querySelector('.peek-history'), id);
-        peek.hidden = false;
-        row.classList.add('open');
+        openPeekFor(row, peek, id);
       });
     });
   }
@@ -1186,10 +1261,16 @@ PGRE.views.formulas = (function () {
           (du <= 0 ? 'due now' : 'due in ' + srs.ivlLabel(du)) + '</span>';
       }
       if (locked) chip += '<span class="due-chip today-chip">done today</span>';
-      return '<label class="picker-row' + (locked ? ' is-locked' : '') + '">' +
-        '<input type="checkbox" class="picker-box" value="' + ui.esc(c.id) + '"' +
-          (inBatch[c.id] ? ' checked' : '') + (locked ? ' disabled data-locked="1"' : '') + '>' +
-        '<span class="deck-name">' + ui.esc(cardName(c)) + '</span>' + chip + '</label>';
+      return '<div class="picker-item">' +
+        '<div class="picker-row' + (locked ? ' is-locked' : '') + '" data-cardid="' +
+          ui.esc(c.id) + '">' +
+          '<label class="picker-check"><input type="checkbox" class="picker-box" value="' +
+            ui.esc(c.id) + '"' + (inBatch[c.id] ? ' checked' : '') +
+            (locked ? ' disabled data-locked="1"' : '') + '></label>' +
+          '<span class="deck-name">' + ui.esc(cardName(c)) + '</span>' + chip +
+        '</div>' +
+        '<div class="browse-peek picker-peek" data-peek="' + ui.esc(c.id) + '" hidden></div>' +
+      '</div>';
     }
 
     // Three sections, each topic-grouped: due now, upcoming, never-studied.
@@ -1208,8 +1289,8 @@ PGRE.views.formulas = (function () {
         if (!cards.length) return;
         anySec = true;
         secHTML += '<div class="picker-topic"><div class="picker-topic-head">' +
-          '<label class="picker-selall"><input type="checkbox" class="picker-selall-box" ' +
-            'data-topic="' + ui.esc(t.id) + '"> ' + ui.monogram(t) + ' ' + ui.esc(t.name) +
+          '<label class="picker-selall"><input type="checkbox" class="picker-selall-box"> ' +
+            ui.monogram(t) + ' ' + ui.esc(t.name) +
           '</label></div>' + cards.map(rowHTML).join('') + '</div>';
       });
       if (anySec) {
@@ -1233,10 +1314,32 @@ PGRE.views.formulas = (function () {
       selectable().forEach(function (b) { if (b.checked) n++; });
       return n;
     }
+    /* Unlocked rows under this heading that the name filter has not hidden.
+       Same topic in another Due now / Upcoming / New section is a different group. */
+    function groupSelectable(tp) {
+      var out = [];
+      if (!tp) return out;
+      tp.querySelectorAll('.picker-item').forEach(function (item) {
+        if (item.hidden) return;
+        var b = item.querySelector('.picker-box');
+        if (b && !b.getAttribute('data-locked')) out.push(b);
+      });
+      return out;
+    }
+    function syncHeadings() {
+      body().querySelectorAll('.picker-selall-box').forEach(function (sa) {
+        var rows = groupSelectable(sa.closest('.picker-topic'));
+        sa.disabled = rows.length === 0;
+        var allOn = rows.length > 0;
+        rows.forEach(function (b) { if (!b.checked) allOn = false; });
+        sa.checked = allOn;
+      });
+    }
     function refresh() {
       var n = countChecked();
       var cc = document.getElementById('picker-count');
       if (cc) cc.textContent = n + ' picked · target ' + T;
+      syncHeadings();
     }
     boxes.forEach(function (b) {
       if (b.getAttribute('data-locked')) return;
@@ -1244,34 +1347,41 @@ PGRE.views.formulas = (function () {
     });
     body().querySelectorAll('.picker-selall-box').forEach(function (sa) {
       sa.addEventListener('change', function () {
-        var topic = sa.getAttribute('data-topic');
-        var rows = Array.prototype.filter.call(selectable(), function (b) {
-          var c = deckById(b.value);
-          return c && c.topic === topic;
+        var on = sa.checked;
+        groupSelectable(sa.closest('.picker-topic')).forEach(function (b) {
+          b.checked = on;
         });
-        rows.forEach(function (b) { b.checked = sa.checked; });
         refresh();
       });
     });
-    // Name filter: hide non-matching rows, then topics with nothing visible.
+    // Name filter: hide non-matching items (row + peek), then empty topics.
     var filter = document.getElementById('picker-filter');
     if (filter) filter.addEventListener('input', function () {
       var q = filter.value.trim().toLowerCase();
-      body().querySelectorAll('.picker-row').forEach(function (r) {
-        var name = r.querySelector('.deck-name');
-        r.hidden = !!q && !!name && name.textContent.toLowerCase().indexOf(q) === -1;
+      body().querySelectorAll('.picker-item').forEach(function (item) {
+        var name = item.querySelector('.deck-name');
+        item.hidden = !!q && !!name && name.textContent.toLowerCase().indexOf(q) === -1;
       });
       body().querySelectorAll('.picker-topic').forEach(function (tp) {
         var visible = Array.prototype.some.call(
-          tp.querySelectorAll('.picker-row'), function (r) { return !r.hidden; });
+          tp.querySelectorAll('.picker-item'), function (r) { return !r.hidden; });
         tp.hidden = !visible;
+      });
+      refresh();
+    });
+    body().querySelectorAll('.picker-row').forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('.picker-check') || e.target.closest('.picker-box')) return;
+        var id = row.getAttribute('data-cardid');
+        var peek = row.parentNode &&
+          row.parentNode.querySelector('[data-peek="' + cssAttr(id) + '"]');
+        openPeekFor(row, peek, id);
       });
     });
     refresh();
 
     document.getElementById('picker-clear').addEventListener('click', function () {
       selectable().forEach(function (b) { b.checked = false; });
-      body().querySelectorAll('.picker-selall-box').forEach(function (sa) { sa.checked = false; });
       refresh();
     });
     document.getElementById('picker-cancel').addEventListener('click', renderHome);
@@ -1400,11 +1510,12 @@ PGRE.views.formulas = (function () {
       frontFace = '<div class="fcard-rev-q">What is this? When does it apply?</div>' +
         '<div class="fcard-front" id="fcard-front">' + formulaHTML(c.back) + '</div>';
       backFace = (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
-        '<div class="fcard-rev-prompt">' + formulaHTML(c.front) + '</div>' + noteHTML + mnem;
+        '<div class="fcard-rev-prompt">' + formulaHTML(c.front) + '</div>' + noteHTML + mnem +
+        vizNavButtonHTML(c.id, 'btn-sm', 'study-viz');
     } else {
       frontFace = (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
         '<div class="fcard-front" id="fcard-front">' + formulaHTML(c.front || 'Recall the formula.') + '</div>';
-      backFace = backHTML(c) + noteHTML + mnem;
+      backFace = backHTML(c) + noteHTML + mnem + vizNavButtonHTML(c.id, 'btn-sm', 'study-viz');
     }
     var html = '<div class="card practice-card">' +
       '<div class="practice-meta">' +
@@ -1451,6 +1562,7 @@ PGRE.views.formulas = (function () {
     if (sb) sb.addEventListener('click', function (e) { e.stopPropagation(); skipCard(); });
     var pa = document.getElementById('putaway-btn');
     if (pa) pa.addEventListener('click', function (e) { e.stopPropagation(); putAwayCard(); });
+    wireVizNav(body());
   }
 
   /* F8 pre-flip scaffold: swap the card front for the generic prompt list; the
@@ -1490,9 +1602,9 @@ PGRE.views.formulas = (function () {
         (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
         '<div class="fcard-front">' + formulaHTML(c.front) + '</div>' +
         '<div class="fcard-back">' + backHTML(c) +
-          (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') + '</div>' +
+          (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') +
+          vizNavButtonHTML(c.id, 'btn-sm', 'peek-viz') + '</div>' +
       '</div>' +
-      vizNavButtonHTML(c.id, 'btn-sm', 'peek-viz') +
       '<div class="btn-row session-peek-bar">' +
         '<button class="btn btn-ghost" id="peek-older"' + (idx <= 0 ? ' disabled' : '') +
           '>← Older</button>' +
@@ -1535,9 +1647,6 @@ PGRE.views.formulas = (function () {
     if (backEl) {
       backEl.hidden = false;
       backEl.classList.add('fcard-reveal');   // clip-path wipe via motion tokens
-      if (window.PGRE && window.PGRE.renderInlineVisualizer) {
-        window.PGRE.renderInlineVisualizer(c.id, backEl);
-      }
     }
     // F5 reverse: the equation is the QUESTION, so its book number would give the
     // answer away. It is withheld until here, then the front is re-rendered with
@@ -2300,6 +2409,9 @@ PGRE.views.formulas = (function () {
       ? '<span class="due-chip today-chip">In today</span>'
       : '<button type="button" class="btn btn-ghost btn-sm" data-fs-add="' +
           ui.esc(c.id) + '">Add to today</button>';
+    var hasViz = hasInteractiveVisualizer(c.id);
+    var modalLabel = hasViz ? 'Open Simulation' : 'Complete view';
+    var modalAria = hasViz ? ' aria-haspopup="dialog"' : '';
     // The id is read straight back with getAttribute (never as a CSS selector),
     // so HTML-escaping is the only escaping it needs.
     return '<article class="fs-card' + (open ? ' is-open' : '') +
@@ -2318,7 +2430,7 @@ PGRE.views.formulas = (function () {
           (open ? 'Hide formula' : 'Show formula') + '</button>' +
         '<span class="fs-card-actions">' +
           '<button type="button" class="btn btn-ghost btn-sm fs-modal-btn" data-fs-modal="' +
-            ui.esc(c.id) + '">Complete view</button>' +
+            ui.esc(c.id) + '"' + modalAria + '>' + modalLabel + '</button>' +
           addCtrl +
         '</span>' +
         '<span class="fs-chips">' + searchChipsHTML(c) + '</span>' +

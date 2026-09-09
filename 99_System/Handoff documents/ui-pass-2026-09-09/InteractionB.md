@@ -1,0 +1,20 @@
+# InteractionB — empty/destructive states, formula-recall landing, visualizer fold
+
+## What changed
+
+1. Mistake book (`js/view-mistakes.js`): `drillLabel(base, pool, emptyText)` returns plain copy when the pool is empty. "Drill due (0)" is now a disabled primary reading "Nothing due today"; "Drill all (0)" reads "Nothing to drill". The "Questions per drill" chip row only renders when there are open mistakes. Archive/browse list untouched.
+2. Library (`js/view-content.js`, `css/style.css` Library section): "Reset all progress" moved out of the "Your data" row into a last-on-page `.card.danger-zone` (`--bad` border and heading). Clicking it swaps in an inline confirm row (`--bad-tint` panel: "Erase all progress on this machine?" / "Yes, erase everything" `.btn-danger` / "Cancel"). Focus moves to the confirm and back on cancel. The two `confirm()` dialogs are gone. Export / restore / reset-formula-cards stay where they were. Added `.btn-danger`, `.danger-zone`, `.danger-confirm(-text)`.
+3. `#/formulas` empty-day landing (`js/view-formulas.js` `renderHome`): when nothing is picked, nothing is mid-flight, and unseen cards exist, a `.fm-landing` card appears right under the intro with "Study N today" (`#fill-study-btn`, N = min(daily target, unsuspended new cards)) and "Pick cards myself" (`#landing-pick-btn`). The primary button calls `PGRE.srs.fillFormulaDayIfEmpty(deck)`, sets the existing `studyFromFill` flag and re-renders — the exact path the dashboard arms via `armStudyFromFill`. The duplicate "Nothing picked yet" heading/`#pick-btn` in the Today card is suppressed in that state; all other states (resume, remaining, caught up) render as before. Picker itself untouched (N4 stays parked).
+4. Flash-mode tab bar (`css/style.css` `.flash-tabs`, `js/view-formulas.js` `renderShell`): single row, `flex-wrap: nowrap; overflow-x: auto`, hidden scrollbar, `position: relative` so tabs measure against the strip. `revealTab()` scrolls the strip (never the page) so the active tab is in view on render and on click. Scroll-snap was tried and dropped: it pinned programmatic `scrollLeft` back to the first snap point.
+5. Visualizer modal (`css/visualizer.css`): `.viz-modal-body .viz-canvas-wrapper { height: clamp(300px, 44vh, 420px) }` so at 1440x900 the legend and the "Parameters & Controls" heading plus first slider are on the first screen (controls top 664px, body bottom 863px; before, the canvas alone was 692px). Controls panel gets a 2px `--ink-3` top rule as the fold marker. Speed cluster (0.2x-3.0x) untouched. Also fixed a pre-existing 390px bug found on the way: `.viz-thumb-card { min-width: 0 }` — a wide KaTeX line was widening lab cards to 663px and the whole page to 695px.
+
+## Verification
+
+- Browser at 1440x900 and 390x844 (headless Chromium, `python3 -m http.server 8004`). Screenshots in `/tmp/pgre-interactionB/`: `mistakes-{1440,390}.png`, `library-1440.png`, `library-confirm-{1440,390}.png`, `formulas-{1440,390}.png`, `formulas-study-from-landing-1440.png`, `formulas-tabs-{search,lab}-390.png`, `viz-modal-{1440,390}.png`, `viz-lab-390.png`.
+- Measured: drill buttons disabled with the new copy and no size row on an empty book; danger zone is the last `#view > .card`, confirm row toggles and focus moves; landing "Study 10 today" starts a session ("Card 1 · 10 left", `#flip-btn` present) and "Pick cards myself" opens the picker (334 rows); tabs render as 1 row at 390 (356px strip, 465px content), Search/Lab tabs come into view with `window.scrollY` unchanged; modal first control row visible at 900px; page `scrollWidth` 390 at 390.
+- Suites: `node tools/test-visualizer-aesthetics.js` (1091 pass), `node tools/test-formula-checkin.js` (71), `node tools/test-mistakes-srs.js` (36), plus `node tools/test-ux-interaction.js` (108) since it drives the formulas home. All green.
+
+## Open
+
+- Picker redesign (N4) still parked; the landing only routes around it.
+- Browser tab named `aes2` (Aesthetics') was released by my cleanup due to a shared-kernel variable collision; Aesthetics notified.

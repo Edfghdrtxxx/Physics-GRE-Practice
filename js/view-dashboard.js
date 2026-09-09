@@ -388,7 +388,8 @@ PGRE.views.dashboard = (function () {
 
   /* Next unused intact ETS form. Never GR8677/GR9277 as a fresh test.
      If ets2024 has not been sat, it is the pointer even when the catalog
-     has not loaded. */
+     has not loaded. Shared with the exam setup screen as PGRE.nextMockPointer
+     so both surfaces point at the same sitting. */
   function nextMockPointer() {
     var sat = {};
     (PGRE.store.state.exams || []).forEach(function (x) {
@@ -402,17 +403,18 @@ PGRE.views.dashboard = (function () {
       }
       return fallback;
     }
-    if (!sat.ets2024) return { title: catalogTitle('ets2024', 'ETS 2024') };
+    if (!sat.ets2024) return { id: 'ets2024', title: catalogTitle('ets2024', 'ETS 2024') };
     var list = PGRE.ETS_EXAMS || [];
     for (var i = 0; i < list.length; i++) {
       var ex = list[i];
       if (!ex || !ex.id) continue;
       var id = String(ex.id).toLowerCase();
       if (skip[id] || sat[id]) continue;
-      return { title: ex.title || ex.id };
+      return { id: ex.id, title: ex.title || ex.id };
     }
     return null;
   }
+  PGRE.nextMockPointer = nextMockPointer;
 
   function todayAgendaHTML() {
     var ui = PGRE.ui;

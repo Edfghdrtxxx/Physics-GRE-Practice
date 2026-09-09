@@ -179,6 +179,100 @@
     haloLabel(ctx, label, lx, ly, { color: color });
   }
 
+  function wrapAngle(a) {
+    var t = a % (2 * Math.PI);
+    if (t < 0) t += 2 * Math.PI;
+    return t;
+  }
+
+  function angSpan(a, b) {
+    return wrapAngle(b - a);
+  }
+
+  function keplerE(M, e) {
+    var twoPi = 2 * Math.PI;
+    M = ((M % twoPi) + twoPi) % twoPi;
+    if (M > Math.PI) M -= twoPi;
+    var E = M;
+    var i, dE, denom;
+    for (i = 0; i < 14; i++) {
+      denom = 1 - e * Math.cos(E);
+      if (Math.abs(denom) < 1e-12) break;
+      dE = (E - e * Math.sin(E) - M) / denom;
+      E -= dE;
+      if (Math.abs(dE) < 1e-12) break;
+    }
+    if (!isFinite(E)) E = M;
+    return E;
+  }
+
+  function trueFromM(M, e) {
+    if (e < 1e-8) return wrapAngle(M);
+    var E = keplerE(M, e);
+    var ta = 2 * Math.atan2(
+      Math.sqrt(1 + e) * Math.sin(E / 2),
+      Math.sqrt(Math.max(1e-12, 1 - e)) * Math.cos(E / 2)
+    );
+    return wrapAngle(ta);
+  }
+
+  function polarR(phi, p, e) {
+    var d = 1 + e * Math.cos(phi);
+    if (d <= 1e-6) return Infinity;
+    return p / d;
+  }
+
+  function paintPolarWedge(ctx, fx, fy, p, e, s, phi0, phi1, fill, stroke) {
+    var dphi = angSpan(phi0, phi1);
+    if (dphi < 1e-4) return;
+    var n = Math.max(10, Math.ceil(dphi / 0.045));
+    var k, ph, rv;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(fx, fy);
+    for (k = 0; k <= n; k++) {
+      ph = phi0 + dphi * (k / n);
+      rv = polarR(ph, p, e);
+      if (!isFinite(rv)) continue;
+      ctx.lineTo(fx + rv * Math.cos(ph) * s, fy + rv * Math.sin(ph) * s);
+    }
+    ctx.closePath();
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+    if (stroke) {
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function wedgeCentroid(fx, fy, p, e, s, phi0, phi1) {
+    var mid = phi0 + angSpan(phi0, phi1) * 0.5;
+    var rv = polarR(mid, p, e);
+    if (!isFinite(rv)) rv = p;
+    return {
+      x: fx + 0.52 * rv * Math.cos(mid) * s,
+      y: fy + 0.52 * rv * Math.sin(mid) * s
+    };
+  }
+
+  function disk(ctx, x, y, r, fill, glow) {
+    if (!isFinite(x) || !isFinite(y) || !isFinite(r)) return;
+    if (glow && CV && typeof CV.drawGlowCircle === 'function') {
+      CV.drawGlowCircle(ctx, x, y, r, fill, glow, Math.max(8, r * 1.7));
+      return;
+    }
+    ctx.save();
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(1, r), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
 
   PGRE.visualizers['cpgf-1.35'] = {
   id: 'cpgf-1.35',
@@ -186,9 +280,9 @@
   title: 'Conserved Angular Momentum & Kepler’s 2nd Law in Polar Coordinates',
   formulaLatex: 'l = m r^2 \\dot{\\phi} = \\text{constant} \\quad\\iff\\quad \\frac{dA}{dt} = \\frac{1}{2} r^2 \\dot{\\phi} = \\frac{l}{2m}',
 
-  physicalStory: `In any central force field $\\mathbf{F}(\\mathbf{r}) = f(r)\\hat{\\mathbf{r}}$, the line of action passes directly through the origin (force center). Consequently, the net torque vanishes identically: $\\boldsymbol{\\tau} = \\mathbf{r} \\times \\mathbf{F} = \\mathbf{0}$. By Noether's theorem and rotational symmetry, the orbital angular momentum vector $\\mathbf{L} = \\mathbf{r} \\times \\mathbf{p}$ is an invariant of motion, confining the orbit to a fixed 2D plane perpendicular to $\\mathbf{L}$.
+  physicalStory: `In any central force field $\\mathbf{F}(\\mathbf{r}) = f(r)\\hat{\\mathbf{r}}$, the torque about the force center vanishes: $\\boldsymbol{\\tau} = \\mathbf{r} \\times \\mathbf{F} = \\mathbf{0}$. Angular momentum $\\mathbf{l} = \\mathbf{r} \\times m\\mathbf{v}$ is therefore constant, the motion is planar, and $l = m r^2 \\dot{\\phi}$ is an integral of motion.
 
-In plane polar coordinates $(r, \\phi)$, the angular momentum magnitude is $l = m r^2 \\dot{\\phi}$. Geometrically, the infinitesimal area swept out by the radial position vector in time $dt$ is $dA = \\frac{1}{2} r (r d\\phi) = \\frac{1}{2} r^2 \\dot{\\phi} dt$. The constancy of $l$ guarantees that the areal velocity $dA/dt = l/(2m)$ is strictly constant throughout the entire orbit (Kepler's Second Law). When the orbiting body nears periapsis ($r$ decreases), its angular speed $\\dot{\\phi}$ must drastically surge as $1/r^2$ so that the swept area per second remains impeccably conserved.`,
+The radius vector from the force center sweeps area $dA = \\frac{1}{2} r^2 d\\phi$. Constancy of $l$ is Kepler's second law: equal areas in equal times, $dA/dt = l/(2m)$, for every central force — not only gravity. On an ellipse the two highlighted sectors have identical duration $\\Delta t$ and therefore identical area. Near periapsis $r$ is small, so $\\dot{\\phi} \\propto 1/r^2$ is large and the sector is wide-angled and short. Near apoapsis the same $\\Delta t$ is a long, narrow sliver. The planet races through periapsis and crawls through apoapsis so that $r^2 \\dot{\\phi}$ never changes.`,
 
   derivationSteps: [
     "1. Torque definition: $\\boldsymbol{\\tau} = \\mathbf{r} \\times \\mathbf{F}(\\mathbf{r}) = \\mathbf{r} \\times [f(r)\\hat{\\mathbf{r}}] = f(r)(\\mathbf{r} \\times \\hat{\\mathbf{r}}) = \\mathbf{0}$.",
@@ -213,20 +307,13 @@ In plane polar coordinates $(r, \\phi)$, the angular momentum magnitude is $l = 
   ],
 
   parameters: [
-    { id: 'eccentricity', label: 'Eccentricity ($e$)', min: 0.0, max: 0.85, step: 0.05, default: 0.65, unit: '' },
-    { id: 'semiMajorAxis', label: 'Semi-major axis ($a$)', min: 100, max: 220, step: 10, default: 160, unit: '' },
-    { id: 'mass', label: 'Mass ($m$)', min: 0.5, max: 4.0, step: 0.5, default: 1.0, unit: '' },
-    { id: 'sectorDuration', label: 'Sector sweep interval', min: 0.5, max: 2.5, step: 0.25, default: 1.0, unit: 's' },
-    { id: 'showVectors', label: 'Show velocity vectors', type: 'toggle', default: true, unit: '' },
+    { id: 'eccentricity', label: 'Eccentricity ($e$)', min: 0.0, max: 0.85, step: 0.05, default: 0.50, unit: '' },
+    { id: 'sectorDuration', label: 'Equal-time slice ($\\Delta t$)', min: 0.3, max: 1.2, step: 0.1, default: 0.5, unit: 's' },
     { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
   ],
 
   init(container, state, redraw) {
     state._time = 0;
-    state._trueAnomaly = 0;
-    state._sectors = [];
-    state._lastSectorTime = 0;
-    state._lastSectorPhi = 0;
     state._trail = [];
   },
 
@@ -238,229 +325,125 @@ In plane polar coordinates $(r, \\phi)$, the angular momentum magnitude is $l = 
     creamFill(ctx, width, height);
     lightGrid(ctx, width, height, 40);
 
-    var e = Math.max(0, Math.min(0.92, numParam(state, 'eccentricity', 0.65)));
-    var aPhys = numParam(state, 'semiMajorAxis', 160);
-    var m = Math.max(0.05, numParam(state, 'mass', 1.0));
-    var sectorDt = Math.max(0.2, numParam(state, 'sectorDuration', 1.0));
-    var showVecs = flagParam(state, 'showVectors', true);
+    var e = Math.max(0, Math.min(0.92, numParam(state, 'eccentricity', 0.50)));
+    var sectorDt = Math.max(0.2, numParam(state, 'sectorDuration', 0.5));
     var speed = numParam(state, 'simSpeed', 1.0);
     dt = safeDt(dt);
 
-    var padT = 28;
-    var padB = 22;
-    var padL = 50;
+    var m = 1.0;
+    var T = 8.0;
+    var nMot = (2 * Math.PI) / T;
+    var a = 1.0;
+    var b = Math.sqrt(Math.max(0.02, 1 - e * e));
+    var p = a * (1 - e * e);
+    var h = nMot * a * a * b;
+    var l = m * h;
+    var arealVelocity = 0.5 * h;
+    var sectorArea = arealVelocity * sectorDt;
+
+    var padT = 30;
+    var padB = 26;
+    var padL = 36;
     var padR = 28;
     var availW = Math.max(80, width - padL - padR);
     var availH = Math.max(80, height - padT - padB);
-    var bPhys = aPhys * Math.sqrt(Math.max(0.001, 1 - e * e));
-    var aFit = 220;
-    var s = Math.min(availW / (2 * aFit), availH / (2 * aFit));
+    var s = Math.min(availW / (2.12 * a), availH / (2.16 * b));
     if (!isFinite(s) || s <= 0) s = 1;
-    var planetR = 5.5 + 4.5 * Math.sqrt(m);
 
-    var a = aPhys;
-    var b = bPhys;
     var ecx = padL + availW / 2;
     var ecy = padT + availH / 2;
-    var cx = ecx + a * e * s;
-    var cy = ecy;
-
-    var GM = 120000;
-    var p = a * (1 - e * e);
-    var h = Math.sqrt(Math.max(1, GM * p));
-    var l = m * h;
-    var period = (2 * Math.PI * Math.pow(a, 1.5)) / Math.sqrt(GM);
+    var fx = ecx + a * e * s;
+    var fy = ecy;
 
     state._time = (state._time || 0) + dt * speed;
-    var nMot = (2 * Math.PI) / Math.max(period, 1e-6);
-    var meanAnomaly = (nMot * state._time) % (2 * Math.PI);
+    var meanAnomaly = wrapAngle(nMot * state._time);
+    var trueAnomaly = trueFromM(meanAnomaly, e);
+    var r = polarR(trueAnomaly, p, e);
+    var px = fx + r * Math.cos(trueAnomaly) * s;
+    var py = fy + r * Math.sin(trueAnomaly) * s;
+    var phiDot = h / Math.max(r * r, 1e-8);
+    var vPhi = h / Math.max(r, 1e-8);
+    var vR = (h / Math.max(p, 1e-8)) * e * Math.sin(trueAnomaly);
+    var vTot = Math.hypot(vR, vPhi);
 
-    var E_anom = meanAnomaly;
-    for (var iter = 0; iter < 10; iter++) {
-      var fKep = E_anom - e * Math.sin(E_anom) - meanAnomaly;
-      var fprime = 1 - e * Math.cos(E_anom);
-      if (Math.abs(fprime) < 1e-10) break;
-      E_anom -= fKep / fprime;
-      if (!isFinite(E_anom)) { E_anom = meanAnomaly; break; }
-    }
+    var dM = nMot * sectorDt;
+    var peri0 = trueFromM(-0.5 * dM, e);
+    var peri1 = trueFromM(0.5 * dM, e);
+    var apo0 = trueFromM(Math.PI - 0.5 * dM, e);
+    var apo1 = trueFromM(Math.PI + 0.5 * dM, e);
+    var dPhiPeri = angSpan(peri0, peri1);
+    var dPhiApo = angSpan(apo0, apo1);
 
-    var trueAnomaly = 2 * Math.atan2(
-      Math.sqrt(1 + e) * Math.sin(E_anom / 2),
-      Math.sqrt(Math.max(0.001, 1 - e)) * Math.cos(E_anom / 2)
-    );
-    if (trueAnomaly < 0) trueAnomaly += 2 * Math.PI;
-    state._trueAnomaly = trueAnomaly;
-
-    var r = p / (1 + e * Math.cos(trueAnomaly));
-    var px = cx + r * Math.cos(trueAnomaly) * s;
-    var py = cy + r * Math.sin(trueAnomaly) * s;
-
-    var v_phi = h / Math.max(r, 1e-6);
-    var v_r = (h / Math.max(p, 1e-6)) * e * Math.sin(trueAnomaly);
-    var v_total = Math.hypot(v_r, v_phi);
-    var phi_dot = h / (r * r);
-    var arealVelocity = 0.5 * r * r * phi_dot;
-
-    if (state._lastEcc !== e || state._lastA !== a) {
-      state._sectors = [];
+    if (state._lastEcc !== e) {
       state._trail = [];
-      state._lastSectorTime = state._time;
-      state._lastSectorPhi = trueAnomaly;
       state._lastEcc = e;
-      state._lastA = a;
     }
 
     panelTitle(ctx, 'Equal areas in equal times', padL, 8, 'left');
 
+    paintPolarWedge(ctx, fx, fy, p, e, s, peri0, peri1, 'rgba(204, 120, 92, 0.30)', 'rgba(204, 120, 92, 0.70)');
+    paintPolarWedge(ctx, fx, fy, p, e, s, apo0, apo1, 'rgba(93, 184, 166, 0.30)', 'rgba(93, 184, 166, 0.70)');
+
     ctx.save();
-    ctx.strokeStyle = (CV && CV.colors && CV.colors.orbit) || 'rgba(204, 120, 92, 0.45)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = (CV && CV.colors && CV.colors.orbit) || 'rgba(204, 120, 92, 0.55)';
+    ctx.lineWidth = 2.2;
     ctx.beginPath();
     ctx.ellipse(ecx, ecy, a * s, b * s, 0, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.setLineDash([]);
     ctx.restore();
 
-    if (!state._sectors) state._sectors = [];
-    if (state._lastSectorTime === undefined) {
-      state._lastSectorTime = state._time;
-      state._lastSectorPhi = trueAnomaly;
-    }
-
-    if (state._time - state._lastSectorTime >= sectorDt) {
-      var startP = state._lastSectorPhi;
-      var endP = trueAnomaly;
-      if (endP < startP) endP += 2 * Math.PI;
-      state._sectors.push({
-        startPhi: startP,
-        endPhi: endP,
-        colorIndex: state._sectors.length % 2,
-        time: state._time
-      });
-      state._lastSectorPhi = trueAnomaly;
-      state._lastSectorTime = state._time;
-      if (state._sectors.length > 8) state._sectors.shift();
-    }
-
-    function paintWedge(startPhi, endPhi, fill, stroke) {
-      ctx.save();
-      ctx.fillStyle = fill;
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      var dPhi = endPhi - startPhi;
-      var numSteps = 28;
-      for (var k = 0; k <= numSteps; k++) {
-        var phi_s = startPhi + (dPhi * k) / numSteps;
-        var r_s = p / (1 + e * Math.cos(phi_s));
-        ctx.lineTo(cx + r_s * Math.cos(phi_s) * s, cy + r_s * Math.sin(phi_s) * s);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    for (var si = 0; si < state._sectors.length; si++) {
-      var sec = state._sectors[si];
-      if (sec.colorIndex === 0) {
-        paintWedge(sec.startPhi, sec.endPhi, (CV && CV.colors && CV.colors.sectorA) || 'rgba(204, 120, 92, 0.22)', 'rgba(204, 120, 92, 0.45)');
-      } else {
-        paintWedge(sec.startPhi, sec.endPhi, (CV && CV.colors && CV.colors.sectorB) || 'rgba(93, 184, 166, 0.22)', 'rgba(93, 184, 166, 0.45)');
-      }
-    }
-
-    if (state._lastSectorPhi !== undefined) {
-      var currStart = state._lastSectorPhi;
-      var currEnd = trueAnomaly;
-      if (currEnd < currStart) currEnd += 2 * Math.PI;
-      paintWedge(currStart, currEnd, 'rgba(212, 160, 23, 0.18)', 'rgba(212, 160, 23, 0.35)');
-    }
-
     ctx.save();
-    ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.18);
+    ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.16);
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(ecx - a * s, cy);
-    ctx.lineTo(ecx + a * s, cy);
+    ctx.moveTo(ecx - a * s, fy);
+    ctx.lineTo(ecx + a * s, fy);
     ctx.stroke();
     ctx.restore();
 
-    var sunR = 12;
-    if (CV && CV.drawGlowCircle) {
-      CV.drawGlowCircle(ctx, cx, cy, sunR, (CV.colors && CV.colors.sun) || GOLD, (CV.colors && CV.colors.sunGlow) || 'rgba(212, 160, 23, 0.35)', 18);
-    } else {
-      ctx.fillStyle = GOLD;
-      ctx.beginPath();
-      ctx.arc(cx, cy, sunR, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.save();
-    ctx.fillStyle = '#78350f';
-    ctx.font = 'bold 10px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('M', cx, cy);
-    ctx.restore();
+    var periC = wedgeCentroid(fx, fy, p, e, s, peri0, peri1);
+    var apoC = wedgeCentroid(fx, fy, p, e, s, apo0, apo1);
+    haloLabel(ctx, 'dt', periC.x, periC.y, { color: CORAL });
+    haloLabel(ctx, 'dt', apoC.x, apoC.y, { color: TEAL });
 
-    labeledArrow(ctx, cx, cy, px, py, (CV && CV.colors && CV.colors.vecR) || TEAL, 'r', {
-      along: 0.45, side: 1, pad: 14, clampW: width, clampH: height, lineWidth: 2, arrowSize: 7
+    disk(ctx, fx, fy, 11, (CV && CV.colors && CV.colors.sun) || GOLD, (CV && CV.colors && CV.colors.sunGlow) || 'rgba(212, 160, 23, 0.35)');
+
+    labeledArrow(ctx, fx, fy, px, py, (CV && CV.colors && CV.colors.vecR) || TEAL, 'r', {
+      along: 0.42, side: 1, pad: 13, clampW: width, clampH: height, lineWidth: 2, arrowSize: 7
     });
 
     if (!state._trail) state._trail = [];
     state._trail.push({ x: px, y: py });
-    if (state._trail.length > 60) state._trail.shift();
+    if (state._trail.length > 48) state._trail.shift();
 
     ctx.save();
-    for (var i = 0; i < state._trail.length - 1; i++) {
-      var alpha = (i / state._trail.length) * 0.55;
-      ctx.strokeStyle = 'rgba(204, 120, 92, ' + alpha + ')';
-      ctx.lineWidth = 2.2;
+    var ti;
+    for (ti = 0; ti < state._trail.length - 1; ti++) {
+      ctx.strokeStyle = 'rgba(204, 120, 92, ' + ((ti / state._trail.length) * 0.5) + ')';
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(state._trail[i].x, state._trail[i].y);
-      ctx.lineTo(state._trail[i + 1].x, state._trail[i + 1].y);
+      ctx.moveTo(state._trail[ti].x, state._trail[ti].y);
+      ctx.lineTo(state._trail[ti + 1].x, state._trail[ti + 1].y);
       ctx.stroke();
     }
     ctx.restore();
 
-    if (CV && CV.drawGlowCircle) {
-      CV.drawGlowCircle(ctx, px, py, planetR, (CV.colors && CV.colors.particle) || CORAL, (CV.colors && CV.colors.particleGlow) || 'rgba(204, 120, 92, 0.5)', planetR * 2);
-    } else {
-      ctx.fillStyle = CORAL;
-      ctx.beginPath();
-      ctx.arc(px, py, planetR, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    disk(ctx, px, py, 7.5, (CV && CV.colors && CV.colors.particle) || CORAL, (CV && CV.colors && CV.colors.particleGlow) || 'rgba(204, 120, 92, 0.5)');
 
-    if (showVecs) {
-      var vPix = 52;
-      var vScale = vPix / Math.max(v_total, 1e-6);
-      var totVx = v_r * Math.cos(trueAnomaly) + v_phi * (-Math.sin(trueAnomaly));
-      var totVy = v_r * Math.sin(trueAnomaly) + v_phi * Math.cos(trueAnomaly);
-      labeledArrow(ctx, px, py, px + totVx * vScale, py + totVy * vScale, CORAL, 'v', {
-        along: 1, side: 1, pad: 12, extraAlong: 11, clampW: width, clampH: height, lineWidth: 2.4, arrowSize: 8
-      });
+    if (e > 0.08) {
+      haloLabel(ctx, 'peri', Math.min(width - 18, ecx + a * s - 8), Math.min(height - 14, fy + 20), { color: MUTED, align: 'right' });
+      haloLabel(ctx, 'apo', Math.max(18, ecx - a * s + 8), Math.max(18, fy - 20), { color: MUTED, align: 'left' });
     }
-
-    var periX = ecx + a * s;
-    var apoX = ecx - a * s;
-    var periLabelX = periX - Math.max(36, sunR + 20);
-    if (periLabelX < cx + sunR + 10) periLabelX = Math.min(periX - 8, cx - sunR - 18);
-    periLabelX = Math.max(padL + 8, Math.min(width - padR - 8, periLabelX));
-    haloLabel(ctx, 'periapsis', periLabelX, Math.min(height - 14, cy + 22), { color: MUTED });
-    haloLabel(ctx, 'apoapsis', apoX + 32, Math.max(18, cy - 22), { color: MUTED });
 
     pushLegend('Kepler 2nd law', [
-      { label: '$m$', value: '$' + m.toFixed(1) + '$' },
-      { label: '$l = m r^2 \\dot{\\phi}$', value: '$' + l.toFixed(1) + '$' },
-      { label: '$dA/dt = l/(2m)$', value: '$' + arealVelocity.toFixed(1) + '$' },
-      { label: '$r$', value: '$' + r.toFixed(1) + '$' },
-      { label: '$\\dot{\\phi}$', value: '$' + phi_dot.toFixed(3) + '$' },
-      { label: '$v_\\phi$', value: '$' + v_phi.toFixed(1) + '$' },
-      { label: '$v_r$', value: '$' + v_r.toFixed(1) + '$' },
-      { label: '$|v|$', value: '$' + v_total.toFixed(1) + '$' }
+      { label: '$dA/dt = l/(2m)$', value: '$' + arealVelocity.toFixed(3) + '$' },
+      { label: 'Sector area $A = (dA/dt)\\,\\Delta t$', value: '$' + sectorArea.toFixed(3) + '$' },
+      { label: '$\\Delta\\phi$ peri', value: '$' + dPhiPeri.toFixed(2) + '$' },
+      { label: '$\\Delta\\phi$ apo', value: '$' + dPhiApo.toFixed(2) + '$' },
+      { label: '$r$', value: '$' + r.toFixed(2) + '$' },
+      { label: '$\\dot{\\phi}$', value: '$' + phiDot.toFixed(2) + '$' },
+      { label: '$l = m r^2 \\dot{\\phi}$', value: '$' + l.toFixed(3) + '$' },
+      { label: '$|v|$', value: '$' + vTot.toFixed(2) + '$' }
     ]);
   },
 
@@ -483,11 +466,9 @@ In plane polar coordinates $(r, \\phi)$, the angular momentum magnitude is $l = 
   title: 'Total Energy & 1D Effective Potential Well in Central Forces',
   formulaLatex: 'E = \\frac{1}{2}m\\dot{r}^2 + \\frac{l^2}{2mr^2} + U(r) \\equiv \\frac{1}{2}m\\dot{r}^2 + V_{\\text{eff}}(r)',
 
-  physicalStory: `By virtue of angular momentum conservation $l = m r^2 \\dot{\\phi} = \\text{const}$, the azimuthal coordinate $\\phi$ is cyclic. We can eliminate $\\dot{\\phi} = l / (m r^2)$ from the 2D kinetic energy, mapping the entire 2D orbital motion onto an equivalent 1D radial motion governed by the effective potential $V_{\\text{eff}}(r) = \\frac{l^2}{2mr^2} + U(r)$.
+  physicalStory: `Angular momentum $l = m r^2 \\dot{\\phi}$ is conserved, so $\\phi$ is cyclic. Substituting $\\dot{\\phi} = l/(m r^2)$ collapses the planar orbit to an equivalent 1D radial problem in the effective potential $V_{\\text{eff}}(r) = l^2/(2mr^2) + U(r)$. The first term is the centrifugal barrier: a repulsive $1/r^2$ wall that keeps $l \\ne 0$ trajectories from the origin.
 
-The term $\\frac{l^2}{2mr^2}$ is the fictitious centrifugal barrier, a steeply repulsive $1/r^2$ potential generated by angular momentum that physically prevents the particle from falling into the origin. For Newtonian gravity $U(r) = -k/r$, the combination of the repulsive centrifugal barrier at short range and the attractive gravitational well at long range forms an asymmetric potential well.
-
-The total mechanical energy $E$ determines the orbit geometry. When $E = V_{\\text{eff},\\min}$, the motion is circular at the equilibrium radius $r_0 = l^2/(mk)$ with $\\dot{r} = 0$. When $V_{\\text{eff},\\min} < E < 0$, a bound ellipse oscillates between turning points $r_{\\min}$ and $r_{\\max}$ where $E = V_{\\text{eff}}(r)$. When $E = 0$, the orbit is a parabolic escape with a single turning point ($e = 1$). When $E > 0$, the motion is an unbound hyperbolic scatter ($e > 1$).`,
+For Newtonian gravity $U = -k/r$ the barrier plus the attractive well form an asymmetric bowl. The bead on that bowl is the same $r(t)$ as the orbit on the left. Energy $E$ is a waterline: $E = E_{\\min}$ sits at the bottom (circle), $E_{\\min} < E < 0$ sloshes between turning points (ellipse), $E = 0$ is parabolic escape, and $E > 0$ is a hyperbolic scatter. The shaded band between $E$ and $V_{\\text{eff}}$ is the radial kinetic energy $\\frac{1}{2}m\\dot{r}^2$. Tangential motion never stops: at an apsis $\\dot{r} = 0$ but $v_\\phi = l/(mr) \\ne 0$.`,
 
   derivationSteps: [
     "1. 2D Kinetic Energy in polar coordinates: $T = \\frac{1}{2}m(\\dot{r}^2 + r^2\\dot{\\phi}^2)$.",
@@ -513,15 +494,13 @@ The total mechanical energy $E$ determines the orbit geometry. When $E = V_{\\te
   ],
 
   parameters: [
-    { id: 'relEnergy', label: 'Energy ($E / |E_{\\min}|$)', min: -1, max: 0.8, step: 0.05, default: -0.6, unit: '' },
+    { id: 'relEnergy', label: 'Energy ($E / |E_{\\min}|$)', min: -1, max: 0.8, step: 0.05, default: -0.55, unit: '' },
     { id: 'angMom', label: 'Angular momentum ($l$)', min: 0.8, max: 2.0, step: 0.1, default: 1.3, unit: '' },
-    { id: 'showRadialKinetic', label: 'Show radial kinetic $T_r$', type: 'toggle', default: true, unit: '' },
+    { id: 'showParts', label: 'Decompose $V_{\\mathrm{eff}}$', type: 'toggle', default: true, unit: '' },
     { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
   ],
 
   init(container, state, redraw) {
-    state._r = 100;
-    state._rdot = 0;
     state._phi = 0;
     state._orbitTrail = [];
   },
@@ -537,130 +516,144 @@ The total mechanical energy $E$ determines the orbit geometry. When $E = V_{\\te
     var m = 1.0;
     var k = 24000;
     var l = numParam(state, 'angMom', 1.3) * 1200;
-    var relE = numParam(state, 'relEnergy', -0.6);
+    var relE = numParam(state, 'relEnergy', -0.55);
     var speed = numParam(state, 'simSpeed', 1.0);
-    var showTr = flagParam(state, 'showRadialKinetic', true);
+    var showParts = flagParam(state, 'showParts', true);
     dt = safeDt(dt);
 
     var r0 = (l * l) / (m * k);
     var Emin = -(m * k * k) / (2 * l * l);
     var E = relE * Math.abs(Emin);
+    var eOrb = Math.sqrt(Math.max(0, 1 + E / Math.abs(Emin)));
+    if (relE <= -0.999) eOrb = 0;
+    var p = r0;
+    var rMin = p / (1 + eOrb);
+    var rMax = (eOrb < 0.999) ? p / Math.max(1e-6, 1 - eOrb) : Infinity;
+    var almostCirc = eOrb < 0.045;
+    var hSpec = l / m;
 
-    var disc = k * k + (2 * E * l * l) / m;
-    var r_min;
-    var r_max;
-    if (Math.abs(E) < 1e-4) {
-      r_min = (l * l) / (2 * m * k);
-      r_max = 99999;
-    } else if (E < 0) {
-      if (disc >= 0) {
-        r_min = (k - Math.sqrt(disc)) / (2 * Math.abs(E));
-        r_max = (k + Math.sqrt(disc)) / (2 * Math.abs(E));
-      } else {
-        r_min = r0;
-        r_max = r0;
-      }
-    } else {
-      r_min = (Math.sqrt(Math.max(0, disc)) - k) / (2 * E);
-      r_max = 99999;
+    var phiMax = Math.PI;
+    if (eOrb > 1) {
+      phiMax = Math.acos(Math.max(-1, Math.min(1, -1 / eOrb))) - 0.05;
+    } else if (eOrb > 0.999) {
+      phiMax = 2.55;
     }
-    if (!isFinite(r_min) || r_min < 8) r_min = Math.max(8, r0 * 0.4);
-    if (!isFinite(r_max)) r_max = 99999;
 
-    var splitX = Math.round(width * 0.44);
+    var splitX = Math.round(width * 0.40);
     var padT = 28;
-    var ox = splitX * 0.5;
-    var oy = padT + (height - padT) * 0.5;
+    var ox = splitX * 0.50;
+    var oy = padT + (height - padT) * 0.52;
     var orbitRoom = Math.min(splitX * 0.38, (height - padT - 16) * 0.42);
-    var rView = (E < 0 && r_max < 800) ? Math.max(r_max, r0) * 1.12 : Math.max(r0 * 2.4, r_min * 2.8, 90);
+    var rView;
+    if (eOrb < 1 && isFinite(rMax) && rMax < r0 * 5.5) rView = rMax * 1.10;
+    else rView = Math.max(r0 * 2.5, rMin * 3.0, 80);
     var orbitScale = orbitRoom / Math.max(rView, 1);
-    var rLeave = (orbitRoom * 1.08) / Math.max(orbitScale, 1e-6);
+    var rLeave = (orbitRoom * 1.15) / Math.max(orbitScale, 1e-6);
 
-    var subSteps = 10;
-    var simDt = (dt * speed) / subSteps;
-
-    if (!state._r || isNaN(state._r) || state._lastL !== l || Math.abs((state._lastE ?? 0) - E) > 1e-3) {
-      state._r = r_min;
-      state._rdot = 0;
-      state._phi = 0;
+    var phiLaunch = (eOrb < 1) ? 0 : -Math.min(phiMax * 0.55, 1.2);
+    var key = l.toFixed(2) + ':' + E.toFixed(2);
+    if (state._key !== key) {
+      state._key = key;
+      state._phi = phiLaunch;
       state._orbitTrail = [];
-      state._escaped = false;
-      state._lastL = l;
-      state._lastE = E;
+    }
+    if (!isFinite(state._phi)) state._phi = 0;
+
+    var sub = 12;
+    var hdt = (dt * speed) / sub;
+    var step, rvPhi, den;
+    for (step = 0; step < sub; step++) {
+      den = 1 + eOrb * Math.cos(state._phi);
+      rvPhi = den > 1e-4 ? p / den : p * 8;
+      rvPhi = Math.max(p * 0.08, rvPhi);
+      state._phi += (hSpec / (rvPhi * rvPhi)) * hdt;
+    }
+    if (eOrb >= 1 && (Math.abs(state._phi) > phiMax)) {
+      state._phi = phiLaunch;
+      state._orbitTrail = [];
     }
 
-    if (!state._escaped) {
-      for (var step = 0; step < subSteps; step++) {
-        var r_curr = Math.max(15, state._r);
-        var f_eff = (l * l) / (m * r_curr * r_curr * r_curr) - k / (r_curr * r_curr);
-        var r_ddot = f_eff / m;
-        state._rdot += r_ddot * simDt;
-        state._r += state._rdot * simDt;
-        if (state._r <= r_min) {
-          state._r = r_min;
-          if (state._rdot < 0) state._rdot = -state._rdot;
-        } else if (E < 0 && state._r >= r_max) {
-          state._r = r_max;
-          if (state._rdot > 0) state._rdot = -state._rdot;
-        }
-        var phi_dot = l / (m * state._r * state._r);
-        state._phi += phi_dot * simDt;
-      }
-      if (E >= 0 && state._r > rLeave) {
-        state._r = rLeave;
-        state._rdot = 0;
-        state._escaped = true;
-      }
+    den = 1 + eOrb * Math.cos(state._phi);
+    var rNow = den > 1e-4 ? p / den : rLeave;
+    if (!isFinite(rNow) || rNow < 1) rNow = rMin;
+    if (eOrb >= 1 && rNow > rLeave) {
+      state._phi = phiLaunch;
+      state._orbitTrail = [];
+      den = 1 + eOrb * Math.cos(state._phi);
+      rNow = p / Math.max(den, 1e-4);
     }
 
-    function toOrbitX(rv, phi) { return ox + rv * Math.cos(phi) * orbitScale; }
-    function toOrbitY(rv, phi) { return oy + rv * Math.sin(phi) * orbitScale; }
+    function veff(rv) {
+      return (l * l) / (2 * m * rv * rv) - k / rv;
+    }
+    function vCent(rv) {
+      return (l * l) / (2 * m * rv * rv);
+    }
+    function vGrav(rv) {
+      return -k / rv;
+    }
+
+    var Tr = Math.max(0, E - veff(rNow));
+    var px = ox + rNow * Math.cos(state._phi) * orbitScale;
+    var py = oy + rNow * Math.sin(state._phi) * orbitScale;
 
     dividerV(ctx, splitX, 8, height - 8);
-    panelTitle(ctx, 'Orbit in the plane', 14, 8, 'left');
+    panelTitle(ctx, 'Orbit  (same r)', 14, 8, 'left');
     panelTitle(ctx, 'Radial well', splitX + 14, 8, 'left');
 
-    function dashCircle(radius, color) {
-      if (radius < 4) return;
+    ctx.save();
+    ctx.strokeStyle = (CV && CV.colors && CV.colors.orbit) || 'rgba(204, 120, 92, 0.50)';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    var ph0 = (eOrb < 1) ? 0 : -phiMax;
+    var ph1 = (eOrb < 1) ? Math.PI * 2 : phiMax;
+    var dph = 0.04;
+    var started = false;
+    var ph, rr, xx, yy;
+    for (ph = ph0; ph <= ph1 + 1e-9; ph += dph) {
+      rr = polarR(ph, p, eOrb);
+      if (!isFinite(rr) || rr > rView * 1.08) {
+        started = false;
+        continue;
+      }
+      xx = ox + rr * Math.cos(ph) * orbitScale;
+      yy = oy + rr * Math.sin(ph) * orbitScale;
+      if (!started) { ctx.moveTo(xx, yy); started = true; }
+      else ctx.lineTo(xx, yy);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    if (rMin * orbitScale > 6 && rMin < rView) {
       ctx.save();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(224, 86, 102, 0.40)';
       ctx.setLineDash([3, 3]);
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(ox, oy, radius, 0, Math.PI * 2);
+      ctx.arc(ox, oy, rMin * orbitScale, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
-    if (r_min * orbitScale < orbitRoom * 1.05) {
-      dashCircle(r_min * orbitScale, 'rgba(224, 86, 102, 0.45)');
-    }
-    if (r_max < 800 && r_max * orbitScale < orbitRoom * 1.05) {
-      dashCircle(r_max * orbitScale, 'rgba(204, 120, 92, 0.45)');
-    }
-    dashCircle(r0 * orbitScale, 'rgba(78, 155, 111, 0.35)');
-
-    if (CV && CV.drawGlowCircle) {
-      CV.drawGlowCircle(ctx, ox, oy, 11, (CV.colors && CV.colors.sun) || GOLD, (CV.colors && CV.colors.sunGlow) || 'rgba(212, 160, 23, 0.35)', 16);
-    } else {
-      ctx.fillStyle = GOLD;
+    if (isFinite(rMax) && rMax < rView && rMax * orbitScale < orbitRoom * 1.05) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(204, 120, 92, 0.40)';
+      ctx.setLineDash([3, 3]);
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(ox, oy, 11, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.arc(ox, oy, rMax * orbitScale, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
     }
 
-    var px = toOrbitX(state._r, state._phi);
-    var py = toOrbitY(state._r, state._phi);
+    disk(ctx, ox, oy, 10, (CV && CV.colors && CV.colors.sun) || GOLD, (CV && CV.colors && CV.colors.sunGlow) || 'rgba(212, 160, 23, 0.35)');
 
     if (!state._orbitTrail) state._orbitTrail = [];
-    if (!state._escaped) {
-      state._orbitTrail.push({ x: px, y: py });
-      if (state._orbitTrail.length > 120) state._orbitTrail.shift();
-    }
-
+    state._orbitTrail.push({ x: px, y: py });
+    if (state._orbitTrail.length > 110) state._orbitTrail.shift();
     ctx.save();
-    for (var ti = 0; ti < state._orbitTrail.length - 1; ti++) {
-      var ta = (ti / state._orbitTrail.length) * 0.65;
-      ctx.strokeStyle = 'rgba(204, 120, 92, ' + ta + ')';
+    var ti;
+    for (ti = 0; ti < state._orbitTrail.length - 1; ti++) {
+      ctx.strokeStyle = 'rgba(204, 120, 92, ' + ((ti / state._orbitTrail.length) * 0.62) + ')';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(state._orbitTrail[ti].x, state._orbitTrail[ti].y);
@@ -669,26 +662,20 @@ The total mechanical energy $E$ determines the orbit geometry. When $E = V_{\\te
     }
     ctx.restore();
 
-    if (CV && CV.drawArrow) {
-      CV.drawArrow(ctx, ox, oy, px, py, 'rgba(93, 184, 166, 0.7)', '', 1.5, 6);
+    if (CV && typeof CV.drawArrow === 'function') {
+      CV.drawArrow(ctx, ox, oy, px, py, 'rgba(93, 184, 166, 0.75)', '', 1.5, 6);
     }
-    if (CV && CV.drawGlowCircle) {
-      CV.drawGlowCircle(ctx, px, py, 7, (CV.colors && CV.colors.particle) || CORAL, (CV.colors && CV.colors.particleGlow) || 'rgba(204, 120, 92, 0.5)', 12);
-    } else {
-      ctx.fillStyle = CORAL;
-      ctx.beginPath();
-      ctx.arc(px, py, 7, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    disk(ctx, px, py, 7, (CV && CV.colors && CV.colors.particle) || CORAL, (CV && CV.colors && CV.colors.particleGlow) || 'rgba(204, 120, 92, 0.5)');
 
-    var gx0 = splitX + 40;
-    var gx1 = width - 18;
-    var gy0 = 44;
-    var gy1 = height - 26;
-    if (gx1 <= gx0 + 40) gx1 = gx0 + 40;
-    if (gy1 <= gy0 + 40) gy1 = gy0 + 40;
-    var gZeroY = gy0 + (gy1 - gy0) * 0.38;
-    var rPlotMax = (E < 0 && r_max < 800) ? Math.max(140, r_max * 1.18) : Math.max(180, r0 * 2.5);
+    var gx0 = splitX + 38;
+    var gx1 = width - 16;
+    var gy0 = 42;
+    var gy1 = height - 24;
+    if (gx1 < gx0 + 40) gx1 = gx0 + 40;
+    if (gy1 < gy0 + 40) gy1 = gy0 + 40;
+    var gZeroY = gy0 + (gy1 - gy0) * 0.36;
+    var rPlotMax = (eOrb < 1 && isFinite(rMax) && rMax < r0 * 7) ? Math.max(r0 * 1.6, rMax * 1.18) : Math.max(r0 * 3.1, rMin * 3.4);
+    var rPlotMin = Math.max(r0 * 0.16, 10);
     var rScale = (gx1 - gx0) / rPlotMax;
     var vScale = (gy1 - gZeroY) / (Math.abs(Emin) * 1.55);
 
@@ -700,8 +687,57 @@ The total mechanical energy $E$ determines the orbit geometry. When $E = V_{\\te
     ctx.rect(gx0, gy0, gx1 - gx0, gy1 - gy0);
     ctx.clip();
 
+    ctx.beginPath();
+    ctx.moveTo(plotX(rPlotMin), gy1);
+    var rv, yy;
+    for (rv = rPlotMin; rv <= rPlotMax; rv += rPlotMax / 160) {
+      yy = plotY(veff(rv));
+      if (yy < gy0) yy = gy0;
+      if (yy > gy1) yy = gy1;
+      ctx.lineTo(plotX(rv), yy);
+    }
+    ctx.lineTo(plotX(rPlotMax), gy1);
+    ctx.closePath();
+    ctx.fillStyle = PGRE.vizStageTheme().inkFade(0.055);
+    ctx.fill();
+
+    var allowLo = rMin;
+    var allowHi = (eOrb < 1 && isFinite(rMax)) ? rMax : rPlotMax;
+    if (allowLo < rPlotMax && E > veff(r0) - 1e-6) {
+      ctx.beginPath();
+      started = false;
+      var lastX = plotX(allowLo);
+      for (rv = Math.max(allowLo, rPlotMin); rv <= Math.min(allowHi, rPlotMax); rv += rPlotMax / 180) {
+        if (veff(rv) > E + 1e-6) {
+          if (started) {
+            ctx.lineTo(plotX(rv), plotY(E));
+            ctx.lineTo(lastX, plotY(E));
+            ctx.closePath();
+          }
+          started = false;
+          continue;
+        }
+        yy = plotY(veff(rv));
+        if (!started) {
+          ctx.moveTo(plotX(rv), plotY(E));
+          ctx.lineTo(plotX(rv), yy);
+          started = true;
+          lastX = plotX(rv);
+        } else {
+          ctx.lineTo(plotX(rv), yy);
+          lastX = plotX(rv);
+        }
+      }
+      if (started) {
+        ctx.lineTo(lastX, plotY(E));
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(93, 184, 166, 0.28)';
+        ctx.fill();
+      }
+    }
+
     ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.22);
-    ctx.lineWidth = 1.4;
+    ctx.lineWidth = 1.3;
     ctx.beginPath();
     ctx.moveTo(gx0, gZeroY);
     ctx.lineTo(gx1, gZeroY);
@@ -709,20 +745,17 @@ The total mechanical energy $E$ determines the orbit geometry. When $E = V_{\\te
     ctx.lineTo(gx0, gy1);
     ctx.stroke();
 
-    function strokeCurve(color, widthPx, dash, fn, dr) {
+    function strokeFn(color, widthPx, dash, fn, dr) {
       ctx.save();
       ctx.strokeStyle = color;
       ctx.lineWidth = widthPx;
       ctx.setLineDash(dash || []);
       ctx.beginPath();
-      var started = false;
-      for (var rv = 18; rv < rPlotMax; rv += dr) {
-        var yy = plotY(fn(rv));
-        var xx = plotX(rv);
-        if (yy < gy0 - 8 || yy > gy1 + 8) {
-          started = false;
-          continue;
-        }
+      started = false;
+      for (rv = rPlotMin; rv <= rPlotMax; rv += dr) {
+        yy = plotY(fn(rv));
+        xx = plotX(rv);
+        if (yy < gy0 - 6 || yy > gy1 + 6) { started = false; continue; }
         if (!started) { ctx.moveTo(xx, yy); started = true; }
         else ctx.lineTo(xx, yy);
       }
@@ -730,15 +763,11 @@ The total mechanical energy $E$ determines the orbit geometry. When $E = V_{\\te
       ctx.restore();
     }
 
-    strokeCurve('rgba(212, 160, 23, 0.75)', 1.5, [4, 4], function(rv) {
-      return (l * l) / (2 * m * rv * rv);
-    }, 2);
-    strokeCurve('rgba(204, 120, 92, 0.7)', 1.5, [4, 4], function(rv) {
-      return -k / rv;
-    }, 2);
-    strokeCurve(VIOLET, 2.6, [], function(rv) {
-      return (l * l) / (2 * m * rv * rv) - k / rv;
-    }, 1.5);
+    if (showParts) {
+      strokeFn('rgba(212, 160, 23, 0.70)', 1.4, [4, 4], vCent, 2);
+      strokeFn('rgba(150, 75, 50, 0.65)', 1.4, [4, 4], vGrav, 2);
+    }
+    strokeFn(VIOLET, 2.5, [], veff, 1.4);
 
     var plotEY = plotY(E);
     ctx.strokeStyle = (CV && CV.colors && CV.colors.energy) || ROSE;
@@ -749,35 +778,39 @@ The total mechanical energy $E$ determines the orbit geometry. When $E = V_{\\te
     ctx.lineTo(gx1, plotEY);
     ctx.stroke();
 
-    var almostCirc = E < 0 && Math.abs(r_max - r_min) < 10;
+    ctx.setLineDash([2, 3]);
+    ctx.lineWidth = 1;
     if (almostCirc) {
-      var t0 = plotX(r0);
-      ctx.strokeStyle = 'rgba(78, 155, 111, 0.8)';
-      ctx.setLineDash([2, 2]);
+      ctx.strokeStyle = 'rgba(78, 155, 111, 0.75)';
       ctx.beginPath();
-      ctx.moveTo(t0, gy0);
-      ctx.lineTo(t0, gy1);
+      ctx.moveTo(plotX(r0), gy0);
+      ctx.lineTo(plotX(r0), gy1);
       ctx.stroke();
     } else {
-      if (r_min < rPlotMax) {
-        var tmin = plotX(r_min);
-        ctx.strokeStyle = 'rgba(224, 86, 102, 0.75)';
-        ctx.setLineDash([2, 2]);
+      if (rMin < rPlotMax) {
+        ctx.strokeStyle = 'rgba(224, 86, 102, 0.65)';
         ctx.beginPath();
-        ctx.moveTo(tmin, gy0);
-        ctx.lineTo(tmin, gy1);
+        ctx.moveTo(plotX(rMin), gy0);
+        ctx.lineTo(plotX(rMin), gy1);
         ctx.stroke();
       }
-      if (r_max < rPlotMax) {
-        var tmax = plotX(r_max);
-        ctx.strokeStyle = 'rgba(204, 120, 92, 0.75)';
-        ctx.setLineDash([2, 2]);
+      if (isFinite(rMax) && rMax < rPlotMax) {
+        ctx.strokeStyle = 'rgba(204, 120, 92, 0.65)';
         ctx.beginPath();
-        ctx.moveTo(tmax, gy0);
-        ctx.lineTo(tmax, gy1);
+        ctx.moveTo(plotX(rMax), gy0);
+        ctx.lineTo(plotX(rMax), gy1);
         ctx.stroke();
       }
     }
+
+    var beadX = Math.max(gx0 + 4, Math.min(gx1 - 4, plotX(rNow)));
+    ctx.strokeStyle = 'rgba(93, 184, 166, 0.45)';
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(beadX, gy0);
+    ctx.lineTo(beadX, gy1);
+    ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
 
     haloLabel(ctx, 'V = 0', gx0 + 6, gZeroY - 10, { align: 'left', color: MUTED });
@@ -790,61 +823,36 @@ The total mechanical energy $E$ determines the orbit geometry. When $E = V_{\\te
     }
 
     if (almostCirc) {
-      haloLabel(ctx, 'r_0', plotX(r0), gy1 - 8, { color: EMERALD });
+      haloLabel(ctx, 'r0', plotX(r0), gy1 - 8, { color: EMERALD });
     } else {
-      if (r_min < rPlotMax) {
-        haloLabel(ctx, 'r_min', plotX(r_min), gy1 - 8, { color: ROSE, align: r_max - r_min < 28 ? 'right' : 'center' });
+      if (rMin < rPlotMax) {
+        haloLabel(ctx, 'rmin', plotX(rMin), gy1 - 8, {
+          color: ROSE, align: (isFinite(rMax) && rMax - rMin < rPlotMax * 0.12) ? 'right' : 'center'
+        });
       }
-      if (r_max < rPlotMax) {
-        haloLabel(ctx, 'r_max', plotX(r_max), gy1 - 8, { color: CORAL, align: r_max - r_min < 28 ? 'left' : 'center' });
+      if (isFinite(rMax) && rMax < rPlotMax) {
+        haloLabel(ctx, 'rmax', plotX(rMax), gy1 - 8, {
+          color: CORAL, align: (rMax - rMin < rPlotMax * 0.12) ? 'left' : 'center'
+        });
       }
     }
 
-    var currentR = state._r;
-    var currentVeff = (l * l) / (2 * m * currentR * currentR) - k / currentR;
-    var beadX = plotX(currentR);
-    var beadY = plotY(currentVeff);
-    beadX = Math.max(gx0 + 4, Math.min(gx1 - 4, beadX));
-    beadY = Math.max(gy0 + 4, Math.min(gy1 - 4, beadY));
-
-    if (showTr && !state._escaped && plotEY <= beadY - 2 && beadX > gx0 && beadX < gx1) {
-      ctx.save();
-      var barH = Math.min(beadY, gy1) - Math.max(plotEY, gy0);
-      if (barH > 2) {
-        ctx.fillStyle = 'rgba(78, 155, 111, 0.28)';
-        ctx.fillRect(beadX - 4, Math.max(plotEY, gy0), 8, barH);
-        ctx.strokeStyle = EMERALD;
-        ctx.lineWidth = 1.2;
-        ctx.strokeRect(beadX - 4, Math.max(plotEY, gy0), 8, barH);
-      }
-      ctx.restore();
-    }
-
-    if (CV && CV.drawGlowCircle) {
-      CV.drawGlowCircle(ctx, beadX, beadY, 7, VIOLET, 'rgba(157, 124, 216, 0.45)', 12);
-    } else {
-      ctx.fillStyle = VIOLET;
-      ctx.beginPath();
-      ctx.arc(beadX, beadY, 7, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    var beadY = Math.max(gy0 + 4, Math.min(gy1 - 4, plotY(veff(rNow))));
+    disk(ctx, beadX, beadY, 7, VIOLET, 'rgba(157, 124, 216, 0.45)');
 
     var orbitKind = almostCirc
       ? 'circular'
-      : (E < 0
-        ? 'bound ellipse'
-        : (Math.abs(E) < 1e-4 ? 'parabolic escape' : 'hyperbolic scatter'));
-    if (state._escaped) orbitKind += ' (frozen at view edge)';
-    var Tr = state._escaped ? 0 : Math.max(0, E - currentVeff);
+      : (eOrb < 1 ? 'bound ellipse' : (Math.abs(eOrb - 1) < 0.02 ? 'parabolic escape' : 'hyperbolic scatter'));
+
     pushLegend('Effective potential', [
-      { label: '$E$', value: '$' + E.toFixed(1) + '$' },
-      { label: '$E_{\\min}$', value: '$' + Emin.toFixed(1) + '$' },
       { label: '$E / |E_{\\min}|$', value: '$' + (Math.abs(Emin) > 1e-9 ? (E / Math.abs(Emin)).toFixed(2) : '0') + '$' },
       { label: 'Orbit', value: orbitKind },
-      { label: '$r$', value: '$' + currentR.toFixed(1) + '$' },
+      { label: '$e$', value: '$' + eOrb.toFixed(2) + '$' },
+      { label: '$r$', value: '$' + rNow.toFixed(1) + '$' },
       { label: '$r_0$', value: '$' + r0.toFixed(1) + '$' },
-      { label: '$T_r$', value: '$' + Tr.toFixed(1) + '$' },
-      { label: 'Curves', value: '$l^2/(2mr^2)$, $-k/r$, $V_{\\mathrm{eff}}$' }
+      { label: '$T_r = E - V_{\\mathrm{eff}}$', value: '$' + Tr.toFixed(1) + '$' },
+      { label: '$E$', value: '$' + E.toFixed(1) + '$' },
+      { label: '$E_{\\min}$', value: '$' + Emin.toFixed(1) + '$' }
     ]);
   },
 
@@ -867,18 +875,16 @@ The total mechanical energy $E$ determines the orbit geometry. When $E = V_{\\te
   title: 'Centripetal Radial Acceleration & The Velocity Hodograph',
   formulaLatex: 'a_c = \\frac{v^2}{r} = \\omega^2 r = v\\omega',
 
-  physicalStory: `Even when an object moves with uniform speed $v$ around a circular path of radius $r$, it is accelerating because its velocity vector $\\mathbf{v}$ continuously rotates in direction. The rate of change of the direction of $\\mathbf{v}$ produces a centripetal acceleration vector $\\mathbf{a}_c$ that points strictly perpendicular to $\\mathbf{v}$, oriented inward toward the instantaneous center of curvature.
+  physicalStory: `Uniform circular motion has constant speed $v$ but a velocity vector that rotates. The geometric proof is a pair of similar isosceles triangles. In a short time the position vector turns through $\\Delta\\theta$; the two radii and the chord $\\Delta\\mathbf{r}$ form a triangle similar to the two velocity vectors and the chord $\\Delta\\mathbf{v}$ drawn from a common origin (the hodograph). Side ratios give $|\\Delta\\mathbf{v}|/v = |\\Delta\\mathbf{r}|/r = 2\\sin(\\Delta\\theta/2)$. Dividing by $\\Delta t = \\Delta\\theta/\\omega$ yields $|\\Delta\\mathbf{v}|/\\Delta t = v\\omega\\,\\mathrm{sinc}(\\Delta\\theta/2) \\to v^2/r$ as $\\Delta\\theta \\to 0$, directed along the angle bisector — toward the center.
 
-Geometrically, consider an infinitesimal time $dt$: the position vector rotates through angle $d\\theta = \\omega dt = (v/r) dt$. The velocity vector rotates by the identical angle $d\\theta$, creating a difference vector $|\\Delta\\mathbf{v}| = v d\\theta = v (v/r) dt = (v^2/r) dt$. Dividing by $dt$ yields the centripetal acceleration $a_c = v^2/r$.
-
-In the velocity hodograph (the locus of velocity vectors plotted from a common origin), the tip of $\\mathbf{v}(t)$ traces out a circle of radius $v$ with angular speed $\\omega$. The velocity of the velocity vector is the acceleration vector $\\mathbf{a} = d\\mathbf{v}/dt = \\omega v = v^2/r$.`,
+The hodograph of uniform circular motion is itself a circle of radius $v$. The tip of $\\mathbf{v}$ runs around that circle at the same $\\omega$, so $\\mathbf{a} = d\\mathbf{v}/dt$ is tangent to the hodograph and perpendicular to $\\mathbf{v}$. Shrink $\\Delta\\theta$ to watch the finite chord become the true centripetal acceleration.`,
 
   derivationSteps: [
     "1. Parametric position vector: $\\mathbf{r}(t) = r\\cos(\\omega t)\\hat{\\mathbf{i}} + r\\sin(\\omega t)\\hat{\\mathbf{j}} = r\\hat{\\mathbf{r}}$.",
     "2. Tangential velocity vector: $\\mathbf{v}(t) = \\frac{d\\mathbf{r}}{dt} = -r\\omega\\sin(\\omega t)\\hat{\\mathbf{i}} + r\\omega\\cos(\\omega t)\\hat{\\mathbf{j}} = r\\omega\\hat{\\boldsymbol{\\theta}}$.",
     "3. Acceleration vector: $\\mathbf{a}(t) = \\frac{d\\mathbf{v}}{dt} = -r\\omega^2\\cos(\\omega t)\\hat{\\mathbf{i}} - r\\omega^2\\sin(\\omega t)\\hat{\\mathbf{j}} = -\\omega^2\\mathbf{r}(t) = -\\omega^2 r \\hat{\\mathbf{r}}$.",
     "4. Hodograph geometric proof: Triangle $(\\mathbf{r}, \\mathbf{r}+\\Delta\\mathbf{r}, \\Delta\\mathbf{r})$ is similar to velocity triangle $(\\mathbf{v}, \\mathbf{v}+\\Delta\\mathbf{v}, \\Delta\\mathbf{v})$.",
-    "5. Ratio of sides: $\\frac{|\\Delta\\mathbf{v}|}{v} = \\frac{|\\Delta\\mathbf{r}|}{r} = \\frac{v\\Delta t}{r} \\implies \\frac{|\\Delta\\mathbf{v}|}{\\Delta t} = \\frac{v^2}{r}$.",
+    "5. Ratio of sides: $\\frac{|\\Delta\\mathbf{v}|}{v} = \\frac{|\\Delta\\mathbf{r}|}{r} = 2\\sin(\\Delta\\theta/2)$. With $\\Delta t = \\Delta\\theta/\\omega$, $\\frac{|\\Delta\\mathbf{v}|}{\\Delta t} = v\\omega\\,\\frac{\\sin(\\Delta\\theta/2)}{\\Delta\\theta/2} \\to v\\omega$ as $\\Delta\\theta \\to 0$.",
     "6. Taking $\\Delta t \\to 0$: $\\mathbf{a}_c = \\lim_{\\Delta t \\to 0} \\frac{\\Delta\\mathbf{v}}{\\Delta t} = -\\frac{v^2}{r}\\hat{\\mathbf{r}} = -\\omega^2 r\\hat{\\mathbf{r}}$."
   ],
 
@@ -898,7 +904,7 @@ In the velocity hodograph (the locus of velocity vectors plotted from a common o
   parameters: [
     { id: 'radius', label: 'Radius ($r$)', min: 60, max: 180, step: 10, default: 120, unit: '' },
     { id: 'omega', label: 'Angular velocity ($\\omega$)', min: 0.5, max: 4.0, step: 0.25, default: 1.8, unit: 'rad/s' },
-    { id: 'showHodograph', label: 'Show velocity-space hodograph', type: 'toggle', default: true, unit: '' },
+    { id: 'deltaTheta', label: 'Finite angle $(\\Delta\\theta)$', min: 15, max: 75, step: 5, default: 40, unit: 'deg' },
     { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
   ],
 
@@ -916,125 +922,168 @@ In the velocity hodograph (the locus of velocity vectors plotted from a common o
 
     var r = numParam(state, 'radius', 120);
     var omega = numParam(state, 'omega', 1.8);
-    var showHodo = flagParam(state, 'showHodograph', true);
+    var dDeg = numParam(state, 'deltaTheta', 40);
     var speed = numParam(state, 'simSpeed', 1.0);
     dt = safeDt(dt);
+    var dTh = Math.max(0.08, dDeg * Math.PI / 180);
 
     state._theta = (state._theta || 0) + omega * dt * speed;
     var theta = state._theta;
+    var theta0 = theta - dTh;
 
     var padT = 28;
-    var splitX = showHodo ? Math.round(width * 0.55) : width;
-    var leftW = splitX;
-    var cx = leftW * 0.5;
-    var cy = padT + (height - padT) * 0.52;
-    var rFit = Math.min(leftW * 0.34, (height - padT) * 0.34);
+    var splitX = Math.round(width * 0.56);
+    var cx = splitX * 0.50;
+    var cy = padT + (height - padT) * 0.54;
+    var rFit = Math.min(splitX * 0.32, (height - padT) * 0.32);
     var fit = rFit / Math.max(r, 1);
     if (!isFinite(fit) || fit <= 0) fit = 1;
     var rDraw = r * fit;
 
     var px = cx + rDraw * Math.cos(theta);
     var py = cy + rDraw * Math.sin(theta);
-    var vxDraw = -rDraw * omega * Math.sin(theta);
-    var vyDraw = rDraw * omega * Math.cos(theta);
-    var axDraw = -rDraw * omega * omega * Math.cos(theta);
-    var ayDraw = -rDraw * omega * omega * Math.sin(theta);
-    var v_mag = omega * r;
-    var a_mag = omega * omega * r;
-    var a_from_v2r = (v_mag * v_mag) / Math.max(r, 1e-6);
-    var a_from_vom = v_mag * omega;
+    var p0x = cx + rDraw * Math.cos(theta0);
+    var p0y = cy + rDraw * Math.sin(theta0);
+
+    var vMag = omega * r;
+    var aMag = omega * omega * r;
+    var aFromV2r = (vMag * vMag) / Math.max(r, 1e-6);
+    var aFromVom = vMag * omega;
+    var dVfin = 2 * vMag * Math.sin(dTh / 2);
+    var dtFin = dTh / Math.max(omega, 1e-8);
+    var aFin = dVfin / dtFin;
+
+    panelTitle(ctx, 'Position space', 14, 8, 'left');
 
     ctx.save();
-    ctx.strokeStyle = (CV && CV.colors && CV.colors.orbit) || 'rgba(204, 120, 92, 0.45)';
+    ctx.fillStyle = 'rgba(93, 184, 166, 0.18)';
+    ctx.strokeStyle = 'rgba(93, 184, 166, 0.55)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(p0x, p0y);
+    ctx.lineTo(px, py);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = (CV && CV.colors && CV.colors.orbit) || 'rgba(204, 120, 92, 0.50)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(cx, cy, rDraw, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
 
-    panelTitle(ctx, 'Position space', 14, 8, 'left');
+    ctx.save();
+    ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.35);
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(p0x, p0y);
+    ctx.lineTo(px, py);
+    ctx.stroke();
+    ctx.restore();
 
-    if (CV && CV.drawGlowCircle) {
-      CV.drawGlowCircle(ctx, cx, cy, 5, MUTED, 'rgba(108, 106, 100, 0.35)', 8);
-    } else {
-      ctx.fillStyle = MUTED;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    var vPix = Math.min(42, rDraw * 0.42);
-    var aPix = Math.min(38, rDraw * 0.38);
-    var vDrawMag = Math.max(Math.hypot(vxDraw, vyDraw), 1e-6);
-    var aDrawMag = Math.max(Math.hypot(axDraw, ayDraw), 1e-6);
-    var vScalePos = vPix / vDrawMag;
-    var aScalePos = aPix / aDrawMag;
+    disk(ctx, cx, cy, 4.5, MUTED, 'rgba(108, 106, 100, 0.30)');
+    disk(ctx, p0x, p0y, 5, 'rgba(204, 120, 92, 0.40)', null);
+    disk(ctx, px, py, 8, (CV && CV.colors && CV.colors.particle) || CORAL, (CV && CV.colors && CV.colors.particleGlow) || 'rgba(204, 120, 92, 0.5)');
 
     labeledArrow(ctx, cx, cy, px, py, (CV && CV.colors && CV.colors.vecR) || TEAL, 'r', {
-      along: 0.32, side: 1, pad: 14, clampW: splitX, clampH: height, lineWidth: 2, arrowSize: 7
+      along: 0.34, side: 1, pad: 13, clampW: splitX, clampH: height, lineWidth: 2, arrowSize: 7
     });
-    if (CV && CV.drawGlowCircle) {
-      CV.drawGlowCircle(ctx, px, py, 8, (CV.colors && CV.colors.particle) || CORAL, (CV.colors && CV.colors.particleGlow) || 'rgba(204, 120, 92, 0.5)', 14);
-    } else {
-      ctx.fillStyle = CORAL;
-      ctx.beginPath();
-      ctx.arc(px, py, 8, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    labeledArrow(ctx, px, py, px + vxDraw * vScalePos, py + vyDraw * vScalePos, (CV && CV.colors && CV.colors.vecV) || EMERALD, 'v', {
+
+    var vPix = Math.min(44, rDraw * 0.40);
+    var aPix = Math.min(40, rDraw * 0.36);
+    var vx = -Math.sin(theta);
+    var vy = Math.cos(theta);
+    labeledArrow(ctx, px, py, px + vx * vPix, py + vy * vPix, (CV && CV.colors && CV.colors.vecV) || EMERALD, 'v', {
       along: 1, side: 1, pad: 11, extraAlong: 10, clampW: splitX, clampH: height, lineWidth: 2.4, arrowSize: 8
     });
-    labeledArrow(ctx, px, py, px + axDraw * aScalePos, py + ayDraw * aScalePos, (CV && CV.colors && CV.colors.vecA) || ROSE, 'a', {
-      along: 1, side: -1, pad: 12, extraAlong: 10, clampW: splitX, clampH: height, lineWidth: 2.6, arrowSize: 8
+    labeledArrow(ctx, px, py, px - Math.cos(theta) * aPix, py - Math.sin(theta) * aPix, (CV && CV.colors && CV.colors.vecA) || ROSE, 'a', {
+      along: 1, side: -1, pad: 12, extraAlong: 10, clampW: splitX, clampH: height, lineWidth: 2.4, arrowSize: 8
     });
 
-    if (showHodo) {
-      dividerV(ctx, splitX, 8, height - 8);
-      panelTitle(ctx, 'Velocity space  (hodograph)', splitX + 14, 8, 'left');
-
-      var hx = splitX + (width - splitX) * 0.5;
-      var hy = padT + (height - padT) * 0.50;
-      var hodoRoom = Math.min((width - splitX) * 0.32, (height - padT) * 0.30);
-      var vHodo = omega * r;
-      var hodoScale = hodoRoom / Math.max(vHodo, 1e-6);
-      var vx = -r * omega * Math.sin(theta);
-      var vy = r * omega * Math.cos(theta);
-      var ax = -r * omega * omega * Math.cos(theta);
-      var ay = -r * omega * omega * Math.sin(theta);
-
-      ctx.save();
-      ctx.strokeStyle = 'rgba(78, 155, 111, 0.4)';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath();
-      ctx.arc(hx, hy, vHodo * hodoScale, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-
-      if (CV && CV.drawGlowCircle) {
-        CV.drawGlowCircle(ctx, hx, hy, 4, MUTED, 'rgba(108, 106, 100, 0.3)', 6);
-      }
-
-      var hvx = hx + vx * hodoScale;
-      var hvy = hy + vy * hodoScale;
-      var aHodoPix = Math.min(34, hodoRoom * 0.38);
-      var aHodoScale = aHodoPix / Math.max(a_mag, 1e-6);
-      labeledArrow(ctx, hx, hy, hvx, hvy, (CV && CV.colors && CV.colors.vecV) || EMERALD, 'v', {
-        along: 0.5, side: 1, pad: 12, clampW: width, clampH: height, lineWidth: 2, arrowSize: 7
-      });
-      labeledArrow(ctx, hvx, hvy, hvx + ax * aHodoScale, hvy + ay * aHodoScale, (CV && CV.colors && CV.colors.vecA) || ROSE, 'a', {
-        along: 1, side: 1, pad: 11, extraAlong: 10, clampW: width, clampH: height, lineWidth: 2.2, arrowSize: 7
-      });
+    var chordMx = (p0x + px) / 2;
+    var chordMy = (p0y + py) / 2;
+    if (Math.hypot(chordMx - cx, chordMy - cy) > 22) {
+      haloLabel(ctx, 'dr', chordMx, chordMy, { color: MUTED });
     }
 
+    dividerV(ctx, splitX, 8, height - 8);
+    panelTitle(ctx, 'Velocity space  (hodograph)', splitX + 14, 8, 'left');
+
+    var hx = splitX + (width - splitX) * 0.50;
+    var hy = padT + (height - padT) * 0.52;
+    var hodoRoom = Math.min((width - splitX) * 0.32, (height - padT) * 0.30);
+    var hodoScale = hodoRoom / Math.max(vMag, 1e-6);
+    var vxN = -r * omega * Math.sin(theta);
+    var vyN = r * omega * Math.cos(theta);
+    var vxP = -r * omega * Math.sin(theta0);
+    var vyP = r * omega * Math.cos(theta0);
+    var hvx = hx + vxN * hodoScale;
+    var hvy = hy + vyN * hodoScale;
+    var hvx0 = hx + vxP * hodoScale;
+    var hvy0 = hy + vyP * hodoScale;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(93, 184, 166, 0.18)';
+    ctx.strokeStyle = 'rgba(93, 184, 166, 0.55)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(hx, hy);
+    ctx.lineTo(hvx0, hvy0);
+    ctx.lineTo(hvx, hvy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(78, 155, 111, 0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.arc(hx, hy, vMag * hodoScale, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    disk(ctx, hx, hy, 4, MUTED, 'rgba(108, 106, 100, 0.28)');
+
+    ctx.save();
+    ctx.strokeStyle = ROSE;
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(hvx0, hvy0);
+    ctx.lineTo(hvx, hvy);
+    ctx.stroke();
+    ctx.restore();
+    haloLabel(ctx, 'dv', (hvx0 + hvx) / 2, (hvy0 + hvy) / 2, { color: ROSE });
+
+    labeledArrow(ctx, hx, hy, hvx0, hvy0, 'rgba(78, 155, 111, 0.45)', '', {
+      along: 0.5, side: 1, pad: 10, clampW: width, clampH: height, lineWidth: 1.6, arrowSize: 6
+    });
+    labeledArrow(ctx, hx, hy, hvx, hvy, (CV && CV.colors && CV.colors.vecV) || EMERALD, 'v', {
+      along: 0.52, side: 1, pad: 12, clampW: width, clampH: height, lineWidth: 2.2, arrowSize: 7
+    });
+
+    var aHodoPix = Math.min(34, hodoRoom * 0.38);
+    var axN = -r * omega * omega * Math.cos(theta);
+    var ayN = -r * omega * omega * Math.sin(theta);
+    var aHodoScale = aHodoPix / Math.max(aMag, 1e-6);
+    labeledArrow(ctx, hvx, hvy, hvx + axN * aHodoScale, hvy + ayN * aHodoScale, (CV && CV.colors && CV.colors.vecA) || ROSE, 'a', {
+      along: 1, side: 1, pad: 11, extraAlong: 10, clampW: width, clampH: height, lineWidth: 2.2, arrowSize: 7
+    });
+
     pushLegend('Centripetal kinematics', [
-      { label: '$v = \\omega r$', value: '$' + v_mag.toFixed(1) + '$' },
-      { label: '$a_c = v^2/r$', value: '$' + a_from_v2r.toFixed(1) + '$' },
-      { label: '$\\omega^2 r$', value: '$' + a_mag.toFixed(1) + '$' },
-      { label: '$v\\omega$', value: '$' + a_from_vom.toFixed(1) + '$' },
+      { label: '$v = \\omega r$', value: '$' + vMag.toFixed(1) + '$' },
+      { label: '$a_c = v^2/r$', value: '$' + aFromV2r.toFixed(1) + '$' },
+      { label: '$\\omega^2 r$', value: '$' + aMag.toFixed(1) + '$' },
+      { label: '$v\\omega$', value: '$' + aFromVom.toFixed(1) + '$' },
+      { label: '$|\\Delta v|/\\Delta t$', value: '$' + aFin.toFixed(1) + '$' },
+      { label: '$\\Delta\\theta$', value: '$' + dDeg.toFixed(0) + '^\\circ$' },
       { label: '$\\omega$', value: '$' + omega.toFixed(2) + '$' },
-      { label: '$r$', value: '$' + r.toFixed(0) + '$' },
       { label: '$T$', value: '$' + ((2 * Math.PI) / Math.max(omega, 1e-6)).toFixed(2) + '$' }
     ]);
   },

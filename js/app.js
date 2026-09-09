@@ -502,8 +502,6 @@ PGRE.route = function () {
   if (!v) { main.innerHTML = '<p>Unknown view.</p>'; return; }
 
   PGRE.motion && PGRE.motion.loader.start();
-  PGRE.ambient && PGRE.ambient.setIntensity &&
-    PGRE.ambient.setIntensity(hash.indexOf('exam/run') === 0 ? 'calm' : 'normal');
 
   PGRE.store.rollDay();
   PGRE.nav.route(view, params);   // base breadcrumb trail before the view mounts
@@ -512,6 +510,15 @@ PGRE.route = function () {
   main.scrollTop = 0;
   window.scrollTo(0, 0);
   PGRE.setActiveNav(view, params);
+  if (PGRE.isNarrow()) PGRE.applySidebarDrawer(false);
+  else {
+    var sb = document.getElementById('sidebar');
+    if (sb && (sb.hasAttribute('inert') || sb.getAttribute('aria-hidden') === 'true')) {
+      PGRE.applySidebar(PGRE.store.state.settings.sidebarFolded);
+    }
+  }
+
+
   PGRE.refreshNavBadges();
 
   // Exam and formulas paint a placeholder/skeleton first; they call viewEnter
@@ -587,9 +594,67 @@ PGRE.buildNav = function () {
 };
 
 /* ——— Foldable sidebar ———
-   The ☰ button in the top bar hides/shows #sidebar (body.sidebar-folded, see
-   css). Persisted in settings.sidebarFolded so the choice survives reloads. */
+   Desktop: the ☰ button hides/shows #sidebar (body.sidebar-folded).
+   Persisted in settings.sidebarFolded so the choice survives reloads.
+   Below 860px: overlay drawer (body.sidebar-open), closed by default.
+   Never write sidebarFolded while the viewport is narrow. The test harness
+   matchMedia stub returns false for non-reduce queries, so isNarrow() is
+   false there and the desktop persist path is what tests exercise. */
+PGRE.isNarrow = function () {
+  return !!(window.matchMedia && window.matchMedia('(max-width: 860px)').matches);
+};
+
+PGRE.ensureSidebarScrim = function () {
+  var el = document.getElementById('sidebar-scrim');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'sidebar-scrim';
+  el.setAttribute('aria-hidden', 'true');
+  el.addEventListener('click', function () {
+    if (PGRE.isNarrow()) PGRE.applySidebarDrawer(false);
+  });
+  document.body.appendChild(el);
+  return el;
+};
+
+PGRE.applySidebarDrawer = function (open) {
+  var wasOpen = document.body.classList.contains('sidebar-open');
+  document.body.classList.toggle('sidebar-open', !!open);
+  document.body.classList.remove('sidebar-folded');
+  PGRE.ensureSidebarScrim();
+  var sidebar = document.getElementById('sidebar');
+  if (sidebar) {
+    sidebar.setAttribute('aria-hidden', open ? 'false' : 'true');
+    if (open) sidebar.removeAttribute('inert');
+    else sidebar.setAttribute('inert', '');
+  }
+  var btn = document.getElementById('sidebar-toggle');
+  if (btn) {
+    var label = open ? 'Hide sidebar' : 'Show sidebar';
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('title', label);
+  }
+  if (open) {
+    var current = document.querySelector('#sidebar a[aria-current="page"]') ||
+                  document.querySelector('#sidebar-nav a');
+    if (current && current.focus) current.focus();
+  } else if (wasOpen && btn && btn.focus) {
+    btn.focus();
+  }
+};
+
 PGRE.applySidebar = function (folded) {
+  if (PGRE.isNarrow()) {
+    PGRE.applySidebarDrawer(false);
+    return;
+  }
+  document.body.classList.remove('sidebar-open');
+  var sidebar = document.getElementById('sidebar');
+  if (sidebar) {
+    sidebar.removeAttribute('aria-hidden');
+    sidebar.removeAttribute('inert');
+  }
   document.body.classList.toggle('sidebar-folded', !!folded);
   var btn = document.getElementById('sidebar-toggle');
   if (btn) {
@@ -601,11 +666,16 @@ PGRE.applySidebar = function (folded) {
 };
 
 PGRE.toggleSidebar = function () {
+  if (PGRE.isNarrow()) {
+    PGRE.applySidebarDrawer(!document.body.classList.contains('sidebar-open'));
+    return;
+  }
   var s = PGRE.store.state.settings;
   s.sidebarFolded = !s.sidebarFolded;
   PGRE.store.save();
   PGRE.applySidebar(s.sidebarFolded);
 };
+
 
 /* ——— Theme: 'light' (default) or 'dark', a data-theme layer on <html> ——— */
 PGRE.applyTheme = function (t) {
@@ -629,9 +699,30 @@ PGRE.setTheme = function (t) {
 PGRE.boot = function () {
   PGRE.store.load();
   PGRE.applyTheme(PGRE.store.state.settings.theme);
+  PGRE.ensureSidebarScrim();
   PGRE.applySidebar(PGRE.store.state.settings.sidebarFolded);
   var sbToggle = document.getElementById('sidebar-toggle');
   if (sbToggle) sbToggle.addEventListener('click', PGRE.toggleSidebar);
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (!PGRE.isNarrow()) return;
+    if (!document.body.classList.contains('sidebar-open')) return;
+    PGRE.applySidebarDrawer(false);
+  });
+  PGRE._narrow = PGRE.isNarrow();
+  var onBreak = function () {
+    var n = PGRE.isNarrow();
+    if (n === PGRE._narrow && n) return;
+    PGRE._narrow = n;
+    PGRE.applySidebar(PGRE.store.state.settings.sidebarFolded);
+  };
+  if (window.matchMedia) {
+    var mq = window.matchMedia('(max-width: 860px)');
+    if (mq.addEventListener) mq.addEventListener('change', onBreak);
+    else if (mq.addListener) mq.addListener(onBreak);
+  }
+  window.addEventListener('resize', onBreak);
+
   PGRE.buildNav();
   PGRE.studyTime.start();       // passive active-minutes heartbeat
   if (PGRE.timer) PGRE.timer.boot();   // F3 focus timer: resume/credit + wire the top-bar widget
@@ -665,8 +756,13 @@ window.addEventListener('unhandledrejection', function (e) {
   console.error('Unhandled rejection:', e.reason);
 });
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', PGRE.boot);
-} else {
+// index.html loads scripts with `defer`: they run with readyState
+// 'interactive', before DOMContentLoaded, and motion.js comes after this file.
+// Waiting for DOMContentLoaded (fired after ALL deferred scripts) keeps
+// PGRE.motion present when boot() first routes. 'complete' only happens when
+// app.js is injected late (tests, devtools); then boot at once.
+if (document.readyState === 'complete') {
   PGRE.boot();
+} else {
+  document.addEventListener('DOMContentLoaded', PGRE.boot);
 }

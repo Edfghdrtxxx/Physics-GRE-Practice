@@ -54,7 +54,7 @@ PGRE.views.practice = (function () {
       var why = sols[idx];
       if (why == null || String(why).replace(/\s+/g, '') === '') continue;  // skip absent
       items += '<div class="distractor-item">' +
-        '<div class="miss-pick is-bad"><span class="fb-icon">✗</span>' +
+        '<div class="miss-pick is-bad">' +
           '<strong>' + LETTERS[idx] + '</strong> — ' +
           '<span class="miss-pick-body">' + q.choices[idx] + '</span></div>' +
         '<div class="solution"><div class="solution-label">Why it tempts</div>' + why + '</div>' +
@@ -154,13 +154,15 @@ PGRE.views.practice = (function () {
   function showNoteSaved(ta) {
     var tick = ta.parentNode.querySelector('.nb-saved');
     if (!tick) return;
-    tick.textContent = ta.value.trim() === '' ? 'Note cleared' : 'Saved ✓';
+    tick.textContent = ta.value.trim() === '' ? 'Note cleared' : 'Saved';
     tick.classList.add('show');
     clearTimeout(tick._t);
     tick._t = setTimeout(function () { tick.classList.remove('show'); }, 1600);
   }
 
   /* ——— Pace trainer (#4) ——— */
+  var PACE_GRACE_MS = 5000; // a click inside the first 5 s is not pace data
+
   function clearPace() {
     if (paceTimer) { clearInterval(paceTimer); paceTimer = null; }
   }
@@ -176,18 +178,99 @@ PGRE.views.practice = (function () {
     if (!chip || !session) { clearPace(); return; }
     var sec = Math.round((Date.now() - session.qStart) / 1000);
     var target = settings().paceTargetSec || 103;
-    chip.textContent = '⏱ ' + sec + ' s';
+    chip.textContent = sec + ' s';
     chip.classList.toggle('pace-over', sec > target);
   }
 
   function paceMark(elapsedMs) {
     if (!settings().paceTrainer) return '';
+    if (elapsedMs < PACE_GRACE_MS) return '';
     var sec = Math.round(elapsedMs / 1000);
     var target = settings().paceTargetSec || 103;
     var over = sec > target;
     return '<div class="pace-mark ' + (over ? 'pace-over' : 'pace-under') + '">' +
-      '⏱ ' + sec + ' s — ' + (over ? 'over pace' : 'under pace') +
+      sec + ' s — ' + (over ? 'over pace' : 'under pace') +
       ' <span class="pace-target">(target ' + target + ' s)</span></div>';
+  }
+
+  /* ——— Mid-session persistence ———
+     Leaving #/practice/<id> mid-set used to drop the queue silently. The
+     in-flight session is mirrored to sessionStorage (same transient handoff
+     the custom-quiz builder uses for 'pgre-quiz-config'): question ids, the
+     position, the answered rows and the gamify session id. The config screen
+     for the same topic/filter then offers Resume / Start over. Cleared when
+     the summary renders or the user starts over. Attempts themselves are
+     already in the saved profile, so nothing is double-counted on resume. */
+  var SAVE_KEY = 'pgre-practice-session';
+
+  function saveSession() {
+    if (!session || session.stage === 'summary') return;
+    var snap = {
+      topicId: session.topicId, filter: session.filter, label: session.label,
+      custom: session.custom, criteria: session.criteria, sid: session.sid,
+      ids: session.qs.map(function (q) { return q.id; }),
+      // answers only cover finished questions; the resume point is the next one
+      i: session.answers.length, correct: session.correct, xpEarned: session.xpEarned,
+      answers: session.answers.map(function (a) { return { qid: a.q.id, picked: a.picked, correct: a.correct }; }),
+      savedAt: Date.now()
+    };
+    try { sessionStorage.setItem(SAVE_KEY, JSON.stringify(snap)); } catch (e) { /* storage blocked */ }
+  }
+
+  function clearSaved() {
+    try { sessionStorage.removeItem(SAVE_KEY); } catch (e) { /* storage blocked */ }
+  }
+
+  function loadSaved(topicId, filter) {
+    var raw = null;
+    try { raw = sessionStorage.getItem(SAVE_KEY); } catch (e) { return null; }
+    if (!raw) return null;
+    var snap = null;
+    try { snap = JSON.parse(raw); } catch (e2) { return null; }
+    if (!snap || !snap.ids || !snap.ids.length) return null;
+    if (snap.topicId !== topicId || (snap.filter || null) !== (filter || null)) return null;
+    if (snap.i >= snap.ids.length) { clearSaved(); return null; }   // nothing left to do
+    return snap;
+  }
+
+  function resumeSaved(snap) {
+    var qs = [];
+    snap.ids.forEach(function (id) { var q = PGRE.questionById(id); if (q) qs.push(q); });
+    var answers = [];
+    snap.answers.forEach(function (a) {
+      var q = PGRE.questionById(a.qid);
+      if (q) answers.push({ q: q, picked: a.picked, correct: a.correct });
+    });
+    var i = Math.min(snap.i, qs.length);
+    if (!qs.length || i >= qs.length) { clearSaved(); return false; }  // bank changed under us
+    session = { topicId: snap.topicId, qs: qs, i: i, correct: snap.correct || 0,
+                xpEarned: snap.xpEarned || 0, answers: answers, qStart: Date.now(),
+                label: snap.label || null, custom: !!snap.custom, criteria: snap.criteria || null,
+                filter: snap.filter || null, stage: 'question', assess: null, sid: snap.sid };
+    renderQuestion();
+    return true;
+  }
+
+  function resumeCard(snap, name, onStartOver) {
+    var left = snap.ids.length - snap.i;
+    var html = '<div class="card practice-card practice-resume">' +
+      '<h1>Practice — ' + name + '</h1>' +
+      '<p class="muted">You left a set part-way through: ' + left + ' of ' + snap.ids.length +
+      ' question' + (snap.ids.length === 1 ? '' : 's') + ' left, ' + snap.correct + ' correct so far.</p>' +
+      '<div class="btn-row">' +
+        '<button class="btn btn-primary" id="resume-btn">Resume session (' + left + ' of ' + snap.ids.length + ' left)</button>' +
+        '<button class="btn btn-ghost" id="startover-btn">Start over</button>' +
+      '</div></div>';
+    lastRenderAt = Date.now();
+    el().innerHTML = html;
+    window.scrollTo(0, 0);
+    document.getElementById('resume-btn').addEventListener('click', function () {
+      if (!resumeSaved(snap)) onStartOver();
+    });
+    document.getElementById('startover-btn').addEventListener('click', function () {
+      clearSaved();
+      onStartOver();
+    });
   }
 
   /* ——— Config (topic / all modes; optional done-status filter) ———
@@ -207,12 +290,17 @@ PGRE.views.practice = (function () {
     return bank;
   }
 
-  function renderConfig(topicId, filter) {
+  function renderConfig(topicId, filter, ignoreSaved) {
     if (filter !== 'new' && filter !== 'done') filter = null;
     var t = topicId === 'all' ? null : PGRE.topicById(topicId);
     var bank = filteredBank(topicId, filter);
     var name = (t ? t.name : 'All topics (mixed)') +
       (filter === 'new' ? ' · not yet done' : filter === 'done' ? ' · done before' : '');
+    var saved = ignoreSaved ? null : loadSaved(topicId, filter);
+    if (saved) {
+      resumeCard(saved, name, function () { renderConfig(topicId, filter, true); });
+      return;
+    }
     var counts = [5, 10, 20].filter(function (n) { return n < bank.length; });
     var html = '<div class="card practice-card">' +
       '<h1>Practice — ' + name + '</h1>';
@@ -260,12 +348,19 @@ PGRE.views.practice = (function () {
   }
 
   /* ——— Custom quiz (#3): consume the builder's handoff ——— */
-  function startCustom(resample) {
+  function startCustom(resample, ignoreSaved) {
     var raw = null;
     try { raw = sessionStorage.getItem('pgre-quiz-config'); } catch (e) { raw = null; }
     var cfg = null;
     if (raw) { try { cfg = JSON.parse(raw); } catch (e2) { cfg = null; } }
     if (!cfg || !cfg.ids || !cfg.ids.length) { renderNoCustom(); return; }
+    // a custom set left part-way through resumes too, as long as the builder's
+    // handoff still describes the same questions
+    var saved = (resample || ignoreSaved) ? null : loadSaved('custom', null);
+    if (saved && sameIds(saved.ids, cfg.ids)) {
+      resumeCard(saved, PGRE.ui.esc(cfg.label || 'Custom quiz'), function () { startCustom(false, true); });
+      return;
+    }
     var qs = [];
     // Replay ("Draw a fresh set") of a criteria-built quiz resamples from the
     // original criteria against the current pool; mounting #/practice/custom
@@ -282,6 +377,13 @@ PGRE.views.practice = (function () {
                                  criteria: cfg.criteria || null });
   }
 
+  function sameIds(a, b) {
+    if (a.length !== b.length) return false;
+    var set = {};
+    a.forEach(function (id) { set[id] = true; });
+    return b.every(function (id) { return set[id]; });
+  }
+
   function renderNoCustom() {
     el().innerHTML = '<div class="card practice-card">' +
       '<h1>Custom quiz</h1>' +
@@ -294,6 +396,7 @@ PGRE.views.practice = (function () {
   function beginPractice(qs, opts) {
     opts = opts || {};
     var topicId = opts.topicId || 'all';
+    clearSaved(); // a fresh set replaces whatever was left part-way
     session = { topicId: topicId, qs: qs, i: 0, correct: 0, xpEarned: 0, answers: [],
                 qStart: Date.now(), label: opts.label || null, custom: !!opts.custom,
                 criteria: opts.criteria || null,
@@ -309,13 +412,14 @@ PGRE.views.practice = (function () {
     session.stage = 'question';
     session.assess = null;
     lastRenderAt = Date.now();
-    var html = '<div class="card practice-card">' +
+    var html = '<div class="card practice-card practice-live">' +
+      '<div class="practice-scroll">' +
       '<div class="practice-meta">' +
         '<span>Question ' + (session.i + 1) + ' of ' + session.qs.length + '</span>' +
         (session.label ? '<span class="chip chip-session">' + PGRE.ui.esc(session.label) + '</span>' : '') +
         '<span class="chip">' + t.name + '</span>' +
         '<span class="chip chip-diff">' + PGRE.ui.diffDots(q.difficulty) + '</span>' +
-        (settings().paceTrainer ? '<span class="chip pace-chip" id="pace-chip">⏱ 0 s</span>' : '') +
+        (settings().paceTrainer ? '<span class="chip pace-chip" id="pace-chip" title="Time on this question">0 s</span>' : '') +
       '</div>' +
       PGRE.ui.meter(100 * session.i / session.qs.length, 'meter-thin') +
       '<div class="q-text">' + q.q + '</div>' +
@@ -326,14 +430,13 @@ PGRE.views.practice = (function () {
     });
     html += '</div>';
     if (settings().keyboard) {
+      // only the keys that work right now — the tagging keys appear on the
+      // chips themselves once the answer is in
       html += '<div class="practice-keys muted">' +
         '<span class="key-hint">A</span>–<span class="key-hint">E</span> or ' +
-        '<span class="key-hint">1</span>–<span class="key-hint">5</span> to answer · ' +
-        '<span class="key-hint">Enter</span> next · ' +
-        '<span class="key-hint">K</span> knew it · <span class="key-hint">G</span> guessed · ' +
-        '<span class="key-hint">T</span> too slow · <span class="key-hint">F</span> forgot</div>';
+        '<span class="key-hint">1</span>–<span class="key-hint">5</span> to answer</div>';
     }
-    html += '<div id="feedback"></div></div>';
+    html += '<div id="feedback"></div></div></div>';
     el().innerHTML = html;
     PGRE.typesetMath(el());
     if (window.PGRE && PGRE.motion && PGRE.motion.animateMeter) {
@@ -343,6 +446,7 @@ PGRE.views.practice = (function () {
     window.scrollTo(0, 0); // in-place swap: route()'s reset doesn't run here
     session.qStart = Date.now();
     startPaceTimer();
+    saveSession();
 
     el().querySelectorAll('.choice').forEach(function (b) {
       b.addEventListener('click', function () { answer(parseInt(b.getAttribute('data-idx'), 10)); });
@@ -383,7 +487,6 @@ PGRE.views.practice = (function () {
     var fb = document.getElementById('feedback');
     fb.innerHTML =
       '<div class="feedback reveal-in ' + (isCorrect ? 'feedback-good' : 'feedback-bad') + '">' +
-        '<span class="fb-icon">' + (isCorrect ? '✓' : '✗') + '</span>' +
         '<strong>' + (isCorrect ? 'Correct' : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
         '<span class="fb-xp">+' + xp + ' XP</span>' +
       '</div>' +
@@ -391,12 +494,19 @@ PGRE.views.practice = (function () {
       PGRE.assess.html(settings().keyboard) +
       '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
       distractorBlock(q) +
-      notesBlock(q) +
-      '<div class="btn-row"><button class="btn btn-primary" id="next-btn">' +
-        (session.i + 1 < session.qs.length ? 'Next question →' : 'Finish session') + '</button></div>';
+      notesBlock(q);
+    var card = el().querySelector('.practice-card');
+    if (card) {
+      card.insertAdjacentHTML('beforeend',
+        '<div class="btn-row practice-actions"><button class="btn btn-primary" id="next-btn">' +
+          (session.i + 1 < session.qs.length ? 'Next question' : 'Finish session') + '</button>' +
+          (settings().keyboard ? '<span class="practice-keys muted"><span class="key-hint">Enter</span> next</span>' : '') +
+        '</div>');
+    }
     PGRE.typesetMath(fb);
     session.assess = PGRE.assess.bind(fb, q, isCorrect);
     bindNotes(fb, q);
+    saveSession();
     if (window.PGRE && PGRE.motion && PGRE.motion.countUp) {
       var xpEl = fb.querySelector('.fb-xp');
       if (xpEl) PGRE.motion.countUp(xpEl, xp, { duration: 600, format: function (n) { return '+' + Math.round(n) + ' XP'; } });
@@ -407,7 +517,9 @@ PGRE.views.practice = (function () {
     }
     var nb = document.getElementById('next-btn');
     nb.addEventListener('click', next);
-    nb.focus();
+    // the action row is pinned to the bottom of the screen, so focusing Next
+    // must not yank the page down past the feedback and solution
+    try { nb.focus({ preventScroll: true }); } catch (e) { nb.focus(); }
   }
 
   /* Self-assessment (#6, multi-select): rendering, storage and the lucky-guess
@@ -425,6 +537,7 @@ PGRE.views.practice = (function () {
   function renderSummary() {
     clearPace();
     session.stage = 'summary';
+    clearSaved();
     lastRenderAt = Date.now();
     PGRE.gamify.endSession(session.sid);
     PGRE.gamify.recordSession(session.qs.length, session.correct);

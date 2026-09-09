@@ -21,6 +21,7 @@
   var K_COULOMB = H.K_COULOMB;
 
   var CREAM = '#faf9f5';
+  var INK = '#141413';
   var MUTED = '#6c6a64';
   var CORAL = '#cc785c';
   var GOLD = '#d4a017';
@@ -33,13 +34,21 @@
   function syncStageTheme() {
     var t = PGRE.vizStageTheme ? PGRE.vizStageTheme() : null;
     if (!t) return;
-    CREAM = t.bg; MUTED = t.muted; LINE = t.line; PANEL = t.panel;
+    CREAM = t.bg; INK = t.ink; MUTED = t.muted; LINE = t.line; PANEL = t.panel;
   }
 
   function stageFill(ctx, w, h) {
     syncStageTheme();
     ctx.fillStyle = (CV && CV.colors && CV.colors.bg) || CREAM;
     ctx.fillRect(0, 0, w, h);
+  }
+
+  function theme() {
+    return PGRE.vizStageTheme ? PGRE.vizStageTheme() : {
+      bg: CREAM, ink: INK, muted: MUTED, line: LINE, panel: PANEL,
+      inkFade: function (a) { return 'rgba(20, 20, 19, ' + a + ')'; },
+      chipFade: function (a) { return 'rgba(250, 249, 245, ' + a + ')'; }
+    };
   }
 
   function legend(title, rows) {
@@ -68,7 +77,7 @@
       if (opts.baseline === 'top') by = y;
       else if (opts.baseline === 'bottom') by = y - h;
       else by = y - h / 2;
-      ctx.fillStyle = PGRE.vizStageTheme().chipFade(0.92);
+      ctx.fillStyle = theme().chipFade(0.92);
       ctx.fillRect(bx - p, by, tw + 2 * p, h);
     }
     ctx.fillStyle = opts.color || MUTED;
@@ -148,7 +157,7 @@
       var mx = (x1 + x2) / 2 + nx;
       var my = (y1 + y2) / 2 + ny;
       var tw = ctx.measureText(label).width;
-      ctx.fillStyle = PGRE.vizStageTheme().chipFade(0.94);
+      ctx.fillStyle = theme().chipFade(0.94);
       ctx.fillRect(mx - tw / 2 - 3, my - 7, tw + 6, 14);
       ctx.fillStyle = color;
       ctx.fillText(label, mx, my);
@@ -156,25 +165,15 @@
     ctx.restore();
   }
 
-  function plotFrame(ctx, x, y, w, h) {
-    ctx.save();
-    ctx.fillStyle = PANEL;
-    ctx.strokeStyle = LINE;
-    ctx.lineWidth = 1;
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeRect(x, y, w, h);
-    ctx.restore();
-  }
-
   function hatchFloor(ctx, x0, x1, floorY) {
     ctx.save();
-    ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.28);
+    ctx.strokeStyle = theme().inkFade(0.28);
     ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(x0, floorY);
     ctx.lineTo(x1, floorY);
     ctx.stroke();
-    ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.12);
+    ctx.strokeStyle = theme().inkFade(0.12);
     ctx.lineWidth = 1;
     ctx.beginPath();
     var fx;
@@ -184,6 +183,79 @@
     }
     ctx.stroke();
     ctx.restore();
+  }
+
+  function drawWall(ctx, x, y, w, h, side) {
+    var th = theme();
+    ctx.save();
+    ctx.fillStyle = th.chipFade(0.72);
+    ctx.strokeStyle = th.inkFade(0.32);
+    ctx.lineWidth = 1.4;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.strokeStyle = th.inkFade(0.16);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    var step = 7;
+    var py;
+    if (side === 'right') {
+      for (py = y; py < y + h + w; py += step) {
+        ctx.moveTo(x + w, py);
+        ctx.lineTo(x, py - w);
+      }
+    } else {
+      for (py = y; py < y + h + w; py += step) {
+        ctx.moveTo(x, py);
+        ctx.lineTo(x + w, py - w);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function roundRectPath(ctx, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  function drawMass(ctx, cx, cy, size, label, color, hot) {
+    var half = size / 2;
+    ctx.save();
+    ctx.fillStyle = color || INK;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = hot ? 2.6 : 1.8;
+    roundRectPath(ctx, cx - half, cy - half, size, size, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = INK;
+    ctx.beginPath();
+    ctx.arc(cx, cy + half * 0.22, 2.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = fontSans(11, '600');
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = INK;
+    ctx.fillText(String(label), cx, cy - 4);
+    ctx.restore();
+  }
+
+  function drawSpring(ctx, x1, y1, x2, y2, coils, amp, color) {
+    var len = Math.hypot(x2 - x1, y2 - y1);
+    if (len < 20 || !(DrawUtils && DrawUtils.drawSpring)) {
+      coilSpring(ctx, x1, y1, x2, y2, coils, amp, color);
+      return;
+    }
+    DrawUtils.drawSpring(ctx, x1, y1, x2, y2, coils || 10, (amp || 8) * 2, color, 0);
   }
 
   function finiteNum(v, fallback) {
@@ -259,15 +331,6 @@
     }
   }
 
-  function drawSpring(ctx, x1, y1, x2, y2, coils, amp, color) {
-    var len = Math.hypot(x2 - x1, y2 - y1);
-    if (len < 20 || !(DrawUtils && DrawUtils.drawSpring)) {
-      coilSpring(ctx, x1, y1, x2, y2, coils, amp, color);
-      return;
-    }
-    DrawUtils.drawSpring(ctx, x1, y1, x2, y2, coils || 10, (amp || 8) * 2, color, 0);
-  }
-
   var SPEED_PARAM = { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' };
 
   function wrapAngle(th) {
@@ -275,6 +338,62 @@
     var p = th % twoPi;
     if (p < 0) p += twoPi;
     return p;
+  }
+
+  /* x'' + gamma x' + omega^2 x = 0, exact for under/critical/over-damped. */
+  function shoEvolve(x0, v0, omega, gamma, t) {
+    omega = Math.max(1e-9, omega);
+    var g2 = 0.5 * gamma;
+    var x;
+    var v;
+    var e;
+    var A;
+    var B;
+    var c;
+    var s;
+    if (gamma < 1e-8) {
+      c = Math.cos(omega * t);
+      s = Math.sin(omega * t);
+      x = x0 * c + (v0 / omega) * s;
+      v = -x0 * omega * s + v0 * c;
+      return { x: x, v: v };
+    }
+    var disc = omega * omega - g2 * g2;
+    if (disc > 1e-10) {
+      var wd = Math.sqrt(disc);
+      A = x0;
+      B = (v0 + g2 * x0) / wd;
+      e = Math.exp(-g2 * t);
+      c = Math.cos(wd * t);
+      s = Math.sin(wd * t);
+      x = e * (A * c + B * s);
+      v = -g2 * x + e * (-A * wd * s + B * wd * c);
+      return { x: x, v: v };
+    }
+    if (disc >= -1e-10) {
+      e = Math.exp(-g2 * t);
+      A = x0;
+      B = v0 + g2 * x0;
+      x = e * (A + B * t);
+      v = -g2 * x + e * B;
+      return { x: x, v: v };
+    }
+    var w = Math.sqrt(-disc);
+    A = x0;
+    B = (v0 + g2 * x0) / w;
+    e = Math.exp(-g2 * t);
+    var ch = Math.cosh(w * t);
+    var sh = Math.sinh(w * t);
+    x = e * (A * ch + B * sh);
+    v = -g2 * x + e * (A * w * sh + B * w * ch);
+    return { x: x, v: v };
+  }
+
+  function captureCoupledICs(sim) {
+    sim.Q10 = (sim.x1 + sim.x2) / Math.SQRT2;
+    sim.Q20 = (sim.x1 - sim.x2) / Math.SQRT2;
+    sim.Qd10 = (sim.v1 + sim.v2) / Math.SQRT2;
+    sim.Qd20 = (sim.v1 - sim.v2) / Math.SQRT2;
   }
 
   function applyCoupledICs(sim, mode) {
@@ -294,6 +413,7 @@
     sim.t = 0;
     sim.history = [];
     sim.lastMode = mode;
+    captureCoupledICs(sim);
   }
 
   PGRE.visualizers['cpgf-1.39'] = {
@@ -302,7 +422,7 @@
     title: 'Spring Equation of Motion & Hooke\'s Law Dynamics',
     formulaLatex: '$$F = m\\ddot{x} = -kx \\iff \\ddot{x} + \\omega_0^2 x = 0,\\quad \\omega_0 = \\sqrt{\\frac{k}{m}}$$',
     physicalStory:
-      'A linear restoring force arises from the quadratic potential well $V(x)=\\tfrac12 k x^2$ (the universal leading Taylor term near any stable equilibrium). Newton\'s 2nd law yields an autonomous second-order linear ODE. When $\\zeta=0$, kinetic energy $T$ and elastic potential $V$ oscillate out of phase by $\\pi/2$, keeping total mechanical energy $E$ conserved. Linear damping $\\zeta>0$ spirals the phase-space ellipse inward as $E$ decays. In phase space $(x,p)$, the undamped trajectory traces an ellipse of invariant area $2\\pi E/\\omega_0$.',
+      'Hooke\'s law is the force from the universal quadratic well $V(x)=\\tfrac12 k x^2$ near any stable equilibrium: $F=-V\'(x)=-kx$. Newton\'s law then reads $\\ddot{x}+\\omega_0^2 x=0$ with $\\omega_0=\\sqrt{k/m}$. The picture is energy, not a physical hill: the particle moves on the $x$-axis while $V(x)$ is plotted vertically. At each $x$, the gap from $V$ up to the total energy $E$ is the kinetic energy $T=E-V$. Turning points sit where $V=E$. For $\\zeta=0$, $E$ is invariant and $T$ and $V$ trade with a $\\pi/2$ lag. Linear damping $\\zeta>0$ lowers the $E$ line as the motion spirals into the origin.',
     derivationSteps: [
       {
         step: 1,
@@ -324,9 +444,9 @@
       },
       {
         step: 4,
-        title: 'Phase Space Ellipse & Energy Conservation',
-        formula: 'E = \\frac{1}{2}m v^2 + \\frac{1}{2}k x^2 = \\frac{p^2}{2m} + \\frac{1}{2}k x^2 = \\frac{1}{2}k A^2 = \\text{const}',
-        text: 'Dividing by $E$ yields the canonical ellipse $(x/A)^2 + (p/p_{\\max})^2 = 1$ in phase space $(x,p)$, with semi-axes $A$ and $p_{\\max}=m\\omega_0 A$.'
+        title: 'Energy Partition on the Well',
+        formula: 'E = \\frac{1}{2}m v^2 + \\frac{1}{2}k x^2 = \\frac{1}{2}k A^2,\\quad T(x)=E-V(x),\\quad x_{\\mathrm{tp}}=\\pm A',
+        text: 'The classically allowed region is $V(x)\\le E$. Kinetic energy is the vertical gap $E-V$; it is maximum at $x=0$ and vanishes at the turning points $\\pm A$.'
       }
     ],
     limitingCases: [
@@ -410,9 +530,9 @@
         x: state.A,
         v: 0.0,
         t: 0.0,
+        x0: state.A,
+        v0: 0.0,
         isDragging: false,
-        phaseHistory: [],
-        maxHistoryLen: 300,
         lastA: state.A,
         lastM: state.m,
         lastK: state.k,
@@ -425,26 +545,36 @@
         var onDown = function (e) {
           var pos = getPos(e);
           var block = state.sim.blockScreenPos;
-          if (block && Math.hypot(pos.x - block.x, pos.y - block.y) < block.size * 1.2) {
+          if (block && Math.hypot(pos.x - block.x, pos.y - block.y) < block.size * 1.25) {
             state.sim.isDragging = true;
             state.sim.v = 0;
+            state.sim.v0 = 0;
+            state.sim.t = 0;
             if (e.cancelable) e.preventDefault();
           }
         };
 
         var onMove = function (e) {
-          if (state.sim.isDragging && state.sim.springOriginX !== undefined) {
+          if (state.sim.isDragging && state.sim.originX !== undefined) {
             var pos = getPos(e);
             var scale = state.sim.pixelsPerMeter || 80;
-            var newX = (pos.x - state.sim.springOriginX) / scale;
+            var newX = (pos.x - state.sim.originX) / scale;
             state.sim.x = Math.max(-2.2, Math.min(2.2, newX));
             state.sim.v = 0;
+            state.sim.x0 = state.sim.x;
+            state.sim.v0 = 0;
+            state.sim.t = 0;
             if (redraw) redraw();
             if (e.cancelable) e.preventDefault();
           }
         };
 
         var onUp = function () {
+          if (state.sim.isDragging) {
+            state.sim.x0 = state.sim.x;
+            state.sim.v0 = 0;
+            state.sim.t = 0;
+          }
           state.sim.isDragging = false;
         };
 
@@ -454,203 +584,227 @@
 
     draw(ctx, width, height, state, dt) {
       if (!state.sim) this.init(null, state);
-      const sim = state.sim;
+      var sim = state.sim;
       width = width || 640;
       height = height || 420;
 
-      const m = Math.max(0.1, finiteNum(state.m, 1.0));
-      const k = Math.max(0.1, finiteNum(state.k, 16.0));
-      const damping = Math.max(0, finiteNum(state.damping, 0.0));
-      const Aset = finiteNum(state.A, 1.2);
+      var m = Math.max(0.1, finiteNum(state.m, 1.0));
+      var k = Math.max(0.1, finiteNum(state.k, 16.0));
+      var damping = Math.max(0, finiteNum(state.damping, 0.0));
+      var Aset = finiteNum(state.A, 1.2);
 
-      if (!sim.isDragging && (
-        sim.lastA !== Aset ||
+      if (sim.lastA !== Aset) {
+        sim.x = Aset;
+        sim.v = 0;
+        sim.x0 = Aset;
+        sim.v0 = 0;
+        sim.t = 0;
+      } else if (!sim.isDragging && (
         sim.lastM !== m ||
         sim.lastK !== k ||
         sim.lastDamp !== damping
       )) {
-        sim.x = Aset;
-        sim.v = 0.0;
-        sim.t = 0.0;
-        sim.phaseHistory = [];
+        sim.x0 = sim.x;
+        sim.v0 = sim.v;
+        sim.t = 0;
       }
       sim.lastA = Aset;
       sim.lastM = m;
       sim.lastK = k;
       sim.lastDamp = damping;
 
-      const omega0 = Math.sqrt(k / m);
-      const gamma = 2 * damping * omega0;
-
-      const subSteps = 10;
-      const stepDt = scaledDt(dt, state) / subSteps;
+      var omega0 = Math.sqrt(k / m);
+      var gamma = 2 * damping * omega0;
 
       if (!sim.isDragging) {
-        for (let i = 0; i < subSteps; i++) {
-          const accel = (-k * sim.x - gamma * m * sim.v) / m;
-          sim.v += accel * stepDt;
-          sim.x += sim.v * stepDt;
-          sim.t += stepDt;
-        }
+        sim.t += scaledDt(dt, state);
+        var ev = shoEvolve(sim.x0, sim.v0, omega0, gamma, sim.t);
+        sim.x = ev.x;
+        sim.v = ev.v;
       }
 
-      const p = m * sim.v;
-      sim.phaseHistory.push({ x: sim.x, p: p, t: sim.t });
-      if (sim.phaseHistory.length > sim.maxHistoryLen) {
-        sim.phaseHistory.shift();
-      }
+      var T = 0.5 * m * sim.v * sim.v;
+      var V = 0.5 * k * sim.x * sim.x;
+      var E = T + V;
+      var A_E = Math.sqrt((2 * Math.max(0, E)) / k);
 
       stageFill(ctx, width, height);
 
-      const pad = 16;
-      const wallW = 14;
-      const topH = Math.round(Math.max(168, height * 0.46));
-      const wallX = pad;
-      const floorY = topH - 36;
-      const centerY = floorY - 22;
-      const massSize = Math.max(36, Math.min(46, 32 + m * 5));
-      const minMassX = wallX + wallW + 36;
-      const maxMassX = width - pad - massSize / 2 - 8;
-      const eqX = wallX + wallW + (width - pad * 2 - wallW) * 0.40;
-      const Aspan = Math.max(2.2, Aset);
-      const pxPerM = Math.min((eqX - minMassX) / Aspan, (maxMassX - eqX) / Aspan);
+      var pad = 16;
+      var railY = height - 34;
+      var wellX = 48;
+      var wellY = 22;
+      var wellW = width - wellX - 18;
+      var wellH = railY - wellY - 52;
+      var originX = wellX + wellW * 0.5;
+      var vZeroY = wellY + wellH - 6;
+      var xMax = Math.max(1.8, Aset * 1.35);
+      var sx = (wellW * 0.46) / xMax;
+      var Vmax = 0.5 * k * xMax * xMax;
+      var sy = (wellH - 24) / Math.max(Vmax, 1e-6);
 
-      sim.springOriginX = eqX;
-      sim.pixelsPerMeter = pxPerM;
+      sim.originX = originX;
+      sim.pixelsPerMeter = sx;
 
-      const massX = Math.max(minMassX, Math.min(maxMassX, eqX + sim.x * pxPerM));
-      const massY = centerY;
-      sim.blockScreenPos = { x: massX, y: massY, size: massSize };
-
-      if (DrawUtils && DrawUtils.drawHatchedWall) {
-        DrawUtils.drawHatchedWall(ctx, wallX, centerY - 58, wallW, floorY - (centerY - 58) + 4, 'vertical-left');
-      }
-      hatchFloor(ctx, wallX + wallW, width - pad, floorY);
+      function toX(x) { return originX + x * sx; }
+      function toY(val) { return vZeroY - val * sy; }
 
       ctx.save();
-      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.22);
-      ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.moveTo(eqX, pad + 22);
-      ctx.lineTo(eqX, floorY + 8);
+      ctx.rect(wellX, wellY, wellW, wellH);
+      ctx.clip();
+
+      ctx.strokeStyle = theme().inkFade(0.07);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      var gx;
+      for (gx = originX; gx < wellX + wellW; gx += 36) {
+        ctx.moveTo(gx, wellY);
+        ctx.lineTo(gx, wellY + wellH);
+      }
+      for (gx = originX; gx > wellX; gx -= 36) {
+        ctx.moveTo(gx, wellY);
+        ctx.lineTo(gx, wellY + wellH);
+      }
+      ctx.stroke();
+
+      ctx.strokeStyle = theme().inkFade(0.28);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(wellX + 8, vZeroY);
+      ctx.lineTo(wellX + wellW - 8, vZeroY);
+      ctx.moveTo(originX, wellY + 8);
+      ctx.lineTo(originX, vZeroY + 4);
+      ctx.stroke();
+
+      var xi;
+      ctx.beginPath();
+      for (xi = -xMax; xi <= xMax + 1e-9; xi += xMax / 48) {
+        var px = toX(xi);
+        var py = toY(0.5 * k * xi * xi);
+        if (xi === -xMax) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = CORAL;
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+
+      ctx.lineTo(toX(xMax), vZeroY);
+      ctx.lineTo(toX(-xMax), vZeroY);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(204, 120, 92, 0.10)';
+      ctx.fill();
+
+      if (E > 1e-6 && A_E > 1e-4) {
+        var xL = toX(-A_E);
+        var xR = toX(A_E);
+        var yE = toY(E);
+        ctx.strokeStyle = GOLD;
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(xL, yE);
+        ctx.lineTo(xR, yE);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.strokeStyle = theme().inkFade(0.18);
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 4]);
+        ctx.beginPath();
+        ctx.moveTo(xL, yE);
+        ctx.lineTo(xL, vZeroY);
+        ctx.moveTo(xR, yE);
+        ctx.lineTo(xR, vZeroY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        var xNow = toX(sim.x);
+        var yV = toY(V);
+        var yTop = toY(E);
+        if (yV > yTop + 1) {
+          ctx.fillStyle = 'rgba(93, 184, 166, 0.38)';
+          ctx.fillRect(xNow - 6, yTop, 12, yV - yTop);
+        }
+        ctx.strokeStyle = GOLD;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(xNow, vZeroY);
+        ctx.lineTo(xNow, yTop);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = GOLD;
+      ctx.strokeStyle = CORAL;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(toX(sim.x), toY(V), 6, 0, Math.PI * 2);
+      ctx.fill();
       ctx.stroke();
       ctx.restore();
-      inkLabel(ctx, 'x = 0', eqX, floorY + 20, { color: MUTED, font: fontSans(10) });
 
-      drawSpring(ctx, wallX + wallW, centerY, massX - massSize / 2, centerY, 12, 9, CORAL);
-
-      if (DrawUtils && DrawUtils.drawMassBlock) {
-        DrawUtils.drawMassBlock(ctx, massX, massY, massSize, 'm', CORAL, sim.isDragging);
+      inkLabel(ctx, 'V(x)', wellX + 6, wellY + 10, { color: CORAL, font: fontSans(11, '500'), align: 'left', pad: true });
+      inkLabel(ctx, 'x', wellX + wellW - 12, vZeroY + 12, { color: MUTED, font: fontSans(11), align: 'right', pad: true });
+      if (E > 1e-6) {
+        inkLabel(ctx, 'E', toX(Math.min(xMax * 0.92, A_E + 0.05 * xMax)) + 10, toY(E), {
+          color: GOLD, font: fontSans(11, '500'), align: 'left', pad: true
+        });
       }
 
-      const forceVal = -k * sim.x;
-      const fRoom = forceVal >= 0 ? (width - pad - massX) : (massX - pad);
-      const fCap = capLen(forceVal * 3.2, 0, Math.min(70, Math.max(8, fRoom - 6)));
-      if (fCap.ok && Math.abs(forceVal) > 0.05) {
-        arrow(ctx, massX, massY - massSize / 2 - 16, massX + fCap.dx, massY - massSize / 2 - 16, ROSE, 'F');
-      }
+      hatchFloor(ctx, pad, width - pad, railY);
 
-      const vFromX = massX + (sim.v >= 0 ? massSize / 2 : -massSize / 2);
-      const vRoom = sim.v >= 0 ? (width - pad - vFromX) : (vFromX - pad);
-      const vCap = capLen(sim.v * 22, 0, Math.min(70, Math.max(8, vRoom - 6)));
-      if (vCap.ok && Math.abs(sim.v) > 0.02) {
-        arrow(ctx, vFromX, massY, vFromX + vCap.dx, massY, EMERALD, 'v');
+      ctx.save();
+      ctx.strokeStyle = theme().inkFade(0.2);
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(originX, vZeroY);
+      ctx.lineTo(originX, railY + 6);
+      ctx.stroke();
+      ctx.restore();
+      inkLabel(ctx, 'x = 0', originX, railY + 16, { color: MUTED, font: fontSans(10) });
+
+      var massSize = Math.max(34, Math.min(46, 30 + m * 5));
+      var massX = Math.max(pad + massSize / 2, Math.min(width - pad - massSize / 2, toX(sim.x)));
+      var massY = railY - massSize / 2;
+      sim.blockScreenPos = { x: massX, y: massY, size: massSize };
+
+      ctx.save();
+      ctx.strokeStyle = theme().inkFade(0.16);
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(massX, Math.min(toY(V), railY - massSize - 4));
+      ctx.lineTo(massX, massY - massSize / 2);
+      ctx.stroke();
+      ctx.restore();
+
+      drawMass(ctx, massX, massY, massSize, 'm', CORAL, sim.isDragging);
+
+      var forceVal = -k * sim.x;
+      var fFrom = massX;
+      var fCap = capLen(forceVal * 3.0, 0, 64);
+      if (fCap.ok && Math.abs(forceVal) > 0.08) {
+        arrow(ctx, fFrom, massY - massSize / 2 - 14, fFrom + fCap.dx, massY - massSize / 2 - 14, ROSE, 'F');
       }
 
       inkLabel(
         ctx,
         sim.isDragging ? 'dragging' : 'drag the mass',
         pad + 8,
-        pad + 10,
+        pad + 4,
         { color: MUTED, font: fontSans(10), align: 'left', baseline: 'top' }
       );
 
-      ctx.save();
-      ctx.strokeStyle = LINE;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(pad, topH);
-      ctx.lineTo(width - pad, topH);
-      ctx.stroke();
-      ctx.restore();
-
-      const plotX = 48;
-      const plotY = topH + 28;
-      const plotW = width - plotX - 20;
-      const plotH = height - plotY - 22;
-      inkLabel(ctx, 'phase space (x, p)', plotX, topH + 14, { color: MUTED, font: fontSans(11), align: 'left' });
-      plotFrame(ctx, plotX, plotY, plotW, plotH);
-
-      const phaseCx = plotX + plotW / 2;
-      const phaseCy = plotY + plotH / 2;
-      const T = 0.5 * m * sim.v * sim.v;
-      const V = 0.5 * k * sim.x * sim.x;
-      const E = T + V;
-      const A_current = Math.sqrt((2 * Math.max(0.001, E)) / k);
-      const p_max = Math.sqrt(2 * m * Math.max(0.001, E));
-      const Aref = Aset;
-      const axW = plotW * 0.38;
-      const axH = plotH * 0.38;
-      const scalePhaseX = axW / Math.max(1.8, Aref * 1.15);
-      const scalePhaseP = axH / Math.max(7.0, Math.sqrt(2 * m * 0.5 * k * Aref * Aref) * 1.15);
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(plotX + 1, plotY + 1, plotW - 2, plotH - 2);
-      ctx.clip();
-
-      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.28);
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(plotX + 12, phaseCy);
-      ctx.lineTo(plotX + plotW - 12, phaseCy);
-      ctx.moveTo(phaseCx, plotY + 12);
-      ctx.lineTo(phaseCx, plotY + plotH - 12);
-      ctx.stroke();
-
-      ctx.strokeStyle = 'rgba(204, 120, 92, 0.35)';
-      ctx.lineWidth = 1.4;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.ellipse(phaseCx, phaseCy, Math.max(4, A_current * scalePhaseX), Math.max(4, p_max * scalePhaseP), 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      if (sim.phaseHistory.length > 1) {
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        for (let i = 1; i < sim.phaseHistory.length; i++) {
-          const pt0 = sim.phaseHistory[i - 1];
-          const pt1 = sim.phaseHistory[i];
-          const alpha = (i / sim.phaseHistory.length) * 0.85;
-          ctx.strokeStyle = 'rgba(204, 120, 92, ' + alpha + ')';
-          ctx.beginPath();
-          ctx.moveTo(phaseCx + pt0.x * scalePhaseX, phaseCy - pt0.p * scalePhaseP);
-          ctx.lineTo(phaseCx + pt1.x * scalePhaseX, phaseCy - pt1.p * scalePhaseP);
-          ctx.stroke();
-        }
-      }
-
-      ctx.fillStyle = GOLD;
-      ctx.beginPath();
-      ctx.arc(phaseCx + sim.x * scalePhaseX, phaseCy - p * scalePhaseP, 4.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-
-      inkLabel(ctx, 'x', plotX + plotW - 16, phaseCy + 12, { color: MUTED, font: fontSans(11), align: 'right', pad: true });
-      inkLabel(ctx, 'p', phaseCx + 12, plotY + 14, { color: MUTED, font: fontSans(11), align: 'left', pad: true });
-
       legend('Oscillator', [
-        { label: '$\\omega_0=\\sqrt{k/m}$', value: omega0.toFixed(2) + ' rad/s' },
-        { label: '$T_0=2\\pi/\\omega_0$', value: (2 * Math.PI / omega0).toFixed(3) + ' s' },
-        { label: '$x$', value: sim.x.toFixed(3) + ' m' },
-        { label: '$v$', value: sim.v.toFixed(3) + ' m/s' },
-        { label: 'Drag', value: sim.isDragging ? 'setting $x$' : 'drag the mass' }
+        { label: '$\\omega_0=\\sqrt{k/m}$', value: '$' + omega0.toFixed(2) + '\\,\\mathrm{rad/s}$' },
+        { label: '$T_0=2\\pi/\\omega_0$', value: '$' + (2 * Math.PI / omega0).toFixed(3) + '\\,\\mathrm{s}$' },
+        { label: '$x$', value: '$' + sim.x.toFixed(3) + '\\,\\mathrm{m}$' },
+        { label: '$v$', value: '$' + sim.v.toFixed(3) + '\\,\\mathrm{m/s}$' }
       ]);
-      legend('Energy', [
-        { label: '$T=\\tfrac12 m v^2$', value: T.toFixed(2) + ' J' },
-        { label: '$V=\\tfrac12 k x^2$', value: V.toFixed(2) + ' J' },
-        { label: damping > 1e-6 ? '$E=T+V$ ($\\zeta>0$, decaying)' : '$E=T+V$ ($\\zeta=0$, conserved)', value: E.toFixed(2) + ' J' }
+      legend('Energy well', [
+        { label: '$T=E-V$', value: '$' + T.toFixed(2) + '\\,\\mathrm{J}$' },
+        { label: '$V=\\tfrac12 k x^2$', value: '$' + V.toFixed(2) + '\\,\\mathrm{J}$' },
+        { label: damping > 1e-6 ? '$E$ ($\\zeta>0$, decaying)' : '$E$ ($\\zeta=0$, conserved)', value: '$' + E.toFixed(2) + '\\,\\mathrm{J}$' },
+        { label: '$x_{\\mathrm{tp}}=\\pm\\sqrt{2E/k}$', value: '$' + (A_E).toFixed(3) + '\\,\\mathrm{m}$' }
       ]);
     }
   };
@@ -662,7 +816,7 @@
     formulaLatex:
       '$$x(t) = \\text{Re}\\left[\\tilde{A} e^{i\\omega t}\\right] = A_0 \\cos(\\omega t + \\phi_0),\\quad \\tilde{A} = A_0 e^{i\\phi_0}$$',
     physicalStory:
-      'By Euler\'s identity $\\mathrm{e}^{i\\theta}=\\cos\\theta+i\\sin\\theta$, 1D simple harmonic motion is the real physical projection of steady circular motion in the complex plane. The complex displacement phasor $\\tilde{z}(t)$ rotates counter-clockwise at constant angular velocity $\\omega$. Differentiating multiplies the phasor by $i\\omega=\\omega\\,\\mathrm{e}^{i\\pi/2}$, rotating velocity by $+90^\\circ$ ahead of displacement, and acceleration by $+180^\\circ$ (antiparallel to $x$). With $\\gamma>0$ the tip traces an inward logarithmic spiral $A_0\\mathrm{e}^{-\\gamma t}$.',
+      'One-dimensional SHM is the real projection of uniform circular motion in the complex plane. The phasor $z(t)=A_0 e^{-\\gamma t}e^{i(\\omega t+\\phi_0)}$ rotates counterclockwise at $\\omega$; the physical coordinate is the shadow $x=\\mathrm{Re}(z)$ on the real axis. That shadow, copied to the right, writes $x(t)$. Differentiation multiplies by $i\\omega$, rotating the velocity phasor $+90^\\circ$ ahead of $z$; acceleration is antiparallel ($-\\omega^2 z$). With $\\gamma>0$ the tip traces a logarithmic spiral inward.',
     derivationSteps: [
       {
         step: 1,
@@ -760,7 +914,7 @@
         isDraggingPhasor: false,
         waveHistory: [],
         phasorTrail: [],
-        maxWaveLen: 220,
+        maxWaveLen: 240,
         lastOmega: state.omega,
         lastA0: state.amplitude,
         lastPhi: state.phase,
@@ -786,7 +940,7 @@
           var phasorCenter = state.sim.phasorCenter;
           if (phasorCenter) {
             var dist = Math.hypot(pos.x - phasorCenter.x, pos.y - phasorCenter.y);
-            if (dist < phasorCenter.radius * 1.4) {
+            if (dist < phasorCenter.radius * 1.35) {
               state.sim.isDraggingPhasor = true;
               setFromPointer(pos);
               if (e.cancelable) e.preventDefault();
@@ -812,14 +966,14 @@
 
     draw(ctx, width, height, state, dt) {
       if (!state.sim) this.init(null, state);
-      const sim = state.sim;
+      var sim = state.sim;
       width = width || 640;
       height = height || 420;
 
-      const omega = Math.max(0.2, finiteNum(state.omega, 2.0));
-      const A0 = Math.max(0.2, finiteNum(state.amplitude, 1.5));
-      const phi0 = finiteNum(state.phase, 0.0);
-      const decay = Math.max(0.0, finiteNum(state.decay, 0.0));
+      var omega = Math.max(0.2, finiteNum(state.omega, 2.0));
+      var A0 = Math.max(0.2, finiteNum(state.amplitude, 1.5));
+      var phi0 = finiteNum(state.phase, 0.0);
+      var decay = Math.max(0.0, finiteNum(state.decay, 0.0));
 
       if (!sim.isDraggingPhasor && (
         sim.lastOmega !== omega ||
@@ -835,47 +989,40 @@
       sim.lastA0 = A0;
       sim.lastPhi = phi0;
       sim.lastDecay = decay;
-
       if (!sim.phasorTrail) sim.phasorTrail = [];
 
-      sim.t += scaledDt(dt, state);
+      if (!sim.isDraggingPhasor) sim.t += scaledDt(dt, state);
 
-      const envelope = A0 * Math.exp(-decay * sim.t);
-      const theta = omega * sim.t + phi0;
+      var envelope = A0 * Math.exp(-decay * sim.t);
+      var theta = omega * sim.t + phi0;
+      var x_val = envelope * Math.cos(theta);
+      var y_val = envelope * Math.sin(theta);
+      var v_val = -decay * x_val - omega * y_val;
+      var a_val = (decay * decay - omega * omega) * x_val + 2 * decay * omega * y_val;
 
-      const x_val = envelope * Math.cos(theta);
-      const y_val = envelope * Math.sin(theta);
-      const v_val = -decay * x_val - omega * y_val;
-      const a_val = (decay * decay - omega * omega) * x_val + 2 * decay * omega * y_val;
-
-      sim.waveHistory.push({ t: sim.t, x: x_val, v: v_val, a: a_val });
-      if (sim.waveHistory.length > sim.maxWaveLen) {
-        sim.waveHistory.shift();
-      }
+      sim.waveHistory.push({ t: sim.t, x: x_val });
+      if (sim.waveHistory.length > sim.maxWaveLen) sim.waveHistory.shift();
       if (decay > 0.005) {
         sim.phasorTrail.push({ x: x_val, y: y_val });
-        if (sim.phasorTrail.length > 180) sim.phasorTrail.shift();
+        if (sim.phasorTrail.length > 200) sim.phasorTrail.shift();
       } else {
         sim.phasorTrail = [];
       }
 
       stageFill(ctx, width, height);
 
-      const pad = 16;
-      const splitX = Math.round(width * 0.46);
-      const leftW = splitX;
-
-      inkLabel(ctx, 'complex plane', leftW / 2, pad + 2, { color: MUTED, font: fontSans(11), baseline: 'top' });
-
-      const cx = leftW * 0.5;
-      const cy = height * 0.52;
-      const maxRadiusPx = Math.min(leftW * 0.34, (height - cy) - pad - 8, cy - 44);
-      const scale = maxRadiusPx / 2.5;
-
+      var pad = 16;
+      var splitX = Math.round(width * 0.58);
+      var cx = splitX * 0.5;
+      var cy = height * 0.52;
+      var maxRadiusPx = Math.min(splitX * 0.36, (height - cy) - pad - 10, cy - 40);
+      var scale = maxRadiusPx / 2.5;
       sim.phasorCenter = { x: cx, y: cy, radius: maxRadiusPx, scale: scale };
 
+      inkLabel(ctx, 'complex plane', splitX / 2, pad + 2, { color: MUTED, font: fontSans(11), baseline: 'top' });
+
       ctx.save();
-      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.28);
+      ctx.strokeStyle = theme().inkFade(0.26);
       ctx.lineWidth = 1.2;
       ctx.beginPath();
       ctx.moveTo(cx - maxRadiusPx - 10, cy);
@@ -900,11 +1047,11 @@
         ctx.save();
         ctx.lineWidth = 1.6;
         ctx.lineJoin = 'round';
-        for (let ti = 1; ti < sim.phasorTrail.length; ti++) {
-          const pt0 = sim.phasorTrail[ti - 1];
-          const pt1 = sim.phasorTrail[ti];
-          const alpha = (ti / sim.phasorTrail.length) * 0.7;
-          ctx.strokeStyle = 'rgba(204, 120, 92, ' + alpha + ')';
+        var ti;
+        for (ti = 1; ti < sim.phasorTrail.length; ti++) {
+          var pt0 = sim.phasorTrail[ti - 1];
+          var pt1 = sim.phasorTrail[ti];
+          ctx.strokeStyle = 'rgba(204, 120, 92, ' + ((ti / sim.phasorTrail.length) * 0.7) + ')';
           ctx.beginPath();
           ctx.moveTo(cx + pt0.x * scale, cy - pt0.y * scale);
           ctx.lineTo(cx + pt1.x * scale, cy - pt1.y * scale);
@@ -913,60 +1060,42 @@
         ctx.restore();
       }
 
-      const phasorTipX = cx + x_val * scale;
-      const phasorTipY = cy - y_val * scale;
-
-      const vNormScale = scale / Math.max(0.5, omega);
-      const vdx = (-decay * x_val - omega * y_val) * vNormScale * 0.35;
-      const vdy = -(-decay * y_val + omega * x_val) * vNormScale * 0.35;
-      const vC = capLen(vdx, vdy, 40);
-      if (vC.ok) {
-        arrow(ctx, phasorTipX, phasorTipY, phasorTipX + vC.dx, phasorTipY + vC.dy, TEAL, '');
-        inkLabel(ctx, 'v', phasorTipX + vC.dx * 1.2, phasorTipY + vC.dy * 1.2, {
-          color: TEAL, font: fontSans(11, '500'), pad: true
-        });
-      }
-
-      const aRe = (decay * decay - omega * omega) * x_val + 2 * decay * omega * y_val;
-      const aIm = (decay * decay - omega * omega) * y_val - 2 * decay * omega * x_val;
-      const aNorm = scale / Math.max(0.5, omega * omega);
-      const adx = aRe * aNorm * 0.22;
-      const ady = -aIm * aNorm * 0.22;
-      const aC = capLen(adx, ady, 36);
-      if (aC.ok) {
-        arrow(ctx, phasorTipX, phasorTipY, phasorTipX + aC.dx, phasorTipY + aC.dy, ROSE, '');
-        inkLabel(ctx, 'a', phasorTipX + aC.dx * 1.15, phasorTipY + aC.dy * 1.15, {
-          color: ROSE, font: fontSans(11, '500'), pad: true
-        });
-      }
-
-      arrow(ctx, cx, cy, phasorTipX, phasorTipY, CORAL, 'z');
+      var tipX = cx + x_val * scale;
+      var tipY = cy - y_val * scale;
+      arrow(ctx, cx, cy, tipX, tipY, CORAL, 'z');
 
       ctx.save();
-      ctx.fillStyle = CREAM;
-      ctx.strokeStyle = CORAL;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(phasorTipX, phasorTipY, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-
-      ctx.save();
-      ctx.strokeStyle = 'rgba(212, 160, 23, 0.5)';
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = GOLD;
+      ctx.lineWidth = 1.3;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
-      ctx.moveTo(phasorTipX, phasorTipY);
-      ctx.lineTo(phasorTipX, cy);
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX, cy);
       ctx.stroke();
+      ctx.setLineDash([]);
       ctx.restore();
 
       ctx.save();
+      ctx.fillStyle = CORAL;
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(tipX, tipY, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
       ctx.fillStyle = GOLD;
       ctx.beginPath();
-      ctx.arc(phasorTipX, cy, 4.5, 0, Math.PI * 2);
+      ctx.arc(tipX, cy, 5, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.strokeStyle = theme().inkFade(0.22);
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      var arcR = Math.max(14, Math.min(28, envelope * scale * 0.28));
+      ctx.arc(cx, cy, arcR, -theta - 0.55, -theta - 0.08);
+      ctx.stroke();
       ctx.restore();
 
       ctx.save();
@@ -978,23 +1107,20 @@
       ctx.stroke();
       ctx.restore();
 
-      const waveX = splitX + 28;
-      const waveW = width - waveX - pad;
-      const waveY = 40;
-      const waveH = height - waveY - 28;
-      inkLabel(ctx, 'x(t)', waveX, pad + 2, { color: MUTED, font: fontSans(11), align: 'left', baseline: 'top' });
-      inkLabel(ctx, 'x', waveX + waveW - 72, pad + 2, { color: CORAL, font: fontSans(10), align: 'left', baseline: 'top' });
-      inkLabel(ctx, 'v', waveX + waveW - 44, pad + 2, { color: TEAL, font: fontSans(10), align: 'left', baseline: 'top' });
+      var waveX = splitX + 22;
+      var waveW = width - waveX - pad;
+      var waveY = 36;
+      var waveH = height - waveY - 24;
+      inkLabel(ctx, 'x(t) = Re(z)', waveX, pad + 2, { color: MUTED, font: fontSans(11), align: 'left', baseline: 'top' });
 
-      plotFrame(ctx, waveX, waveY, waveW, waveH);
-
-      const waveMidY = waveY + waveH / 2;
+      var waveMidY = waveY + waveH / 2;
       ctx.save();
       ctx.beginPath();
-      ctx.rect(waveX + 1, waveY + 1, waveW - 2, waveH - 2);
+      ctx.rect(waveX, waveY, waveW, waveH);
       ctx.clip();
 
-      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.18);
+      ctx.strokeStyle = theme().inkFade(0.2);
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(waveX, waveMidY);
       ctx.lineTo(waveX + waveW, waveMidY);
@@ -1004,47 +1130,44 @@
         ctx.strokeStyle = CORAL;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        for (let i = 0; i < sim.waveHistory.length; i++) {
-          const pt = sim.waveHistory[i];
-          const px = waveX + (i / sim.maxWaveLen) * waveW;
-          const py = waveMidY - pt.x * scale;
+        var i;
+        for (i = 0; i < sim.waveHistory.length; i++) {
+          var pt = sim.waveHistory[i];
+          var px = waveX + (i / sim.maxWaveLen) * waveW;
+          var py = waveMidY - pt.x * scale;
           if (i === 0) ctx.moveTo(px, py);
           else ctx.lineTo(px, py);
         }
         ctx.stroke();
-
-        ctx.strokeStyle = TEAL;
-        ctx.lineWidth = 1.4;
-        ctx.setLineDash([4, 3]);
-        ctx.beginPath();
-        for (let i = 0; i < sim.waveHistory.length; i++) {
-          const pt = sim.waveHistory[i];
-          const px = waveX + (i / sim.maxWaveLen) * waveW;
-          const py = waveMidY - (pt.v / omega) * scale;
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-        ctx.setLineDash([]);
       }
 
-      const curWaveX = waveX + ((Math.max(1, sim.waveHistory.length) - 1) / sim.maxWaveLen) * waveW;
-      const curWaveY = waveMidY - x_val * scale;
-      ctx.fillStyle = CORAL;
+      var curWaveX = waveX + ((Math.max(1, sim.waveHistory.length) - 1) / sim.maxWaveLen) * waveW;
+      var curWaveY = waveMidY - x_val * scale;
+      ctx.fillStyle = GOLD;
       ctx.beginPath();
-      ctx.arc(curWaveX, curWaveY, 4, 0, Math.PI * 2);
+      ctx.arc(curWaveX, curWaveY, 4.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
 
+      ctx.save();
+      ctx.strokeStyle = 'rgba(212, 160, 23, 0.55)';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(tipX, cy);
+      ctx.lineTo(curWaveX, curWaveY);
+      ctx.stroke();
+      ctx.restore();
+
       legend('Phasor', [
-        { label: '$\\omega$', value: omega.toFixed(2) + ' rad/s' },
-        { label: '$\\theta(t)$', value: wrapAngle(theta).toFixed(2) + ' rad' },
-        { label: '$|z|=A_0 e^{-\\gamma t}$', value: envelope.toFixed(2) + ' m' }
+        { label: '$\\omega$', value: '$' + omega.toFixed(2) + '\\,\\mathrm{rad/s}$' },
+        { label: '$\\theta(t)=\\omega t+\\phi_0$', value: '$' + wrapAngle(theta).toFixed(2) + '\\,\\mathrm{rad}$' },
+        { label: '$|z|=A_0 e^{-\\gamma t}$', value: '$' + envelope.toFixed(2) + '\\,\\mathrm{m}$' }
       ]);
-      legend('Observables', [
-        { label: '$x=\\mathrm{Re}(z)$', value: x_val.toFixed(3) + ' m' },
-        { label: '$v=\\dot{x}$', value: v_val.toFixed(3) + ' m/s' },
-        { label: '$a=\\ddot{x}$', value: a_val.toFixed(3) + ' m/s²' }
+      legend('Projection', [
+        { label: '$x=\\mathrm{Re}(z)$', value: '$' + x_val.toFixed(3) + '\\,\\mathrm{m}$' },
+        { label: '$v=\\dot{x}$', value: '$' + v_val.toFixed(3) + '\\,\\mathrm{m/s}$' },
+        { label: '$a=\\ddot{x}$', value: '$' + a_val.toFixed(3) + '\\,\\mathrm{m/s}^2$' }
       ]);
     }
   };
@@ -1056,7 +1179,7 @@
     formulaLatex:
       '$$\\mathbf{M}\\mathbf{\\ddot{q}} + \\mathbf{K}\\mathbf{q} = \\mathbf{0} \\implies \\det(\\mathbf{K} - \\omega^2 \\mathbf{M}) = 0,\\quad q_k(t) = \\sum_r A_r a_k^{(r)} e^{i(\\omega_r t + \\phi_r)}$$',
     physicalStory:
-      'In an $N$-degree-of-freedom coupled linear oscillator (masses connected by springs), individual coordinate trajectories exhibit quasiperiodic beats. There exist $N$ distinct collective normal modes wherein every particle oscillates at the same eigenfrequency $\\omega_r$ with fixed amplitude ratios and invariant phase coherence. The normal coordinates $Q_r$ cleanly decouple the system into $N$ independent harmonic oscillators. At $k_c=0$ the masses are independent: $\\omega_1=\\omega_2=\\sqrt{k/m}$ and energy does not transfer.',
+      'Two equal masses with wall springs $k$ and coupling $k_c$ look messy in $x_1,x_2$, but they are two independent oscillators in the normal coordinates $Q_1=(x_1+x_2)/\\sqrt{2}$ (in-phase, $\\omega_1=\\sqrt{k/m}$) and $Q_2=(x_1-x_2)/\\sqrt{2}$ (anti-phase, $\\omega_2=\\sqrt{(k+2k_c)/m}$). Motion in the $(Q_1,Q_2)$ plane is a Lissajous figure: a pure mode is a line along one axis; a beat (both modes) fills a rectangle at incommensurate frequencies. At $k_c=0$ the frequencies coincide and energy does not transfer.',
     derivationSteps: [
       {
         step: 1,
@@ -1080,7 +1203,7 @@
         step: 4,
         title: 'Symmetric & Anti-symmetric Eigenmodes',
         formula: '\\omega_1 = \\sqrt{\\frac{k}{m}},\\; \\mathbf{a}^{(1)} = \\begin{pmatrix} 1 \\\\ 1 \\end{pmatrix};\\quad \\omega_2 = \\sqrt{\\frac{k + 2k_c}{m}},\\; \\mathbf{a}^{(2)} = \\begin{pmatrix} 1 \\\\ -1 \\end{pmatrix}',
-        text: 'In Mode 1 (In-Phase), the coupling spring is unstretched. In Mode 2 (Anti-Phase), the coupling spring experiences double deformation.'
+        text: 'In Mode 1 (In-Phase), the coupling spring is unstretched. In Mode 2 (Anti-Phase), the coupling spring experiences double deformation. The normal coordinates $Q_1=(x_1+x_2)/\\sqrt{2}$, $Q_2=(x_1-x_2)/\\sqrt{2}$ each execute independent SHM.'
       }
     ],
     limitingCases: [
@@ -1100,7 +1223,7 @@
         name: 'Pure Symmetric Mode Excitation',
         condition: 'x_1(0) = x_2(0) = A',
         result: 'x_1(t) = x_2(t) = A\\cos(\\omega_1 t)',
-        explanation: 'The coupling spring exerts zero force at all times; no beating occurs and frequency is independent of kc.'
+        explanation: 'The coupling spring exerts zero force at all times; no beating occurs and frequency is independent of kc. The $(Q_1,Q_2)$ trajectory is a line on the $Q_1$ axis.'
       },
       {
         name: 'Beat Phenomenon (Single Mass Released)',
@@ -1173,8 +1296,12 @@
         t: 0.0,
         draggedMass: null,
         history: [],
-        maxHistoryLen: 240,
-        lastMode: state.mode
+        maxHistoryLen: 280,
+        lastMode: state.mode,
+        Q10: 0,
+        Q20: 0,
+        Qd10: 0,
+        Qd20: 0
       };
       applyCoupledICs(state.sim, state.mode);
 
@@ -1188,9 +1315,11 @@
           if (b1 && Math.hypot(pos.x - b1.x, pos.y - b1.y) < b1.size * 1.1) {
             state.sim.draggedMass = 1;
             state.sim.v1 = 0;
+            state.sim.v2 = 0;
             if (e.cancelable) e.preventDefault();
           } else if (b2 && Math.hypot(pos.x - b2.x, pos.y - b2.y) < b2.size * 1.1) {
             state.sim.draggedMass = 2;
+            state.sim.v1 = 0;
             state.sim.v2 = 0;
             if (e.cancelable) e.preventDefault();
           }
@@ -1203,16 +1332,27 @@
             if (state.sim.draggedMass === 1) {
               state.sim.x1 = Math.max(-1.8, Math.min(1.8, (pos.x - state.sim.eq1X) / scale));
               state.sim.v1 = 0;
+              state.sim.v2 = 0;
             } else if (state.sim.draggedMass === 2) {
               state.sim.x2 = Math.max(-1.8, Math.min(1.8, (pos.x - state.sim.eq2X) / scale));
+              state.sim.v1 = 0;
               state.sim.v2 = 0;
             }
+            state.sim.t = 0;
+            captureCoupledICs(state.sim);
+            state.sim.history = [];
             if (redraw) redraw();
             if (e.cancelable) e.preventDefault();
           }
         };
 
         var onUp = function () {
+          if (state.sim.draggedMass) {
+            state.sim.v1 = 0;
+            state.sim.v2 = 0;
+            state.sim.t = 0;
+            captureCoupledICs(state.sim);
+          }
           state.sim.draggedMass = null;
         };
 
@@ -1222,111 +1362,114 @@
 
     draw(ctx, width, height, state, dt) {
       if (!state.sim) this.init(null, state);
-      const sim = state.sim;
+      var sim = state.sim;
       width = width || 640;
       height = height || 420;
 
-      const m = Math.max(0.1, finiteNum(state.m, 1.0));
-      const k = Math.max(0.1, finiteNum(state.k_wall, 8.0));
-      const kc = Math.max(0.0, finiteNum(state.k_couple, 6.0));
-      const damping = Math.max(0.0, finiteNum(state.damping, 0.0));
-      const mode = state.mode || 'beat';
+      var m = Math.max(0.1, finiteNum(state.m, 1.0));
+      var k = Math.max(0.1, finiteNum(state.k_wall, 8.0));
+      var kc = Math.max(0.0, finiteNum(state.k_couple, 6.0));
+      var damping = Math.max(0.0, finiteNum(state.damping, 0.0));
+      var mode = state.mode || 'beat';
 
       if (sim.lastMode !== mode && !sim.draggedMass) {
         applyCoupledICs(sim, mode);
       }
       sim.lastMode = mode;
 
-      const omega1 = Math.sqrt(k / m);
-      const omega2 = Math.sqrt((k + 2 * kc) / m);
+      var omega1 = Math.sqrt(k / m);
+      var omega2 = Math.sqrt((k + 2 * kc) / m);
+      var gamma = damping * 2 * omega1;
 
-      const subSteps = 8;
-      const stepDt = scaledDt(dt, state) / subSteps;
+      if (sim.Q10 === undefined) captureCoupledICs(sim);
 
       if (!sim.draggedMass) {
-        for (let s = 0; s < subSteps; s++) {
-          const gamma = damping * 2 * omega1;
-          const a1 = (-k * sim.x1 + kc * (sim.x2 - sim.x1) - gamma * m * sim.v1) / m;
-          const a2 = (-k * sim.x2 - kc * (sim.x2 - sim.x1) - gamma * m * sim.v2) / m;
-
-          sim.v1 += a1 * stepDt;
-          sim.v2 += a2 * stepDt;
-          sim.x1 += sim.v1 * stepDt;
-          sim.x2 += sim.v2 * stepDt;
-          sim.t += stepDt;
-        }
+        sim.t += scaledDt(dt, state);
+        var e1 = shoEvolve(sim.Q10, sim.Qd10, omega1, gamma, sim.t);
+        var e2 = shoEvolve(sim.Q20, sim.Qd20, omega2, gamma, sim.t);
+        var Q1 = e1.x;
+        var Q2 = e2.x;
+        var Qd1 = e1.v;
+        var Qd2 = e2.v;
+        sim.x1 = (Q1 + Q2) / Math.SQRT2;
+        sim.x2 = (Q1 - Q2) / Math.SQRT2;
+        sim.v1 = (Qd1 + Qd2) / Math.SQRT2;
+        sim.v2 = (Qd1 - Qd2) / Math.SQRT2;
       }
 
-      sim.history.push({ t: sim.t, x1: sim.x1, x2: sim.x2 });
-      if (sim.history.length > sim.maxHistoryLen) {
-        sim.history.shift();
-      }
+      var Q1now = (sim.x1 + sim.x2) / Math.SQRT2;
+      var Q2now = (sim.x1 - sim.x2) / Math.SQRT2;
+      var Qd1now = (sim.v1 + sim.v2) / Math.SQRT2;
+      var Qd2now = (sim.v1 - sim.v2) / Math.SQRT2;
 
-      const Q1 = (sim.x1 + sim.x2) / Math.SQRT2;
-      const Q2 = (sim.x1 - sim.x2) / Math.SQRT2;
+      sim.history.push({ Q1: Q1now, Q2: Q2now });
+      if (sim.history.length > sim.maxHistoryLen) sim.history.shift();
+
+      var EQ1 = 0.5 * m * Qd1now * Qd1now + 0.5 * k * Q1now * Q1now;
+      var EQ2 = 0.5 * m * Qd2now * Qd2now + 0.5 * (k + 2 * kc) * Q2now * Q2now;
+      var A1 = Math.sqrt((2 * Math.max(0, EQ1)) / k);
+      var A2 = Math.sqrt((2 * Math.max(0, EQ2)) / Math.max(k + 2 * kc, 1e-9));
 
       stageFill(ctx, width, height);
 
-      const pad = 16;
-      const topH = Math.round(Math.max(168, height * 0.46));
-      const wallLeftX = pad;
-      const wallW = 14;
-      const wallRightX = width - pad - wallW;
-      const floorY = topH - 44;
-      const centerY = floorY - 22;
-      const blockSize = Math.max(34, Math.min(44, 30 + m * 5));
-
-      const inner = wallRightX - (wallLeftX + wallW);
-      const eq1X = wallLeftX + wallW + inner * 0.32;
-      const eq2X = wallLeftX + wallW + inner * 0.68;
-      const gap = eq2X - eq1X;
-      const scale = Math.max(24, Math.min(inner * 0.14, (gap - blockSize - 18) / 3.6));
+      var pad = 16;
+      var topH = Math.round(Math.max(150, height * 0.40));
+      var wallLeftX = pad;
+      var wallW = 14;
+      var wallRightX = width - pad - wallW;
+      var floorY = topH - 40;
+      var centerY = floorY - 22;
+      var blockSize = Math.max(32, Math.min(42, 28 + m * 5));
+      var inner = wallRightX - (wallLeftX + wallW);
+      var eq1X = wallLeftX + wallW + inner * 0.32;
+      var eq2X = wallLeftX + wallW + inner * 0.68;
+      var gap = eq2X - eq1X;
+      var scale = Math.max(24, Math.min(inner * 0.14, (gap - blockSize - 18) / 3.6));
 
       sim.eq1X = eq1X;
       sim.eq2X = eq2X;
       sim.scale = scale;
 
-      const m1X = eq1X + sim.x1 * scale;
-      const m2X = eq2X + sim.x2 * scale;
-
+      var m1X = eq1X + sim.x1 * scale;
+      var m2X = eq2X + sim.x2 * scale;
       sim.b1Pos = { x: m1X, y: centerY, size: blockSize };
       sim.b2Pos = { x: m2X, y: centerY, size: blockSize };
 
-      if (DrawUtils && DrawUtils.drawHatchedWall) {
-        DrawUtils.drawHatchedWall(ctx, wallLeftX, centerY - 50, wallW, floorY - (centerY - 50) + 4, 'vertical-left');
-        DrawUtils.drawHatchedWall(ctx, wallRightX, centerY - 50, wallW, floorY - (centerY - 50) + 4, 'vertical-right');
-      }
+      drawWall(ctx, wallLeftX, centerY - 50, wallW, floorY - (centerY - 50) + 4, 'left');
+      drawWall(ctx, wallRightX, centerY - 50, wallW, floorY - (centerY - 50) + 4, 'right');
       hatchFloor(ctx, wallLeftX + wallW, wallRightX, floorY);
 
       ctx.save();
-      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.2);
+      ctx.strokeStyle = theme().inkFade(0.2);
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
-      ctx.moveTo(eq1X, pad + 22);
-      ctx.lineTo(eq1X, floorY + 8);
-      ctx.moveTo(eq2X, pad + 22);
-      ctx.lineTo(eq2X, floorY + 8);
+      ctx.moveTo(eq1X, pad + 18);
+      ctx.lineTo(eq1X, floorY + 6);
+      ctx.moveTo(eq2X, pad + 18);
+      ctx.lineTo(eq2X, floorY + 6);
       ctx.stroke();
       ctx.restore();
 
       drawSpring(ctx, wallLeftX + wallW, centerY, m1X - blockSize / 2, centerY, 10, 8, CORAL);
-      drawSpring(ctx, m1X + blockSize / 2, centerY, m2X - blockSize / 2, centerY, 12, 8, kc < 1e-9 ? 'rgba(93, 184, 166, 0.28)' : TEAL);
+      drawSpring(ctx, m1X + blockSize / 2, centerY, m2X - blockSize / 2, centerY, 12, 8, kc < 1e-9 ? theme().inkFade(0.22) : TEAL);
       drawSpring(ctx, m2X + blockSize / 2, centerY, wallRightX, centerY, 10, 8, CORAL);
 
-      if (DrawUtils && DrawUtils.drawMassBlock) {
-        DrawUtils.drawMassBlock(ctx, m1X, centerY, blockSize, 'm1', CORAL, sim.draggedMass === 1);
-        DrawUtils.drawMassBlock(ctx, m2X, centerY, blockSize, 'm2', GOLD, sim.draggedMass === 2);
-      }
+      drawMass(ctx, m1X, centerY, blockSize, 'm1', CORAL, sim.draggedMass === 1);
+      drawMass(ctx, m2X, centerY, blockSize, 'm2', GOLD, sim.draggedMass === 2);
+
+      var v1c = capLen(sim.v1 * 18, 0, 36);
+      var v2c = capLen(sim.v2 * 18, 0, 36);
+      if (v1c.ok) arrow(ctx, m1X, centerY - blockSize / 2 - 12, m1X + v1c.dx, centerY - blockSize / 2 - 12, EMERALD, '');
+      if (v2c.ok) arrow(ctx, m2X, centerY - blockSize / 2 - 12, m2X + v2c.dx, centerY - blockSize / 2 - 12, EMERALD, '');
 
       inkLabel(ctx, 'k', (wallLeftX + wallW + m1X - blockSize / 2) / 2, pad + 10, { color: CORAL, font: fontSans(11), pad: true });
       inkLabel(ctx, kc < 1e-9 ? 'kc = 0' : 'kc', (m1X + m2X) / 2, pad + 10, { color: TEAL, font: fontSans(11), pad: true });
       inkLabel(ctx, 'k', (m2X + blockSize / 2 + wallRightX) / 2, pad + 10, { color: CORAL, font: fontSans(11), pad: true });
-
       inkLabel(
         ctx,
         sim.draggedMass ? ('dragging m' + sim.draggedMass) : 'drag m1 or m2',
         width / 2,
-        floorY + 22,
+        floorY + 18,
         { color: MUTED, font: fontSans(10) }
       );
 
@@ -1339,71 +1482,81 @@
       ctx.stroke();
       ctx.restore();
 
-      const plotX = 40;
-      const plotY = topH + 26;
-      const plotW = width - plotX - pad;
-      const plotH = height - plotY - 18;
-      inkLabel(ctx, 'x1(t), x2(t)', plotX, topH + 12, { color: MUTED, font: fontSans(11), align: 'left' });
-      inkLabel(ctx, 'x1', plotX + plotW - 64, topH + 12, { color: CORAL, font: fontSans(10), align: 'left' });
-      inkLabel(ctx, 'x2', plotX + plotW - 32, topH + 12, { color: GOLD, font: fontSans(10), align: 'left' });
+      var qSide = Math.min(width - 72, height - topH - 36);
+      var qX = (width - qSide) / 2;
+      var qY = topH + 22;
+      inkLabel(ctx, 'normal coordinates (Q1, Q2)', width / 2, topH + 10, { color: MUTED, font: fontSans(11) });
 
-      plotFrame(ctx, plotX, plotY, plotW, plotH);
-
-      const graphMidY = plotY + plotH / 2;
-      let yMax = 1.6;
-      for (let i = 0; i < sim.history.length; i++) {
-        yMax = Math.max(yMax, Math.abs(sim.history[i].x1), Math.abs(sim.history[i].x2));
+      var qCx = qX + qSide / 2;
+      var qCy = qY + qSide / 2;
+      var qMax = 1.8;
+      var hi;
+      for (hi = 0; hi < sim.history.length; hi++) {
+        qMax = Math.max(qMax, Math.abs(sim.history[hi].Q1) * 1.15, Math.abs(sim.history[hi].Q2) * 1.15);
       }
-      const yScale = (plotH * 0.42) / yMax;
+      qMax = Math.max(qMax, A1 * 1.2, A2 * 1.2, 1.2);
+      var qS = (qSide * 0.42) / qMax;
 
       ctx.save();
       ctx.beginPath();
-      ctx.rect(plotX + 1, plotY + 1, plotW - 2, plotH - 2);
+      ctx.rect(qX, qY, qSide, qSide);
       ctx.clip();
 
-      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.18);
+      ctx.strokeStyle = theme().inkFade(0.26);
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.moveTo(plotX, graphMidY);
-      ctx.lineTo(plotX + plotW, graphMidY);
+      ctx.moveTo(qX + 10, qCy);
+      ctx.lineTo(qX + qSide - 10, qCy);
+      ctx.moveTo(qCx, qY + 10);
+      ctx.lineTo(qCx, qY + qSide - 10);
       ctx.stroke();
 
-      if (sim.history.length > 1) {
-        ctx.strokeStyle = CORAL;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        for (let i = 0; i < sim.history.length; i++) {
-          const pt = sim.history[i];
-          const px = plotX + (i / sim.maxHistoryLen) * plotW;
-          const py = graphMidY - pt.x1 * yScale;
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-
-        ctx.strokeStyle = GOLD;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        for (let i = 0; i < sim.history.length; i++) {
-          const pt = sim.history[i];
-          const px = plotX + (i / sim.maxHistoryLen) * plotW;
-          const py = graphMidY - pt.x2 * yScale;
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
+      if (A1 > 0.04 || A2 > 0.04) {
+        var rw = Math.max(3, A1 * qS);
+        var rh = Math.max(3, A2 * qS);
+        ctx.strokeStyle = theme().inkFade(0.16);
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(qCx - rw, qCy - rh, rw * 2, rh * 2);
+        ctx.setLineDash([]);
       }
+
+      if (sim.history.length > 1) {
+        ctx.lineWidth = 1.8;
+        ctx.lineJoin = 'round';
+        for (hi = 1; hi < sim.history.length; hi++) {
+          var a = sim.history[hi - 1];
+          var b = sim.history[hi];
+          var alpha = (hi / sim.history.length) * 0.9;
+          ctx.strokeStyle = 'rgba(204, 120, 92, ' + alpha + ')';
+          ctx.beginPath();
+          ctx.moveTo(qCx + a.Q1 * qS, qCy - a.Q2 * qS);
+          ctx.lineTo(qCx + b.Q1 * qS, qCy - b.Q2 * qS);
+          ctx.stroke();
+        }
+      }
+
+      ctx.fillStyle = GOLD;
+      ctx.beginPath();
+      ctx.arc(qCx + Q1now * qS, qCy - Q2now * qS, 4.5, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
 
+      inkLabel(ctx, 'Q1', qX + qSide - 14, qCy + 12, { color: MUTED, font: fontSans(11), align: 'right', pad: true });
+      inkLabel(ctx, 'Q2', qCx + 12, qY + 14, { color: MUTED, font: fontSans(11), align: 'left', pad: true });
+
       legend('Normal modes', [
-        { label: '$\\omega_1=\\sqrt{k/m}$ (in-phase)', value: omega1.toFixed(2) + ' rad/s' },
-        { label: '$Q_1=(x_1+x_2)/\\sqrt{2}$', value: Q1.toFixed(2) + ' m' },
-        { label: '$\\omega_2=\\sqrt{(k+2k_c)/m}$ (anti-phase)', value: omega2.toFixed(2) + ' rad/s' },
-        { label: '$Q_2=(x_1-x_2)/\\sqrt{2}$', value: Q2.toFixed(2) + ' m' },
-        { label: '$\\omega_{\\mathrm{beat}}=|\\omega_2-\\omega_1|=2\\delta$', value: Math.abs(omega2 - omega1).toFixed(2) + ' rad/s' },
-        { label: 'Mode', value: kc < 1e-9 ? 'uncoupled ($k_c=0$)' : mode }
+        { label: '$\\omega_1=\\sqrt{k/m}$ (in-phase)', value: '$' + omega1.toFixed(2) + '\\,\\mathrm{rad/s}$' },
+        { label: '$Q_1=(x_1+x_2)/\\sqrt{2}$', value: '$' + Q1now.toFixed(2) + '\\,\\mathrm{m}$' },
+        { label: '$\\omega_2=\\sqrt{(k+2k_c)/m}$ (anti-phase)', value: '$' + omega2.toFixed(2) + '\\,\\mathrm{rad/s}$' },
+        { label: '$Q_2=(x_1-x_2)/\\sqrt{2}$', value: '$' + Q2now.toFixed(2) + '\\,\\mathrm{m}$' },
+        { label: '$\\omega_{\\mathrm{beat}}=|\\omega_2-\\omega_1|$', value: '$' + Math.abs(omega2 - omega1).toFixed(2) + '\\,\\mathrm{rad/s}$' },
+        { label: 'Mode', value: kc < 1e-9 ? 'uncoupled ($k_c=0$)' : '$\\text{' + mode + '}$' }
+      ]);
+      legend('Mode energy', [
+        { label: '$E_{Q_1}=\\tfrac12 m\\dot Q_1^2+\\tfrac12 k Q_1^2$', value: '$' + EQ1.toFixed(2) + '\\,\\mathrm{J}$' },
+        { label: '$E_{Q_2}=\\tfrac12 m\\dot Q_2^2+\\tfrac12(k+2k_c)Q_2^2$', value: '$' + EQ2.toFixed(2) + '\\,\\mathrm{J}$' }
       ]);
     }
   };
-
 
 })(typeof window !== 'undefined' ? window : globalThis);

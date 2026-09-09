@@ -88,14 +88,19 @@ PGRE.examEngine = (function () {
   }
 
   /* ——— Draw: current format (weighted, prefer-unseen) ——— */
-  function buildWeighted(seed) {
-    // weighted mocks may draw the book's sample-exam questions (pre-existing
-    // behavior) but never the intact released ETS exams — those stay fresh
-    // for verbatim replay (AGENTS.md spoiler rule; whether sat exams should
-    // graduate into this pool is still an open user decision)
-    var pool = PGRE.allQuestions({ includeExam: true }).filter(function (q) {
+  /* Weighted mocks may draw the book's sample-exam questions (pre-existing
+     behavior) but never the intact released ETS exams — those stay fresh for
+     verbatim replay (AGENTS.md spoiler rule; whether sat exams should graduate
+     into this pool is still an open user decision). canStart and the setup
+     screen's pool copy read the same list so they can never disagree. */
+  function drawPool() {
+    return PGRE.allQuestions({ includeExam: true }).filter(function (q) {
       return q.src !== 'ets-exam';
     });
+  }
+
+  function buildWeighted(seed) {
+    var pool = drawPool();
     var need = FORMAT_META['70x120'].questions;
     if (pool.length < need) return null;
 
@@ -183,11 +188,7 @@ PGRE.examEngine = (function () {
       var built = legacyExam(source);
       return built ? { ok: true } : { ok: false, need: 0, have: 0, legacy: true };
     }
-    // must mirror buildWeighted's pool (ets-exam excluded) or canStart could
-    // approve a draw the builder cannot fill
-    var have = PGRE.allQuestions({ includeExam: true }).filter(function (q) {
-      return q.src !== 'ets-exam';
-    }).length;
+    var have = drawPool().length;
     var need = FORMAT_META['70x120'].questions;
     return have >= need ? { ok: true } : { ok: false, need: need, have: have, legacy: false };
   }
@@ -303,6 +304,7 @@ PGRE.examEngine = (function () {
     scaledEstimate: scaledEstimate,
     examById: examById,
     canStart: canStart,
+    poolSize: function () { return drawPool().length; },
     create: create,
     active: active,
     byId: byId,

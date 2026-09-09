@@ -5,15 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Physics GRE · Prep Studio</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#936;</text></svg>">
-  <!-- ?v= is a cache-buster: bump it whenever these files change so browsers
-       can never serve a stale copy -->
-  <link rel="stylesheet" href="css/fonts.css?v=20260725c">
-  <link rel="stylesheet" href="css/style.css?v=20260908d">
-  <link rel="stylesheet" href="css/visualizer.css?v=20260901a">
-  <link rel="stylesheet" href="css/print.css?v=20260901a">
-  <link rel="stylesheet" href="css/ambient.css?v=20260906a">
-  <link rel="stylesheet" href="css/motion.css?v=20260907a">
-  <link rel="stylesheet" href="vendor/katex/katex.min.css">
+  <!-- ?v= is a cache-buster shared by EVERY stylesheet and script below. Bump
+       the one value (search-and-replace it in this file) whenever any asset
+       changes, so a returning browser can never mix a fresh app.js with a stale
+       view or a stale style.css. -->
+  <link rel="stylesheet" href="css/fonts.css?v=20260909w">
+  <link rel="stylesheet" href="css/style.css?v=20260909w">
+  <link rel="stylesheet" href="css/visualizer.css?v=20260909w">
+  <link rel="stylesheet" href="css/print.css?v=20260909w">
+  <link rel="stylesheet" href="css/motion.css?v=20260909w">
+  <link rel="stylesheet" href="vendor/katex/katex.min.css?v=20260909w">
 </head>
 <body>
   <!-- Keyboard bypass (WCAG 2.4.1): visually hidden until focused; see
@@ -54,7 +55,7 @@
                title="Active time today">
               <span class="today-learn-run">
                 <span class="today-learn-kicker">Today</span>
-                <span id="today-learn-time" class="today-learn-time" aria-live="polite">0 min</span>
+                <span id="today-learn-time" class="today-learn-time">0 min 0 s</span>
               </span>
             </a>
             <button id="focus-toggle" class="focus-toggle" type="button"
@@ -77,75 +78,78 @@
 
   <div id="toasts"></div>
 
-  <!-- vendored libraries (fully offline). Load order is a contract:
-       marked -> katex -> auto-render, all SYNCHRONOUS like every script
-       below, so by the time js/app.js boots (DOMContentLoaded) and first
-       calls PGRE.typesetMath, window.renderMathInElement always exists.
+  <!-- Every script below is `defer`: the browser fetches them in parallel while
+       it parses the page, then runs them in DOCUMENT ORDER (defer keeps order
+       for classic scripts) once the markup is complete and before
+       DOMContentLoaded. Load order is therefore still a contract:
+       marked -> katex -> auto-render, data before engine before views, and
+       app.js before motion.js. js/app.js boots on DOMContentLoaded, which
+       fires only after the last deferred script (motion.js) has run, so
+       PGRE.motion and window.renderMathInElement always exist by then.
        auto-render.min.js depends on the katex global from the line above. -->
-  <script src="vendor/marked.min.js"></script>
-  <script src="vendor/katex/katex.min.js"></script>
-  <script src="vendor/katex/contrib/auto-render.min.js"></script>
+  <script src="vendor/marked.min.js?v=20260909w" defer></script>
+  <script src="vendor/katex/katex.min.js?v=20260909w" defer></script>
+  <script src="vendor/katex/contrib/auto-render.min.js?v=20260909w" defer></script>
 
   <!-- data -->
-  <script src="js/data-topics.js?v=20260908e"></script>
-  <script src="js/data-questions.js"></script>
-  <script src="js/data-formulas.js"></script>
-  <script src="js/data-achievements.js"></script>
-  <script src="js/data-plan.js?v=20260908e"></script>
+  <script src="js/data-topics.js?v=20260909w" defer></script>
+  <script src="js/data-questions.js?v=20260909w" defer></script>
+  <script src="js/data-formulas.js?v=20260909w" defer></script>
+  <script src="js/data-achievements.js?v=20260909w" defer></script>
+  <script src="js/data-plan.js?v=20260909w" defer></script>
 
   <!-- book-derived bank (gitignored; generated placeholders until the
        extraction pipeline fills them) -->
-  <script src="content/bank/cpg-questions.js"></script>
-  <script src="content/bank/cpg-exams.js"></script>
-  <script src="content/bank/cpg-formulas.js"></script>
-  <script src="content/bank/ets-exams.js?v=20260901a"></script>  <!-- released ETS exams (gitignored — ETS copyright) -->
+  <script src="content/bank/cpg-questions.js?v=20260909w" defer></script>
+  <script src="content/bank/cpg-exams.js?v=20260909w" defer></script>
+  <script src="content/bank/cpg-formulas.js?v=20260909w" defer></script>
+  <script src="content/bank/ets-exams.js?v=20260909w" defer></script>  <!-- released ETS exams (gitignored — ETS copyright) -->
 
   <!-- engine -->
-  <script src="js/store.js?v=20260908e"></script>
-  <script src="js/srs.js?v=20260831b"></script>
-  <script src="js/bank.js?v=20260901a"></script>
-  <script src="js/study-time.js?v=20260908a"></script>
-  <script src="js/timer.js?v=20260908a"></script>
-  <script src="js/focus-sound.js?v=20260804a"></script>  <!-- focus-timer selectable SFX -->
-  <script src="js/focus-fx.js?v=20260718a"></script>  <!-- detector field + beamline fx for the focus page -->
-  <script src="js/notes.js"></script>
-  <script src="js/gamify.js?v=20260908e"></script>
-  <script src="js/formula-checkin.js?v=20260804a"></script>  <!-- formula-recall daily check-in -->
+  <script src="js/store.js?v=20260909w" defer></script>
+  <script src="js/srs.js?v=20260909w" defer></script>
+  <script src="js/bank.js?v=20260909w" defer></script>
+  <script src="js/study-time.js?v=20260909w" defer></script>
+  <script src="js/timer.js?v=20260909w" defer></script>
+  <script src="js/focus-sound.js?v=20260909w" defer></script>  <!-- focus-timer selectable SFX -->
+  <script src="js/focus-fx.js?v=20260909w" defer></script>  <!-- detector field + beamline fx for the focus page -->
+  <script src="js/notes.js?v=20260909w" defer></script>
+  <script src="js/gamify.js?v=20260909w" defer></script>
+  <script src="js/formula-checkin.js?v=20260909w" defer></script>  <!-- formula-recall daily check-in -->
 
   <!-- views -->
-  <script src="js/view-dashboard.js?v=20260907a"></script>
-  <script src="js/view-topic.js"></script>
-  <script src="js/view-practice.js?v=20260907a"></script>
-  <script src="js/view-history.js"></script>
-  <script src="js/view-analytics.js"></script>
-  <script src="js/view-build.js?v=20260901a"></script>
-  <script src="js/view-search.js"></script>
-  <script src="js/view-notes.js?v=20260901a"></script>
-  <script src="js/view-mistakes.js?v=20260907a"></script>
-  <script src="js/view-formulas.js?v=20260907a"></script>
-  <script src="js/view-focus.js?v=20260804a"></script>        <!-- F5 focus page -->
-  <script src="js/view-study-time.js"></script>   <!-- dedicated study-time page -->
-  <script src="js/view-achievements.js"></script>
-  <script src="js/view-plan.js?v=20260908e"></script>
-  <script src="js/view-content.js"></script>
-  <script src="js/exam-engine.js"></script>
-  <script src="js/view-exam.js?v=20260907a"></script>
-  <script src="js/visualizer-engine.js?v=20260901a"></script>
-  <script src="js/visualizers/trio-g1.js?v=20260901a"></script>
-  <script src="js/visualizers/trio-g2.js?v=20260901a"></script>
-  <script src="js/visualizers/trio-g3.js?v=20260901a"></script>
-  <script src="js/visualizers/trio-g4.js?v=20260901a"></script>
-  <script src="js/visualizers/trio-g5.js?v=20260901a"></script>
-  <script src="js/visualizers/trio-g6.js?v=20260901a"></script>
-  <script src="js/visualizers/trio-g7.js?v=20260901a"></script>
-  <script src="js/visualizers/trio-g8.js?v=20260901a"></script>
-  <script src="js/visualizers/trio-g9.js?v=20260901a"></script>
-  <script src="js/visualizers/trio-g10.js?v=20260901a"></script>
+  <script src="js/view-dashboard.js?v=20260909w" defer></script>
+  <script src="js/view-topic.js?v=20260909w" defer></script>
+  <script src="js/view-practice.js?v=20260909w" defer></script>
+  <script src="js/view-history.js?v=20260909w" defer></script>
+  <script src="js/view-analytics.js?v=20260909w" defer></script>
+  <script src="js/view-build.js?v=20260909w" defer></script>
+  <script src="js/view-search.js?v=20260909w" defer></script>
+  <script src="js/view-notes.js?v=20260909w" defer></script>
+  <script src="js/view-mistakes.js?v=20260909w" defer></script>
+  <script src="js/view-formulas.js?v=20260909w" defer></script>
+  <script src="js/view-focus.js?v=20260909w" defer></script>        <!-- F5 focus page -->
+  <script src="js/view-study-time.js?v=20260909w" defer></script>   <!-- dedicated study-time page -->
+  <script src="js/view-achievements.js?v=20260909w" defer></script>
+  <script src="js/view-plan.js?v=20260909w" defer></script>
+  <script src="js/view-content.js?v=20260909w" defer></script>
+  <script src="js/exam-engine.js?v=20260909w" defer></script>
+  <script src="js/view-exam.js?v=20260909w" defer></script>
+  <script src="js/visualizer-engine.js?v=20260909w" defer></script>
+  <script src="js/visualizers/trio-g1.js?v=20260909w" defer></script>
+  <script src="js/visualizers/trio-g2.js?v=20260909w" defer></script>
+  <script src="js/visualizers/trio-g3.js?v=20260909w" defer></script>
+  <script src="js/visualizers/trio-g4.js?v=20260909w" defer></script>
+  <script src="js/visualizers/trio-g5.js?v=20260909w" defer></script>
+  <script src="js/visualizers/trio-g6.js?v=20260909w" defer></script>
+  <script src="js/visualizers/trio-g7.js?v=20260909w" defer></script>
+  <script src="js/visualizers/trio-g8.js?v=20260909w" defer></script>
+  <script src="js/visualizers/trio-g9.js?v=20260909w" defer></script>
+  <script src="js/visualizers/trio-g10.js?v=20260909w" defer></script>
 
   <!-- shell -->
-  <script src="js/app.js?v=20260907a"></script>
-  <!-- motion & ambient effects: loaded after app.js but still parsed before DOMContentLoaded fires, so PGRE.ambient/motion exist before PGRE.boot runs -->
-  <script src="js/ambient-fx.js?v=20260906a"></script>
-  <script src="js/motion.js?v=20260907a"></script>
+  <script src="js/app.js?v=20260909w" defer></script>
+  <!-- motion effects: runs after app.js and before DOMContentLoaded, so PGRE.motion exists before PGRE.boot runs -->
+  <script src="js/motion.js?v=20260909w" defer></script>
 </body>
 </html>

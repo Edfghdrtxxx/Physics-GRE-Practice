@@ -126,10 +126,15 @@ PGRE.views.exam = (function () {
     if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: setup is the base exam screen
     var eng = PGRE.examEngine, ui = PGRE.ui;
     var act = eng.active();
-    var pool = PGRE.allQuestions({ includeExam: true }).length;
+    // the number the weighted draw actually samples from: intact ETS exams are
+    // excluded (spoiler rule), so this is smaller than the whole bank
+    var pool = eng.poolSize();
     var need70 = eng.FORMAT_META['70x120'].questions;
     var bookExams = PGRE.BOOK_EXAMS || [];
     var etsExams = PGRE.ETS_EXAMS || [];
+    // same pointer the dashboard's Today card shows — the next unused real exam
+    var next = PGRE.nextMockPointer ? PGRE.nextMockPointer() : null;
+    var nextExam = next && eng.examById(next.id);
 
     var html = '<div class="card"><h1>Timed mock exam</h1>' +
       '<p class="muted">A full exam-room simulation: countdown clock, question palette, ' +
@@ -151,45 +156,62 @@ PGRE.views.exam = (function () {
         '</div></div>';
     }
 
-    // Current format — weighted draw
-    html += '<div class="card exam-format">' +
-      '<div class="exam-format-head"><h2>Current format</h2>' +
-      '<span class="chip">70 questions · 120 min</span></div>' +
-      '<p class="muted">A weighted random draw across the nine topics at their official exam ' +
-      'weights (CM 20 · EM 18 · QM 13 · TS 10 · AP 10 · ST 9 · OW 8 · SR 6 · LM 6), preferring ' +
-      'questions you have not seen, from the full bank of ' + pool + ' question' +
-      (pool === 1 ? '' : 's') + '.</p>';
-    if (pool >= need70) {
-      html += '<div class="btn-row"><button class="btn btn-primary" id="start-70"' +
-        (act ? ' disabled' : '') + '>Start 70-question exam</button></div>';
-    } else {
-      html += bankNotReady(need70, pool, false);
+    // Primary: the next real released exam you have not sat yet
+    if (nextExam) {
+      var nfm = eng.FORMAT_META[nextExam.format];
+      html += '<div class="card exam-format exam-next-mock">' +
+        '<div class="exam-format-head"><h2>Your next mock</h2>' +
+        '<span class="chip">' + (nfm ? ui.esc(nfm.label) : 'official') + '</span></div>' +
+        '<p class="muted">The next real exam you have not sat: <strong>' + ui.esc(next.title) +
+        '</strong>. Replayed word for word and scored with the official answer key and ' +
+        'ETS’s own published raw-to-scaled table — the truest read on where you stand.</p>' +
+        '<div class="btn-row"><button class="btn btn-primary" data-replay="' + ui.esc(nextExam.id) + '"' +
+        (act ? ' disabled' : '') + '>Start ' + ui.esc(next.title) + '</button></div></div>';
     }
-    html += '</div>';
 
-    // Released ETS exams — verbatim replay, official key + published scaling
+    // Other released ETS exams — verbatim replay, official key + published scaling
+    var otherEts = etsExams.filter(function (ex) { return !(nextExam && ex && ex.id === nextExam.id); });
     html += '<div class="card exam-format">' +
-      '<div class="exam-format-head"><h2>Released ETS exams</h2>' +
+      '<div class="exam-format-head"><h2>' + (nextExam ? 'Other released ETS exams' : 'Released ETS exams') + '</h2>' +
       '<span class="chip">official</span></div>' +
       '<p class="muted">Verbatim replays of real exams released by ETS, scored with the official ' +
       'answer key and each exam’s own published raw→scaled table. The exam PDFs stay local-only ' +
       '(ETS copyright — link, don’t republish); sources are listed in the project’s ' +
       'Practice Resources doc.</p>';
-    if (etsExams.length) {
+    if (otherEts.length) {
       html += '<div class="btn-row">';
-      etsExams.forEach(function (ex) {
+      otherEts.forEach(function (ex) {
         var fm = eng.FORMAT_META[ex.format];
         html += '<button class="btn btn-ghost" data-replay="' + ui.esc(ex.id) + '"' +
           (act ? ' disabled' : '') + ' title="' + (fm ? ui.esc(fm.label) : '') + '">' +
           ui.esc(ex.title || ex.id) + '</button>';
       });
       html += '</div>';
-    } else {
+    } else if (!etsExams.length) {
       html += '<div class="exam-empty">' +
-        '<span class="exam-empty-icon" aria-hidden="true">⌛</span>' +
         '<div><strong>No released exams imported yet.</strong> ' +
         '<span class="muted">They unlock once the extraction pipeline fills ' +
         'content/bank/ets-exams.js from the local exam PDFs.</span></div></div>';
+    } else {
+      html += '<p class="muted">Every other released exam has been sat — replay one from ' +
+        'your past simulations below.</p>';
+    }
+    html += '</div>';
+
+    // Secondary: a randomised 70-question set in the current format
+    html += '<div class="card exam-format">' +
+      '<div class="exam-format-head"><h2>Practice set in the current format</h2>' +
+      '<span class="chip">70 questions · 120 min</span></div>' +
+      '<p class="muted">A random draw across the nine topics at their official exam ' +
+      'weights (CM 20 · EM 18 · QM 13 · TS 10 · AP 10 · ST 9 · OW 8 · SR 6 · LM 6), preferring ' +
+      'questions you have not seen. It draws from ' + pool + ' question' +
+      (pool === 1 ? '' : 's') + ' — the book and drill banks; the released ETS exams above ' +
+      'are kept out so they stay unspoiled.</p>';
+    if (pool >= need70) {
+      html += '<div class="btn-row"><button class="btn btn-ghost" id="start-70"' +
+        (act ? ' disabled' : '') + '>Start a 70-question set</button></div>';
+    } else {
+      html += bankNotReady(need70, pool, false);
     }
     html += '</div>';
 
@@ -234,7 +256,6 @@ PGRE.views.exam = (function () {
 
   function bankNotReady(need, have, legacy) {
     return '<div class="exam-empty">' +
-      '<span class="exam-empty-icon" aria-hidden="true">⌛</span>' +
       '<div><strong>Bank not imported yet.</strong> ' +
       '<span class="muted">' + (legacy
         ? 'No sample exams are in the bank. This format unlocks once the book’s sample exams are imported into content/bank/.'
@@ -296,11 +317,6 @@ PGRE.views.exam = (function () {
         '<div class="exam-body">' +
           '<div class="exam-main">' +
             '<div id="exam-q"></div>' +
-            '<div class="exam-navrow">' +
-              '<button class="btn btn-ghost" id="exam-prev">← Back</button>' +
-              '<button class="btn btn-ghost" id="exam-flag" aria-pressed="false">⚑ Flag for review</button>' +
-              '<button class="btn btn-primary" id="exam-next">Next →</button>' +
-            '</div>' +
           '</div>' +
           '<aside class="exam-palette">' +
             '<div class="exam-palette-title">Question palette</div>' +
@@ -308,9 +324,14 @@ PGRE.views.exam = (function () {
             '<div class="exam-legend">' +
               '<span class="exam-legend-item"><span class="pal-swatch sw-unanswered"></span>Unanswered</span>' +
               '<span class="exam-legend-item"><span class="pal-swatch sw-answered"></span>Answered</span>' +
-              '<span class="exam-legend-item"><span class="pal-swatch sw-flagged">⚑</span>Flagged</span>' +
+              '<span class="exam-legend-item"><span class="pal-swatch sw-flagged"></span>Flagged</span>' +
             '</div>' +
           '</aside>' +
+        '</div>' +
+        '<div class="exam-navrow">' +
+          '<button class="btn btn-ghost" id="exam-prev">Back</button>' +
+          '<button class="btn btn-ghost" id="exam-flag" aria-pressed="false">Flag for review</button>' +
+          '<button class="btn btn-primary" id="exam-next">Next</button>' +
         '</div>' +
       '</div>' +
       '<div id="exam-modal-host"></div>';
@@ -351,7 +372,7 @@ PGRE.views.exam = (function () {
     var html = '<div class="exam-qmeta" id="exam-q-heading" tabindex="-1">' +
       '<span>Question ' + (exam.cursor + 1) + ' of ' + exam.order.length + '</span>' +
       (t ? '<span class="chip">' + t.name + '</span>' : '') +
-      (flagged ? '<span class="chip exam-flagchip">⚑ Flagged for review</span>' : '') +
+      (flagged ? '<span class="chip exam-flagchip">Flagged for review</span>' : '') +
     '</div>' +
     '<div class="q-text">' + q.q + '</div>' +
     '<div class="choices">';
@@ -380,8 +401,7 @@ PGRE.views.exam = (function () {
     if (next) next.disabled = exam.cursor >= exam.order.length - 1;
     if (flag) {
       var flagged = exam.flags.indexOf(exam.order[exam.cursor]) !== -1;
-      flag.textContent = flagged ? '⚑ Unflag' : '⚑ Flag for review';
-      flag.classList.toggle('is-flagged', flagged);
+      flag.textContent = flagged ? 'Unflag' : 'Flag for review';
       flag.setAttribute('aria-pressed', flagged ? 'true' : 'false');
     }
   }
@@ -412,7 +432,7 @@ PGRE.views.exam = (function () {
       var meta = box.querySelector('.exam-qmeta');
       var chip = box.querySelector('.exam-flagchip');
       if (exam.flags.indexOf(qid) !== -1 && meta && !chip) {
-        meta.insertAdjacentHTML('beforeend', '<span class="chip exam-flagchip">⚑ Flagged for review</span>');
+        meta.insertAdjacentHTML('beforeend', '<span class="chip exam-flagchip">Flagged for review</span>');
       } else if (chip && exam.flags.indexOf(qid) === -1) {
         chip.remove();
       }
@@ -519,8 +539,8 @@ PGRE.views.exam = (function () {
     var remaining = Math.max(0, exam.limitSec - exam.durationSec);
     var amber = remaining <= 15 * 60 && remaining > 5 * 60;
     var red = remaining <= 5 * 60;
-    // status is icon + label, never colour alone (DESIGN §6)
-    el.innerHTML = (red || amber ? '<span class="exam-timer-warn" aria-hidden="true">⚠</span>' : '') +
+    // status is a text note + tint, never colour alone (DESIGN §6)
+    el.innerHTML =
       '<span class="exam-timer-clock">' + fmtClock(remaining) + '</span>' +
       (red ? '<span class="exam-timer-note">under 5 min</span>'
            : amber ? '<span class="exam-timer-note">under 15 min</span>' : '');
@@ -617,7 +637,7 @@ PGRE.views.exam = (function () {
         ui.statTile('Time used', fmtDur(exam.durationSec), 'of ' + fmtDur(exam.limitSec)) +
         ui.statTile('Flagged', String(exam.flags.length)) +
       '</div>' +
-      (exam.missing ? '<p class="muted exam-missing-note">⚠ ' + exam.missing + ' question' +
+      (exam.missing ? '<p class="muted exam-missing-note">' + exam.missing + ' question' +
         (exam.missing === 1 ? '' : 's') + ' could not be matched to the current bank and ' +
         (exam.missing === 1 ? 'was' : 'were') + ' scored as incorrect — the bank changed ' +
         'since this sitting.</p>' : '') +
@@ -646,7 +666,7 @@ PGRE.views.exam = (function () {
     // Question-by-question review
     html += '<div class="card"><h2>Question-by-question review</h2>' +
       '<p class="muted">Your pick beside the correct answer, with the full solution. ' +
-      '⚑ marks questions you flagged.</p></div>';
+      'Questions you flagged are marked.</p></div>';
     exam.order.forEach(function (qid, i) {
       html += reviewCard(exam, qid, i);
     });
@@ -685,7 +705,7 @@ PGRE.views.exam = (function () {
       var why = sols[idx];
       if (why == null || String(why).replace(/\s+/g, '') === '') continue;  // skip absent
       items += '<div class="distractor-item">' +
-        '<div class="miss-pick is-bad"><span class="fb-icon">✗</span>' +
+        '<div class="miss-pick is-bad">' +
           '<strong>' + LETTERS[idx] + '</strong> — ' +
           '<span class="miss-pick-body">' + q.choices[idx] + '</span></div>' +
         '<div class="solution"><div class="solution-label">Why it tempts</div>' + why + '</div>' +
@@ -750,7 +770,7 @@ PGRE.views.exam = (function () {
   function showNoteSaved(ta) {
     var tick = ta.parentNode.querySelector('.nb-saved');
     if (!tick) return;
-    tick.textContent = ta.value.trim() === '' ? 'Note cleared' : 'Saved ✓';
+    tick.textContent = ta.value.trim() === '' ? 'Note cleared' : 'Saved';
     tick.classList.add('show');
     clearTimeout(tick._t);
     tick._t = setTimeout(function () { tick.classList.remove('show'); }, 1600);
@@ -801,20 +821,20 @@ PGRE.views.exam = (function () {
     var correct = picked === q.answer;
     var html = '<div class="card exam-review-q' + (correct ? ' is-right' : '') + '">' +
       '<div class="miss-head">' +
-        '<span class="hist-mark ' + (correct ? 'is-good' : 'is-bad') + '">' + (correct ? '✓' : '✗') + '</span>' +
+        '<span class="hist-mark ' + (correct ? 'is-good' : 'is-bad') + '">' + (correct ? 'Right' : 'Wrong') + '</span>' +
         (t ? ui.monogram(t) : '') +
         '<span class="muted">Question ' + (i + 1) + '</span>' +
-        (flagged ? '<span class="chip exam-flagchip">⚑ Flagged</span>' : '') +
+        (flagged ? '<span class="chip exam-flagchip">Flagged</span>' : '') +
       '</div>' +
       '<div class="q-text">' + q.q + '</div>' +
       '<div class="miss-picks">';
     if (picked == null) {
-      html += '<div class="miss-pick is-bad"><span class="fb-icon">✗</span><strong>Left blank</strong></div>';
+      html += '<div class="miss-pick is-bad"><strong>Left blank</strong></div>';
     } else if (!correct) {
-      html += '<div class="miss-pick is-bad"><span class="fb-icon">✗</span><strong>You picked ' +
+      html += '<div class="miss-pick is-bad"><strong>You picked ' +
         LETTERS[picked] + '</strong> — <span class="miss-pick-body">' + q.choices[picked] + '</span></div>';
     }
-    html += '<div class="miss-pick is-good"><span class="fb-icon">✓</span><strong>' +
+    html += '<div class="miss-pick is-good"><strong>' +
       (correct ? 'You picked ' : 'Correct: ') + LETTERS[q.answer] + '</strong> — ' +
       '<span class="miss-pick-body">' + q.choices[q.answer] + '</span></div>' +
     '</div>' +

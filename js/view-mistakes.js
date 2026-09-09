@@ -46,8 +46,10 @@ PGRE.views.mistakes = (function () {
     return shuffle(qs).slice(0, n);
   }
   /* Honest button caption: "Drill due (5 of 7)" when a size caps the pool,
-     plain "Drill due (7)" when the whole pool will be drawn. */
-  function drillLabel(base, pool) {
+     plain "Drill due (7)" when the whole pool will be drawn. An empty pool
+     gets plain-language copy instead of a "(0)" that looks like a live action. */
+  function drillLabel(base, pool, emptyText) {
+    if (!pool) return emptyText;
     var n = drillSize();
     return (n && n < pool) ? (base + ' (' + n + ' of ' + pool + ')')
                            : (base + ' (' + pool + ')');
@@ -204,12 +206,13 @@ PGRE.views.mistakes = (function () {
       '(' + PGRE.srs.MISTAKE_LADDER.join(' → ') + ' days). Missing it again resets the ladder.</p>' +
       '<div class="btn-row">' +
         '<button class="btn btn-primary" id="drill-due"' + (due.length ? '' : ' disabled') + '>' +
-          drillLabel('Drill due', due.length) + '</button>' +
+          drillLabel('Drill due', due.length, 'Nothing due today') + '</button>' +
         '<button class="btn btn-ghost" id="drill-all"' + (open.length ? '' : ' disabled') + '>' +
-          drillLabel('Drill all', open.length) + '</button>' +
+          drillLabel('Drill all', open.length, 'Nothing to drill') + '</button>' +
         (open.length ? '<button class="btn btn-ghost" id="print-mistakes">Print / PDF</button>' : '') +
       '</div>' +
-      drillSizeHTML() +
+      // The size picker only means something once there is a pool to draw from.
+      (open.length ? drillSizeHTML() : '') +
       '</div>';
 
     if (!open.length && !archived.length) {
@@ -247,8 +250,8 @@ PGRE.views.mistakes = (function () {
     // are captured from this render; the disabled state depends only on the pool,
     // so it never changes with size — only the caption does.
     function applyLabels() {
-      if (dd) dd.textContent = drillLabel('Drill due', due.length);
-      if (da) da.textContent = drillLabel('Drill all', open.length);
+      if (dd) dd.textContent = drillLabel('Drill due', due.length, 'Nothing due today');
+      if (da) da.textContent = drillLabel('Drill all', open.length, 'Nothing to drill');
     }
     var sizeCustom = document.getElementById('drill-size-custom');
     root().querySelectorAll('.focus-chip[data-size]').forEach(function (b) {

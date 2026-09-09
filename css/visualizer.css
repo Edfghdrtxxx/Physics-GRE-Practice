@@ -46,6 +46,59 @@
   letter-spacing: 0.04em;
 }
 
+/* Open Simulation row — under the formula/note on study, peek, and
+   browse. Not in the grade row. Hardcoded Claude pair (#141413 fill,
+   #faf9f5 type) so dark theme does not invert the button via --ink/--bg. */
+.viz-open-strip {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line, #e6dfd8);
+  cursor: default;
+  text-align: center;
+  font-family: var(--sans, Inter, sans-serif);
+  line-height: 1;
+}
+.card .viz-open-strip .btn-ghost,
+.card .viz-open-strip .btn-sm,
+.browse-peek .viz-open-strip .viz-nav-btn,
+.viz-open-strip .viz-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  min-height: var(--ctl-h-lg, 38px);
+  padding: 0 22px;
+  font-family: var(--sans, Inter, sans-serif);
+  font-size: 16px;
+  font-weight: 500;
+  color: #faf9f5;
+  background: #141413;
+  border: 1px solid #141413;
+  border-radius: var(--ctl-r, 8px);
+  box-shadow: none;
+  cursor: pointer;
+}
+.card .viz-open-strip .btn-ghost:hover,
+.viz-open-strip .viz-nav-btn:hover {
+  color: #faf9f5;
+  background: #252523;
+  border-color: #252523;
+  box-shadow: none;
+}
+[data-theme="dark"] .card .viz-open-strip .btn-ghost,
+[data-theme="dark"] .viz-open-strip .viz-nav-btn {
+  border-color: #faf9f5;
+}
+[data-theme="dark"] .card .viz-open-strip .btn-ghost:hover,
+[data-theme="dark"] .viz-open-strip .viz-nav-btn:hover {
+  background: #252523;
+  border-color: #faf9f5;
+}
+
 /* Simulation Grid — stacked full-width drawing, then legend, then controls.
    Desktop must NOT use a 310px side column (that crowding was rejected). */
 .viz-sim-grid {
@@ -73,6 +126,19 @@
   justify-content: center;
   min-height: 380px;
   width: 100%;
+}
+/* Inside the modal the stage is capped to a share of the viewport so the
+   legend and the first control row land on the first screen at 900px tall;
+   the drawing scales with the wrapper (the render loop reads the live rect). */
+.viz-modal-body .viz-canvas-wrapper {
+  height: clamp(300px, 44vh, 420px);
+  min-height: 0;
+}
+/* A visible fold: the controls panel announces itself under the legend. */
+.viz-modal-body .viz-controls-panel {
+  border-top: 2px solid var(--ink-3, #b8b3ab);
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
 }
 
 .viz-canvas-wrapper canvas {
@@ -748,6 +814,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
+  min-width: 0;   /* a wide KaTeX line scrolls inside .viz-thumb-formula instead of widening the card */
   cursor: pointer;
   transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
 }
