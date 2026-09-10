@@ -614,8 +614,8 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 
 .solution {
   background: var(--ivory);
-  border-left: 3px solid var(--accent);
-  border-radius: 0 10px 10px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   padding: 14px 18px;
   margin-top: 12px;
   font-size: 14.5px;
@@ -911,9 +911,8 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 .rq-count { flex: 1; color: var(--ink-2); font-size: 13.5px; }
 .rq-row .btn { margin: 0; }
 
-/* Today agenda (kinetic polish) — warm tint + extra left padding for the
-   coral accent-bar pseudo-element (css/motion.css .today-draw::before). */
-#today-agenda { background: var(--ivory); padding-left: 28px; }
+/* Today agenda — warm ivory fill, same padding as .card. */
+#today-agenda { background: var(--ivory); }
 /* ——— Due chips (mistake book, formula deck) ——— */
 .due-chip {
   font-size: 11px;
@@ -2381,7 +2380,6 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
   color-scheme: light dark;
 }
 .final-pass-banner {
-  border-left: 3px solid var(--accent);
   background: var(--accent-tint);
   font-size: 14.5px;
 }
@@ -2389,7 +2387,6 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 
 /* ——— Formula daily check-in (签到) — portal strip + post-session celebrate ——— */
 .formula-checkin-card {
-  border-left: 3px solid var(--accent);
   background: var(--accent-tint);
 }
 .formula-checkin-card .fci-row { display: flex; flex-direction: column; gap: 4px; }
@@ -2420,14 +2417,12 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .fci-streak { color: var(--ink); font-weight: 600; }
 .fci-hint { margin: 0; font-size: 13.5px; }
 .formula-checkin-celebrate {
-  border-left: 3px solid var(--accent);
   background: var(--accent-tint);
   font-size: 15px;
   animation: fci-pop 0.45s cubic-bezier(.34, 1.56, .64, 1);
 }
 .formula-checkin-celebrate strong { color: var(--ink); }
 .formula-checkin-already {
-  border-left: 3px solid var(--line);
   font-size: 14px;
 }
 @keyframes fci-pop {
@@ -2462,7 +2457,6 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 /* F2 — leech chip + leech-drill banner. Warning-styled (amber) chip. */
 .leech-chip { color: var(--amber); background: var(--amber-tint); cursor: help; }
 .leech-banner {
-  border-left: 3px solid var(--amber);
   background: var(--amber-tint);
   font-size: 14.5px;
 }
@@ -2483,9 +2477,9 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .fcard-mnemonic {
   margin-top: 10px;
   padding: 8px 12px;
-  border-left: 3px solid var(--accent);
+  border: 1px solid var(--line);
   background: var(--accent-tint);
-  border-radius: 0 8px 8px 0;
+  border-radius: 8px;
   font-size: 14px;
   color: var(--ink);
   text-align: left;

@@ -211,31 +211,6 @@
   50% { opacity: 0.68; }
 }
 
-/* ——— Today card accent bar ———
-   A 3px coral left-border that scales in from the top edge on mount,
-   drawing the eye to the daily agenda. Uses a pseudo-element so the
-   card's own border is not disturbed. */
-.today-draw {
-  position: relative;
-  overflow: hidden;
-}
-.today-draw::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--accent);
-  border-radius: var(--radius) 0 0 var(--radius);
-  transform-origin: top center;
-  animation: today-draw var(--dur-slow) var(--ease-out) both;
-}
-@keyframes today-draw {
-  from { transform: scaleY(0); }
-  to   { transform: scaleY(1); }
-}
-
 /* ——— Wrong-answer shake ———
    A decaying horizontal oscillation on a wrong choice. Amplitude drops
    from 4px to 1px over 400ms — physical, not cute. */
@@ -322,7 +297,6 @@
   .flash-tile { transition: none; }
   /* kinetic polish */
   .countdown-breathe { animation: none; }
-  .today-draw::before { animation: none; }
   .answer-shake { animation: none; transform: none; }
   .answer-settle { animation: none; transform: none; }
   .fcard-reveal { animation: none; clip-path: none; opacity: 1; }

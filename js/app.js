@@ -167,6 +167,17 @@ PGRE.formulaTextHTML = function (text) {
       return HOLD + (held.push(tex) - 1) + HOLD;
     }
 
+    // Time derivatives written q-dot / q-ddot / q-dot_i. Must run before the
+    // Greek and letter passes, which would otherwise claim the base (`q` in
+    // q-dot_i → "$q$-dot_i"). A trailing hyphen means a product (L-dot-S), not
+    // a derivative.
+    part = part.replace(/\b([A-Za-z]+)-(d?dot)(_(?:[A-Za-z0-9]+|\{[^}]+\}))?(?![\w-])/g,
+      function (_, name, kind, sub) {
+        var base = greek[name] || name;
+        var cmd = kind === 'ddot' ? '\\ddot' : '\\dot';
+        return mathToken(cmd + '{' + base + '}' + (sub || ''));
+      });
+
     // Handle named Greek variants first so tau_0 is one mathematical span.
     part = part.replace(/\b(alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|rho|sigma|tau|phi|omega|Omega)(?:_([A-Za-z0-9]+|\{[^}]+\})|\^([A-Za-z0-9]+|\{[^}]+\}))?(\/\d+)?\b/g,
       function (_, name, sub, sup, frac) {
@@ -374,14 +385,18 @@ PGRE.nav = (function () {
   var LABELS = {
     plan: 'Study plan', history: 'History', analytics: 'Analytics',
     build: 'Custom quiz', search: 'Search', notes: 'Notes & bookmarks',
-    mistakes: 'Mistake book', formulas: 'Formula recall', focus: 'Focus timer',
+    mistakes: 'Mistake book', formulas: 'Formula recall',
+    concepts: 'Concept visualization',
+    focus: 'Focus timer',
     studytime: 'Study time', achievements: 'Achievements', library: 'Library',
     exam: 'Mock exam'
   };
   var HREF = {
     plan: '#/plan', history: '#/history', analytics: '#/analytics',
     build: '#/build', search: '#/search', notes: '#/notes',
-    mistakes: '#/mistakes', formulas: '#/formulas', focus: '#/focus',
+    mistakes: '#/mistakes', formulas: '#/formulas',
+    concepts: '#/concepts',
+    focus: '#/focus',
     studytime: '#/study-time', achievements: '#/achievements',
     library: '#/library', exam: '#/exam'
   };
@@ -452,6 +467,9 @@ PGRE.nav = (function () {
         trail.push({ label: LABELS[view], href: HREF[view] });
         if (view === 'exam' && params.sub === 'run') trail.push({ label: 'Run' });
         else if (view === 'exam' && params.sub === 'review') trail.push({ label: 'Review' });
+        else if (view === 'concepts' && params.sub === 'search') trail.push({ label: 'Search' });
+        else if (view === 'concepts' && params.sub === 'visualizers') trail.push({ label: 'Visualizers' });
+        else if (view === 'concepts' && params.sub === 'spherical') trail.push({ label: 'Spherical coordinates' });
       }
       base = trail;
       paint(base);
@@ -490,6 +508,7 @@ PGRE.route = function () {
   else if (parts[0] === 'notes') { view = 'notes'; }
   else if (parts[0] === 'mistakes') { view = 'mistakes'; }
   else if (parts[0] === 'formulas') { view = 'formulas'; }
+  else if (parts[0] === 'concepts') { view = 'concepts'; }
   else if (parts[0] === 'focus') { view = 'focus'; }
   else if (parts[0] === 'study-time') { view = 'studytime'; }
   else if (parts[0] === 'achievements') { view = 'achievements'; }
@@ -579,6 +598,7 @@ PGRE.buildNav = function () {
       '<span class="nav-badge nav-badge-due" id="nav-mist-due" hidden></span></a>' +
     '<a href="#/formulas" data-nav="formulas">Formula recall' +
       '<span class="nav-badge nav-badge-due" id="nav-form-due" hidden></span></a>' +
+    '<a href="#/concepts" data-nav="concepts">Concept visualization</a>' +
     '<a href="#/focus" data-nav="focus">Focus timer</a>' +
     '<a href="#/study-time" data-nav="studytime">Study time</a>' +
     '<a href="#/achievements" data-nav="achievements">Achievements</a>' +

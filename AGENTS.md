@@ -6,8 +6,8 @@ I have little background in computer science. When a decision is required of me,
 # Repository Structure & Placement
 
 - `index.html`: SPA entry shell (hash-routed, offline KaTeX/marked).
-- `js/`: Application logic, state stores (`store.js`, `srs.js`, `gamify.js`, `bank.js`), static datasets (`data-*.js`), view modules (`view-*.js`), router (`app.js`).
-- `css/`: Stylesheets (`style.css` Anthropic palette, `fonts.css`, `visualizer.css`, `print.css`).
+- `js/`: Application logic, state stores (`store.js`, `srs.js`, `gamify.js`, `bank.js`), static datasets (`data-*.js`), view modules (`view-*.js`), router (`app.js`), concept-visualization session (`view-concepts.js`, `concept-search.js`, `concept-door-fx.js`; teaching widgets in `js/visualizers/`).
+- `css/`: Stylesheets (`style.css` Anthropic palette, `fonts.css`, `visualizer.css`, `concepts.css`, `print.css`, `motion.css`).
 - `simulations/`: Standalone interactive physics visualizers/sandboxes (`oscillator.html`, `simulations/README.md`).
 - `tools/`: Offline node/python build scripts, extraction pipelines, and unit test suites (`test-*.js`).
 - `content/`: Question banks and assets. Gitignored generated datasets (`bank/`), figures (`book-assets/`), ETS assets (`ets-assets/`, `ets-src/`).
@@ -19,7 +19,7 @@ I have little background in computer science. When a decision is required of me,
 
 ## Placement Rules
 - **UI Views:** Add `js/view-<name>.js` and register routes/navigation in `js/app.js`.
-- **Simulations:** Add standalone HTML visualizers in `simulations/` matching `oscillator.html` patterns.
+- **Concept visualization:** Session view `js/view-concepts.js` (`#/concepts`, `#/concepts/search`, `#/concepts/visualizers`, `#/concepts/spherical`). Door background `js/concept-door-fx.js`. Session search `js/concept-search.js`. Concept teaching widgets as `js/visualizers/<id>.js` registered on `PGRE.conceptVisualizers`. Formula Lab (`#/formulas` Lab tab) stays as a shortcut into `PGRE.visualizers`.
 - **Tests & Scripts:** Place offline node/python runners, verification tools, and test suites in `tools/`.
 - **Handoffs:** Place cross-agent handoff briefs in `99_System/Handoff documents/<topic>/`.
 - **Agent Skills:** Place reusable agent workflows and instructions under `.agents/skills/<skill-name>/`.

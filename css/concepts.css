@@ -1,0 +1,161 @@
+/* Concept visualization session. Cream/coral hairlines; no shadows, no glows. */
+
+.cv-root { position: relative; }
+.cv-kicker {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 0 0 8px;
+}
+.cv-door {
+  min-height: calc(100vh - 140px);
+}
+.cv-door-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.cv-door-fx canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.cv-door-stage {
+  position: relative;
+  z-index: 1;
+  padding-top: 8px;
+}
+.cv-door-title {
+  font-weight: 400;
+  margin: 0 0 8px;
+}
+.cv-door-lead { max-width: 36em; }
+.cv-door-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 56px;
+}
+.cv-door-card {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px 20px 20px;
+  text-decoration: none;
+  color: var(--ink);
+}
+.cv-door-card:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--surface);
+}
+.cv-door-card-kicker {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-deep);
+  margin-bottom: 8px;
+}
+.cv-door-card-title {
+  font-size: 18px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+.cv-door-card p { margin: 0; }
+
+.cv-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 22px;
+}
+.cv-subnav-link {
+  font-size: 13px;
+  color: var(--ink-2);
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.cv-subnav-link:hover { color: var(--ink); text-decoration: none; }
+.cv-subnav-link.active {
+  color: var(--accent-deep);
+  background: var(--accent-tint);
+  border-color: var(--line);
+}
+
+.cv-search-label {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-3);
+  margin: 0 0 6px;
+}
+.cv-search-input {
+  width: 100%;
+  max-width: 520px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+}
+.cv-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.cv-search-status { min-height: 1.2em; margin: 8px 0 16px; }
+
+.cv-hit {
+  display: block;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+  color: var(--ink);
+}
+.cv-hit:hover { text-decoration: none; color: var(--ink); }
+.cv-hit-kind {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-right: 8px;
+}
+.cv-hit-title { font-weight: 500; }
+.cv-hit-sn {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.cv-hit mark {
+  background: var(--accent-tint);
+  color: inherit;
+}
+
+.cv-kind-bar { margin-top: 14px; }
+.cv-teach-head { margin-bottom: 16px; }
+.cv-teach-search-row { margin-bottom: 16px; }
+.cv-teach { min-height: 420px; }
+
+.cv-convention-note {
+  font-size: 13px;
+  color: var(--ink-2);
+  margin: 10px 0 0;
+}
+
+@media (max-width: 860px) {
+  .cv-door-cards { grid-template-columns: 1fr; margin-top: 28px; }
+  .cv-door { min-height: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-door-card { transition: none; }
+}

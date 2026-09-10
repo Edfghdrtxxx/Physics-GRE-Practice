@@ -741,8 +741,6 @@ PGRE.views.dashboard = (function () {
       var countdownNum = document.querySelector('.countdown-num');
       if (countdownNum) countdownNum.classList.add('countdown-breathe');
     }
-    var todayAgenda = document.getElementById('today-agenda');
-    if (todayAgenda) todayAgenda.classList.add('today-draw');
 
     var tfBtn = document.getElementById('today-formulas-btn');
     if (tfBtn) tfBtn.addEventListener('click', startFormulaFromToday);

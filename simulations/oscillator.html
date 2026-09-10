@@ -339,25 +339,43 @@
       height: 175px;
     }
 
-    /* Controls Panel */
+    /* Parameters overlay (collapsed by default; not in page flow) */
     .sim-controls {
+      display: none;
+      position: fixed;
+      z-index: 50;
+      width: 22rem;
+      max-width: calc(100vw - 24px);
+      max-height: 60vh;
+      overflow: hidden;
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: 14px 18px;
-      display: flex;
+      padding: 0;
       flex-direction: column;
-      gap: 12px;
+      gap: 0;
+      box-shadow: 0 1px 3px var(--shadow);
     }
 
-    .sim-controls-top {
+    .sim-controls.is-open {
+      display: flex;
+    }
+
+    .sim-controls-titlebar {
       display: flex;
       justify-content: space-between;
       align-items: center;
       border-bottom: 1px solid var(--line);
-      padding-bottom: 10px;
-      flex-wrap: wrap;
+      padding: 10px 12px;
+      flex-shrink: 0;
       gap: 8px;
+      cursor: move;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .sim-controls-titlebar .sim-btn {
+      cursor: pointer;
     }
 
     .sim-controls-title {
@@ -366,6 +384,15 @@
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: var(--ink-2);
+    }
+
+    .sim-controls-body {
+      overflow-y: auto;
+      padding: 12px 14px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
     }
 
     .sim-presets {
@@ -377,8 +404,8 @@
     /* Sliders Grid */
     .sim-sliders-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px 28px;
+      grid-template-columns: 1fr;
+      gap: 12px;
     }
 
     .sim-slider-row {
@@ -451,9 +478,6 @@
       .sim-grid {
         grid-template-columns: 1fr;
       }
-      .sim-sliders-grid {
-        grid-template-columns: 1fr;
-      }
     }
   </style>
 </head>
@@ -466,6 +490,7 @@
         <div id="sim-math-header" class="sim-equation"></div>
       </div>
       <div class="sim-header-right">
+        <button id="sim-params-toggle" class="sim-btn" type="button" aria-expanded="false" aria-controls="sim-controls">Parameters</button>
         <button id="sim-theme-toggle" class="sim-btn" type="button">Dark mode</button>
       </div>
     </header>
@@ -561,10 +586,13 @@
       </div>
     </div>
 
-    <!-- Controls Panel -->
-    <div class="sim-controls">
-      <div class="sim-controls-top">
+    <!-- Parameters overlay (out of flow; opened from header) -->
+    <div class="sim-controls" id="sim-controls">
+      <div class="sim-controls-titlebar" id="sim-controls-drag">
         <div class="sim-controls-title">Simulation Parameters</div>
+        <button id="sim-params-close" class="sim-btn" type="button">Close</button>
+      </div>
+      <div class="sim-controls-body">
         <div class="sim-presets">
           <button id="preset-res" class="sim-btn active" onclick="applyPreset(0.15, 2.0, 1.0, 2.0, this)">Resonance</button>
           <button class="sim-btn" onclick="applyPreset(0.01, 2.0, 1.0, 2.2, this)">Beats</button>
@@ -573,55 +601,55 @@
           <button class="sim-btn" onclick="applyPreset(1.80, 2.0, 1.0, 2.0, this)">Overdamped</button>
           <button class="sim-btn" onclick="applyPreset(0.15, 2.0, 1.5, 4.5, this)">High Frequency</button>
         </div>
-      </div>
 
-      <div class="sim-sliders-grid">
-        <!-- Slider: Zeta -->
-        <div class="sim-slider-row">
-          <div class="sim-slider-head">
-            <span class="sim-param-name">
-              <span id="param-label-zeta"></span>
-              <span class="sim-param-desc">(Damping ratio)</span>
-            </span>
-            <span id="val-zeta" class="sim-param-val">0.15</span>
+        <div class="sim-sliders-grid">
+          <!-- Slider: Zeta -->
+          <div class="sim-slider-row">
+            <div class="sim-slider-head">
+              <span class="sim-param-name">
+                <span id="param-label-zeta"></span>
+                <span class="sim-param-desc">(Damping ratio)</span>
+              </span>
+              <span id="val-zeta" class="sim-param-val">0.15</span>
+            </div>
+            <input type="range" id="slider-zeta" min="0.0" max="2.0" step="0.01" value="0.15">
           </div>
-          <input type="range" id="slider-zeta" min="0.0" max="2.0" step="0.01" value="0.15">
-        </div>
 
-        <!-- Slider: Omega 0 -->
-        <div class="sim-slider-row">
-          <div class="sim-slider-head">
-            <span class="sim-param-name">
-              <span id="param-label-omega0"></span>
-              <span class="sim-param-desc">(Natural frequency)</span>
-            </span>
-            <span id="val-omega0" class="sim-param-val">2.00</span>
+          <!-- Slider: Omega 0 -->
+          <div class="sim-slider-row">
+            <div class="sim-slider-head">
+              <span class="sim-param-name">
+                <span id="param-label-omega0"></span>
+                <span class="sim-param-desc">(Natural frequency)</span>
+              </span>
+              <span id="val-omega0" class="sim-param-val">2.00</span>
+            </div>
+            <input type="range" id="slider-omega0" min="0.5" max="4.0" step="0.05" value="2.00">
           </div>
-          <input type="range" id="slider-omega0" min="0.5" max="4.0" step="0.05" value="2.00">
-        </div>
 
-        <!-- Slider: F0 -->
-        <div class="sim-slider-row">
-          <div class="sim-slider-head">
-            <span class="sim-param-name">
-              <span id="param-label-F0"></span>
-              <span class="sim-param-desc">(Driving force amplitude)</span>
-            </span>
-            <span id="val-F0" class="sim-param-val">1.00</span>
+          <!-- Slider: F0 -->
+          <div class="sim-slider-row">
+            <div class="sim-slider-head">
+              <span class="sim-param-name">
+                <span id="param-label-F0"></span>
+                <span class="sim-param-desc">(Driving force amplitude)</span>
+              </span>
+              <span id="val-F0" class="sim-param-val">1.00</span>
+            </div>
+            <input type="range" id="slider-F0" min="0.0" max="3.0" step="0.05" value="1.00">
           </div>
-          <input type="range" id="slider-F0" min="0.0" max="3.0" step="0.05" value="1.00">
-        </div>
 
-        <!-- Slider: Omega -->
-        <div class="sim-slider-row">
-          <div class="sim-slider-head">
-            <span class="sim-param-name">
-              <span id="param-label-omega"></span>
-              <span class="sim-param-desc">(Driving frequency)</span>
-            </span>
-            <span id="val-omega" class="sim-param-val">2.00</span>
+          <!-- Slider: Omega -->
+          <div class="sim-slider-row">
+            <div class="sim-slider-head">
+              <span class="sim-param-name">
+                <span id="param-label-omega"></span>
+                <span class="sim-param-desc">(Driving frequency)</span>
+              </span>
+              <span id="val-omega" class="sim-param-val">2.00</span>
+            </div>
+            <input type="range" id="slider-omega" min="0.1" max="5.0" step="0.05" value="2.00">
           </div>
-          <input type="range" id="slider-omega" min="0.1" max="5.0" step="0.05" value="2.00">
         </div>
       </div>
     </div>
@@ -774,6 +802,139 @@
       const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
       applyTheme(!isDark);
     });
+
+    // ---------------------------------------------------------
+    // Collapsible Parameters overlay
+    // ---------------------------------------------------------
+    const paramsToggle = document.getElementById('sim-params-toggle');
+    const paramsClose = document.getElementById('sim-params-close');
+    const paramsPanel = document.getElementById('sim-controls');
+    const paramsDragHandle = document.getElementById('sim-controls-drag');
+    let paramsOpen = false;
+    let paramsDragged = false;
+    let paramsDragging = false;
+    let paramsPos = { left: 0, top: 0 };
+    let paramsDragOffset = { x: 0, y: 0 };
+
+    function clampParamsPos(left, top) {
+      const w = paramsPanel.offsetWidth;
+      const maxL = Math.max(0, window.innerWidth - w);
+      const formula = document.getElementById('sim-math-header');
+      const header = document.querySelector('.sim-header');
+      const playback = document.querySelector('.sim-playback-controls');
+      const fRect = formula.getBoundingClientRect();
+      const hRect = header.getBoundingClientRect();
+      let minTop = Math.max(hRect.bottom, fRect.bottom) + 8;
+      if (playback) {
+        minTop = Math.max(minTop, playback.getBoundingClientRect().bottom + 8);
+      }
+      // Keep horizontal clamp. Do not raise a tall card to fit in the
+      // viewport — that would cover Pause/speed/scrubber and the formula.
+      return {
+        left: Math.min(Math.max(0, left), maxL),
+        top: Math.max(minTop, top)
+      };
+    }
+
+    function applyParamsPos() {
+      paramsPanel.style.left = paramsPos.left + 'px';
+      paramsPanel.style.top = paramsPos.top + 'px';
+    }
+
+    function defaultParamsPos() {
+      const formula = document.getElementById('sim-math-header');
+      const header = document.querySelector('.sim-header');
+      const playback = document.querySelector('.sim-playback-controls');
+      const drawing = document.querySelector('.sim-mech-canvas-wrap');
+      const fRect = formula.getBoundingClientRect();
+      const hRect = header.getBoundingClientRect();
+      const bRect = paramsToggle.getBoundingClientRect();
+      const w = paramsPanel.offsetWidth;
+      const left = bRect.right - w;
+      const minTop = Math.max(hRect.bottom, fRect.bottom) + 8;
+      let top = minTop;
+      if (playback) {
+        top = Math.max(top, playback.getBoundingClientRect().bottom + 8);
+      }
+      if (drawing) {
+        top = Math.max(top, drawing.getBoundingClientRect().top);
+      }
+      // Keep the title bar below playback when it would still be on-screen.
+      // Full clamp can pull a 60vh card up over the speed cluster.
+      const maxL = Math.max(0, window.innerWidth - w);
+      const leftClamped = Math.min(Math.max(0, left), maxL);
+      if (top >= window.innerHeight) {
+        return { left: leftClamped, top: minTop };
+      }
+      return { left: leftClamped, top: top };
+    }
+
+    function repositionParamsOverlay() {
+      if (!paramsOpen) return;
+      if (!paramsDragged) paramsPos = defaultParamsPos();
+      else paramsPos = clampParamsPos(paramsPos.left, paramsPos.top);
+      applyParamsPos();
+    }
+
+    function openParamsOverlay() {
+      if (paramsOpen) return;
+      paramsOpen = true;
+      paramsPanel.classList.add('is-open');
+      paramsToggle.classList.add('active');
+      paramsToggle.setAttribute('aria-expanded', 'true');
+      repositionParamsOverlay();
+    }
+
+    function closeParamsOverlay() {
+      if (!paramsOpen) return;
+      paramsOpen = false;
+      paramsPanel.classList.remove('is-open');
+      paramsToggle.classList.remove('active');
+      paramsToggle.setAttribute('aria-expanded', 'false');
+    }
+
+    function toggleParamsOverlay() {
+      if (paramsOpen) closeParamsOverlay();
+      else openParamsOverlay();
+    }
+
+    paramsToggle.addEventListener('click', toggleParamsOverlay);
+    paramsClose.addEventListener('click', closeParamsOverlay);
+
+    function onParamsPointerMove(e) {
+      if (!paramsDragging) return;
+      paramsDragged = true;
+      paramsPos = clampParamsPos(
+        e.clientX - paramsDragOffset.x,
+        e.clientY - paramsDragOffset.y
+      );
+      applyParamsPos();
+    }
+
+    function endParamsPointerDrag() {
+      paramsDragging = false;
+      document.removeEventListener('pointermove', onParamsPointerMove);
+      document.removeEventListener('pointerup', endParamsPointerDrag);
+      document.removeEventListener('pointercancel', endParamsPointerDrag);
+    }
+
+    paramsDragHandle.addEventListener('pointerdown', (e) => {
+      if (e.button != null && e.button !== 0) return;
+      if (e.target.closest('#sim-params-close')) return;
+      const rect = paramsPanel.getBoundingClientRect();
+      paramsDragging = true;
+      paramsDragOffset.x = e.clientX - rect.left;
+      paramsDragOffset.y = e.clientY - rect.top;
+      if (paramsDragHandle.setPointerCapture && e.pointerId != null) {
+        try { paramsDragHandle.setPointerCapture(e.pointerId); } catch (err) {}
+      }
+      document.addEventListener('pointermove', onParamsPointerMove);
+      document.addEventListener('pointerup', endParamsPointerDrag);
+      document.addEventListener('pointercancel', endParamsPointerDrag);
+      e.preventDefault();
+    });
+
+    window.addEventListener('resize', repositionParamsOverlay);
 
     // ---------------------------------------------------------
     // Physics Engine: 4th Order Runge-Kutta (RK4) ODE Solver
@@ -930,6 +1091,11 @@
 
     // Keyboard Shortcuts for Speed & Playback
     window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && paramsOpen) {
+        e.preventDefault();
+        closeParamsOverlay();
+        return;
+      }
       if (e.target.tagName === 'INPUT') return;
       if (e.code === 'Space') {
         e.preventDefault();

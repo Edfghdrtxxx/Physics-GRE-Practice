@@ -10,6 +10,8 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
   var modalAnimId = null;
   var currentViz = null;
   var currentState = null;
+  var paramsOverlayOpen = false;
+  var paramsOverlayPos = null;
 
   // Active inline visualizer in the study/flip card view
   var inlineAnimId = null;
@@ -98,6 +100,14 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
         ],
         throwOnError: false
       });
+    }
+    if (el.querySelector && el.querySelector(".viz-formula-banner")) {
+      refreshUndraggedParamsOverlay();
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(function() {
+          refreshUndraggedParamsOverlay();
+        });
+      }
     }
   }
 
@@ -532,6 +542,188 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     activeInlineState = null;
   };
 
+  function overlayRect(el) {
+    if (el && typeof el.getBoundingClientRect === "function") return el.getBoundingClientRect();
+    return { width: 0, height: 0, top: 0, left: 0, bottom: 0, right: 0 };
+  }
+
+  function isParamsCloseControl(node) {
+    var n = node;
+    while (n && n !== document) {
+      if (n.id === "viz-params-close-btn") return true;
+      n = n.parentNode;
+    }
+    return false;
+  }
+
+  function clampParamsOverlayPos(left, top, overlay, host) {
+    var hostR = overlayRect(host);
+    var cardR = overlayRect(overlay);
+    var w = cardR.width || 336;
+    var h = cardR.height || 120;
+    var maxL = hostR.width - w;
+    var maxT = hostR.height - h;
+    left = Number(left);
+    top = Number(top);
+    if (!isFinite(maxL) || maxL < 0) maxL = 0;
+    if (!isFinite(maxT) || maxT < 0) maxT = 0;
+    if (!isFinite(left) || left < 0) left = 0;
+    if (!isFinite(top) || top < 0) top = 0;
+    if (left > maxL) left = maxL;
+    if (top > maxT) top = maxT;
+    return { left: left, top: top };
+  }
+
+  function writeParamsOverlayPos(overlay, host, left, top) {
+    var pos = clampParamsOverlayPos(left, top, overlay, host);
+    overlay.style.left = pos.left + "px";
+    overlay.style.top = pos.top + "px";
+    return pos;
+  }
+
+  function applyParamsOverlayPos(overlay, host, left, top) {
+    paramsOverlayPos = writeParamsOverlayPos(overlay, host, left, top);
+  }
+
+  function placeParamsOverlayDefault(overlay, host) {
+    var hostR = overlayRect(host);
+    var cardR = overlayRect(overlay);
+    var w = cardR.width || 336;
+    var pad = 12;
+    var left = hostR.width - w - pad;
+    var btn = document.getElementById("viz-params-btn");
+    if (btn) {
+      left = overlayRect(btn).right - hostR.left - w;
+    }
+    var top = pad;
+    var banner = host.querySelector(".viz-formula-banner");
+    if (banner) {
+      top = overlayRect(banner).bottom - hostR.top + 8;
+    }
+    writeParamsOverlayPos(overlay, host, left, top);
+  }
+
+  function refreshUndraggedParamsOverlay() {
+    if (paramsOverlayPos) return;
+    var overlay = document.getElementById("viz-controls-panel");
+    var host = document.getElementById("viz-modal-window");
+    if (!overlay || !host || !paramsOverlayOpen) return;
+    placeParamsOverlayDefault(overlay, host);
+  }
+
+  function hideParamsOverlay() {
+    var overlay = document.getElementById("viz-controls-panel");
+    var btn = document.getElementById("viz-params-btn");
+    if (overlay) {
+      overlay.classList.remove("viz-params-open");
+      overlay.hidden = true;
+      overlay.setAttribute("hidden", "");
+    }
+    if (btn) btn.setAttribute("aria-expanded", "false");
+    paramsOverlayOpen = false;
+  }
+
+  function showParamsOverlay() {
+    var overlay = document.getElementById("viz-controls-panel");
+    var host = document.getElementById("viz-modal-window");
+    var btn = document.getElementById("viz-params-btn");
+    if (!overlay || !host) return;
+    overlay.hidden = false;
+    if (overlay.removeAttribute) overlay.removeAttribute("hidden");
+    overlay.classList.add("viz-params-open");
+    if (btn) btn.setAttribute("aria-expanded", "true");
+    paramsOverlayOpen = true;
+    if (paramsOverlayPos) {
+      applyParamsOverlayPos(overlay, host, paramsOverlayPos.left, paramsOverlayPos.top);
+    } else {
+      placeParamsOverlayDefault(overlay, host);
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(function() {
+          refreshUndraggedParamsOverlay();
+        });
+      }
+    }
+  }
+
+  function toggleParamsOverlay() {
+    if (paramsOverlayOpen) hideParamsOverlay();
+    else showParamsOverlay();
+  }
+
+  function bindParamsOverlay() {
+    var overlay = document.getElementById("viz-controls-panel");
+    var host = document.getElementById("viz-modal-window");
+    var openBtn = document.getElementById("viz-params-btn");
+    var closeBtn = document.getElementById("viz-params-close-btn");
+    var handle = document.getElementById("viz-params-handle");
+    if (!overlay || !host) return;
+
+    if (openBtn) {
+      openBtn.addEventListener("click", function() {
+        toggleParamsOverlay();
+      });
+    }
+    if (closeBtn) {
+      closeBtn.addEventListener("click", function(e) {
+        if (e && e.stopPropagation) e.stopPropagation();
+        hideParamsOverlay();
+      });
+    }
+    if (!handle) return;
+
+    var dragging = false;
+    var startX = 0;
+    var startY = 0;
+    var origL = 0;
+    var origT = 0;
+
+    function endDrag() {
+      dragging = false;
+      if (document.removeEventListener) {
+        document.removeEventListener("pointermove", onDragMove);
+        document.removeEventListener("pointerup", onDragUp);
+        document.removeEventListener("pointercancel", onDragUp);
+      }
+    }
+
+    function onDragMove(e) {
+      if (!dragging) return;
+      var dx = (e && e.clientX != null) ? e.clientX - startX : 0;
+      var dy = (e && e.clientY != null) ? e.clientY - startY : 0;
+      applyParamsOverlayPos(overlay, host, origL + dx, origT + dy);
+    }
+
+    function onDragUp() {
+      endDrag();
+    }
+
+    handle.addEventListener("pointerdown", function(e) {
+      if (e && e.button != null && e.button !== 0) return;
+      if (isParamsCloseControl(e && e.target)) return;
+      dragging = true;
+      startX = e && e.clientX != null ? e.clientX : 0;
+      startY = e && e.clientY != null ? e.clientY : 0;
+      origL = parseFloat(overlay.style.left);
+      origT = parseFloat(overlay.style.top);
+      if (!isFinite(origL)) origL = 0;
+      if (!isFinite(origT)) origT = 0;
+      if (handle.setPointerCapture && e && e.pointerId != null) {
+        try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+      }
+      if (e && e.preventDefault) e.preventDefault();
+      if (document.addEventListener) {
+        document.addEventListener("pointermove", onDragMove);
+        document.addEventListener("pointerup", onDragUp);
+        document.addEventListener("pointercancel", onDragUp);
+      }
+    });
+  }
+
+  function resetParamsOverlayState() {
+    paramsOverlayOpen = false;
+    paramsOverlayPos = null;
+  }
+
   // --- MODAL DIALOG / FULLSCREEN VISUALIZER ---
   window.PGRE.openVisualizerModal = function(cardId) {
     // Synchronous immediate cleanup of previous modal to avoid delayed timeout wipe
@@ -546,6 +738,7 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     activeModal = null;
     currentViz = null;
     currentState = null;
+    resetParamsOverlayState();
 
     var viz = window.PGRE.visualizers && window.PGRE.visualizers[cardId];
     if (viz && typeof viz.draw === "function") {
@@ -582,7 +775,10 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
             "<h2 class=\"viz-header-title\">" + esc(viz.title) + "</h2>" +
             topicBadge +
           "</div>" +
-          "<button class=\"viz-close-btn\" id=\"viz-close-btn\" aria-label=\"Close modal\">&times;</button>" +
+          "<div class=\"viz-header-actions\">" +
+            "<button type=\"button\" class=\"viz-params-btn\" id=\"viz-params-btn\" aria-expanded=\"false\" aria-controls=\"viz-controls-panel\">Parameters</button>" +
+            "<button type=\"button\" class=\"viz-close-btn\" id=\"viz-close-btn\" aria-label=\"Close modal\">&times;</button>" +
+          "</div>" +
         "</div>" +
         "<div class=\"viz-modal-body\" id=\"viz-modal-body\">" +
           formatFormulaBanner(viz.formulaLatex) +
@@ -591,10 +787,6 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
               "<canvas id=\"viz-canvas\" width=\"640\" height=\"420\"></canvas>" +
             "</div>" +
             "<div class=\"viz-legend-strip\" id=\"viz-legend-strip\" aria-live=\"polite\"></div>" +
-            "<div class=\"viz-controls-panel\" id=\"viz-controls-panel\">" +
-              "<div class=\"viz-controls-heading\">Parameters & Controls</div>" +
-              "<div id=\"viz-params-container\"></div>" +
-            "</div>" +
           "</div>" +
           "<div class=\"viz-info-section\">" +
             "<div class=\"viz-info-nav\">" +
@@ -616,6 +808,15 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
             "<div class=\"viz-tab-pane\" id=\"viz-pane-challenge\">" + challengeHTML + "</div>" +
           "</div>" +
         "</div>" +
+        "<div class=\"viz-controls-panel viz-params-overlay\" id=\"viz-controls-panel\" hidden>" +
+          "<div class=\"viz-controls-heading\" id=\"viz-params-handle\">" +
+            "<span>Parameters & Controls</span>" +
+            "<button type=\"button\" class=\"viz-params-close-btn\" id=\"viz-params-close-btn\">Close</button>" +
+          "</div>" +
+          "<div class=\"viz-params-overlay-body\">" +
+            "<div id=\"viz-params-container\"></div>" +
+          "</div>" +
+        "</div>" +
       "</div>";
 
     document.body.appendChild(backdrop);
@@ -634,6 +835,7 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     backdrop.addEventListener("click", function(e) {
       if (e.target === backdrop) window.PGRE.closeVisualizerModal();
     });
+    bindParamsOverlay();
 
     // Tab switcher
     backdrop.querySelectorAll("[data-viz-tab]").forEach(function(btn) {
@@ -852,6 +1054,7 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
       activeModal = null;
       currentViz = null;
       currentState = null;
+      resetParamsOverlayState();
       setTimeout(function() {
         if (modalToRemove && modalToRemove.parentNode) {
           modalToRemove.parentNode.removeChild(modalToRemove);
@@ -863,6 +1066,10 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
   // Keyboard shortcut: Escape closes modal visualizer
   if (typeof window !== "undefined" && typeof window.addEventListener === "function") window.addEventListener("keydown", function(e) {
     if (e.key === "Escape" && activeModal) {
+      if (paramsOverlayOpen) {
+        hideParamsOverlay();
+        return;
+      }
       window.PGRE.closeVisualizerModal();
     }
   });

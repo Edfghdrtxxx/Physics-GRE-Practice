@@ -801,20 +801,38 @@ assert(!/310px/.test(simGridBody), '.viz-sim-grid rule body does not mention 310
 var probeId = EXPECTED_IDS.filter(function (id) { return visualizers[id] && typeof visualizers[id].draw === 'function'; })[0];
 assert(!!probeId, 'have a registered viz to drive chrome builders (' + (probeId || 'none') + ')');
 
-function assertStackedGrid(rootEl, label) {
+function assertStackedGrid(rootEl, label, opts) {
+  opts = opts || {};
   var grid = rootEl.querySelector('.viz-sim-grid');
   assert(!!grid, label + ' emits .viz-sim-grid');
   if (!grid) return;
   var kids = elementChildren(grid);
-  assert(kids.length >= 3, label + ' .viz-sim-grid has ≥3 children (got ' + kids.length + ')');
+  var expectControls = opts.controlsInGrid !== false;
+  if (expectControls) {
+    assert(kids.length >= 3, label + ' .viz-sim-grid has ≥3 children (got ' + kids.length + ')');
+  } else {
+    assert(kids.length === 2, label + ' .viz-sim-grid has canvas + legend only (got ' + kids.length + ')');
+  }
   assert(classHas(kids[0], 'viz-canvas-wrapper') || (kids[0] && kids[0].querySelector && kids[0].querySelector('canvas')),
     label + ' first grid child is the canvas wrapper');
   assert(classHas(kids[1], 'viz-legend-strip'),
     label + ' second grid child is .viz-legend-strip');
-  assert(classHas(kids[2], 'viz-controls-panel'),
-    label + ' third grid child is .viz-controls-panel');
+  if (expectControls) {
+    assert(classHas(kids[2], 'viz-controls-panel'),
+      label + ' third grid child is .viz-controls-panel');
+  } else {
+    assert(!grid.querySelector('.viz-controls-panel'),
+      label + ' does not keep .viz-controls-panel in the sim grid');
+  }
   var canvas = grid.querySelector('canvas');
   assert(!!canvas, label + ' grid contains a canvas');
+}
+
+function fireClick(el) {
+  var list = el && el.listeners && el.listeners.click;
+  if (!list) return;
+  var evt = { type: 'click', target: el, preventDefault: function () {}, stopPropagation: function () {} };
+  for (var i = 0; i < list.length; i++) list[i](evt);
 }
 
 if (probeId) {
@@ -822,7 +840,7 @@ if (probeId) {
     PGRE.openVisualizerModal(probeId);
     var backdrop = loaded.document.getElementById('viz-modal-backdrop');
     assert(!!backdrop, 'openVisualizerModal mounts #viz-modal-backdrop');
-    if (backdrop) assertStackedGrid(backdrop, 'modal');
+    if (backdrop) assertStackedGrid(backdrop, 'modal', { controlsInGrid: false });
     var modalCanvas = loaded.document.getElementById('viz-canvas');
     assert(!!modalCanvas, 'modal canvas is #viz-canvas');
     if (modalCanvas) {
@@ -830,6 +848,69 @@ if (probeId) {
         'modal canvas default size is ' + LAB_W + '×' + LAB_H +
         ' (got ' + modalCanvas.width + '×' + modalCanvas.height + ')');
     }
+    var modalCanvasCss = cssRuleBody(cssSrc, '.viz-modal-body .viz-canvas-wrapper');
+    assert(/clamp\(\s*300px\s*,\s*44vh\s*,\s*420px\s*\)/.test(modalCanvasCss),
+      'modal canvas wrapper keeps height: clamp(300px, 44vh, 420px)');
+    var overlayCss = cssRuleBody(cssSrc, '.viz-params-overlay');
+    assert(!!overlayCss, 'css/visualizer.css declares .viz-params-overlay');
+    assert(/position\s*:\s*absolute/.test(overlayCss), '.viz-params-overlay is position:absolute');
+    assert(/21rem/.test(overlayCss), '.viz-params-overlay width is 21rem');
+    assert(/60vh/.test(overlayCss), '.viz-params-overlay max-height is 60vh');
+    assert(!/310px/.test(overlayCss), '.viz-params-overlay does not use a 310px column');
+    var formulaBannerCss = cssRuleBody(cssSrc, '.viz-formula-banner');
+    assert(!!formulaBannerCss, 'css/visualizer.css declares .viz-formula-banner');
+    assert(!/flex-shrink/.test(formulaBannerCss),
+      'shared .viz-formula-banner does not set flex-shrink');
+    assert(!/overflow-y/.test(formulaBannerCss),
+      'shared .viz-formula-banner does not set overflow-y');
+    var modalBannerCss = cssRuleBody(cssSrc, '.viz-modal-body .viz-formula-banner');
+    assert(/flex-shrink\s*:\s*0/.test(modalBannerCss),
+      'modal .viz-formula-banner keeps flex-shrink: 0');
+
+    var actions = backdrop && backdrop.querySelector('.viz-header-actions');
+    assert(!!actions, 'draw modal header has .viz-header-actions');
+    var actionKids = elementChildren(actions);
+    assert(actionKids[0] && actionKids[0].id === 'viz-params-btn',
+      'Parameters button is immediately left of close');
+    assert(actionKids[1] && actionKids[1].id === 'viz-close-btn',
+      'close button remains last in the header actions');
+    assert(actionKids[0] && /^\s*Parameters\s*$/.test(actionKids[0].textContent),
+      'Parameters button is text-only');
+
+    var overlay = loaded.document.getElementById('viz-controls-panel');
+    assert(!!overlay && classHas(overlay, 'viz-params-overlay'),
+      'draw modal mounts #viz-controls-panel as the compact overlay');
+    assert(overlay.hidden && !classHas(overlay, 'viz-params-open'),
+      'parameters overlay is collapsed by default');
+    var handle = loaded.document.getElementById('viz-params-handle');
+    assert(!!handle && classHas(handle, 'viz-controls-heading'),
+      'overlay heading is the drag handle');
+    assert(handle && handle.textContent.indexOf('Parameters & Controls') >= 0,
+      'overlay heading is Parameters & Controls');
+    var closeParams = loaded.document.getElementById('viz-params-close-btn');
+    assert(!!closeParams && /^\s*Close\s*$/.test(closeParams.textContent),
+      'overlay has a Close text button');
+    assert(!!loaded.document.getElementById('viz-params-container'),
+      'buildControls still targets #viz-params-container');
+
+    var formulaBanner = backdrop && backdrop.querySelector('.viz-formula-banner');
+    assert(!!formulaBanner, 'draw modal emits .viz-formula-banner above the canvas');
+    assert(formulaBanner && String(formulaBanner.textContent || '').trim().length > 0,
+      'formula banner contains formula text');
+
+    var paramsBtn = loaded.document.getElementById('viz-params-btn');
+    fireClick(paramsBtn);
+    assert(overlay && classHas(overlay, 'viz-params-open') && !overlay.hidden,
+      'Parameters button opens the overlay');
+    fireClick(closeParams);
+    assert(overlay && !classHas(overlay, 'viz-params-open') && overlay.hidden,
+      'Close on the card dismisses the overlay');
+    fireClick(paramsBtn);
+    assert(overlay && classHas(overlay, 'viz-params-open'),
+      'Parameters button reopens the overlay');
+    fireClick(paramsBtn);
+    assert(overlay && !classHas(overlay, 'viz-params-open'),
+      'Parameters button toggles the overlay closed');
   } catch (err) {
     assert(false, 'openVisualizerModal threw: ' + err.message);
   }
@@ -886,7 +967,10 @@ try {
   PGRE.openVisualizerModal('cpg-f-test-nonviz');
   var nonvizBackdrop = loaded.document.getElementById('viz-modal-backdrop');
   assert(!!nonvizBackdrop, 'openVisualizerModal mounts #viz-modal-backdrop for non-visualizer card');
-  assert(!!nonvizBackdrop.querySelector('.viz-detail-window'), 'non-visualizer modal has .viz-detail-window');
+  assert(!!nonvizBackdrop.querySelector('.viz-detail-window'),
+    'non-visualizer modal has .viz-detail-window');
+  assert(!nonvizBackdrop.querySelector('#viz-params-btn'),
+    'detail modal has no Parameters button');
   assert(nonvizBackdrop.innerHTML.indexOf('Kepler Test Law') >= 0, 'detail modal includes card title');
   assert(nonvizBackdrop.innerHTML.indexOf('Classical Mechanics') >= 0, 'detail modal includes topic badge');
   assert(nonvizBackdrop.innerHTML.indexOf('Eq 1.99') >= 0, 'detail modal includes equation tag');
