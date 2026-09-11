@@ -15,7 +15,7 @@ var EXPECTED_IDS = [
   'cpgf-1.35', 'cpgf-1.38', 'cpgf-1.3',
   'cpgf-1.4', 'cpgf-1.22', 'cpgf-1.20',
   'cpgf-1.39', 'cpgf-1.41', 'cpgf-1.42',
-  'cpgf-1.47', 'cpgf-1.24', 'cpgf-1.25',
+  'cpgf-1.47', 'cpgf-1.24', 'cpgf-1.25', 'cpgf-1.48',
   'cpgf-1.26', 'cpgf-1.27', 'cpgf-1.15',
   'cpgf-1.28', 'cpgf-1.29', 'cpgf-1.30',
   'cpgf-1.31', 'cpgf-1.32', 'cpgf-1.33',

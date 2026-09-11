@@ -282,6 +282,57 @@
   letter-spacing: 0.04em;
 }
 
+/* ——— Random letter-swap (nav bands) ———
+   In-flow spacer holds each glyph's box. Both painted copies are
+   absolute so a display:block letter cannot blockify the cell into
+   a full-width row (sidebar links are flex). Clip per cell. */
+.cv-subnav-link { position: relative; }
+.letter-swap {
+  display: inline-flex;
+  flex-flow: row nowrap;
+  align-items: baseline;
+  flex: none;
+  width: max-content;
+  max-width: none;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.letter-swap-cell {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  overflow: hidden;
+  white-space: pre;
+  vertical-align: baseline;
+}
+.letter-swap-s {
+  visibility: hidden;
+  display: inline-block;
+  white-space: pre;
+}
+.letter-swap-a,
+.letter-swap-b {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  white-space: pre;
+}
+.letter-swap-a { transform: translateY(0); }
+.letter-swap-b { transform: translateY(-100%); }
+.letter-swap-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ——— Reduced motion: static everything ——— */
 @media (prefers-reduced-motion: reduce) {
   .skel-bar { animation: none; }
@@ -303,4 +354,6 @@
   .grade-cascade { animation: none; opacity: 1; }
   .xp-pop { animation: none; opacity: 1; transform: none; }
   .btn-primary:hover { transform: none; }
+  .letter-swap-a,
+  .letter-swap-b { transform: none; }
 }

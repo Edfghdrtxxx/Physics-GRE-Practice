@@ -1,4 +1,4 @@
-/* Study plan — Jul 13 → November 1, 2026 in three phases.
+/* Study plan — vault calendar (Week 0 historical + 7 live weeks Sep 14–Nov 1).
    Checking a task grants its XP (once) and counts as study activity. */
 window.PGRE = window.PGRE || {};
 PGRE.views = PGRE.views || {};
@@ -6,27 +6,33 @@ PGRE.views = PGRE.views || {};
 PGRE.views.plan = (function () {
 
   function weekProgress(w) {
-    var done = w.tasks.filter(function (t) { return PGRE.gamify.taskDone(t.id); }).length;
-    return { done: done, total: w.tasks.length, pct: Math.round(100 * done / w.tasks.length) };
+    var tasks = PGRE.weekTasks(w);
+    var done = tasks.filter(function (t) { return PGRE.gamify.taskDone(t.id); }).length;
+    var total = tasks.length;
+    return { done: done, total: total, pct: total ? Math.round(100 * done / total) : 0 };
   }
 
   function body() {
     var ui = PGRE.ui, g = PGRE.gamify;
     var today = PGRE.store.today();
     var days = g.daysToExam();
-    var cw = PGRE.currentWeek();
 
-    var allTasks = 0, allDone = 0;
+    var allTasks = 0, allDone = 0, seen = {};
     PGRE.PLAN.forEach(function (ph) {
       ph.weeks.forEach(function (w) {
-        allTasks += w.tasks.length;
-        allDone += w.tasks.filter(function (t) { return g.taskDone(t.id); }).length;
+        PGRE.weekTasks(w).forEach(function (t) {
+          if (seen[t.id]) return;
+          seen[t.id] = true;
+          allTasks++;
+          if (g.taskDone(t.id)) allDone++;
+        });
       });
     });
 
     var html = '<div class="card hero">' +
       '<div class="hero-left"><h1>Review plan</h1>' +
-      '<p class="muted">July 13 → November 1, 2026 · intensive (~15–17 h/week) · two full passes, five released practice tests, then taper.</p>' +
+      '<p class="muted">Sep 14 → November 1, 2026 · 7 live weeks · 5+6+2 load (~16 h/wk) · checkpoints Oct 4 & Oct 25 · exam-week taper</p>' +
+      '<p class="muted">Mirror of the vault syllabus (8-Week-Syllabus.md) — regenerate: node tools/build-plan.js</p>' +
       ui.meter(100 * allDone / Math.max(1, allTasks)) +
       '<div class="hero-xp-note">' + allDone + ' / ' + allTasks + ' tasks complete</div></div>' +
       '<div class="hero-right"><div class="countdown"><div class="countdown-num">' + days + '</div>' +
@@ -35,8 +41,9 @@ PGRE.views.plan = (function () {
     PGRE.PLAN.forEach(function (phase) {
       var phTasks = 0, phDone = 0;
       phase.weeks.forEach(function (w) {
-        phTasks += w.tasks.length;
-        phDone += w.tasks.filter(function (t) { return g.taskDone(t.id); }).length;
+        var tasks = PGRE.weekTasks(w);
+        phTasks += tasks.length;
+        phDone += tasks.filter(function (t) { return g.taskDone(t.id); }).length;
       });
       html += '<div class="phase"><div class="phase-head"><h2>' + ui.esc(phase.name) + '</h2>' +
         '<span class="muted">' + phDone + '/' + phTasks + '</span></div>' +
@@ -44,6 +51,7 @@ PGRE.views.plan = (function () {
 
       phase.weeks.forEach(function (w) {
         var p = weekProgress(w);
+        var tasks = PGRE.weekTasks(w);
         var isCurrent = today >= w.start && today <= w.end;
         var isPast = today > w.end;
         var state = isCurrent ? 'current' : isPast ? (p.pct === 100 ? 'done' : 'past') : 'future';
@@ -53,8 +61,10 @@ PGRE.views.plan = (function () {
             '<span class="week-title">' + ui.esc(w.title) + '</span>' +
             '<span class="week-meta">~' + w.hours + ' h · ' + p.done + '/' + p.total + '</span>' +
           '</div>' + ui.meter(p.pct, 'meter-thin') + '</summary>' +
+          '<p class="muted week-focus">' + ui.esc(w.focus || '') +
+            (w.notes ? ' — ' + ui.esc(w.notes) : '') + '</p>' +
           '<ul class="task-list">';
-        w.tasks.forEach(function (t) {
+        tasks.forEach(function (t) {
           var done = g.taskDone(t.id);
           html += '<li class="task' + (done ? ' done' : '') + '">' +
             '<label><input type="checkbox" data-task="' + t.id + '" data-xp="' + t.xp + '"' + (done ? ' checked' : '') + '>' +

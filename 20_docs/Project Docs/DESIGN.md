@@ -1,6 +1,6 @@
 # Physics GRE Prep Studio — Design Document
 
-Personal, fully-local study site for the GRE Physics Test (exam day: **Wed, October 28, 2026**).
+Personal, fully-local study site for the GRE Physics Test (exam day: **Sun, November 1, 2026**).
 Everything runs from static files; all data stays on this machine (localStorage + IndexedDB).
 
 ---
@@ -305,20 +305,30 @@ renumbers ids resets card progress (known limitation).
 `{ id: 'formula-deck', kind: 'formula-deck', cards: [...] }` in IndexedDB;
 `PGRE.formulaDeck()` merges both). Keyboard: space flips, 1–4 grade, ← steps back.
 
-## 5. Review plan (data: `js/data-plan.js`)
+## 5. Review plan (generated: `js/data-plan.js`, resolved: `js/plan-engine.js`)
 
-Jul 13 → Oct 28, 2026 · **intensive ~15–17 h/week** · three phases:
+The source of truth is the OrbitOS vault syllabus
+(`20_Project/GRE_Physics_Prep/01_Syllabus_&_Plan/8-Week-Syllabus.md`).
+`tools/build-plan.js` compiles it (plus `### Set NN` titles from
+`03_Topic_Sets/`) into `js/data-plan.js` — a pure-data file, never hand-edited.
+`js/plan-engine.js` resolves each week's task list at runtime (`PGRE.weekTasks`)
+so the Set 02 carry rule can depend on whether `set-02` was finished before
+2026-09-14.
 
-1. **Foundation Pass (W1–W9, Jul 13–Sep 13)** — one deep pass over all 9 topics in
-   exam-weight order (CM, CM, EM, EM, OW, TS, QM, QM+AP, AP+SR), building a formula
-   sheet page per topic.
-2. **Second Pass & Practice Tests (W10–W13, Sep 14–Oct 11)** — finish LM+ST, then fast
-   re-sweeps; one full released ETS exam per week (GR8677 → GR9277 → GR9677 → GR0177),
-   timed, on paper; miss-classification feeds a weak-topic list.
-3. **Sharpen & Taper (W14–W16, Oct 12–28)** — data-driven drilling of the 3 weakest
-   topics, GR1777 + final mock, memorization sweep, logistics, taper. Exam Wednesday Oct 28.
+Sep 7 → Nov 1, 2026 · **3 phases / 8 weeks**:
+
+1. **Week 0 · Historical (Sep 7–13)** — CM Sets 01–05 already assigned; kept so
+   the carry rule resolves. Not replayed.
+2. **Live calendar W1–W6 (Sep 14 – Oct 25)** — 6 live weeks at a **5+6+2** load
+   (~16 h/wk): timed sets, formula recall, misses-first extras. Checkpoints:
+   **Sun Oct 4** paper diagnostic GR0177/GR0877; **Sun Oct 25** 70Q/120 computer
+   rehearsal (2024 Practice Book). Each replaces that week's 5th timed set.
+3. **Exam week · taper (Oct 26 – Nov 1)** — Sets 32–33 new only; weekday timed
+   slots replay the latest miss-heavy set (else 32); Fri logistics, Sat rest,
+   exam Sun Nov 1 14:00. Deferred new: 30/31/34/35.
 
 Weeks render as collapsible cards; the current week auto-opens; checking tasks grants XP once.
+Regenerate after syllabus edits: `node tools/build-plan.js`.
 
 ## 6. Design-system notes (dataviz conventions applied)
 

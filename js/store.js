@@ -167,6 +167,15 @@ PGRE.store = {
       this.state.migrations.ankiReset2026 = new Date().toISOString();
       this.save();
     }
+    // planRebuild2026 — drop orphaned Jul-13 plan ids (XP already granted is kept)
+    if (!this.state.migrations.planRebuild2026) {
+      var plan = this.state.plan || {};
+      Object.keys(plan).forEach(function (k) {
+        if (/^w\d{2}t\d+$/.test(k)) delete plan[k];
+      });
+      this.state.migrations.planRebuild2026 = new Date().toISOString();
+      this.save();
+    }
     // ITEM 5 — one-time Easy-interval recompute. Runs AFTER the try/catch so it
     // never trips the corruption-recovery path, and after migrate() has
     // backfilled settings.examDate. PGRE.srs is fully loaded before boot calls

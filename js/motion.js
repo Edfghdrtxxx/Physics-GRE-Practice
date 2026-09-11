@@ -1,5 +1,6 @@
 /* ——— Motion system ———
-   Public API: PGRE.motion = { loader, countUp, animateMeter, stagger, reduced }
+   Public API: PGRE.motion = { loader, countUp, animateMeter, stagger,
+     letterSwapNav, reduced }
    All animations respect prefers-reduced-motion and pause when tab hidden. */
 (function () {
   'use strict';
@@ -213,6 +214,161 @@
     requestAnimationFrame(function () {
       requestAnimationFrame(function () { el.style.width = target + '%'; });
     });
+  };
+
+  /* ——— Random letter-swap (nav bands) ———
+     Port of Fancy Components' RandomLetterSwapForward (MIT): on hover,
+     letters slide vertically in shuffled order while a duplicate slides
+     in, then snap to rest. Demo timings: stagger 25ms, spring 600ms.
+     Reduced motion: no-op (labels stay plain text). */
+  var SWAP_MS = 600;
+  var SWAP_STAGGER = 25;
+  var SWAP_EASE = 'cubic-bezier(0.34, 1.4, 0.64, 1)'; /* --ease-spring */
+
+  function swapShuffle(n) {
+    var a = [];
+    var i, j, t;
+    for (i = 0; i < n; i++) a.push(i);
+    for (i = n - 1; i > 0; i--) {
+      j = Math.floor(Math.random() * (i + 1));
+      t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  function firstLabelTextNode(el) {
+    var kids = el.childNodes || [];
+    var i, child, text;
+    for (i = 0; i < kids.length; i++) {
+      child = kids[i];
+      if (child.nodeType !== 3) continue;
+      text = String(child.textContent || '');
+      if (text.replace(/\s+/g, '')) return child;
+    }
+    return null;
+  }
+
+  function buildSwap(label) {
+    var wrap = document.createElement('span');
+    wrap.className = 'letter-swap';
+    wrap.setAttribute('aria-hidden', 'true');
+    var i, ch, cell, spacer, primary, secondary;
+    for (i = 0; i < label.length; i++) {
+      ch = label.charAt(i);
+      cell = document.createElement('span');
+      cell.className = 'letter-swap-cell';
+      spacer = document.createElement('span');
+      spacer.className = 'letter-swap-s';
+      spacer.textContent = ch;
+      primary = document.createElement('span');
+      primary.className = 'letter-swap-a';
+      primary.textContent = ch;
+      secondary = document.createElement('span');
+      secondary.className = 'letter-swap-b';
+      secondary.textContent = ch;
+      cell.appendChild(spacer);
+      cell.appendChild(primary);
+      cell.appendChild(secondary);
+      wrap.appendChild(cell);
+    }
+    return wrap;
+  }
+
+  function resetLayer(el, transform) {
+    if (!el) return;
+    el.style.transform = transform;
+  }
+
+  function cancelAnims(el) {
+    if (!el || !el.getAnimations) return;
+    try {
+      var list = el.getAnimations();
+      var i;
+      for (i = 0; i < list.length; i++) list[i].cancel();
+    } catch (e) { /* ignore */ }
+  }
+
+  function runLayer(el, from, to, delay) {
+    if (!el || !el.animate) return false;
+    try {
+      el.animate(
+        [{ transform: from }, { transform: to }],
+        { duration: SWAP_MS, delay: delay, easing: SWAP_EASE, fill: 'forwards' }
+      );
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function playSwap(wrap, done) {
+    var cells = wrap.querySelectorAll('.letter-swap-cell');
+    var n = cells.length;
+    if (!n) { if (done) done(); return; }
+    var order = swapShuffle(n);
+    var finished = false;
+    var safety = 0;
+    var started = false;
+    function finish() {
+      if (finished) return;
+      finished = true;
+      clearTimeout(safety);
+      var i, cell, a, b;
+      for (i = 0; i < n; i++) {
+        cell = cells[i];
+        a = cell.querySelector('.letter-swap-a');
+        b = cell.querySelector('.letter-swap-b');
+        cancelAnims(a);
+        cancelAnims(b);
+        resetLayer(a, 'translateY(0)');
+        resetLayer(b, 'translateY(-100%)');
+      }
+      if (done) done();
+    }
+    var k, cell, a, b, delay;
+    for (k = 0; k < n; k++) {
+      cell = cells[order[k]];
+      a = cell.querySelector('.letter-swap-a');
+      b = cell.querySelector('.letter-swap-b');
+      cancelAnims(a);
+      cancelAnims(b);
+      delay = k * SWAP_STAGGER;
+      if (runLayer(a, 'translateY(0)', 'translateY(100%)', delay)) started = true;
+      if (runLayer(b, 'translateY(-100%)', 'translateY(0)', delay)) started = true;
+    }
+    if (!started) { finish(); return; }
+    safety = setTimeout(finish, SWAP_MS + Math.max(0, n - 1) * SWAP_STAGGER + 48);
+  }
+
+  function enhanceSwapEl(el) {
+    if (!el || el.getAttribute('data-letter-swap') === '1') return;
+    var node = firstLabelTextNode(el);
+    if (!node) return;
+    var label = String(node.textContent || '');
+    if (!label.replace(/\s+/g, '')) return;
+    var parent = node.parentNode;
+    if (!parent || !parent.insertBefore) return;
+    el.setAttribute('data-letter-swap', '1');
+    var wrap = buildSwap(label);
+    var sr = document.createElement('span');
+    sr.className = 'letter-swap-sr';
+    sr.textContent = label;
+    parent.insertBefore(sr, node);
+    parent.insertBefore(wrap, node);
+    parent.removeChild(node);
+    var blocked = false;
+    el.addEventListener('mouseenter', function () {
+      if (motion.reduced || blocked) return;
+      blocked = true;
+      playSwap(wrap, function () { blocked = false; });
+    });
+  }
+
+  motion.letterSwapNav = function (root) {
+    if (!root || motion.reduced) return;
+    var i, set;
+    set = root.querySelectorAll('a');
+    for (i = 0; i < set.length; i++) enhanceSwapEl(set[i]);
+    set = root.querySelectorAll('.crumb-here');
+    for (i = 0; i < set.length; i++) enhanceSwapEl(set[i]);
   };
 
 

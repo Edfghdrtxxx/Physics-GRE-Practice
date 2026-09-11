@@ -400,6 +400,10 @@ PGRE.views.concepts = (function () {
       else if (s === 'visualizers') wireGallery();
       else if (s === 'spherical') wireTeach();
       if (root && PGRE.typesetMath) PGRE.typesetMath(root);
+      var sub = root && root.querySelector ? root.querySelector('.cv-subnav') : document.querySelector('.cv-subnav');
+      if (sub && PGRE.motion && typeof PGRE.motion.letterSwapNav === 'function') {
+        PGRE.motion.letterSwapNav(sub);
+      }
     }
   };
 })();

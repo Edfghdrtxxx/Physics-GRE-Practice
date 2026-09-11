@@ -549,12 +549,13 @@ PGRE.views.dashboard = (function () {
     html += '</div></div>';
 
     var cw = PGRE.currentWeek();
-    var doneCount = cw.week.tasks.filter(function (t) { return g.taskDone(t.id); }).length;
-    var nextTasks = cw.week.tasks.filter(function (t) { return !g.taskDone(t.id); }).slice(0, 3);
+    var weekTasks = PGRE.weekTasks(cw.week);
+    var doneCount = weekTasks.filter(function (t) { return g.taskDone(t.id); }).length;
+    var nextTasks = weekTasks.filter(function (t) { return !g.taskDone(t.id); }).slice(0, 3);
     html += '<div class="card"><h2>This week — ' + ui.esc(cw.week.title) + '</h2>' +
       '<div class="muted">' + ui.dateRange(cw.week.start, cw.week.end) + ' · ' + ui.esc(cw.phase.name) + ' · ~' + cw.week.hours + ' h</div>' +
-      ui.meter(100 * doneCount / cw.week.tasks.length, 'meter-thin') +
-      '<div class="challenge-prog">' + doneCount + ' / ' + cw.week.tasks.length + ' tasks done</div>';
+      ui.meter(100 * doneCount / Math.max(1, weekTasks.length), 'meter-thin') +
+      '<div class="challenge-prog">' + doneCount + ' / ' + weekTasks.length + ' tasks done</div>';
     if (nextTasks.length) {
       html += '<ul class="next-tasks">';
       nextTasks.forEach(function (t) { html += '<li>' + ui.esc(t.label) + '</li>'; });

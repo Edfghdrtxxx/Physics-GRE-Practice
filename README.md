@@ -1,6 +1,6 @@
 # Physics GRE · Prep Studio
 
-A personal, fully-local practice site for the GRE Physics Test — exam day **October 28, 2026**.
+A personal, fully-local practice site for the GRE Physics Test — exam day **November 1, 2026**.
 No accounts, no network calls: progress lives in your browser (localStorage + IndexedDB),
 libraries are vendored, and the whole thing is plain HTML/CSS/JS with no build step.
 
@@ -26,7 +26,7 @@ on `file://` pages — the local server is the reliable way.)
 | **History** | Every answer ever given, kept for good: question, your pick vs. the correct one, time taken, and its session. Session list + filterable attempt log |
 | **Mistake book** | Every missed question with your wrong pick beside the solution. Re-drillable anytime; resurfaced on a spaced-repetition ladder (1→3→7→14→30→60 days). Solving never removes an entry — only your manual Archive does |
 | **Formula recall** | Vocabulary-app flip cards: recall, flip, self-grade Again/Hard/Good/Easy → SM-2 intervals and a daily due queue. Deck is empty by design until the book import fills it |
-| **Study plan** | Jul 13 → Oct 28, intensive (~15–17 h/wk): 16 weeks, 3 phases, 90 checkable tasks incl. 5 released ETS practice tests. Current week auto-opens; tasks grant XP |
+| **Study plan** | Sep 14 → Nov 1 · 7 live weeks · 5+6+2 (~16 h/wk) · generated from the vault syllabus via tools/build-plan.js |
 | **Achievements** | 36 achievements, 6 categories × Bronze/Silver/Gold/Platinum, 5 secret |
 | **Library** | Import the *Conquering the Physics GRE* markdown (drag & drop), map its sections to topics, export/restore/reset all progress |
 | **Mock exam** | Designed but deferred until the real question bank arrives — see `20_docs/Project Docs/DESIGN.md` |

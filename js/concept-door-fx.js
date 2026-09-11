@@ -1,6 +1,6 @@
 /* Concept Visualization Door Effect — Physics GRE Prep Studio
-   Axonometric spherical coordinate instrument for the concept door.
-   Self-terminating rAF loop, reduced-motion compliance, dark-mode CSS tokens. */
+   Dotted-surface particle wave (port of the Three.js Points field).
+   Self-terminating rAF loop, reduced-motion compliance, dark-mode. */
 window.PGRE = window.PGRE || {};
 var PGRE = window.PGRE;
 PGRE.conceptDoorFx = (function () {
@@ -10,17 +10,27 @@ PGRE.conceptDoorFx = (function () {
   var ctx = null;
   var raf = 0;
   var boundHost = null;
-  var elapsed = 0;
+  var count = 0;
   var lastNow = 0;
   var listenersAttached = false;
+  var reduceMq = null;
 
-  var SQRT2 = Math.SQRT2;
-  var SQRT3 = Math.sqrt(3);
-  var SQRT6 = Math.sqrt(6);
-  var SQRT_2_3 = Math.sqrt(2 / 3);
+  var SEPARATION = 150;
+  var AMOUNTX = 40;
+  var AMOUNTY = 60;
+  var POINT_SIZE = 8;
+  var OPACITY = 0.8;
+  var CAM_Y = 355;
+  var CAM_Z = 1220;
+  var FOV = 60 * Math.PI / 180;
+  var FOG_NEAR = 2000;
+  var FOG_FAR = 10000;
+  /* Original rAF steps count by 0.1 at ~60fps. */
+  var COUNT_PER_SEC = 6;
 
   function reduced() {
-    return !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    return !!(typeof window !== 'undefined' && window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
 
   function reqAnim(fn) {
@@ -34,25 +44,13 @@ PGRE.conceptDoorFx = (function () {
     else if (typeof window !== 'undefined' && window.cancelAnimationFrame) window.cancelAnimationFrame(id);
   }
 
-  function tok(name, fb) {
-    if (typeof document === 'undefined' || !document.documentElement) return fb;
-    var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return v || fb;
-  }
-
-  /* Fixed axonometric projection:
-     +z straight up
-     +x lower-left ~150deg
-     +y lower-right ~30deg */
-  function project(x, y, z, ox, oy) {
-    return {
-      x: ox + (-x + y) / SQRT2,
-      y: oy + (x + y) / SQRT6 - z * SQRT_2_3
-    };
+  function isDark() {
+    return typeof document !== 'undefined' && document.documentElement &&
+      document.documentElement.getAttribute('data-theme') === 'dark';
   }
 
   function syncCanvas() {
-    if (!canvas || !boundHost) return { w: 0, h: 0 };
+    if (!canvas || !boundHost || !ctx) return { w: 0, h: 0 };
     var w = boundHost.clientWidth || 300;
     var h = boundHost.clientHeight || 300;
     var dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -66,193 +64,68 @@ PGRE.conceptDoorFx = (function () {
     return { w: w, h: h };
   }
 
-  function paint(w, h, theta, phi) {
+  function paint(w, h, wave) {
     if (!ctx || w <= 0 || h <= 0) return;
-
-    var ox = 0.5 * w;
-    var R = Math.min(w, h) * 0.28;
-    if (R <= 1) return;
-    var oy = 0.70 * h;
-    var minOy = 1.15 * R + 18;
-    var maxOy = h - R - 20;
-    if (oy < minOy) oy = minOy;
-    if (oy > maxOy) oy = maxOy;
-
-    var lineCol = tok('--line', '#e6dfd8');
-    var ink3Col = tok('--ink-3', '#8e8b82');
-    var accentCol = tok('--accent', '#cc785c');
-    var accentDeepCol = tok('--accent-deep', '#964b32');
 
     ctx.clearRect(0, 0, w, h);
 
-    // 1. Rear equator ellipse: dashed [2, 4]
-    ctx.beginPath();
-    ctx.ellipse(ox, oy, R, R / SQRT3, 0, Math.PI, 2 * Math.PI);
-    ctx.strokeStyle = lineCol;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([2, 4]);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    var aspect = w / h;
+    var py = 1 / Math.tan(FOV / 2);
+    var px = py / aspect;
+    var dark = isDark();
+    /* Match the source component: dark 200/200/200, light black. */
+    var rgb = dark ? '200,200,200' : '0,0,0';
+    var halfX = (AMOUNTX * SEPARATION) / 2;
+    var halfY = (AMOUNTY * SEPARATION) / 2;
+    var margin = POINT_SIZE * 4;
 
-    // 2. Axes: +x, +y, +z hairlines labeled 10px JetBrains Mono
-    var axLen = 1.15 * R;
-    var ax3D = axLen / SQRT_2_3;
-    var tipX = project(ax3D, 0, 0, ox, oy);
-    var tipY = project(0, ax3D, 0, ox, oy);
-    var tipZ = project(0, 0, ax3D, ox, oy);
+    var ix, iy, x, y, z, xC, yC, zC, dist, fog, ndcX, ndcY, sx, sy, diam, alpha;
 
-    ctx.strokeStyle = lineCol;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgb(' + rgb + ')';
 
-    ctx.beginPath();
-    ctx.moveTo(ox, oy);
-    ctx.lineTo(tipX.x, tipX.y);
-    ctx.stroke();
+    for (ix = 0; ix < AMOUNTX; ix++) {
+      for (iy = 0; iy < AMOUNTY; iy++) {
+        x = ix * SEPARATION - halfX;
+        y = Math.sin((ix + wave) * 0.3) * 50 + Math.sin((iy + wave) * 0.5) * 50;
+        z = iy * SEPARATION - halfY;
 
-    ctx.beginPath();
-    ctx.moveTo(ox, oy);
-    ctx.lineTo(tipY.x, tipY.y);
-    ctx.stroke();
+        xC = x;
+        yC = y - CAM_Y;
+        zC = z - CAM_Z;
+        if (zC >= -1) continue;
 
-    ctx.beginPath();
-    ctx.moveTo(ox, oy);
-    ctx.lineTo(tipZ.x, tipZ.y);
-    ctx.stroke();
+        dist = Math.sqrt(xC * xC + yC * yC + zC * zC);
+        fog = 1;
+        if (dist > FOG_NEAR) {
+          fog = (FOG_FAR - dist) / (FOG_FAR - FOG_NEAR);
+          if (fog <= 0) continue;
+          if (fog > 1) fog = 1;
+        }
 
-    ctx.font = '10px "JetBrains Mono", ui-monospace, monospace';
-    ctx.fillStyle = ink3Col;
+        ndcX = px * xC / -zC;
+        ndcY = py * yC / -zC;
+        sx = (ndcX + 1) * 0.5 * w;
+        sy = (1 - ndcY) * 0.5 * h;
+        if (sx < -margin || sx > w + margin || sy < -margin || sy > h + margin) continue;
 
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText('+z', tipZ.x, tipZ.y - 4);
+        /* THREE.PointsMaterial sizeAttenuation: gl_PointSize = size * ((h/2) / -zC). */
+        diam = POINT_SIZE * (h * 0.5) / -zC;
+        if (diam < 0.4) continue;
+        if (diam > 24) diam = 24;
 
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'top';
-    ctx.fillText('+x', tipX.x - 5, tipX.y + 3);
-
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText('+y', tipY.x + 5, tipY.y + 3);
-
-    // 3. Point P on the sphere
-    var px = R * Math.sin(theta) * Math.cos(phi);
-    var py = R * Math.sin(theta) * Math.sin(phi);
-    var pz = R * Math.cos(theta);
-    var ptP = project(px, py, pz, ox, oy);
-
-    // Foot of P down to xy-plane: (px, py, 0)
-    var ptFoot = project(px, py, 0, ox, oy);
-
-    // 4. Faint planar tie from O to the foot
-    ctx.beginPath();
-    ctx.moveTo(ox, oy);
-    ctx.lineTo(ptFoot.x, ptFoot.y);
-    ctx.strokeStyle = lineCol;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
-    ctx.stroke();
-
-    // 5. Dashed drop [3, 5] from P down to xy-plane
-    ctx.beginPath();
-    ctx.moveTo(ptP.x, ptP.y);
-    ctx.lineTo(ptFoot.x, ptFoot.y);
-    ctx.strokeStyle = lineCol;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3, 5]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // 6. r-vector from O to P
-    ctx.beginPath();
-    ctx.moveTo(ox, oy);
-    ctx.lineTo(ptP.x, ptP.y);
-    ctx.strokeStyle = lineCol;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
-    ctx.stroke();
-
-    // 7. Front equator ellipse: solid
-    ctx.beginPath();
-    ctx.ellipse(ox, oy, R, R / SQRT3, 0, 0, Math.PI);
-    ctx.strokeStyle = lineCol;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
-    ctx.stroke();
-
-    // 8. Outer horizon circle: solid
-    ctx.beginPath();
-    ctx.arc(ox, oy, R, 0, 2 * Math.PI);
-    ctx.strokeStyle = lineCol;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
-    ctx.stroke();
-
-    // 9. One meridian through +z, P, -z
-    ctx.beginPath();
-    var merSteps = 64;
-    for (var m = 0; m <= merSteps; m++) {
-      var th = (m / merSteps) * Math.PI;
-      var mx = R * Math.sin(th) * Math.cos(phi);
-      var my = R * Math.sin(th) * Math.sin(phi);
-      var mz = R * Math.cos(th);
-      var mpt = project(mx, my, mz, ox, oy);
-      if (m === 0) ctx.moveTo(mpt.x, mpt.y);
-      else ctx.lineTo(mpt.x, mpt.y);
+        alpha = OPACITY * fog;
+        if (alpha < 0.02) continue;
+        ctx.globalAlpha = alpha;
+        ctx.fillRect(sx - diam * 0.5, sy - diam * 0.5, diam, diam);
+      }
     }
-    ctx.strokeStyle = lineCol;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
-    ctx.stroke();
 
-    // 10. Coral ONLY: 1px --accent arc for theta from +z down to r-vector
-    var arcR = 0.32 * R;
-    ctx.beginPath();
-    var arcSteps = 24;
-    for (var a = 0; a <= arcSteps; a++) {
-      var psi = (a / arcSteps) * theta;
-      var ax = arcR * Math.sin(psi) * Math.cos(phi);
-      var ay = arcR * Math.sin(psi) * Math.sin(phi);
-      var az = arcR * Math.cos(psi);
-      var apt = project(ax, ay, az, ox, oy);
-      if (a === 0) ctx.moveTo(apt.x, apt.y);
-      else ctx.lineTo(apt.x, apt.y);
-    }
-    ctx.strokeStyle = accentCol;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
-    ctx.stroke();
-
-    // Label theta in --accent-deep near the arc
-    var midPsi = theta * 0.5;
-    var midX = arcR * Math.sin(midPsi) * Math.cos(phi);
-    var midY = arcR * Math.sin(midPsi) * Math.sin(phi);
-    var midZ = arcR * Math.cos(midPsi);
-    var midPt = project(midX, midY, midZ, ox, oy);
-    var vdx = midPt.x - ox;
-    var vdy = midPt.y - oy;
-    var vdist = Math.sqrt(vdx * vdx + vdy * vdy);
-    var lx = vdist > 0.001 ? midPt.x + (vdx / vdist) * 11 : midPt.x + 8;
-    var ly = vdist > 0.001 ? midPt.y + (vdy / vdist) * 11 : midPt.y - 8;
-
-    ctx.font = '10px "JetBrains Mono", ui-monospace, monospace';
-    ctx.fillStyle = accentDeepCol;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('θ', lx, ly);
-
-    // 11. Plus 1.5px coral cap on P
-    ctx.beginPath();
-    ctx.arc(ptP.x, ptP.y, 1.5, 0, 2 * Math.PI);
-    ctx.fillStyle = accentCol;
-    ctx.fill();
+    ctx.globalAlpha = 1;
   }
 
   function paintStill() {
     var dims = syncCanvas();
-    var theta = 45 * Math.PI / 180;
-    var phi = 35 * Math.PI / 180;
-    paint(dims.w, dims.h, theta, phi);
+    paint(dims.w, dims.h, 0);
   }
 
   function frame(now) {
@@ -272,15 +145,10 @@ PGRE.conceptDoorFx = (function () {
     var dt = (now - lastNow) / 1000;
     if (dt > 0.1) dt = 0.016;
     lastNow = now;
-    elapsed += dt;
-
-    // Motion: phi precess period 72s linear; theta(t) = 48deg + 6deg * sin(2pi t / 36s)
-    var thetaDeg = 48 + 6 * Math.sin((2 * Math.PI * elapsed) / 36);
-    var theta = thetaDeg * Math.PI / 180;
-    var phi = ((35 + (360 * (elapsed / 72))) % 360) * Math.PI / 180;
+    count += dt * COUNT_PER_SEC;
 
     var dims = syncCanvas();
-    paint(dims.w, dims.h, theta, phi);
+    paint(dims.w, dims.h, count);
 
     raf = reqAnim(frame);
   }
@@ -319,8 +187,21 @@ PGRE.conceptDoorFx = (function () {
 
   function onResize() {
     if (!canvas || !canvas.isConnected) return;
+    if (reduced()) paintStill();
+  }
+
+  function onTheme() {
+    if (!canvas || !canvas.isConnected) return;
+    if (reduced()) paintStill();
+  }
+
+  function onReduceChange() {
+    if (!canvas || !canvas.isConnected) return;
     if (reduced()) {
+      hardStop();
       paintStill();
+    } else {
+      kick();
     }
   }
 
@@ -354,10 +235,22 @@ PGRE.conceptDoorFx = (function () {
     hostEl.appendChild(canvas);
     ctx = canvas.getContext('2d');
     boundHost = hostEl;
+    count = 0;
 
     if (!listenersAttached && typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', onVisibilityChange);
       window.addEventListener('resize', onResize);
+      if (window.MutationObserver) {
+        new MutationObserver(onTheme).observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ['data-theme']
+        });
+      }
+      if (window.matchMedia) {
+        reduceMq = window.matchMedia('(prefers-reduced-motion: reduce)');
+        if (reduceMq.addEventListener) reduceMq.addEventListener('change', onReduceChange);
+        else if (reduceMq.addListener) reduceMq.addListener(onReduceChange);
+      }
       listenersAttached = true;
     }
 

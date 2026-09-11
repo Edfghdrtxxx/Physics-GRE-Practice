@@ -246,19 +246,20 @@ PGRE.toast = function (html, kind, sticky) {
   var el = document.createElement('div');
   el.className = 'toast toast-' + (kind || 'info');
   el.innerHTML = html;
+  el.title = 'Dismiss';
   box.appendChild(el);
   requestAnimationFrame(function () { el.classList.add('show'); });
+  var timer = null;
+  var dismissed = false;
   var dismiss = function () {
+    if (dismissed) return;
+    dismissed = true;
+    if (timer) { clearTimeout(timer); timer = null; }
     el.classList.remove('show');
     setTimeout(function () { el.remove(); }, 350);
   };
-  if (sticky) { // stays until clicked — for conditions the user must notice
-    el.style.cursor = 'pointer';
-    el.title = 'Dismiss';
-    el.addEventListener('click', dismiss);
-  } else {
-    setTimeout(dismiss, 4200);
-  }
+  el.addEventListener('click', dismiss);
+  if (!sticky) timer = setTimeout(dismiss, 4200); // sticky stays until clicked
   return el;
 };
 
@@ -416,12 +417,14 @@ PGRE.nav = (function () {
     // fragment and fire NO hashchange: the router never reruns and the deep state
     // never clears. Detect that exact case and force a re-route, which re-mounts
     // the base view (settling/clearing the deep state) and rebuilds the base trail.
-    // Every crumb label is plain esc'd text, so a click's target IS the <a>.
+    // Letter-swap wraps crumb glyphs in spans, so resolve the <a> via closest.
     if (!el._pgreCrumbBound) {
       el._pgreCrumbBound = true;
       el.addEventListener('click', function (e) {
         var a = e.target;
+        if (a && a.closest) a = a.closest('a');
         if (!a || a.tagName !== 'A') return;
+        if (el.contains && !el.contains(a)) return;
         var href = a.getAttribute('href');
         if (href && href.charAt(0) === '#' && href === location.hash) {
           e.preventDefault();
@@ -442,6 +445,9 @@ PGRE.nav = (function () {
       }
     });
     el.innerHTML = h;
+    if (PGRE.motion && typeof PGRE.motion.letterSwapNav === 'function') {
+      PGRE.motion.letterSwapNav(el);
+    }
   }
 
   return {
@@ -611,6 +617,9 @@ PGRE.buildNav = function () {
       '<span class="nav-weight">' + t.weight + '%</span></a>';
   });
   el.innerHTML = html;
+  if (PGRE.motion && typeof PGRE.motion.letterSwapNav === 'function') {
+    PGRE.motion.letterSwapNav(el);
+  }
 };
 
 /* ——— Foldable sidebar ———

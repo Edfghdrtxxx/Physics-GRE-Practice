@@ -394,7 +394,10 @@ PGRE.gamify = {
     PGRE.PLAN.forEach(function (phase) {
       var phaseDone = true;
       phase.weeks.forEach(function (w) {
-        var all = w.tasks.every(function (task) { return PGRE.gamify.taskDone(task.id); });
+        if (w.historical) return;
+        var tasks = PGRE.weekTasks(w);
+        if (!tasks.length) return;
+        var all = tasks.every(function (task) { return PGRE.gamify.taskDone(task.id); });
         if (all) weeksDone++; else phaseDone = false;
       });
       if (phaseDone) phasesDone++;

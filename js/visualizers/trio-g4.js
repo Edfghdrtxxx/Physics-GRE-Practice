@@ -1199,4 +1199,385 @@
     }
   };
 
+  /* -------------------------------------------------------------------------- */
+  /* cpgf-1.48: Physical pendulum small-oscillation ω = √(mgR/I)                 */
+  /* -------------------------------------------------------------------------- */
+  PGRE.visualizers['cpgf-1.48'] = {
+    id: 'cpgf-1.48',
+    topic: 'cm',
+    title: 'Physical Pendulum Small Oscillations: $\\omega = \\sqrt{mgR/I}$',
+    formulaLatex: '$$\\omega = \\sqrt{\\frac{mgR}{I}}$$',
+    physicalStory:
+      'A physical pendulum is a rigid body swinging about a fixed pivot. Gravity acts at the center of mass, a distance $R$ from the pivot, so the restoring torque is $\\tau = -mgR\\sin\\theta$. Rotational Newton $I\\ddot{\\theta}=\\tau$ with $I$ taken about the pivot (not the CM) yields $\\ddot{\\theta}+(mgR/I)\\sin\\theta=0$. Small angles $\\sin\\theta\\approx\\theta$ give the card, $\\omega=\\sqrt{mgR/I}$. Parallel-axis forbids $I\\le mR^2$ for a real body: $I=I_{\\mathrm{CM}}+mR^2$ and $L_{\\mathrm{eff}}=I/(mR)>R$. The teal ghost is the linear $\\theta$ model; coral is exact $\\sin\\theta$ — the GRE trap $\\sin\\theta\\approx\\theta$ is visible at large amplitude.',
+    derivationSteps: [
+      {
+        step: 1,
+        title: 'Torque about the pivot',
+        formula: '\\tau = -mgR\\sin\\theta',
+        text: 'Gravity acts at the center of mass. The lever arm is $R\\sin\\theta$, so the restoring torque is $-mgR\\sin\\theta$. $R$ is pivot-to-CM, not a rod length.'
+      },
+      {
+        step: 2,
+        title: 'Rotational Newton law',
+        formula: 'I\\ddot{\\theta} = -mgR\\sin\\theta \\implies \\ddot{\\theta} + \\frac{mgR}{I}\\sin\\theta = 0',
+        text: '$I$ is the moment of inertia about the pivot. An extended body is not a simple pendulum of length $R$: $I = I_{\\mathrm{CM}} + mR^2 > mR^2$.'
+      },
+      {
+        step: 3,
+        title: 'Small-angle frequency',
+        formula: '\\sin\\theta \\approx \\theta \\implies \\omega = \\sqrt{\\frac{mgR}{I}},\\quad T = 2\\pi\\sqrt{\\frac{I}{mgR}}',
+        text: 'This is the GRE card. The exact motion keeps $\\sin\\theta$, so large amplitudes run slow — same anharmonic trap as the simple pendulum.'
+      },
+      {
+        step: 4,
+        title: 'Effective simple-pendulum length',
+        formula: 'L_{\\mathrm{eff}} = \\frac{I}{mR} = R + \\frac{I_{\\mathrm{CM}}}{mR},\\quad \\omega = \\sqrt{\\frac{g}{L_{\\mathrm{eff}}}}',
+        text: 'A physical body always has $\\kappa = I/(mR^2) > 1$, hence $L_{\\mathrm{eff}} > R$ and a slower $\\omega$ than $\\sqrt{g/R}$.'
+      }
+    ],
+    limitingCases: [
+      {
+        name: 'Point-mass (simple) limit',
+        condition: 'I \\to mR^2',
+        result: '\\omega \\to \\sqrt{g/R}',
+        explanation: 'All mass sits at the CM. Recovers a simple pendulum of length $R$. A real body always has $I > mR^2$, so it always runs slower than this bound.'
+      },
+      {
+        name: 'Uniform rod, end pivot',
+        condition: 'I = \\tfrac{1}{3}mL^2,\\; R = L/2',
+        result: '\\omega = \\sqrt{3g/(2L)} = \\sqrt{3g/(4R)}',
+        explanation: '$L_{\\mathrm{eff}} = 2L/3$. Faster than a simple pendulum of length $L$, slower than one of length $R$.'
+      },
+      {
+        name: 'Disk pivoted at the rim',
+        condition: 'I = \\tfrac{3}{2}mR^2',
+        result: '\\omega = \\sqrt{2g/(3R)}',
+        explanation: 'Parallel-axis: $I_{\\mathrm{CM}} = \\tfrac{1}{2}mR^2$ plus $mR^2$.'
+      },
+      {
+        name: 'Large amplitude',
+        condition: '\\theta_0 \\not\\ll 1',
+        result: 'T > 2\\pi/\\omega',
+        explanation: '$\\sin\\theta < \\theta$ weakens the restoring torque. The card formula is the small-angle $\\omega$ only. Coral (exact) lags the teal linear ghost.'
+      }
+    ],
+    greTraps: [
+      {
+        trap: 'Using $I_{\\mathrm{CM}}$ in the frequency',
+        warning: 'Writing $\\omega=\\sqrt{mgR/I_{\\mathrm{CM}}}$ instead of the pivot inertia.',
+        strategy: '$I$ in $\\omega=\\sqrt{mgR/I}$ is about the pivot. Always $I_{\\mathrm{pivot}} = I_{\\mathrm{CM}} + mR^2$.'
+      },
+      {
+        trap: 'Treating it as a simple pendulum of length $R$',
+        warning: 'Using $\\omega=\\sqrt{g/R}$ for an extended body.',
+        strategy: 'That is the $\\kappa=1$ bound. Real bodies have $L_{\\mathrm{eff}} = I/(mR) > R$, so they oscillate slower.'
+      },
+      {
+        trap: 'Small-angle formula at large $\\theta_0$',
+        warning: 'Plugging $60^\\circ$ into $T=2\\pi\\sqrt{I/(mgR)}$ and expecting the lab period.',
+        strategy: 'The exact equation is $\\ddot{\\theta}=-(mgR/I)\\sin\\theta$. Coral (exact) lags the teal linear ghost as amplitude grows.'
+      }
+    ],
+    parameters: [
+      { id: 'm', label: 'Mass ($m$)', min: 0.2, max: 4.0, step: 0.1, default: 1.0, unit: 'kg' },
+      { id: 'I', label: 'Inertia about pivot ($I$)', min: 0.05, max: 8.0, step: 0.05, default: 0.40, unit: 'kg m²' },
+      { id: 'R', label: 'Pivot to CM ($R$)', min: 0.15, max: 1.20, step: 0.05, default: 0.50, unit: 'm' },
+      { id: 'g', label: 'Gravity ($g$)', min: 1.0, max: 25.0, step: 0.1, default: 9.8, unit: 'm/s²' },
+      { id: 'theta0_deg', label: 'Initial Angle ($\\theta_0$)', min: 5, max: 170, step: 5, default: 30, unit: 'deg' },
+      { id: 'damping', label: 'Damping ($\\gamma$)', min: 0.0, max: 0.2, step: 0.01, default: 0.0, unit: 's⁻¹' },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
+    ],
+    challenge: {
+      question:
+        'A rigid body of mass $m$ is pivoted a distance $R$ from its center of mass. Its moment of inertia about the pivot is $I$. What is the angular frequency of small oscillations?',
+      options: [
+        'A) $\\sqrt{g/R}$',
+        'B) $\\sqrt{mgR/I}$',
+        'C) $\\sqrt{I/(mgR)}$',
+        'D) $\\sqrt{mg/I}$',
+        'E) $\\sqrt{gI/(mR^3)}$'
+      ],
+      correct: 1,
+      explanation:
+        'Torque about the pivot is $\\tau=-mgR\\sin\\theta$. Rotational Newton gives $I\\ddot{\\theta}=-mgR\\sin\\theta$. For small angles $\\sin\\theta\\approx\\theta$, so $\\ddot{\\theta}+(mgR/I)\\theta=0$ and $\\omega=\\sqrt{mgR/I}$. Option A is the simple-pendulum bound $I=mR^2$; a real body has $I>mR^2$ and runs slower. Option C is $1/\\omega$. $I$ is about the pivot, not the CM.'
+    },
+
+    init: function (container, state, redraw) {
+      state = state || {};
+      state.m = state.m !== undefined ? state.m : 1.0;
+      state.I = state.I !== undefined ? state.I : 0.40;
+      state.R = state.R !== undefined ? state.R : 0.50;
+      state.g = state.g !== undefined ? state.g : 9.8;
+      state.theta0_deg = state.theta0_deg !== undefined ? state.theta0_deg : 30;
+      state.damping = state.damping !== undefined ? state.damping : 0.0;
+      if (state.simSpeed === undefined) state.simSpeed = 1.0;
+
+      var initRad = (Number(state.theta0_deg) * Math.PI) / 180;
+      state.sim = {
+        theta: initRad,
+        omega: 0.0,
+        theta_lin: initRad,
+        omega_lin: 0.0,
+        t: 0.0,
+        isDragging: false,
+        trail: [],
+        amp: Math.abs(initRad)
+      };
+
+      var canvas = findVizCanvas(container);
+      if (canvas && !canvas._cpgf148_bound) {
+        canvas._cpgf148_bound = true;
+
+        var getPos = function (e) {
+          var rect = canvas.getBoundingClientRect();
+          var t = (e.touches && e.touches.length > 0) ? e.touches[0] :
+                    ((e.changedTouches && e.changedTouches.length > 0) ? e.changedTouches[0] : null);
+          var clientX = t ? t.clientX : e.clientX;
+          var clientY = t ? t.clientY : e.clientY;
+          return { x: clientX - rect.left, y: clientY - rect.top };
+        };
+
+        var onDown = function (e) {
+          var pos = getPos(e);
+          var bob = state.sim.bobScreenPos;
+          if (bob && Math.hypot(pos.x - bob.x, pos.y - bob.y) < bob.radius * 2.2) {
+            state.sim.isDragging = true;
+            state.sim.omega = 0;
+            state.sim.omega_lin = 0;
+            if (e.cancelable) e.preventDefault();
+          }
+        };
+
+        var onMove = function (e) {
+          if (state.sim.isDragging && state.sim.pivotPos) {
+            var pos = getPos(e);
+            var piv = state.sim.pivotPos;
+            var angle = Math.atan2(pos.x - piv.x, pos.y - piv.y);
+            state.sim.theta = Math.max(-Math.PI * 0.98, Math.min(Math.PI * 0.98, angle));
+            state.sim.theta_lin = state.sim.theta;
+            state.sim.omega = 0;
+            state.sim.omega_lin = 0;
+            state.sim.amp = Math.abs(state.sim.theta);
+            state.sim.trail = [];
+            if (e.cancelable) e.preventDefault();
+          }
+        };
+
+        var onUp = function () {
+          if (state.sim.isDragging) {
+            state.sim.amp = Math.abs(state.sim.theta);
+          }
+          state.sim.isDragging = false;
+        };
+
+        canvas.addEventListener('mousedown', onDown);
+        canvas.addEventListener('touchstart', onDown, { passive: false });
+
+        if (typeof window !== 'undefined') {
+          if (window._cpgf148_move) {
+            window.removeEventListener('mousemove', window._cpgf148_move);
+            window.removeEventListener('mouseup', window._cpgf148_up);
+            window.removeEventListener('touchmove', window._cpgf148_move);
+            window.removeEventListener('touchend', window._cpgf148_up);
+          }
+          window._cpgf148_move = onMove;
+          window._cpgf148_up = onUp;
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+          window.addEventListener('touchmove', onMove, { passive: false });
+          window.addEventListener('touchend', onUp);
+        }
+      }
+    },
+
+    draw: function (ctx, width, height, state, dt) {
+      state = state || {};
+      if (!state.sim) this.init(null, state);
+      var sim = state.sim;
+
+      var m = Math.max(0.2, numParam(state, 'm', 1.0));
+      var R = Math.max(0.15, numParam(state, 'R', 0.50));
+      var Iraw = Math.max(0.01, numParam(state, 'I', 0.40));
+      var g = Math.max(0.5, numParam(state, 'g', 9.8));
+      var damping = Math.max(0.0, numParam(state, 'damping', 0.0));
+      var speed = simSpeedOf(state);
+      var theta0deg = numParam(state, 'theta0_deg', 30);
+
+      var mR2 = m * R * R;
+      var Imin = mR2 * 1.02;
+      var I = Iraw < Imin ? Imin : Iraw;
+      var clamped = I > Iraw + 1e-12;
+
+      var sig = m + '|' + Iraw + '|' + R + '|' + g + '|' + theta0deg;
+      if (sim.lastSig !== undefined && sim.lastSig !== sig && !sim.isDragging) {
+        var initRad = (theta0deg * Math.PI) / 180;
+        sim.theta = initRad;
+        sim.theta_lin = initRad;
+        sim.omega = 0.0;
+        sim.omega_lin = 0.0;
+        sim.t = 0.0;
+        sim.amp = Math.abs(initRad);
+        sim.trail = [];
+      }
+      sim.lastSig = sig;
+      if (sim.amp === undefined) sim.amp = Math.abs(sim.theta);
+
+      var omega0sq = (m * g * R) / I;
+      var omega0 = Math.sqrt(omega0sq);
+      var T0 = (2 * Math.PI) / omega0;
+      var Leff = I / (m * R);
+      var kappa = I / mR2;
+
+      var dtEff = safeDt(dt) * speed;
+      if (dtEff > 0.12) dtEff = 0.12;
+      var subSteps = 10;
+      var stepDt = dtEff / subSteps;
+      var s;
+
+      if (!sim.isDragging) {
+        for (s = 0; s < subSteps; s++) {
+          var f_nonlin = function (th, om) { return -omega0sq * Math.sin(th) - damping * om; };
+          var k1_th = sim.omega;
+          var k1_om = f_nonlin(sim.theta, sim.omega);
+          var k2_th = sim.omega + 0.5 * stepDt * k1_om;
+          var k2_om = f_nonlin(sim.theta + 0.5 * stepDt * k1_th, sim.omega + 0.5 * stepDt * k1_om);
+          var k3_th = sim.omega + 0.5 * stepDt * k2_om;
+          var k3_om = f_nonlin(sim.theta + 0.5 * stepDt * k2_th, sim.omega + 0.5 * stepDt * k2_om);
+          var k4_th = sim.omega + stepDt * k3_om;
+          var k4_om = f_nonlin(sim.theta + stepDt * k3_th, sim.omega + stepDt * k3_om);
+          sim.theta += (stepDt / 6) * (k1_th + 2 * k2_th + 2 * k3_th + k4_th);
+          sim.omega += (stepDt / 6) * (k1_om + 2 * k2_om + 2 * k3_om + k4_om);
+
+          var a_lin = -omega0sq * sim.theta_lin - damping * sim.omega_lin;
+          sim.omega_lin += a_lin * stepDt;
+          sim.theta_lin += sim.omega_lin * stepDt;
+          sim.t += stepDt;
+        }
+      }
+
+      creamFill(ctx, width, height);
+      lightGrid(ctx, width, height, 40);
+
+      var ceilY = 22;
+      drawCeiling(ctx, width, ceilY);
+
+      var pad = 18;
+      var bodyW = Math.max(10, Math.min(18, 8 + 3 * m));
+      var pivotX = width * 0.5;
+      var pivotY = ceilY + 10;
+      var maxArm = Math.min(pivotX - pad - bodyW, width - pivotX - pad - bodyW, height - pivotY - pad - 24);
+      var armLengthPx = Math.max(52, maxArm * (R / 1.20));
+      sim.pivotPos = { x: pivotX, y: pivotY };
+
+      var kg = Math.sqrt(Math.max(I / m - R * R, 0));
+      var halfBody = Math.max(14, armLengthPx * (kg / Math.max(R, 0.05)) * Math.sqrt(3));
+      var maxHalf = Math.max(14, height - pivotY - armLengthPx - 16);
+      if (halfBody > maxHalf) halfBody = maxHalf;
+      if (halfBody > armLengthPx * 0.92) halfBody = armLengthPx * 0.92;
+      var maxReach = Math.min(pivotX - pad, width - pivotX - pad, height - pivotY - pad);
+      if (armLengthPx + halfBody > maxReach) {
+        var fitScale = maxReach / (armLengthPx + halfBody);
+        armLengthPx *= fitScale;
+        halfBody *= fitScale;
+      }
+
+      ctx.save();
+      ctx.strokeStyle = PGRE.vizStageTheme().inkFade(0.12);
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 5]);
+      ctx.beginPath();
+      ctx.arc(pivotX, pivotY, armLengthPx, Math.PI * 0.08, Math.PI - Math.PI * 0.08);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(pivotX, pivotY);
+      ctx.lineTo(pivotX, pivotY + armLengthPx + 8);
+      ctx.stroke();
+      ctx.restore();
+
+      var ghostX = pivotX + armLengthPx * Math.sin(sim.theta_lin);
+      var ghostY = pivotY + armLengthPx * Math.cos(sim.theta_lin);
+      var cmX = pivotX + armLengthPx * Math.sin(sim.theta);
+      var cmY = pivotY + armLengthPx * Math.cos(sim.theta);
+      sim.bobScreenPos = { x: cmX, y: cmY, radius: Math.max(22, halfBody * 0.45) };
+
+      if (!sim.trail) sim.trail = [];
+      if (!sim.isDragging) {
+        sim.trail.push({ x: cmX, y: cmY });
+        if (sim.trail.length > 56) sim.trail.shift();
+      }
+      if (sim.trail.length > 1) {
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        var ti;
+        for (ti = 1; ti < sim.trail.length; ti++) {
+          ctx.strokeStyle = 'rgba(204, 120, 92, ' + (ti / sim.trail.length) * 0.45 + ')';
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(sim.trail[ti - 1].x, sim.trail[ti - 1].y);
+          ctx.lineTo(sim.trail[ti].x, sim.trail[ti].y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      shaft(ctx, pivotX, pivotY, ghostX, ghostY, TEAL, 1.8, [5, 4]);
+      ctx.save();
+      ctx.globalAlpha = 0.40;
+      ctx.translate(pivotX, pivotY);
+      ctx.rotate(-sim.theta_lin);
+      ctx.strokeStyle = TEAL;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-bodyW / 2, Math.max(4, armLengthPx - halfBody), bodyW, 2 * halfBody);
+      ctx.restore();
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      ringDot(ctx, ghostX, ghostY, 4, TEAL, null);
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(pivotX, pivotY);
+      ctx.rotate(-sim.theta);
+      ctx.fillStyle = 'rgba(204, 120, 92, 0.42)';
+      ctx.strokeStyle = CORAL;
+      ctx.lineWidth = 2;
+      ctx.fillRect(-bodyW / 2, Math.max(4, armLengthPx - halfBody), bodyW, 2 * halfBody);
+      ctx.strokeRect(-bodyW / 2, Math.max(4, armLengthPx - halfBody), bodyW, 2 * halfBody);
+      ctx.restore();
+
+      ringDot(ctx, cmX, cmY, 5, GOOD, CREAM);
+      pill(ctx, 'CM', cmX + 12, cmY, GOOD, 'left');
+
+      ringDot(ctx, pivotX, pivotY, 5, INK, CREAM);
+      pill(ctx, 'pivot', pivotX + 12, pivotY + 1, MUTED, 'left');
+
+      var arcR = Math.min(42, armLengthPx * 0.32);
+      if (Math.abs(sim.theta) > 0.04) {
+        ctx.save();
+        ctx.strokeStyle = GOLD;
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        if (sim.theta >= 0) ctx.arc(pivotX, pivotY, arcR, Math.PI / 2, Math.PI / 2 + sim.theta, false);
+        else ctx.arc(pivotX, pivotY, arcR, Math.PI / 2 + sim.theta, Math.PI / 2, false);
+        ctx.stroke();
+        ctx.restore();
+        var mid = sim.theta / 2;
+        pill(ctx, 'theta', pivotX + (arcR + 16) * Math.sin(mid), pivotY + (arcR + 16) * Math.cos(mid), GOLD, 'center');
+      }
+
+      var iVal = latexNum(I, 3, '\\mathrm{kg\\,m}^2');
+      var iMinVal = latexNum(mR2, 3, '\\mathrm{kg\\,m}^2');
+      vizLegend('Physical pendulum', [
+        { label: '$\\omega=\\sqrt{mgR/I}$', value: latexNum(omega0, 2, '\\mathrm{rad/s}') },
+        { label: '$T=2\\pi/\\omega$', value: latexNum(T0, 3, '\\mathrm{s}') },
+        { label: '$L_{\\mathrm{eff}}=I/(mR)$', value: latexNum(Leff, 3, '\\mathrm{m}') },
+        { label: '$I$ vs $mR^2$', value: iVal + ' / ' + iMinVal + (clamped ? ' (clamped $I>mR^2$)' : '') },
+        { label: '$\\kappa=I/(mR^2)$', value: latexNum(kappa, 2) },
+        { label: '$\\theta(t)$ exact / linear', value: '$' + ((sim.theta * 180) / Math.PI).toFixed(1) + '^\\circ$ / $' + ((sim.theta_lin * 180) / Math.PI).toFixed(1) + '^\\circ$' },
+        { label: 'Traces', value: 'coral = $\\sin\\theta$;  teal dashed = linear $\\theta$' },
+        { label: 'Drag', value: sim.isDragging ? 'setting release angle' : 'drag the body to set $\\theta_0$' }
+      ]);
+    }
+  };
+
 })(typeof window !== 'undefined' ? window : globalThis);

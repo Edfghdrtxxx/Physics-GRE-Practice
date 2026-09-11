@@ -220,8 +220,8 @@ PGRE.views.exam = (function () {
       '<div class="exam-format-head"><h2>Legacy format</h2>' +
       '<span class="chip">100 questions · 170 min</span></div>' +
       '<p class="muted">Replays a full released-style sample exam verbatim, in book order — ' +
-      'matching the 100-question ETS practice tests your <a href="#/plan">study plan</a> ' +
-      'schedules on paper.</p>';
+      'matching the 100-question paper diagnostic (Oct 4, GR0177/GR0877) your <a href="#/plan">study plan</a> ' +
+      'schedules — the Oct 25 rehearsal uses the 70-question format above.</p>';
     if (bookExams.length) {
       html += '<div class="btn-row">';
       bookExams.forEach(function (ex, i) {

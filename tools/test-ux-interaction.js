@@ -854,6 +854,17 @@ motion.animateMeter(meter, 75);
 assert(meter.style.width === '75%', 'animateMeter under reduce sets final width immediately');
 assert(env.rafQueue().length === 0, 'animateMeter under reduce queues no fill frames');
 
+assert(typeof motion.letterSwapNav === 'function', 'motion.letterSwapNav is installed');
+var navReduce = env.document.createElement('nav');
+var aReduce = env.document.createElement('a');
+aReduce.setAttribute('data-nav', 'dashboard');
+aReduce.innerHTML = 'Dashboard';
+navReduce.appendChild(aReduce);
+env.document.body.appendChild(navReduce);
+motion.letterSwapNav(navReduce);
+assert(aReduce.querySelector('.letter-swap') == null,
+  'letterSwapNav under reduce does not wrap labels');
+
 /* ——— (a2) reduced=false control: motion actually runs ——— */
 console.log('\nreduced=false control (motion is not always a no-op)');
 var envOn = loadShipped(false);
@@ -895,6 +906,18 @@ motionOn.animateMeter(meterOn, 75);
 assert(meterOn.style.width === '0%', 'animateMeter with motion on zeros width before the fill');
 assert(envOn.rafQueue().length > 0, 'animateMeter with motion on queues rAF to apply the target width');
 
+var navLive = envOn.document.createElement('nav');
+var aLive = envOn.document.createElement('a');
+aLive.setAttribute('data-nav', 'dashboard');
+aLive.innerHTML = 'Dashboard';
+navLive.appendChild(aLive);
+envOn.document.body.appendChild(navLive);
+motionOn.letterSwapNav(navLive);
+assert(!!aLive.querySelector('.letter-swap'), 'letterSwapNav with motion on wraps the label');
+assert(!!aLive.querySelector('.letter-swap-sr'), 'letterSwapNav keeps a screen-reader label');
+assert(aLive.querySelectorAll('.letter-swap-cell').length === 9,
+  'letterSwapNav splits Dashboard into 9 cells');
+assert(aLive.getAttribute('data-letter-swap') === '1', 'letterSwapNav marks the enhanced link');
 /* ——— assess html() markers + bind on a parsed row ——— */
 console.log('\nPGRE.assess.html + bind');
 var assess = env.window.PGRE.assess;
@@ -965,6 +988,8 @@ assert(/\.grade-btn\s*\{[^}]*transition:\s*none/.test(reduceFlat),
   'reduce block sets .grade-btn { transition: none }');
 assert(/\.flash-tile\s*\{[^}]*transition:\s*none/.test(reduceFlat),
   'reduce block sets .flash-tile { transition: none }');
+assert(/\.letter-swap-a/.test(reduceFlat) && /letter-swap-b/.test(reduceFlat),
+  'reduce block covers letter-swap layers');
 assert(/width:\s*var\(--dur-slow\)\s+var\(--ease-out\)/.test(styleCss.replace(/\s+/g, ' ')) ||
   /width var\(--dur-slow\) var\(--ease-out\)/.test(styleCss),
   '.meter-fill uses duration/easing tokens, not 0.4s ease');
