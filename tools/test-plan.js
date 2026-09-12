@@ -123,8 +123,10 @@ var w3 = PGRE.weekTasks(weekById('w3'));
 var w6 = PGRE.weekTasks(weekById('w6'));
 assert(w3.some(function (t) { return t.id === 'w3-checkpoint' && t.kind === 'checkpoint'; }),
   'w3 checkpoint task present');
-assert(w6.some(function (t) { return t.id === 'w6-checkpoint' && t.kind === 'checkpoint'; }),
-  'w6 checkpoint task present');
+assert(w6.some(function (t) { return t.id === 'gr9677' && t.kind === 'mock'; }),
+  'w6 emits the GR9677 mock task');
+assert(!w6.some(function (t) { return t.id === 'w6-checkpoint'; }),
+  'w6 checkpoint folds into the mock row (no duplicate sitting)');
 
 var w7 = PGRE.weekTasks(weekById('w7'));
 var w7ids = ids(w7);
@@ -151,6 +153,31 @@ assert(allOk, 'every resolved task has id/label/hours/xp; every set id has a PLA
 assert(PGRE.currentWeek('2026-10-04').week.id === 'w3', "currentWeek('2026-10-04')→w3");
 assert(PGRE.currentWeek('2026-11-01').week.id === 'w7', "currentWeek('2026-11-01')→w7");
 assert(PGRE.currentWeek('2026-09-11').week.id === 'w0', "currentWeek('2026-09-11')→w0");
+
+function allMocks() {
+  var out = [];
+  PGRE.PLAN.forEach(function (ph) {
+    (ph.weeks || []).forEach(function (w) {
+      (w.mocks || []).forEach(function (t) { out.push(t); });
+    });
+  });
+  return out;
+}
+var mocks = allMocks();
+var mockIds = mocks.map(function (t) { return String(t.id).toLowerCase(); });
+['ets2024', 'gr1777', 'gr9677'].forEach(function (id) {
+  assert(mockIds.indexOf(id) !== -1, 'PLAN schedules ' + id);
+});
+var mockDates = mocks.map(function (t) { return t.date; });
+assert(mockDates.length === 3, '3 scheduled mocks');
+assert(new Set(mockDates).size === 3, 'mock dates distinct');
+assert(mockDates.every(function (d) { return d && d < '2026-11-01'; }), 'mocks before exam day');
+assert(mocks.every(function (t) {
+  return t.label && typeof t.xp === 'number' && t.kind === 'mock';
+}), 'mock task shape: label, xp, kind');
+assert(mockIds.indexOf('gr8677') === -1 && mockIds.indexOf('gr9277') === -1,
+  'GR8677/GR9277 are not scheduled mocks');
+
 
 if (failed) {
   console.log('\n' + failed + ' failed, ' + passed + ' passed');

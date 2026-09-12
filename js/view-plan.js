@@ -31,7 +31,7 @@ PGRE.views.plan = (function () {
 
     var html = '<div class="card hero">' +
       '<div class="hero-left"><h1>Review plan</h1>' +
-      '<p class="muted">Sep 14 → November 1, 2026 · 7 live weeks · 5+6+2 load (~16 h/wk) · checkpoints Oct 4 & Oct 25 · exam-week taper</p>' +
+      '<p class="muted">Sep 14 → November 1, 2026 · 7 live weeks · 5+6+2 load (~16 h/wk) · checkpoint Oct 4 · intact mocks Oct 11 / 18 / 25 · exam-week taper</p>' +
       '<p class="muted">Mirror of the vault syllabus (8-Week-Syllabus.md) — regenerate: node tools/build-plan.js</p>' +
       ui.meter(100 * allDone / Math.max(1, allTasks)) +
       '<div class="hero-xp-note">' + allDone + ' / ' + allTasks + ' tasks complete</div></div>' +
@@ -69,6 +69,7 @@ PGRE.views.plan = (function () {
           html += '<li class="task' + (done ? ' done' : '') + '">' +
             '<label><input type="checkbox" data-task="' + t.id + '" data-xp="' + t.xp + '"' + (done ? ' checked' : '') + '>' +
             '<span class="task-label">' + ui.esc(t.label) + '</span></label>' +
+            (t.kind === 'mock' ? ' <a class="btn btn-ghost btn-sm" href="#/exam">Open simulator →</a>' : '') +
             '<span class="task-meta">' + t.hours + ' h · +' + t.xp + ' XP</span></li>';
         });
         html += '</ul>';

@@ -125,28 +125,25 @@ PGRE.weekTasks = function (w) {
     });
   }
 
+  // Mock tasks come from the generated week.mocks (Mock schedule in the
+  // syllabus). A checkpoint whose label already names that form is the same
+  // sitting — emit the mock row instead of duplicating it.
+  var mockIds = (w.mocks || []).map(function (t) { return String(t.id).toLowerCase(); });
   if (w.checkpoint) {
-    var cpHours = 2, cpXp = 30;
-    if (w.id === 'w3') {
-      tasks.push({
-        id: 'w3-checkpoint',
-        label: 'Sun Oct 4 — paper diagnostic GR0177/GR0877 (replaces the 5th timed)',
-        hours: cpHours, xp: cpXp, kind: 'checkpoint'
-      });
-    } else if (w.id === 'w6') {
-      tasks.push({
-        id: 'w6-checkpoint',
-        label: 'Sun Oct 25 — 70Q/120 computer rehearsal, 2024 Practice Book (replaces the 5th timed)',
-        hours: cpHours, xp: cpXp, kind: 'checkpoint'
-      });
-    } else {
+    var covered = mockIds.some(function (id) {
+      return w.checkpoint.label.toLowerCase().indexOf(id) !== -1;
+    });
+    if (!covered) {
       tasks.push({
         id: w.checkpoint.id,
         label: w.checkpoint.label,
-        hours: cpHours, xp: cpXp, kind: 'checkpoint'
+        hours: 2, xp: 30, kind: 'checkpoint'
       });
     }
   }
+  (w.mocks || []).forEach(function (t) {
+    tasks.push({ id: t.id, label: t.label, hours: t.hours, xp: t.xp, kind: 'mock' });
+  });
 
   if (w.reviewSlot) {
     tasks.push({

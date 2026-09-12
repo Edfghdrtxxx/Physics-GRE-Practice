@@ -83,6 +83,31 @@ function stripBold(s) {
   return String(s).replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\s+/g, ' ').trim();
 }
 
+function isSunday(iso) {
+  const d = new Date(iso + 'T00:00:00Z');
+  if (isNaN(d.getTime())) fail('bad mock date: ' + iso);
+  return d.getUTCDay() === 0;
+}
+
+function parseMockDate(raw, year) {
+  const s = stripBold(raw);
+  let m = s.match(/(\d{4}-\d{2}-\d{2})/);
+  if (m) return m[1];
+  m = s.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})\b/);
+  if (!m) fail('unparseable mock date: ' + raw);
+  const month = MONTHS[m[1]];
+  if (!month) fail('unknown month in mock date: ' + raw);
+  return ymd(year, month, +m[2]);
+}
+
+function mockHours(format, id) {
+  const f = String(format || '');
+  if (id === 'ets2024' || /70\s*Q\s*\/\s*120/i.test(f)) return 2;
+  if (/(?:99|100)\s*Q\s*\/\s*170/i.test(f)) return 2.8;
+  return 2;
+}
+
+
 function focusHas(text, name) {
   if (name.length <= 3) {
     return new RegExp('(^|[^A-Za-z])' + name + '([^A-Za-z]|$)').test(text);
@@ -270,11 +295,10 @@ const liveWeeks = rows.map(function (line, idx) {
     week.reviewSlot = true;
   }
   if (num === 6) {
-    if (!/70Q\/120/.test(notesCell)) fail('week 6 notes missing 70Q/120');
-    if (!/2024/.test(notesCell)) fail('week 6 notes missing 2024');
+    if (!/GR9677/.test(notesCell)) fail('week 6 notes missing GR9677');
     week.checkpoint = {
       id: 'w6-checkpoint',
-      label: 'Sun Oct 25 — 70Q/120 computer rehearsal, 2024 Practice Book (replaces the 5th timed)'
+      label: 'Sun Oct 25 — GR9677 100q intact mock (replaces the 5th timed)'
     };
   }
   if (num === 7) {
@@ -332,6 +356,79 @@ for (let i = 0; i < weeks.length; i++) {
   }
 }
 
+const mockHead = md.match(/^## Mock schedule\b.*$/m);
+if (!mockHead) fail('missing "## Mock schedule" section');
+const mockBody = sectionAfter(md, /^## Mock schedule\b[^\n]*\n/m, /\n## /);
+if (!mockBody || !mockBody.trim()) fail('Mock schedule section empty');
+if (!/Book Sample Exams/i.test(mockBody) || !/optional extras/i.test(mockBody)) {
+  fail('Mock schedule must document Book Sample Exams as optional extras');
+}
+
+const mockTableMatch = mockBody.match(/\|[^\n]+\|\n\|[-:\s|]+\|\n((?:\|[^\n]+\|\n?)+)/);
+if (!mockTableMatch) fail('Mock schedule table not found');
+const mockRows = mockTableMatch[1].trim().split('\n').filter(Boolean);
+if (mockRows.length < 3) fail('Mock schedule expected at least 3 rows, got ' + mockRows.length);
+if (/\bGR8677\b|\bGR9277\b/i.test(mockTableMatch[0])) {
+  fail('Mock schedule must not list GR8677/GR9277 as mocks');
+}
+
+
+const REQUIRED_MOCKS = {
+  ets2024: '2026-10-11',
+  gr1777: '2026-10-18',
+  gr9677: '2026-10-25'
+};
+const FORBIDDEN_MOCKS = { gr8677: 1, gr9277: 1 };
+const seenMockIds = {};
+const seenMockDates = {};
+
+mockRows.forEach(function (line, idx) {
+  const c = cells(line);
+  if (c.length < 3) fail('Mock schedule row ' + (idx + 1) + ' has ' + c.length + ' cells');
+  const date = parseMockDate(c[0], 2026);
+  const formRaw = stripBold(c[1]);
+  const format = stripBold(c[2]);
+  const idMatch = formRaw.match(/\b(ets2024|GR\d{4}|gr\d{4})\b/i);
+  if (!idMatch) fail('Mock schedule row ' + (idx + 1) + ' missing exam id in Form cell: ' + c[1]);
+  const id = idMatch[1].toLowerCase();
+  if (FORBIDDEN_MOCKS[id]) fail('Mock schedule lists forbidden drill form ' + id);
+  if (!REQUIRED_MOCKS[id]) fail('Mock schedule unexpected exam id ' + id);
+  if (seenMockIds[id]) fail('Mock schedule duplicates ' + id);
+  if (seenMockDates[date]) fail('Mock schedule duplicate date ' + date);
+  if (date >= '2026-11-01') fail('mock ' + id + ' date ' + date + ' is not before 2026-11-01');
+  if (!isSunday(date)) fail('mock ' + id + ' date ' + date + ' is not a Sunday');
+  if (REQUIRED_MOCKS[id] !== date) {
+    fail('mock ' + id + ' expected ' + REQUIRED_MOCKS[id] + ', got ' + date);
+  }
+  seenMockIds[id] = true;
+  seenMockDates[date] = true;
+
+  let host = null;
+  for (let i = 0; i < weeks.length; i++) {
+    if (weeks[i].start <= date && date <= weeks[i].end) {
+      host = weeks[i];
+      break;
+    }
+  }
+  if (!host) fail('mock ' + id + ' date ' + date + ' is not inside a plan week');
+  if (host.historical) fail('mock ' + id + ' landed on historical week ' + host.id);
+  const task = {
+    id: id,
+    date: date,
+    label: stripBold(c[0]) + ' — ' + formRaw + ' ' + format + ' intact mock',
+    hours: mockHours(format, id),
+    xp: 50,
+    kind: 'mock'
+  };
+  if (!host.mocks) host.mocks = [];
+  host.mocks.push(task);
+});
+
+Object.keys(REQUIRED_MOCKS).forEach(function (id) {
+  if (!seenMockIds[id]) fail('Mock schedule missing required exam id ' + id);
+});
+
+
 if (!fs.existsSync(SETS_DIR)) fail('no topic-set dir ' + SETS_DIR);
 const setFiles = fs.readdirSync(SETS_DIR).filter(function (f) { return f.endsWith('.md'); });
 if (setFiles.length !== 7) fail('expected 7 topic-set files, got ' + setFiles.length);
@@ -378,7 +475,7 @@ const plan = [
   {
     id: 'p1',
     name: 'Live calendar · Sep 14 – Oct 25',
-    desc: '5+6+2 weekly load (~16 h): timed sets, formula recall, misses-first extras. Checkpoints Oct 4 and Oct 25.',
+    desc: '5+6+2 weekly load (~16 h): timed sets, formula recall, misses-first extras. Checkpoints Oct 4 and Oct 25. Intact mocks Oct 11 (ets2024), Oct 18 (GR1777), Oct 25 (GR9677).',
     weeks: weeks.slice(1, 7)
   },
   {
@@ -432,6 +529,7 @@ const report = {
       timedSets: w.timedSets,
       carry: w.carry || null,
       checkpoint: w.checkpoint ? w.checkpoint.id : null,
+      mocks: (w.mocks || []).map(function (t) { return t.id; }),
       deferred: w.deferred || null
     };
   }),
