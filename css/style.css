@@ -1,7 +1,7 @@
 /* Physics GRE Prep — Claude Aesthetic design system.
    ------------------------------------------------------------------
-   The palette is a warm cream ground (#faf9f5) carrying a four-step
-   cream ladder (canvas / soft / card / cream-strong), warm ink text
+   The palette is a warm cream floor (#f5f0e8) carrying a four-step
+   cream ladder (floor / canvas / ivory / cream-strong), warm ink text
    (#141413 → #6c6a64 → #8e8b82) and exactly ONE brand hue: coral
    (#cc785c). There is not one cool grey and not one pure white in the
    system. Depth comes from adjacent surface tones and 1px hairlines,
@@ -36,10 +36,13 @@
    ------------------------------------------------------------------ */
 [hidden] { display: none !important; }
 :root {
-  /* Cream ladder — surface-canvas / -soft / -card / -cream-strong.
-     --surface is deliberately the same cream as --bg: cards are
-     bordered canvas cards (1px var(--line)), not white slabs. */
+  /* Cream ladder — floor / panel / canvas-card / cream-strong.
+     --floor is the page (same step as --panel). Cards sit on --surface,
+     the lighter canvas (#faf9f5), so they lift without becoming white
+     slabs. --bg stays that canvas so inverted controls
+     (color: var(--bg) on ink fills) keep working. */
   --bg: #faf9f5;
+  --floor: #f5f0e8;
   --panel: #f5f0e8;
   --surface: #faf9f5;
   --ivory: #efe9de;
@@ -115,7 +118,7 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { height: 100%; }
+html { height: 100%; background: var(--floor); }
 /* Sans (Inter) is the running voice — body-md 16/1.55/400. The display
    serif is reserved for h1 and the focus page. Math is the third voice:
    KaTeX applies its own fonts on .katex, so formulas are untouched, and
@@ -127,7 +130,7 @@ body {
   font-size: 16px;
   line-height: 1.55;
   color: var(--ink);
-  background: var(--bg);
+  background: var(--floor);
   min-height: 100%;
   display: flex;
 }
@@ -279,7 +282,7 @@ a.brand:focus-visible { text-decoration: none; color: inherit; }
 }
 
 /* ——— Main ——— */
-#main { flex: 1; min-width: 0; }
+#main { flex: 1; min-width: 0; background: var(--floor); }
 #view { max-width: 1040px; margin: 0 auto; padding: 36px 40px 80px; }
 
 /* ——— Finder-style breadcrumb top bar (BUNDLE G) ———
@@ -292,7 +295,7 @@ a.brand:focus-visible { text-decoration: none; color: inherit; }
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--bg);
+  background: var(--floor);
   border-bottom: 1px solid var(--line);
 }
 .topbar-inner {
@@ -4201,8 +4204,8 @@ a.today-learn:focus-visible { text-decoration: none; color: inherit; }
    along the cream axis until it clears 4.5:1 on --dark-900.
 
    We invert the system's card convention: upstream, #181715 is a dark
-   *card* on a cream page. Here #181715 is the page floor and cards step
-   UP to #252320. Same three tones, standard product-chrome reading.
+   *card* on a cream page. Here --floor is #181715 and cards step
+   UP to --surface #252320. Same three tones, standard product-chrome reading.
 
    Note --accent is the SAME coral in both modes (5.47:1 on the dark
    floor). That is the strongest signal that this is one system, not a
@@ -4211,7 +4214,8 @@ a.today-learn:focus-visible { text-decoration: none; color: inherit; }
    untouched. KaTeX inherits `color`, so math follows --ink.
    ================================================================== */
 [data-theme="dark"] {
-  --bg: #181715;                 /* surface-dark */
+  --bg: #181715;                 /* surface-dark — inverted-control counterpart of light --bg */
+  --floor: #181715;              /* page floor; cards step UP via --surface */
   --panel: #1f1e1b;              /* surface-dark-soft */
   --surface: #252320;            /* surface-dark-elevated — cards step UP from the floor */
   --ivory: #2c2a26;              /* EXT: the ladder continued by its own step (+7,+7,+6) */
