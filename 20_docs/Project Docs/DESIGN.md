@@ -8,14 +8,22 @@ Everything runs from static files; all data stays on this machine (localStorage 
 ## 1. Architecture
 
 - **No build step.** Plain HTML/CSS/JS, hash-routed single page (`index.html` → `#/...`).
-- **State** in `localStorage` (`pgre-state-v1`): XP, per-question/per-topic records,
-  achievements, plan check-offs, streaks, daily counters, activity log.
+- **State** in `localStorage` (`pgre-state-v1`). Schema keys: `xp`, `questions`,
+  `topics`, `achievements`, `plan`, `daysActive`, `streak`, `today`, `flags`,
+  `attempts`, `sessions`, `mistakes`, `exams`, `notes`, `bookmarks`, `settings`,
+  `formulaDay`, `formulaStudy`, `migrations`, `studyLog`, `timer`, `timerStats`,
+  `focusSessions`, `formulaSuspended`, `formulaCheckIn`, `cards`, `cardReviews`,
+  `cardNotes`, `log`, `contentMeta`, `_rev`, `_epoch`. Persistence is
+  read-merge-write (`save()`): `_rev` is a monotonic counter, `_epoch` is a wipe
+  marker, `_mergeFromDisk` unions append-only arrays and takes maxes of counters.
+  A `storage` listener adopts sibling-tab writes; `PGRE.onStateAdopted` is the
+  repaint hook. Not last-write-wins.
 - **Book content** in `IndexedDB` (`pgre-content`): raw imported markdown, chapter splits,
   chapter→topic mapping. Kept out of localStorage because of its ~5 MB quota.
 - **Vendored libraries** (offline): `marked` (markdown → HTML), `KaTeX` + auto-render
   (math typesetting, `$...$`, `$$...$$`, `\(...\)`, `\[...\]`).
-- **Aesthetic:** Anthropic-inspired — ivory ground (`#FAF9F5`), near-black ink (`#141413`),
-  terracotta accent (`#CC785C`), serif display type, quiet cards, thin single-hue meters.
+- **Aesthetic:** Anthropic-inspired — cream floor (`#f5f0e8`), ivory cards, near-black
+  ink (`#141413`), terracotta accent (`#CC785C`), serif display type, thin meters.
 
 ## 2. Gamification
 
@@ -26,7 +34,7 @@ Everything runs from static files; all data stays on this machine (localStorage 
 | Incorrect answer | +2 |
 | Formula card reviewed | +2 (any grade; awarded quietly at session end) |
 | Formula daily check-in | +15 (once per local day on first Study / Match / Type / Quiz / Cloze settle; formula-specific streak) |
-| Plan task | +10 to +50 (task-specific; granted once, survives un-checking) |
+| Plan task | +5 to +50 (task-specific; granted once, survives un-checking) |
 | Daily challenge | +10 to +30 |
 | Achievement | Bronze +25 · Silver +50 · Gold +100 · Platinum +200 |
 
@@ -44,15 +52,19 @@ Streak = consecutive active days (shown live; broken if the last active day is b
 3 per day, picked deterministically from a 6-item pool seeded by the date, auto-claimed
 when their live counters (answers, correct-run, topics touched, plan tasks, notes visits) cross the goal.
 
-### Achievements (36, hierarchical)
-6 categories × 4 tiers. Chains (Problem Solver I–IV, streak 3/7/14/30, XP milestones, topic
-mastery 1/3/6/9) create the hierarchy; five are secret (hidden until unlocked).
+### Achievements (80, hierarchical)
+80 across 10 categories (`progress`, `knowledge`, `dedication`, `mastery`, `plan`,
+`exam`, `formulas`, `focus`, `review`, `secret`); 7 are secret (hidden until unlocked).
+Chains (Problem Solver I–IV, streak 3/7/14/30, XP milestones, topic mastery 1/3/6/9)
+create the hierarchy.
 Defined in `js/data-achievements.js`; metric- or flag-based, checked centrally in
 `gamify.checkAchievements()` (looped, since bonus XP can cascade into XP-milestone unlocks).
 
 ### Mastery
 Per-topic mastery = share of that topic's question bank solved correctly at least once.
-It will become more meaningful as the bank grows past the 20 preview questions.
+The default practice pool is 366 questions (20 preview + 146 CPG chapter problems +
+200 ETS drills from GR8677/GR9277). Exam-only content is excluded from the denominator
+(see §3).
 
 ## 3. Content pipeline — *status: SHIPPED (July 15, 2026 — parser v2 ran as an offline extraction pipeline)*
 
@@ -70,13 +82,15 @@ It will become more meaningful as the bank grows past the 20 preview questions.
 > default pool (preview + chapter problems; exam questions are opt-in via the quiz builder
 > to keep sims fresh). The pipeline is re-runnable; regenerated files simply overwrite.
 
-> **Released ETS exams (2026-07-18):** seven real ETS exams (2024 practice book — the current
-> 70-question format, with official P+ stats — plus GR1777/GR0877/GR0177/GR9677/GR9277/GR8677)
+> **Released ETS exams (2026-07-18):** five intact ETS exams (`PGRE.ETS_EXAMS`: ets2024 —
+> the current 70-question format, with official P+ stats — plus GR1777, GR0877, GR0177,
+> GR9677, all 100 questions) plus two drill sets (GR8677, GR9277; see exception below)
 > are extracted from local PDFs (gitignored `20_docs/ETS Released Exams/`) by a multi-agent
 > pipeline (transcribe → fidelity audit → blind-solve vs official key → reconcile) into
 > gitignored `content/ets-src/`, then built by `tools/build-ets-exams.js` into gitignored
-> `content/bank/ets-exams.js` (`PGRE.ETS_EXAMS`). The simulator replays them verbatim with the
-> official answer key and each exam's own published raw→scaled table (`exam.scaledOfficial`).
+> `content/bank/ets-exams.js`. The simulator replays the five exams verbatim with the
+> official answer key. Official raw→scaled tables live on the bank field `exam.scale[]`;
+> a submitted sitting records `scaledEst` and `scaledOfficial: true`.
 > **Spoiler-protection rule (user-approved):** exam-sourced questions (`cpg-exam`, `ets-exam`)
 > never enter the default practice pool — `{ includeExam: true }` is reserved for the
 > simulator draw and by-id lookups (review, mistake book, analytics) so intact exams stay
@@ -92,7 +106,9 @@ It will become more meaningful as the bank grows past the 20 preview questions.
 > exam's question are quarantined (`meta.json → quarantine`) so they can't spoil that mock.
 
 The site is frame-first: **20 preview questions** (hand-written, GRE-style, 5 choices)
-spread across all 9 topics stand in until the *Conquering the Physics GRE* markdown arrives.
+spread across all 9 topics. Shipped: the CPG bank (146 chapter problems, 3×100 sample
+exams, 334 formula cards) and ETS drills + exams are merged in (see the SHIPPED callout
+above); the preview set remains as `src: 'preview'`.
 
 **Math convention:** all formulas — in question statements, choices, and solutions — are
 authored as LaTeX inside `$...$` delimiters and typeset offline by KaTeX at render time
@@ -106,7 +122,7 @@ Anything added to the question bank, including parser-v2 output, must follow the
   topic portal's *Notes & reading* card.
 - Importing sets the "The Tome Arrives" secret achievement.
 
-**To build once the real file is here (parser v2):**
+**Parser v2 — shipped (July 15, 2026).** Historical plan (executed; not remaining work):
 1. Inspect the actual markdown structure (chapter headings, problem blocks, solutions,
    answer keys — the book has end-of-chapter problems with worked solutions).
 2. Write a structure-aware parser: chapter → topic auto-mapping; extract each problem
@@ -118,17 +134,20 @@ Anything added to the question bank, including parser-v2 output, must follow the
 
 ## 4. Timed mock-exam simulator — *status: SHIPPED (July 15, 2026)*
 
-Implemented as designed below (`js/exam-engine.js` + `js/view-exam.js`). The 100 × 170
-legacy mode replays Sample Exams 1–3 verbatim; the 70 × 120 mode draws by official
-weights (largest-remainder apportionment, prefer-unseen). In-progress sittings persist
+Implemented as designed below (`js/exam-engine.js` + `js/view-exam.js`). Weighted
+70×120 draw (official weights, largest-remainder apportionment, prefer-unseen) plus
+verbatim replay of the five released ETS exams (`ETS_EXAMS`, including ets2024 70q)
+then the three book sample exams (`BOOK_EXAMS`). In-progress sittings persist
 and resume across reloads; the countdown is wall-clock-based (background-tab throttling
 can't buy time). Blanks and misses feed the mistake book; every question logs an
 attempt row `mode:'exam'` for analytics. Original design:
 
 ### Formats
-- **Current (default):** 70 questions · 120 minutes — the revised test (since Sept 2023).
-- **Legacy mode:** 100 questions · 170 minutes — matches released ETS practice PDFs
-  (GR8677, GR9277, GR9677, GR0177, GR1777), which the study plan schedules on paper meanwhile.
+- **Current (default):** 70 questions · 120 minutes — the revised test (since Sept 2023);
+  weighted draw, plus verbatim ets2024 (70q).
+- **Legacy mode:** 100 questions · 170 minutes — verbatim replay of intact 100q mocks:
+  GR1777, GR0877, GR0177, GR9677, and book Sample Exams 1–3. GR8677 and GR9277 are
+  drill sets (`ETS_DRILLS`, src `ets-drill`), not mocks.
 
 ### Exam-room UI
 - Full-screen takeover, countdown timer (amber at 15 min, red at 5 min).
@@ -139,23 +158,25 @@ attempt row `mode:'exam'` for analytics. Original design:
 
 ### Scoring & results
 - Raw score = number correct (no guessing penalty on the current test).
-- Approximate scaled score via a published raw→scaled lookalike table (documented as an estimate).
+- Scaled score: verbatim released sittings use the bank exam's `exam.scale[]` (sitting
+  sets `scaledEst` + `scaledOfficial: true`); otherwise an estimate table (documented as an estimate).
 - Per-topic breakdown chart → feeds the "weakest topics" ranking used by Phase 3 plan tasks.
 - Session history stored in state (`state.exams[]`: date, format, raw, scaled-est, per-topic, duration used).
 
-### Gamification hooks (reserved ids)
-- XP: +150 completion, +1 per correct.
-- Achievements to add when it ships: *First Full Sim* (bronze), *Marathoner* — 3 sims (silver),
-  *Peak Performer* — ≥85% raw (gold), *Simulated Victory* — beat your previous sim score twice (gold).
+### Gamification hooks — shipped
+- XP: +150 on submit; the sitting stores the raw score.
+- Seven exam achievements: *First Full Sim*, *Marathoner*, *Peak Performer*,
+  *Simulated Victory*, *Battle-Tested*, *Monte Carlo*, *Top of the Curve*.
 
 ### Data model sketch
 ```js
 state.exams = [{
   id, startedAt, format: '70x120' | '100x170',
   seed, answers: {qid: choiceIdx}, flags: [qid],
-  submittedAt, raw, scaledEst, perTopic: {cm: {right, total}, ...}
+  submittedAt, raw, scaledEst, scaledOfficial: true, perTopic: {cm: {right, total}, ...}
 }]
 ```
+Official raw→scaled table lives on the bank exam (`exam.scale[]`), not this row.
 
 ## 4b. Attempt history, mistake book & formula recall — *status: shipped*
 
@@ -182,21 +203,27 @@ wrong pick, miss/solve counts, and a review schedule. Rules (user-chosen):
   (due / all / single) reuses the practice answering pipeline with `mode: 'mistakes'`,
   so drills earn normal XP and log attempts like any answer.
 
-### Formula recall (`#/formulas`, `js/view-formulas.js`, deck: `js/data-formulas.js`)
+### Formula recall (`#/formulas`, `js/view-formulas.js`, deck: `PGRE.formulaDeck()`)
 Vocabulary-app flip cards: prompt → flip → self-grade **Again / Hard / Good / Easy**.
-SM-2-style scheduling per card in `state.cards` (`ease` 1.3–3.0 starting 2.5;
-Again resets reps and repeats within the session; Hard ×1.2; Good ×ease; Easy
-×ease×1.3 — button labels preview the exact next interval). `gradeCard` also stamps
+Anki SM-2 scheduling (`js/srs.js` `nextIntervals`, lines 205–236) per card in
+`state.cards` (`ease` 1.3–3.0 starting 2.5; Again resets reps and repeats within
+the session). New cards: Hard/Good = 1d, Easy = 4d. Reviews add `daysLate`. Floors:
+Hard $\ge$ ivl+1, Good $\ge$ Hard+1, Easy $\ge$ Good+1. Button labels preview the
+exact next interval. `gradeCard` also stamps
 `lastReviewedDay` (LOCAL date) — the `studiedToday` source of truth (never compare a
 UTC ISO prefix to a local date string).
 
-**User-curated daily batch** (nothing is ever auto-selected). The daily target is a **soft
+**User-curated daily batch** (`srs.formulaDay()` is prune-only — it never auto-fills).
+The daily target is a **soft
 suggestion** (clamp **1–100**, default **10**; every read routes the raw value through
 `srs.clampTarget`, so an imported/corrupt value can't poison the UI). `state.formulaDay`
 = `{ date, reviewIds: [], newIds: [], softIds?: [] }` holds the picked batch. It starts EMPTY
-and grows only through explicit user actions; it **persists across day rolls** (un-studied
+and grows through explicit user actions: the picker, browse/search Add, and the **fill**
+CTA (`srs.fillFormulaDayIfEmpty`) on the dashboard (`js/view-dashboard.js`) and formulas
+home (`js/view-formulas.js`), which fills up to `clampTarget` unseen ids when the batch
+is empty. It **persists across day rolls** (un-studied
 picks carry over) and is reconciled on every access (`srs.formulaDay(deck)`, persisted only
-when it changed; an empty deck returns a transient batch WITHOUT persisting, guarding the
+when it changed; an empty batch returns a transient object WITHOUT persisting, guarding the
 nav-badge path that runs before IndexedDB resolves):
 - **Reconcile (prune-only):** drop ids no longer in the deck or suspended; drop soft pins
   that left the deck, are suspended, or were studied today; retire completed picks (graded
@@ -229,8 +256,9 @@ cards (older/newer/Resume).
 
 **Session mechanics (Study mode only; Match/Type/Quiz commit `gradeCard` directly — no steps).**
 - **Exam-date cap (F3):** `settings.examDate` (default `2026-11-01`, editable via the Today card's
-  date input). `srs.examCap()` = `max(1, min(days−1, ceil(0.2·days)))`, null when the date is
-  invalid/past (capping silently off). `nextIntervals` clamps hard/good/easy to the cap (Again
+  date input). `srs.examCap()` = $\max(1,\ \text{days}-1)$ when $\text{days}>1$ and
+  `settings.formulaExamCap !== false`; off when $\text{days}\le 1$ or `formulaExamCap === false`
+  (also off if the date is invalid/past). `nextIntervals` clamps hard/good/easy to the cap (Again
   stays 0), so grade-button previews match reality. **Final pass** (`srs.finalPassActive()`,
   active `0 < days ≤ 7`): scheduling is unchanged; the home banner nudges the user to pick
   due cards into the batch so every learned formula gets one more look — no auto-inclusion.
@@ -300,10 +328,9 @@ intro tile shows the round size, or "No cloze-able cards in today's pool yet." w
 Card ids are **equation-numbered and assumed stable** across re-imports; a re-import that
 renumbers ids resets card progress (known limitation).
 
-**The deck ships empty by design** — cards come only from the book import
-(parser v2 appends to `PGRE.FORMULAS` or stores
-`{ id: 'formula-deck', kind: 'formula-deck', cards: [...] }` in IndexedDB;
-`PGRE.formulaDeck()` merges both). Keyboard: space flips, 1–4 grade, ← steps back.
+**The formula deck is 334 cards** from `PGRE.BOOK_FORMULAS` (`content/bank/cpg-formulas.js`).
+`PGRE.FORMULAS` itself is empty; `PGRE.formulaDeck()` in `js/store.js` returns the book
+cards. Keyboard: space flips, 1–4 grade, ← steps back.
 
 ## 5. Review plan (generated: `js/data-plan.js`, resolved: `js/plan-engine.js`)
 
@@ -332,7 +359,8 @@ Regenerate after syllabus edits: `node tools/build-plan.js`.
 
 ## 6. Design-system notes (dataviz conventions applied)
 
-- Meters: fill = accent terracotta; track = lighter step of the same hue (never gray).
+- Meters: fill = accent terracotta; track = `--accent-track` `#e6dfd8` (neutral cream, not
+  a lighter same-hue). Page floor `--floor` `#f5f0e8`; cards ivory.
 - Stat tiles: sentence-case label, sans-semibold value, proportional figures.
 - Status (correct/incorrect) always icon + label, never color alone; green/red reserved
   for status, never decoration.
@@ -349,25 +377,29 @@ Regenerate after syllabus edits: `node tools/build-plan.js`.
 
 Everything in `PROPOSAL.md` was built in three orchestrated waves (infra → features →
 theme/polish), each implementation reviewed adversarially and the whole site verified
-end-to-end via headless Chrome (per `.claude/skills/verify/SKILL.md`):
+end-to-end via headless Chrome (per `.agents/skills/verify/SKILL.md`):
 
 - **Infra:** state schema v2 (`exams`, `notes`, `bookmarks`, `settings`, `studyLog`,
   attempt `confidence`), `js/bank.js` source merge, `js/study-time.js` passive active-time
   tracker, `js/notes.js` API, routes/nav for `#/analytics` `#/build` `#/search` `#/notes`,
-  4 mock-exam achievements.
+  7 exam achievements.
 - **#1 Mock-exam simulator** (§4) · **#2 Analytics** (`#/analytics`: weekly accuracy trend,
   points-lost-per-topic ranking, time histogram vs pace budget, volume heatmap, sims table)
   · **#3 Custom quiz builder** (`#/build`: topics × difficulty × unseen/missed/slowest/
   bookmarked, exam-source opt-in, deep link `#/build/topic-<id>`) · **#4 Pace trainer**
   (settings-driven, 103 s default) · **#5 Flashcard modes** (Match / Type-to-recall /
-  Auto-quiz in `js/flashmodes.js`, SRS-integrated) · **#6 Confidence tagging** (knew-it/
+  Auto-quiz / Cloze in `js/flashmodes.js`, SRS-integrated) · **#6 Confidence tagging** (knew-it/
   guessed; lucky guesses enter the mistake book, cleared on a confident re-solve) ·
   **#7 Question of the day** (dashboard, date-seeded) · **#8 Notes & bookmarks**
   (`#/notes`) · **#9 Search** (`#/search`, all sources incl. book sections & notes) ·
   **#10 Readiness estimate** (dashboard, labeled estimate, blends sims) · **#11 Study-time
-  tracking** (dashboard card vs 15–17 h target) · **#12 Distractor explanations**
+  tracking** (dashboard card vs 15–17 h target; `#/study-time`) · **#12 Distractor explanations**
   (`choiceSols` mined from the book's worked solutions; shown in practice feedback, exam
   review, mistake book) · **#13 Print/PDF** (`css/print.css`: paper mistake book +
   per-topic formula sheets) · **#14 Keyboard-first practice** (A–E/1–5, Enter, G;
   gated on `settings.keyboard`) · **#15 Dark mode** (tokenized palette,
   `[data-theme="dark"]`, sidebar toggle, per-theme heatmap/amber tokens).
+
+Shipped after the original 15: **Concept visualization** (`#/concepts`, `js/view-concepts.js`,
+`visualizer-engine.js`, `js/visualizers/`), **Focus timer** (`#/focus`), **Study time**
+(`#/study-time`), and **Cloze** flashmode (see §4b).

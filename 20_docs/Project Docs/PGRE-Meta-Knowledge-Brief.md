@@ -8,12 +8,12 @@ Act as the orchestrator for this task. You own the HOW: decide how to decompose 
 ```
 { id, title, format, link, scale: [{raw, scaled}...],
   questions: [{ id, topic, subtopic, difficulty, q, choices, answer,
-                choiceSols, sol, images, src }] }
+                sol, pplus, fig, images, src }] }
 ```
-- `topic`: two-letter code (cm, em, qm, td, at, ow, sr, lm, sp)
-- `choiceSols`: per-distractor explanations (null if none)
+- `topic`: two-letter code (cm, em, qm, th, at, ow, sr, lb, sp)
 - `sol`: HTML string with worked solution
-- 7 exams: ets2024, gr0177, gr0877, gr1777, gr8677, gr9277, gr9677
+- 5 intact `ETS_EXAMS`: ets2024, gr1777, gr0877, gr0177, gr9677
+- 2 `ETS_DRILLS`: gr8677, gr9277
 
 ## Web Research
 Use `/deep-research` for the web-sourced portion. Target reliable platforms:
@@ -31,4 +31,4 @@ Write a single file: `20_docs/Project Docs/PGRE-Philosophy.md`
 - Never reproduce ETS question text (copyright + spoiler protection)
 
 ## What Already Exists at Output Path
-Nothing — `20_docs/Project Docs/` contains `DESIGN.md`, `PROPOSAL.md`, `FORMULA-MEMORIZATION-SURVEY.md`, `Practice Resources.md`. The philosophy doc is new.
+Delivered. `PGRE-Philosophy.md` and `ANKI-SRS-CANON.md` now live in `20_docs/Project Docs/` alongside `DESIGN.md`, `PROPOSAL.md`, `FORMULA-MEMORIZATION-SURVEY.md`, `Practice Resources.md`.
