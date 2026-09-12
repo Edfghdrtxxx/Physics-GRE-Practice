@@ -492,14 +492,12 @@ PGRE.timer = (function () {
     });
   }
 
-  function adoptStudyLog(raw) {
-    if (!raw || !PGRE.store || !PGRE.store.state) return;
-    try {
-      var incoming = JSON.parse(raw);
-      if (incoming && incoming.studyLog && typeof incoming.studyLog === 'object') {
-        PGRE.store.state.studyLog = incoming.studyLog;
-      }
-    } catch (e) { /* peer write unreadable */ }
+  /* store._adopt() already merges a sibling tab's studyLog (per-day max) into
+     the live heap on every storage event; the hook just repaints the sidebar
+     total. Single assignment — no other module registers this hook. */
+  function bindAdoptRepaint() {
+    if (!window.PGRE) return;
+    PGRE.onStateAdopted = function () { paintToday(); };
   }
 
   function registerLifecycle() {
@@ -521,12 +519,7 @@ PGRE.timer = (function () {
     window.addEventListener('hashchange', function () { render(); });
     document.addEventListener('click', paintToday, { capture: false, passive: true });
     document.addEventListener('keydown', paintToday, { capture: false, passive: true });
-    window.addEventListener('storage', function (e) {
-      if (!e || e.key !== PGRE.store.KEY) return;
-      var t = st();
-      if (!t || !t.on) adoptStudyLog(e.newValue);
-      paintToday();
-    });
+    bindAdoptRepaint();
     // Last focused seconds survive closing. NB: pagehide does NOT stop the timer
     // — timer.on + lastCredit persist, and the next boot credits the gap. A PAUSED
     // session banks nothing here (credit no-ops) and its state already persisted at

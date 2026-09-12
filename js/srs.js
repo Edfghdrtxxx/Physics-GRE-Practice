@@ -650,7 +650,8 @@ PGRE.srs = {
   suspendCard: function (id) {
     var s = PGRE.store.state;
     if (!s.formulaSuspended) s.formulaSuspended = {};
-    s.formulaSuspended[id] = 1;
+    s.formulaSuspended[id] = new Date().toISOString(); // ISO so tombstone ts can compare
+    PGRE.store.untombstone('formulaSuspended', id);
     var batch = s.formulaDay;
     if (batch) {
       batch.reviewIds = batch.reviewIds.filter(function (x) { return x !== id; });
@@ -664,7 +665,7 @@ PGRE.srs = {
 
   unsuspendCard: function (id) {
     var susp = PGRE.store.state.formulaSuspended;
-    if (susp) delete susp[id];
+    if (susp) { delete susp[id]; PGRE.store.tombstone('formulaSuspended', id); }
   },
 
   isSuspended: function (id) {

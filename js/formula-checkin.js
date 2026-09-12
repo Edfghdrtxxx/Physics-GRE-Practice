@@ -143,28 +143,20 @@ PGRE.formulaCheckIn = (function () {
     return statusFrom(readState(), todayOpt || todayStr());
   }
 
-  /* Best-effort: merge sibling-tab claims from localStorage into the live
-     in-memory state so a second tab does not re-award the daily bonus. */
-  function syncFromStorage() {
-    try {
-      if (!window.PGRE || !PGRE.store || !PGRE.store.state) return;
-      var key = PGRE.store.KEY;
-      if (!key || typeof localStorage === 'undefined') return;
-      var raw = localStorage.getItem(key);
-      if (!raw) return;
-      var parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && parsed.formulaCheckIn) {
-        PGRE.store.state.formulaCheckIn = coerce(parsed.formulaCheckIn);
-      }
-    } catch (e) { /* corrupt storage — leave live state alone */ }
-  }
 
   /* Side-effecting entry point for settle paths: once-per-day claim, XP bonus
      via gamify, activity log line. Caller is expected to save state afterward
      (settleStudy / awardReviewXP already do). Returns the apply() result. */
   function record(todayOpt) {
     var today = todayOpt || todayStr();
-    syncFromStorage();
+    // close the missed-event race: read disk synchronously so a sibling tab's
+    // claim is visible before we claim the same day twice
+    try {
+      var raw = localStorage.getItem(PGRE.store.KEY);
+      if (raw && PGRE.store && typeof PGRE.store._adopt === 'function') {
+        PGRE.store._adopt(JSON.parse(raw));
+      }
+    } catch (e) { /* unreadable disk — proceed on the live heap */ }
     var prior = readState();
     var r = apply(prior, today);
     if (!r.claimed) return r;

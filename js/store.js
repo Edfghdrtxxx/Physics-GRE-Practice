@@ -10,7 +10,22 @@ PGRE.store = {
   // session-only flags, never part of the saved state (read by boot/UI):
   _recoveredFromCorruption: false, // load() had to discard an unreadable blob
   _persistFailed: false,           // the last save() could not write
+  _adoptHookBound: false,          // storage listener installed (load() may run twice)
 
+  /* Cross-tab persistence. Two documents of this origin share one localStorage
+     key; a tab holding a stale heap used to overwrite a sibling's newer state
+     wholesale (reproduced: idle dashboard's pagehide flush erased a study
+     tab's recorded attempt). Two guards now prevent that:
+       _rev   — monotonic write counter inside the saved blob. save() re-reads
+                disk first; a newer disk _rev means a sibling wrote since our
+                last sync, so we merge disk into the live heap before writing
+                instead of clobbering it.
+       _epoch — bumped by reset()/resetFormulaCards()/importJSON(). A higher
+                disk epoch means the sibling deliberately wiped; adopt disk
+                wholesale, do not resurrect merged-away data.
+     A 'storage' event listener keeps idle heaps current so their later saves
+     have nothing to merge; the save()-time disk read covers the race window
+     between the last event and the write. */
   defaults: function () {
     return {
       created: new Date().toISOString(),
@@ -132,11 +147,216 @@ PGRE.store = {
       // recent activity feed, newest first
       log: [],
       // content files metadata mirror (text itself is in IndexedDB)
-      contentMeta: []
+      contentMeta: [],
+      // deletion markers for user-deletable maps (notes/bookmarks/cardNotes/
+      // formulaSuspended) — stops a stale sibling heap resurrecting them
+      tombstones: {}
     };
   },
 
+  /* Merge a sibling tab's disk state into the live heap. Collections union by
+     identity, counters take max, scalars prefer live (an idle heap is kept
+     current by the storage listener, so live-is-authoritative only ever wins
+     for a change this tab genuinely made). Returns nothing — mutates
+     this.state in place. */
+  _mergeFromDisk: function (disk) {
+    var st = this.state;
+    if (!st || !disk || typeof disk !== 'object') return;
+    var isObj = function (v) { return !!v && typeof v === 'object' && !Array.isArray(v); };
+
+    // append-only logs: union by identity, keep live order then unseen disk
+    // entries appended after (chronological-ish).
+    function unionArr(live, inc, keyFn, cap) {
+      var seen = {}, out = [], i, k;
+      for (i = 0; i < live.length; i++) { k = keyFn(live[i]); seen[k] = 1; out.push(live[i]); }
+      for (i = 0; i < inc.length; i++) { k = keyFn(inc[i]); if (!seen[k]) { seen[k] = 1; out.push(inc[i]); } }
+      if (cap && out.length > cap) out = out.slice(out.length - cap);
+      return out;
+    }
+    var J = JSON.stringify;
+    if (Array.isArray(disk.attempts)) st.attempts = unionArr(st.attempts || [], disk.attempts, function (a) { return a.ts + '|' + a.qid + '|' + a.sid; });
+    if (Array.isArray(disk.sessions)) st.sessions = unionArr(st.sessions || [], disk.sessions, function (s) { return s.id || J(s); });
+    if (Array.isArray(disk.exams)) st.exams = unionArr(st.exams || [], disk.exams, function (e) { return e.id || J(e); });
+    if (Array.isArray(disk.focusSessions)) st.focusSessions = unionArr(st.focusSessions || [], disk.focusSessions, function (s) { return s.startedAt + '|' + s.endedAt; }, 300);
+    if (Array.isArray(disk.cardReviews)) st.cardReviews = unionArr(st.cardReviews || [], disk.cardReviews, J);
+    if (Array.isArray(disk.daysActive)) st.daysActive = unionArr(st.daysActive || [], disk.daysActive, function (d) { return d; }).sort();
+    if (Array.isArray(disk.contentMeta)) st.contentMeta = unionArr(st.contentMeta || [], disk.contentMeta, function (m) { return m.id || J(m); });
+    // activity log is newest-first; union then re-sort by ts desc, cap 60
+    if (Array.isArray(disk.log)) {
+      st.log = unionArr(st.log || [], disk.log, function (l) { return l.ts + '|' + l.kind + '|' + l.text; });
+      st.log.sort(function (a, b) {
+        return (b.ts || '') < (a.ts || '') ? -1 : ((b.ts || '') > (a.ts || '') ? 1 : 0);
+      });
+      if (st.log.length > 60) st.log.length = 60;
+    }
+    // tombstones: user-deletable maps mark deletions with a timestamp so a
+    // stale sibling heap can't resurrect the key on a missed storage event.
+    // A record whose own timestamp postdates the tombstone is a deliberate
+    // re-add and survives (and clears the tombstone); older/untimed = stale.
+    var TOMBED = { notes: 1, bookmarks: 1, cardNotes: 1, formulaSuspended: 1 };
+    function recTs(map, val) {
+      if (map === 'notes' || map === 'cardNotes') return val && val.updatedAt;
+      return typeof val === 'string' ? val : null; // bookmarks: ISO; suspended: ISO
+    }
+    if (isObj(disk.tombstones)) {
+      if (!isObj(st.tombstones)) st.tombstones = {};
+      for (var tm in disk.tombstones) {
+        if (!isObj(st.tombstones[tm])) st.tombstones[tm] = {};
+        for (var tk in disk.tombstones[tm]) {
+          var ts = disk.tombstones[tm][tk];
+          if (!st.tombstones[tm][tk] || ts > st.tombstones[tm][tk]) st.tombstones[tm][tk] = ts;
+        }
+      }
+    }
+    // keyed records: union; on key collision prefer live (this tab's latest
+    // write) except where the field is monotonic.
+    ['questions', 'topics', 'plan', 'mistakes', 'notes', 'bookmarks',
+     'flags', 'cards', 'cardNotes', 'formulaSuspended', 'migrations'].forEach(function (k) {
+      if (!isObj(disk[k])) return;
+      if (!isObj(st[k])) st[k] = {};
+      var tombed = st.tombstones && st.tombstones[k];
+      for (var key in disk[k]) {
+        if (tombed && tombed[key]) {
+          var rt = recTs(k, disk[k][key]);
+          if (!rt || rt <= tombed[key]) continue;      // stale copy — tombstone wins
+          delete tombed[key];                          // newer record = re-add
+        }
+        if (!(key in st[k])) st[k][key] = disk[k][key];
+      }
+    });
+    for (var tm2 in TOMBED) {
+      var tb = st.tombstones && st.tombstones[tm2];
+      if (!tb || !isObj(st[tm2])) continue;
+      for (var tk2 in tb) {
+        if (!(tk2 in st[tm2])) continue;
+        var lts = recTs(tm2, st[tm2][tk2]);
+        if (!lts || lts <= tb[tk2]) delete st[tm2][tk2]; // stale live copy
+        else delete tb[tk2];                             // live re-add clears it
+      }
+    }
+    // achievements: earliest unlock timestamp wins (first-earned is truth)
+    if (isObj(disk.achievements)) {
+      if (!isObj(st.achievements)) st.achievements = {};
+      for (var a in disk.achievements) {
+        if (!(a in st.achievements) || disk.achievements[a] < st.achievements[a]) st.achievements[a] = disk.achievements[a];
+      }
+    }
+    // studyLog: per-day max — summing would double-count two tabs open at once
+    if (isObj(disk.studyLog)) {
+      if (!isObj(st.studyLog)) st.studyLog = {};
+      for (var d in disk.studyLog) st.studyLog[d] = Math.max(st.studyLog[d] || 0, disk.studyLog[d]);
+    }
+
+    // counters / monotonic scalars
+    st.xp = Math.max(st.xp || 0, disk.xp || 0);
+    if (isObj(disk.timerStats)) {
+      st.timerStats.sessions = Math.max(st.timerStats.sessions || 0, disk.timerStats.sessions || 0);
+      st.timerStats.seconds = Math.max(st.timerStats.seconds || 0, disk.timerStats.seconds || 0);
+    }
+    // streaks: later lastDay wins; same day → higher current/best
+    ['streak', 'formulaCheckIn'].forEach(function (k) {
+      var l = st[k], r = disk[k];
+      if (!isObj(r)) return;
+      if (!isObj(l) || (r.lastDay || '') > (l.lastDay || '')) { st[k] = r; return; }
+      if (r.lastDay === l.lastDay) {
+        l.current = Math.max(l.current || 0, r.current || 0);
+        l.best = Math.max(l.best || 0, r.best || 0);
+      }
+    });
+    // today's counters: same date → per-field max; different date → live wins
+    // (a stale-date disk blob is yesterday's leftover, never newer work)
+    if (isObj(disk.today) && isObj(st.today) && disk.today.date === st.today.date) {
+      var dt = disk.today, lt = st.today;
+      ['answered', 'correct', 'run', 'bestRun', 'planTasks', 'examAnswered'].forEach(function (f) {
+        lt[f] = Math.max(lt[f] || 0, dt[f] || 0);
+      });
+      lt.notesVisited = lt.notesVisited || dt.notesVisited;
+      lt.topics = unionArr(lt.topics || [], dt.topics || [], function (x) { return x; });
+      lt.claimed = unionArr(lt.claimed || [], dt.claimed || [], function (x) { return x; });
+      if (!lt.qotd && dt.qotd) lt.qotd = dt.qotd;
+    }
+    // formulaDay: same date → union the id lists; different date → live wins
+    if (isObj(disk.formulaDay) && isObj(st.formulaDay) && disk.formulaDay.date === st.formulaDay.date) {
+      ['reviewIds', 'newIds', 'softIds'].forEach(function (f) {
+        st.formulaDay[f] = unionArr(st.formulaDay[f] || [], disk.formulaDay[f] || [], function (x) { return x; });
+      });
+      // a soft pin only makes sense for a card still in the batch
+      if (st.formulaDay.softIds) {
+        var inBatch = {};
+        st.formulaDay.reviewIds.concat(st.formulaDay.newIds).forEach(function (id) { inBatch[id] = 1; });
+        st.formulaDay.softIds = st.formulaDay.softIds.filter(function (id) { return inBatch[id]; });
+        if (!st.formulaDay.softIds.length) delete st.formulaDay.softIds;
+      }
+    } else if (isObj(disk.formulaDay) && !st.formulaDay) {
+      st.formulaDay = disk.formulaDay;
+    }
+    // in-flight formula Study: an unfinished session beats a finished one;
+    // same done-ness → the more-advanced session wins
+    if (isObj(disk.formulaStudy)) {
+      var ls = st.formulaStudy, ds = disk.formulaStudy;
+      if (!isObj(ls) || (!!ls.done && !ds.done) ||
+          (!!ls.done === !!ds.done && (ds.pressCount || 0) > (ls.pressCount || 0))) {
+        st.formulaStudy = ds;
+      }
+    }
+    // focus timer: a running timer wins; else merge monotonic fields
+    if (isObj(disk.timer) && isObj(st.timer)) {
+      if (disk.timer.on && !st.timer.on) st.timer = disk.timer;
+      else if (!disk.timer.on && st.timer.on) { /* keep live */ }
+      else {
+        if ((disk.timer.lastCredit || 0) > (st.timer.lastCredit || 0)) st.timer.lastCredit = disk.timer.lastCredit;
+        st.timer.pausedMs = Math.max(st.timer.pausedMs || 0, disk.timer.pausedMs || 0);
+        if (st.timer.goalMin == null) st.timer.goalMin = disk.timer.goalMin;
+      }
+    }
+    // settings: prefer live — the storage listener keeps idle heaps current,
+    // so a live value differing from disk is this tab's own fresh change.
+  },
+
+  /* Mark a user deletion so a stale sibling heap can't resurrect the key on a
+     missed storage event. Add paths must call untombstone so a deliberate
+     re-add in this tab persists. */
+  tombstone: function (map, key) {
+    var t = this.state.tombstones || (this.state.tombstones = {});
+    (t[map] || (t[map] = {}))[key] = new Date().toISOString();
+  },
+  untombstone: function (map, key) {
+    var t = this.state.tombstones && this.state.tombstones[map];
+    if (t) delete t[key];
+  },
+
+  /* Adopt a sibling tab's write into the live heap (storage event / pre-save
+     read). Higher epoch → wholesale replace; same epoch → merge. */
+  _adopt: function (disk) {
+    if (!disk || typeof disk !== 'object' || !this.state) return;
+    var diskEpoch = disk._epoch || 0, liveEpoch = this.state._epoch || 0;
+    if (diskEpoch > liveEpoch) {
+      this.state = disk;
+      this.migrate();
+    } else if (diskEpoch === liveEpoch) {
+      if ((disk._rev || 0) > (this.state._rev || 0)) this._mergeFromDisk(disk);
+      else return; // stale or own echo — nothing to absorb
+    } else {
+      return; // our epoch is ahead; disk is pre-reset leftovers
+    }
+    this.state._rev = Math.max(this.state._rev || 0, disk._rev || 0);
+    if (typeof PGRE.onStateAdopted === 'function') {
+      try { PGRE.onStateAdopted(); } catch (e) { /* repaint hook must not break persist */ }
+    }
+  },
+
+  _bindAdoptHook: function () {
+    if (this._adoptHookBound || typeof window === 'undefined' || !window.addEventListener) return;
+    this._adoptHookBound = true;
+    var self = this;
+    window.addEventListener('storage', function (e) {
+      if (!e || e.key !== self.KEY || !e.newValue) return;
+      try { self._adopt(JSON.parse(e.newValue)); } catch (err) { /* peer write unreadable */ }
+    });
+  },
+
   load: function () {
+    this._bindAdoptHook();
     var raw = null;
     try {
       raw = localStorage.getItem(this.KEY);
@@ -207,11 +427,22 @@ PGRE.store = {
       if (!st[k] || typeof st[k] !== 'object' || Array.isArray(st[k])) st[k] = d[k];
       for (var kk in d[k]) if (!(kk in st[k])) st[k][kk] = d[k][kk];
     });
+    if (typeof st._rev !== 'number') st._rev = 0;
+    if (typeof st._epoch !== 'number') st._epoch = 0;
     if (st.settings.examDate === '2026-10-28') st.settings.examDate = '2026-11-01';
   },
 
   save: function () {
     try {
+      // Absorb a sibling tab's newer write before overwriting: without this
+      // read-merge-write a stale heap clobbers work recorded in another tab.
+      var raw = localStorage.getItem(this.KEY);
+      if (raw) {
+        var disk = null;
+        try { disk = JSON.parse(raw); } catch (e) { disk = null; }
+        this._adopt(disk);
+      }
+      this.state._rev = (this.state._rev || 0) + 1;
       localStorage.setItem(this.KEY, JSON.stringify(this.state));
       if (this._persistFailed) {
         this._persistFailed = false;
@@ -226,8 +457,25 @@ PGRE.store = {
     }
   },
 
+  /* Highest epoch seen anywhere (live heap + disk). Deliberate wipes must beat
+     a sibling's missed-event epoch or save() would merge the wipe away. */
+  _maxEpoch: function (extra) {
+    var e = Math.max((this.state && this.state._epoch) || 0, extra || 0);
+    try {
+      var raw = localStorage.getItem(this.KEY);
+      if (raw) {
+        var disk = JSON.parse(raw);
+        if (disk && disk._epoch > e) e = disk._epoch;
+      }
+    } catch (err) { /* unreadable disk — live epoch stands */ }
+    return e;
+  },
+
   reset: function () {
+    var epoch = this._maxEpoch() + 1;
     this.state = this.defaults();
+    this.state._epoch = epoch; // higher epoch forces siblings to adopt wholesale
+    this.state._rev = 0;
     this.save();
   },
 
@@ -238,9 +486,12 @@ PGRE.store = {
     this.state.formulaDay = null;
     this.state.formulaStudy = null;
     this.state.formulaSuspended = {};
+    this.state.tombstones = {};
+    this.state._epoch = this._maxEpoch() + 1; // deletions must not merge back
     if (this.state.migrations) delete this.state.migrations.easy10;
     this.save();
   },
+
 
   today: function () {
     var d = new Date();
@@ -331,6 +582,10 @@ PGRE.store = {
     }
     var prev = this.state; // keep the live state so a failed migrate rolls back
     this.state = obj;
+    // a restore replaces the dataset wholesale — bump epoch past live, disk,
+    // and the imported blob so sibling tabs adopt instead of merging back
+    this.state._epoch = this._maxEpoch(Math.max(obj._epoch || 0, (prev && prev._epoch) || 0)) + 1;
+    this.state._rev = 0;
     try {
       this.migrate();
     } catch (e) {
@@ -472,22 +727,41 @@ PGRE.formulaDeck = function () {
   });
 };
 
-/* Naive chapter splitter for the raw book markdown (placeholder until the
-   real parser is written against the actual file — see 20_docs/Project Docs/DESIGN.md).
-   Splits on level-1/level-2 headings. */
+/* Split imported book markdown into map-able {title, text} sections.
+   Kahn (and similar ATX books) use # / ## for chapters and #### — with a
+   handful of ### — for the sections people actually assign to topic portals.
+   Splitting only on #{1,2} collapsed the real book into a few giant blobs.
+   Section titles are prefixed with the parent chapter when one exists.
+   Heading-less text still falls back to a single "Full document" chapter. */
 PGRE.splitChapters = function (text) {
-  var lines = text.split('\n');
+  var lines = String(text || '').split('\n');
   var chapters = [];
   var cur = null;
-  lines.forEach(function (line, i) {
-    var m = line.match(/^(#{1,2})\s+(.+)/);
-    if (m) {
-      if (cur) cur.endLine = i;
-      cur = { title: m[2].trim(), startLine: i, endLine: lines.length };
-      chapters.push(cur);
+  var parentTitle = '';
+
+  function cleanHeading(s) {
+    s = String(s || '').trim();
+    if (s.indexOf('**') === 0 && s.slice(-2) === '**' && s.length > 4) {
+      s = s.slice(2, -2).trim();
     }
+    return s;
+  }
+
+  lines.forEach(function (line, i) {
+    var m = line.match(/^(#{1,4})\s+(.+)/);
+    if (!m) return;
+    if (cur) cur.endLine = i;
+    var level = m[1].length;
+    var raw = cleanHeading(m[2]);
+    if (level <= 2) parentTitle = raw;
+    var title = (level >= 3 && parentTitle) ? (parentTitle + ' · ' + raw) : raw;
+    if (!title) title = 'Untitled';
+    cur = { title: title, startLine: i, endLine: lines.length };
+    chapters.push(cur);
   });
-  if (chapters.length === 0) chapters.push({ title: 'Full document', startLine: 0, endLine: lines.length });
+  if (chapters.length === 0) {
+    chapters.push({ title: 'Full document', startLine: 0, endLine: lines.length });
+  }
   chapters.forEach(function (ch) {
     ch.text = lines.slice(ch.startLine, ch.endLine).join('\n');
   });

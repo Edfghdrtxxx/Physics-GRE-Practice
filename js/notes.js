@@ -15,8 +15,8 @@ PGRE.notes = {
   set: function (qid, text) {
     var s = PGRE.store.state;
     text = String(text == null ? '' : text).trim();
-    if (text) s.notes[qid] = { text: text, updatedAt: new Date().toISOString() };
-    else delete s.notes[qid];
+    if (text) { s.notes[qid] = { text: text, updatedAt: new Date().toISOString() }; PGRE.store.untombstone('notes', qid); }
+    else { delete s.notes[qid]; PGRE.store.tombstone('notes', qid); }
     PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
     PGRE.store.save();
   },
@@ -24,8 +24,8 @@ PGRE.notes = {
   /* Returns the new state: true = now bookmarked. */
   toggleBookmark: function (qid) {
     var s = PGRE.store.state;
-    if (s.bookmarks[qid]) delete s.bookmarks[qid];
-    else s.bookmarks[qid] = new Date().toISOString();
+    if (s.bookmarks[qid]) { delete s.bookmarks[qid]; PGRE.store.tombstone('bookmarks', qid); }
+    else { s.bookmarks[qid] = new Date().toISOString(); PGRE.store.untombstone('bookmarks', qid); }
     PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
     PGRE.store.save();
     return !!s.bookmarks[qid];
