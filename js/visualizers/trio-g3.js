@@ -1,4 +1,4 @@
-/* Formula visualizers — G3 Hooke / SHO phasor / coupled oscillators */
+/* Formula visualizers — G3 Hooke / SHO phasor / coupled oscillators / amplitude resonance */
 (function (global) {
   'use strict';
   global.PGRE = global.PGRE || {};
@@ -1555,6 +1555,370 @@
       legend('Mode energy', [
         { label: '$E_{Q_1}=\\tfrac12 m\\dot Q_1^2+\\tfrac12 k Q_1^2$', value: '$' + EQ1.toFixed(2) + '\\,\\mathrm{J}$' },
         { label: '$E_{Q_2}=\\tfrac12 m\\dot Q_2^2+\\tfrac12(k+2k_c)Q_2^2$', value: '$' + EQ2.toFixed(2) + '\\,\\mathrm{J}$' }
+      ]);
+    }
+  };
+
+  PGRE.visualizers['cpgf-1.45'] = {
+    id: 'cpgf-1.45',
+    topic: 'cm',
+    title: 'Amplitude Resonance of a Driven Damped Oscillator: $\\omega_R = \\sqrt{\\omega_0^2 - 2\\beta^2}$',
+    formulaLatex: '$$\\omega_R = \\sqrt{\\omega_0^2 - 2\\beta^2}$$',
+    physicalStory:
+      'A driven damped oscillator reaches steady state $x=A(\\omega)\\cos(\\omega t-\\varphi)$ whose amplitude peaks at $\\omega_R=\\sqrt{\\omega_0^2-2\\beta^2}$, not at $\\omega_0$ and not at $\\omega_d=\\sqrt{\\omega_0^2-\\beta^2}$. The peak exists only for $\\beta<\\omega_0/\\sqrt{2}$; heavier damping makes $A(\\omega)$ fall monotonically from $\\omega=0$. Velocity resonance stays exactly at $\\omega_0$. Drag the operating-point marker along the curve.',
+    derivationSteps: [
+      {
+        step: 1,
+        title: 'Steady-state amplitude',
+        formula: 'm\\ddot{x}+b\\dot{x}+kx=F_0\\cos\\omega t,\\quad \\beta=b/(2m),\\quad A(\\omega)=\\frac{F_0/m}{\\sqrt{(\\omega_0^2-\\omega^2)^2+4\\beta^2\\omega^2}}',
+        text: 'After transients die, the particular solution is $x=A(\\omega)\\cos(\\omega t-\\varphi)$. The amplitude is set by the modulus of the complex denominator $(\\omega_0^2-\\omega^2)+2i\\beta\\omega$.'
+      },
+      {
+        step: 2,
+        title: 'Minimize the denominator',
+        formula: 'D(\\omega)=(\\omega_0^2-\\omega^2)^2+4\\beta^2\\omega^2,\\quad \\frac{dD}{d\\omega}=-4\\omega(\\omega_0^2-\\omega^2)+8\\beta^2\\omega',
+        text: 'Maximizing $A$ is equivalent to minimizing $D(\\omega)$. The factor of $F_0/m$ does not shift the peak.'
+      },
+      {
+        step: 3,
+        title: 'Amplitude-resonance root',
+        formula: '\\frac{dD}{d\\omega}=0 \\implies -(\\omega_0^2-\\omega^2)+2\\beta^2=0 \\implies \\omega_R^2=\\omega_0^2-2\\beta^2',
+        text: 'Discard the root $\\omega=0$. The remaining stationary point is the GRE card: $\\omega_R=\\sqrt{\\omega_0^2-2\\beta^2}$.'
+      },
+      {
+        step: 4,
+        title: 'Existence, $\\omega_d$, and velocity resonance',
+        formula: '\\omega_R\\ \\text{real iff }\\ \\beta<\\omega_0/\\sqrt{2};\\quad \\omega_d=\\sqrt{\\omega_0^2-\\beta^2};\\quad \\omega_{\\mathrm{vel}}=\\omega_0',
+        text: 'If $\\beta\\ge\\omega_0/\\sqrt{2}$ then $D(\\omega)$ has no interior minimum and $A(\\omega)$ decreases from $\\omega=0$. The free-oscillation frequency is $\\omega_d$, distinct from $\\omega_R$. Power/velocity resonance sits exactly at $\\omega_0$. Peak height is $A_{\\max}=(F_0/m)/(2\\beta\\omega_d)$ when the peak exists.'
+      }
+    ],
+    limitingCases: [
+      {
+        name: 'Undamped limit',
+        condition: '\\beta \\to 0',
+        result: '\\omega_R \\to \\omega_0,\\quad A_{\\max} \\to \\infty',
+        explanation: 'The resonance peak collapses onto $\\omega_0$ and becomes an infinitely sharp peak of unbounded height. Any $\\beta>0$ both lowers and left-shifts the peak.'
+      },
+      {
+        name: 'Peak about to vanish',
+        condition: '\\beta = \\omega_0/\\sqrt{2}',
+        result: '\\omega_R = 0,\\quad A_{\\max} = A(0) = (F_0/m)/\\omega_0^2',
+        explanation: 'The stationary point has reached $\\omega=0$. There is no peak at $\\omega>0$: $A(\\omega)$ is already monotonically decreasing from the static value, matching the banner. $A_{\\max}$ coincides with $A(0)$.'
+      },
+      {
+        name: 'No amplitude resonance',
+        condition: '\\beta \\ge \\omega_0/\\sqrt{2}',
+        result: 'A(\\omega)\\ \\text{decreases monotonically from }\\ \\omega=0',
+        explanation: 'Heavier damping $\\beta\\ge\\omega_0/\\sqrt{2}$ — including still-underdamped free motion ($\\omega_0/\\sqrt{2}\\le\\beta<\\omega_0$, where $\\omega_d$ is still real) — makes $A(\\omega)$ fall monotonically from the static value $A(0)=F_0/k$. The $\\omega_R$ marker disappears (the GRE trap). Free overdamping is the stricter line $\\beta>\\omega_0$.'
+      },
+      {
+        name: 'High-frequency drive',
+        condition: '\\omega \\gg \\omega_0',
+        result: 'A(\\omega) \\sim (F_0/m)/\\omega^2 \\to 0',
+        explanation: 'Inertia dominates. Phase lag $\\varphi\\to\\pi$: the mass sits opposite the drive.'
+      }
+    ],
+    greTraps: [
+      {
+        trap: 'Amplitude peak is not at $\\omega_0$',
+        warning: 'Writing $\\omega_R=\\omega_0$ for a damped driven oscillator.',
+        strategy: 'Minimize $D(\\omega)=(\\omega_0^2-\\omega^2)^2+4\\beta^2\\omega^2$. The peak sits at $\\omega_R=\\sqrt{\\omega_0^2-2\\beta^2}<\\omega_0$ whenever it exists.'
+      },
+      {
+        trap: 'Confusing $\\omega_R$ with $\\omega_d$',
+        warning: 'Using the damped natural frequency $\\omega_d=\\sqrt{\\omega_0^2-\\beta^2}$ as the driven amplitude peak.',
+        strategy: '$\\omega_d$ is the free-decay oscillation frequency (transient). Amplitude resonance has a $2\\beta^2$ shift, not $\\beta^2$. Always $\\omega_R<\\omega_d<\\omega_0$ when all three are real.'
+      },
+      {
+        trap: 'Assuming a peak always exists',
+        warning: 'Plugging $\\beta>\\omega_0/\\sqrt{2}$ into $\\sqrt{\\omega_0^2-2\\beta^2}$ and taking a real frequency.',
+        strategy: 'The card is conditional. If $2\\beta^2\\ge\\omega_0^2$ there is no peak at $\\omega>0$ (equality puts the stationary point at $\\omega=0$). That is a GRE favorite.'
+      },
+      {
+        trap: 'Velocity resonance vs amplitude resonance',
+        warning: 'Thinking power, current, or velocity also peak at $\\omega_R$.',
+        strategy: 'Velocity amplitude $\\omega A(\\omega)$ (and time-averaged power) peak exactly at $\\omega_0$, independent of $\\beta$. Only displacement amplitude is pulled below $\\omega_0$.'
+      }
+    ],
+    parameters: [
+      { id: 'omega0', label: 'Natural Frequency ($\\omega_0$)', min: 1.5, max: 8.0, step: 0.1, default: 4.0, unit: 'rad/s' },
+      { id: 'beta', label: 'Damping ($\\beta=b/2m$)', min: 0.05, max: 6.0, step: 0.05, default: 0.80, unit: 'rad/s' },
+      { id: 'omega', label: 'Drive Frequency ($\\omega$)', min: 0.05, max: 16.0, step: 0.05, default: 3.80, unit: 'rad/s' },
+      { id: 'f0m', label: 'Drive Strength ($F_0/m$)', min: 1.0, max: 20.0, step: 0.5, default: 8.0, unit: 'm/s²' },
+      SPEED_PARAM
+    ],
+    challenge: {
+      question:
+        'A driven damped harmonic oscillator has natural frequency $\\omega_0$ and damping $\\beta=b/(2m)$. For which values of $\\beta$ does the amplitude $A(\\omega)$ have no peak at finite $\\omega>0$?',
+      options: [
+        'A) $\\beta \\ge \\omega_0$',
+        'B) $\\beta \\ge \\omega_0/\\sqrt{2}$',
+        'C) $\\beta \\ge \\omega_0/2$',
+        'D) never (a peak always exists)',
+        'E) $\\beta \\ge \\sqrt{2}\\,\\omega_0$'
+      ],
+      correct: 1,
+      explanation:
+        'Steady-state amplitude is $A(\\omega)=(F_0/m)/\\sqrt{D(\\omega)}$ with $D(\\omega)=(\\omega_0^2-\\omega^2)^2+4\\beta^2\\omega^2$. Setting $dD/d\\omega=0$ yields $\\omega_R^2=\\omega_0^2-2\\beta^2$. This is real and positive only for $\\beta<\\omega_0/\\sqrt{2}$. At and above that damping the curve decreases from $\\omega=0$ (static response $F_0/k$ is the maximum). Option A is the free critical/overdamped line $\\beta=\\omega_0$ (where $\\omega_d=0$); option C is the $Q=1$ line ($Q=\\omega_0/(2\\beta)$), a $2\\beta$-vs-$\\beta$ mix-up distractor; option E reverses the $\\sqrt{2}$. Velocity resonance remains at $\\omega_0$ for any $\\beta$.'
+    },
+
+    init(container, state, redraw) {
+      state.omega0 = finiteNum(state.omega0, 4.0);
+      state.beta = finiteNum(state.beta, 0.80);
+      state.omega = finiteNum(state.omega, 3.80);
+      state.f0m = finiteNum(state.f0m, 8.0);
+      state.simSpeed = finiteNum(state.simSpeed, 1.0);
+
+      state.sim = {
+        t: 0.0,
+        isDragging: false,
+        plot: null,
+        wMax: 10
+      };
+
+      attachDrag(container, '_cpgf145_bound', function (canvas) {
+        var getPos = function (e) { return eventPos(canvas, e); };
+
+        var omegaFromPos = function (pos) {
+          var plot = state.sim.plot;
+          var wMax = state.sim.wMax || 10;
+          if (!plot || plot.w < 1) return state.omega;
+          var w = ((pos.x - plot.x) / plot.w) * wMax;
+          if (w < 0.05) w = 0.05;
+          if (w > 16) w = 16;
+          if (w > wMax) w = wMax;
+          return w;
+        };
+
+        var onDown = function (e) {
+          var pos = getPos(e);
+          var plot = state.sim.plot;
+          if (plot && pos.x >= plot.x - 8 && pos.x <= plot.x + plot.w + 8 &&
+              pos.y >= plot.y - 8 && pos.y <= plot.y + plot.h + 12) {
+            state.sim.isDragging = true;
+            state.omega = omegaFromPos(pos);
+            if (e.cancelable) e.preventDefault();
+          }
+        };
+
+        var onMove = function (e) {
+          if (state.sim.isDragging) {
+            state.omega = omegaFromPos(getPos(e));
+            if (redraw) redraw();
+            if (e.cancelable) e.preventDefault();
+          }
+        };
+
+        var onUp = function () {
+          state.sim.isDragging = false;
+        };
+
+        return { onDown: onDown, onMove: onMove, onUp: onUp };
+      });
+    },
+
+    draw(ctx, width, height, state, dt) {
+      if (!state.sim) this.init(null, state);
+      var sim = state.sim;
+      width = width || 640;
+      height = height || 420;
+
+      var w0 = Math.max(0.2, finiteNum(state.omega0, 4.0));
+      var beta = Math.max(0.001, finiteNum(state.beta, 0.80));
+      var omega = Math.max(0.0, finiteNum(state.omega, 3.80));
+      var f0m = Math.max(0.1, finiteNum(state.f0m, 8.0));
+
+      function Aof(w) {
+        var det = w0 * w0 - w * w;
+        var den = Math.sqrt(det * det + 4 * beta * beta * w * w);
+        if (!(den > 1e-15)) return f0m / 1e-15;
+        return f0m / den;
+      }
+      function phiOf(w) {
+        return Math.atan2(2 * beta * w, w0 * w0 - w * w);
+      }
+
+      var wR2 = w0 * w0 - 2 * beta * beta;
+      var hasRes = wR2 > 1e-10;
+      var wR = hasRes ? Math.sqrt(wR2) : 0;
+      var wd2 = w0 * w0 - beta * beta;
+      var hasWd = wd2 > 1e-10;
+      var wd = hasWd ? Math.sqrt(wd2) : 0;
+      var Anow = Aof(omega);
+      var phi = phiOf(omega);
+      var A0 = Aof(0);
+      var Amax = hasRes && hasWd ? (f0m / (2 * beta * wd)) : A0;
+
+      sim.t += scaledDt(dt, state);
+      var xNow = Anow * Math.cos(omega * sim.t - phi);
+
+      var wMax = Math.max(2.2 * w0, 16);
+      sim.wMax = wMax;
+
+      var aScale = Math.max(Amax, Anow, A0, 1e-6) * 1.18;
+
+      stageFill(ctx, width, height);
+
+      var pad = 16;
+      var stripH = 96;
+      var plotX = 50;
+      var plotY = 24;
+      var plotW = width - plotX - 16;
+      var plotH = height - stripH - plotY - 18;
+      if (plotH < 80) plotH = 80;
+      sim.plot = { x: plotX, y: plotY, w: plotW, h: plotH };
+
+      function toX(w) { return plotX + (w / wMax) * plotW; }
+      function toY(a) { return plotY + plotH - (a / aScale) * plotH; }
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(plotX, plotY, plotW, plotH);
+      ctx.clip();
+
+      ctx.strokeStyle = theme().inkFade(0.07);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      var gx;
+      for (gx = plotX; gx < plotX + plotW; gx += 36) {
+        ctx.moveTo(gx, plotY);
+        ctx.lineTo(gx, plotY + plotH);
+      }
+      ctx.stroke();
+
+      function vline(w, color, dash) {
+        var x = toX(w);
+        if (x < plotX || x > plotX + plotW) return;
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.4;
+        if (dash) ctx.setLineDash(dash);
+        ctx.beginPath();
+        ctx.moveTo(x, plotY);
+        ctx.lineTo(x, plotY + plotH);
+        ctx.stroke();
+        ctx.restore();
+      }
+      if (hasWd) vline(wd, TEAL, [2, 4]);
+      vline(w0, GOLD, [5, 4]);
+      if (hasRes) vline(wR, ROSE, null);
+
+      var N = 240;
+      var i;
+      var w;
+      ctx.beginPath();
+      for (i = 0; i <= N; i++) {
+        w = (i / N) * wMax;
+        if (i === 0) ctx.moveTo(toX(w), toY(Aof(w)));
+        else ctx.lineTo(toX(w), toY(Aof(w)));
+      }
+      ctx.strokeStyle = CORAL;
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+      ctx.lineTo(toX(wMax), plotY + plotH);
+      ctx.lineTo(toX(0), plotY + plotH);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(204, 120, 92, 0.10)';
+      ctx.fill();
+
+      ctx.strokeStyle = theme().inkFade(0.18);
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.moveTo(toX(omega), plotY + plotH);
+      ctx.lineTo(toX(omega), toY(Anow));
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+
+      ctx.save();
+      ctx.strokeStyle = theme().inkFade(0.28);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(plotX, plotY);
+      ctx.lineTo(plotX, plotY + plotH);
+      ctx.lineTo(plotX + plotW, plotY + plotH);
+      ctx.stroke();
+      ctx.restore();
+
+      inkLabel(ctx, 'A(w)', plotX + 6, plotY + 10, { color: CORAL, font: fontSans(11, '500'), align: 'left', pad: true });
+      inkLabel(ctx, 'w', plotX + plotW - 10, plotY + plotH + 12, { color: MUTED, font: fontSans(11), align: 'right', pad: true });
+      inkLabel(ctx, '0', plotX, plotY + plotH + 12, { color: MUTED, font: fontSans(10), pad: true });
+
+      if (hasRes) {
+        inkLabel(ctx, 'w_R', toX(wR), plotY + 10, { color: ROSE, font: fontSans(10, '600'), pad: true });
+      } else {
+        inkLabel(
+          ctx,
+          'no amplitude resonance  (beta >= w_0 / sqrt(2))',
+          plotX + plotW - 8,
+          plotY + 10,
+          { color: ROSE, font: fontSans(11, '500'), align: 'right', pad: true }
+        );
+      }
+      if (hasWd) {
+        inkLabel(ctx, 'w_d', toX(wd), plotY + 22, { color: TEAL, font: fontSans(10, '500'), pad: true });
+      }
+      inkLabel(ctx, 'w_0', toX(w0), plotY + 34, { color: GOLD, font: fontSans(10, '500'), pad: true });
+
+      ctx.fillStyle = GOLD;
+      ctx.strokeStyle = CORAL;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(toX(omega), toY(Anow), sim.isDragging ? 7 : 5.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      inkLabel(
+        ctx,
+        sim.isDragging ? 'w (drag)' : 'w',
+        toX(omega) + 10,
+        toY(Anow) - 10,
+        { color: GOLD, font: fontSans(10, '500'), align: 'left', pad: true }
+      );
+
+      var stripY = height - stripH;
+      ctx.save();
+      ctx.strokeStyle = LINE;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(pad, stripY);
+      ctx.lineTo(width - pad, stripY);
+      ctx.stroke();
+      ctx.restore();
+
+      var wallX = pad;
+      var wallW = 14;
+      var floorY = height - 28;
+      var centerY = floorY - 22;
+      var blockSize = 36;
+      var eqX = pad + (width - 2 * pad) * 0.50;
+      var travel = Math.min(110, (width - 2 * pad) * 0.22);
+      var xPix = eqX + (aScale > 1e-9 ? (xNow / aScale) * travel : 0);
+      xPix = Math.max(wallX + wallW + blockSize / 2 + 8, Math.min(width - pad - blockSize / 2, xPix));
+
+      drawWall(ctx, wallX, centerY - 44, wallW, floorY - (centerY - 44) + 4, 'left');
+      hatchFloor(ctx, wallX + wallW, width - pad, floorY);
+      drawSpring(ctx, wallX + wallW, centerY, xPix - blockSize / 2, centerY, 12, 8, CORAL);
+      drawMass(ctx, xPix, centerY, blockSize, 'm', CORAL, false);
+
+      inkLabel(
+        ctx,
+        'steady state at drive w (drag the marker on A(w))',
+        width / 2,
+        stripY + 10,
+        { color: MUTED, font: fontSans(10) }
+      );
+
+      legend('Resonance', [
+        { label: '$\\omega_R=\\sqrt{\\omega_0^2-2\\beta^2}$', value: hasRes ? '$' + wR.toFixed(2) + '\\,\\mathrm{rad/s}$' : 'none ($\\beta\\ge\\omega_0/\\sqrt{2}$)' },
+        { label: '$\\omega_d=\\sqrt{\\omega_0^2-\\beta^2}$', value: hasWd ? '$' + wd.toFixed(2) + '\\,\\mathrm{rad/s}$' : 'none' },
+        { label: '$\\omega_0$', value: '$' + w0.toFixed(2) + '\\,\\mathrm{rad/s}$' },
+        { label: '$\\omega$', value: '$' + omega.toFixed(2) + '\\,\\mathrm{rad/s}$' },
+        { label: '$A(\\omega)$', value: '$' + Anow.toFixed(3) + '$' },
+        { label: '$\\varphi=\\mathrm{atan2}(2\\beta\\omega,\\,\\omega_0^2-\\omega^2)$', value: '$' + phi.toFixed(2) + '\\,\\mathrm{rad}$' }
+      ]);
+      legend('Peak', [
+        { label: hasRes ? '$A_{\\max}=(F_0/m)/(2\\beta\\omega_d)$' : '$A(0)=(F_0/m)/\\omega_0^2$', value: '$' + Amax.toFixed(3) + '$' },
+        { label: '$\\beta/\\omega_0$', value: '$' + (beta / w0).toFixed(3) + '$' }
       ]);
     }
   };
