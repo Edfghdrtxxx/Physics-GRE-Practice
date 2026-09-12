@@ -1481,18 +1481,20 @@ function runAsync() {
         'search non-viz card keeps Complete view');
     });
   }).then(function () {
-    console.log('\nformulas: picker heading is section-local');
+    console.log('\nformulas: picker groups by chapter, lazy rows, fill + save');
     var pk = loadShipped(true, { views: true });
     var P = pk.sandbox.PGRE;
-    pk.cardStates.f0 = { due: '2026-09-07', interval: 1, reps: 1 };
-    pk.cardStates.f1 = { due: '2026-09-07', interval: 1, reps: 1 };
-    pk.cardStates.f2 = { due: '2026-09-10', interval: 3, reps: 2 };
-    pk.cardStates.f3 = { due: '2026-09-11', interval: 3, reps: 2 };
-    P.srs.formulaDay = function () {
-      return { reviewIds: [], newIds: [], softIds: [] };
-    };
+    // second chapter: cpgf-<ch>.<eq> ids drive the grouping
+    pk.cards.push({ id: 'cpgf-2.1', topic: 'em', name: 'Gauss', front: 'Gauss law', back: '$$\\Phi = Q/\\epsilon_0$$', note: '', aliases: [] });
+    pk.cards.push({ id: 'cpgf-2.2', topic: 'em', name: 'Ampere', front: 'Ampere law', back: '$$\\oint B = \\mu_0 I$$', note: '', aliases: [] });
+    pk.cardStates['cpgf-2.1'] = { due: '2026-09-07', interval: 1, reps: 1 };
+    P.srs.formulaDay = function () { return { reviewIds: [], newIds: [], softIds: [] }; };
     P.srs.formulaDayRemaining = function () { return []; };
     P.srs.buildMemHistory = function () { return null; };
+    // cpgf-2.1 was already studied today -> locked, stays picked, excluded from Save
+    P.srs.studiedToday = function (st) { return st === pk.cardStates['cpgf-2.1']; };
+    var savedIds = null;
+    P.srs.setFormulaDayPicks = function (deck, ids) { savedIds = ids; };
     pk.location.hash = '#/formulas';
     ensureView(pk, P.views.formulas.render());
     P.views.formulas.mount();
@@ -1501,82 +1503,70 @@ function runAsync() {
         pk.document.getElementById('pick-btn');
       assert(!!pick, 'picker entry rendered');
       pick.click();
-      var topics = pk.document.querySelectorAll('.picker-topic');
-      assert(topics.length >= 2, 'Due now and Upcoming each have a CM group');
-      var due = topics[0], upcoming = topics[1], rest = topics[2];
-      var dueHead = due.querySelector('.picker-selall-box');
-      var upHead = upcoming.querySelector('.picker-selall-box');
-      var dueBoxes = due.querySelectorAll('.picker-box');
-      var upBoxes = upcoming.querySelectorAll('.picker-box');
-      var restBoxes = rest ? rest.querySelectorAll('.picker-box') : [];
-      assert(dueBoxes.length === 2, 'Due now CM has two cards');
-      assert(upBoxes.length === 2, 'Upcoming CM has two cards');
-      assert(!dueHead.checked && !upHead.checked, 'empty batch: headings start empty');
-      assert(boxesChecked(dueBoxes) === 0 && boxesChecked(upBoxes) === 0,
-        'empty batch: no CM cards pre-checked');
 
-      dueHead.checked = true;
-      fireChange(dueHead);
-      assert(boxesChecked(dueBoxes) === 2, 'Due now heading checks Due now CM cards');
-      assert(boxesChecked(upBoxes) === 0, 'Upcoming CM cards stay off');
-      assert(boxesChecked(restBoxes) === 0, 'New CM cards stay off');
-      assert(dueHead.checked, 'Due now heading stays checked after filling its group');
-      assert(!upHead.checked, 'Upcoming heading stays empty');
+      var chapters = pk.document.querySelectorAll('.picker-chapter');
+      assert(chapters.length === 2, 'two chapter groups (ch 2 + other), got ' + chapters.length);
+      var ch2 = null, other = null;
+      chapters.forEach(function (tp) {
+        if (tp.getAttribute('data-ch') === '2') ch2 = tp; else other = tp;
+      });
+      assert(!!ch2 && !!other, 'chapter 2 group and fallback group both present');
+      var bodies = pk.document.querySelectorAll('.picker-chapter-body');
+      var allHidden = true;
+      bodies.forEach(function (b) { if (!b.hidden) allHidden = false; });
+      assert(allHidden, 'chapter bodies start collapsed');
+      assert(pk.document.querySelectorAll('.picker-box').length === 0,
+        'no card rows in the DOM while collapsed');
 
-      dueBoxes[0].checked = false;
-      fireChange(dueBoxes[0]);
-      assert(!dueHead.checked, 'heading empties when any visible card is off');
+      ch2.querySelector('.picker-ch-toggle').click();
+      var boxes = ch2.querySelectorAll('.picker-box');
+      assert(boxes.length === 2, 'expanding paints that chapter’s two rows');
+      var peek = ch2.querySelector('.picker-preview');
+      assert(!!peek && peek.textContent.indexOf('Phi') !== -1,
+        'row shows the rendered formula, not a bare id');
+      assert(boxes[0].getAttribute('data-locked') === '1' && boxes[0].checked,
+        'studied-today card is locked and stays picked');
+      assert(!boxes[1].checked, 'unseen card starts unchecked');
 
-      dueHead.checked = true;
-      fireChange(dueHead);
-      assert(boxesChecked(dueBoxes) === 2, 'empty heading fills remaining Due now cards');
-      assert(boxesChecked(upBoxes) === 0, 'fill does not touch Upcoming');
+      boxes[1].checked = true;
+      fireChange(boxes[1]);
+      var count = pk.document.getElementById('picker-count');
+      assert(count.textContent.indexOf('2 picked') !== -1,
+        'count tracks locked + manual pick, got: ' + count.textContent);
 
-      dueHead.checked = false;
-      fireChange(dueHead);
-      assert(boxesChecked(dueBoxes) === 0, 'full heading clears Due now cards');
-      assert(boxesChecked(upBoxes) === 0, 'clear does not touch Upcoming');
+      var fill = pk.document.getElementById('picker-fill');
+      assert(!!fill, 'fill-batch control rendered');
+      fill.click();
+      assert(count.textContent.indexOf('14 picked') !== -1,
+        'fill stages every unseen card up to target (12 f-cards + cpgf-2.2), got: ' + count.textContent);
+      assert(savedIds === null, 'fill does not persist — Save still owns the write');
 
-      dueBoxes[0].checked = true;
-      fireChange(dueBoxes[0]);
+      var saOther = other.querySelector('.picker-selall-box');
+      saOther.checked = true;
+      fireChange(saOther);
+      assert(count.textContent.indexOf('14 picked') !== -1,
+        'chapter select-all picks its 12 cards without opening it, got: ' + count.textContent);
+
       var filter = pk.document.getElementById('picker-filter');
-      filter.value = 'Card 0';
+      filter.value = 'ampere';
       fireInput(filter);
-      var dueItems = due.querySelectorAll('.picker-item');
-      assert(!dueItems[0].hidden, 'matching Due now row stays visible');
-      assert(!!dueItems[1].hidden, 'non-matching Due now row hides');
-      assert(!!upcoming.hidden, 'Upcoming group hides when no names match');
-      assert(dueHead.checked, 'heading checked when every visible unlocked card is on');
-
-      dueHead.checked = false;
-      fireChange(dueHead);
-      assert(!dueBoxes[0].checked, 'filtered heading click turns off the visible card');
-      assert(!dueBoxes[1].checked, 'hidden Card 1 is not changed');
-
-      dueHead.checked = true;
-      fireChange(dueHead);
-      assert(dueBoxes[0].checked && !dueBoxes[1].checked,
-        'filtered heading fills only visible rows');
-
+      assert(!!other.hidden, 'non-matching chapter hides under filter');
+      assert(!ch2.hidden, 'matching chapter stays visible');
       filter.value = '';
       fireInput(filter);
-      assert(!dueHead.checked, 'clearing filter re-syncs heading against the full group');
-      assert(dueBoxes[0].checked && !dueBoxes[1].checked,
-        'hidden row was not silently picked');
+      assert(!other.hidden, 'clearing filter restores the chapter');
 
-      var peek0 = dueItems[0].querySelector('.browse-peek');
-      assert(!!peek0 && !!peek0.hidden, 'flashcard peek starts closed');
-      due.querySelectorAll('.picker-row')[0].click();
-      assert(peek0 && !peek0.hidden, 'clicking the row body opens the flashcard');
-      assert(String(peek0.textContent).indexOf('Prompt 0') !== -1,
-        'peek shows that card’s front');
-      var checkedBeforePeek = dueBoxes[0].checked;
-      due.querySelectorAll('.picker-row')[0].click();
-      assert(!!peek0.hidden, 'second body click closes the peek');
-      assert(dueBoxes[0].checked === checkedBeforePeek,
-        'body click does not change the checkbox');
-      dueBoxes[0].click();
-      assert(!!peek0.hidden, 'checkbox click does not open the peek');
+      ch2.querySelector('.picker-ch-toggle').click();
+      assert(ch2.querySelectorAll('.picker-box').length === 0,
+        'collapsing removes the rows from the DOM');
+
+      pk.document.getElementById('picker-save').click();
+      assert(Array.isArray(savedIds) && savedIds.length === 13,
+        'save persists picked minus locked (14 picked - 1 locked = 13), got ' +
+          (savedIds && savedIds.length));
+      assert(savedIds.indexOf('cpgf-2.1') === -1, 'locked card not written to the batch');
+      assert(savedIds.indexOf('cpgf-2.2') !== -1 && savedIds.indexOf('f0') !== -1,
+        'manual pick and filled ids both saved');
     });
   });
 }

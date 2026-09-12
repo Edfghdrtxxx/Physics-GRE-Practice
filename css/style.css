@@ -2142,7 +2142,7 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .comp-line { margin: 0 0 4px; }
 .caught-up { font-size: 17px; margin: 6px 0 4px; }
 
-/* ——— Daily picker (due / upcoming / new sections) ——— */
+/* ——— Daily picker (chapter groups, lazy rows) ——— */
 .picker-bar {
   display: flex;
   align-items: center;
@@ -2157,7 +2157,22 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .picker-actions { margin-top: 0; }
 .picker-section { margin: 16px 0 8px; font-size: 15px; }
 .picker-topic { margin-bottom: 14px; }
-.picker-topic-head { margin-bottom: 6px; }
+.picker-topic-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.picker-ch-toggle {
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 15px;
+  min-width: 0;
+}
+.picker-ch-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.picker-preview { overflow-x: auto; }
+.picker-preview .katex-display { margin: 0.3em 0; }
 .picker-filter {
   flex: 1;
   min-width: 160px;

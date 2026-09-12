@@ -132,6 +132,16 @@ PGRE.views.exam = (function () {
     var need70 = eng.FORMAT_META['70x120'].questions;
     var bookExams = PGRE.BOOK_EXAMS || [];
     var etsExams = PGRE.ETS_EXAMS || [];
+    var nPreview = 0, nBook = 0, nDrill = 0, nCpgExam = 0, nEtsExam = 0;
+    (PGRE.allQuestions({ includeExam: true }) || []).forEach(function (q) {
+      if (!q) return;
+      if (q.src === 'preview') nPreview++;
+      else if (q.src === 'cpg') nBook++;
+      else if (q.src === 'ets-drill') nDrill++;
+      else if (q.src === 'ets-exam') nEtsExam++;
+      else if (q.src === 'cpg-exam') nCpgExam++;
+    });
+    var dailyN = nPreview + nBook + nDrill;
     // same pointer the dashboard's Today card shows — the next unused real exam
     var next = PGRE.nextMockPointer ? PGRE.nextMockPointer() : null;
     var nextExam = next && eng.examById(next.id);
@@ -204,9 +214,13 @@ PGRE.views.exam = (function () {
       '<span class="chip">70 questions · 120 min</span></div>' +
       '<p class="muted">A random draw across the nine topics at their official exam ' +
       'weights (CM 20 · EM 18 · QM 13 · TS 10 · AP 10 · ST 9 · OW 8 · SR 6 · LM 6), preferring ' +
-      'questions you have not seen. It draws from ' + pool + ' question' +
-      (pool === 1 ? '' : 's') + ' — the book and drill banks; the released ETS exams above ' +
-      'are kept out so they stay unspoiled.</p>';
+      'questions you have not seen. The drawable pool is ' + pool + ' question' +
+      (pool === 1 ? '' : 's') + ': ' + dailyN + ' in the daily pool (' +
+      nPreview + ' preview + ' + nBook + ' book + ' + nDrill + ' drill) plus ' +
+      nCpgExam + ' book sample-exam question' + (nCpgExam === 1 ? '' : 's') +
+      '. The ' + nEtsExam + ' question' + (nEtsExam === 1 ? '' : 's') + ' across ' +
+      etsExams.length + ' intact released ETS form' + (etsExams.length === 1 ? '' : 's') +
+      ' stay out so they remain unspoiled.</p>';
     if (pool >= need70) {
       html += '<div class="btn-row"><button class="btn btn-ghost" id="start-70"' +
         (act ? ' disabled' : '') + '>Start a 70-question set</button></div>';

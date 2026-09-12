@@ -13,23 +13,39 @@ PGRE.views.topic = {
     var mastery = g.mastery(t.id);
     var bank = PGRE.questionsForTopic(t.id);
 
-    // Break the topic bank down by source so the copy reflects what is actually
-    // loaded: 'cpg' rows come from the imported book, everything else is preview.
-    var bookCount = 0;
-    bank.forEach(function (q) { if (q && q.src === 'cpg') bookCount++; });
-    var previewCount = bank.length - bookCount;
-    var bankSub, practiceCopy;
-    if (bookCount > 0) {
-      bankSub = previewCount > 0
-        ? bookCount + ' book · ' + previewCount + ' preview'
-        : 'from the book';
-      practiceCopy = 'The bank holds ' + bank.length + ' question' + (bank.length === 1 ? '' : 's') +
-        ' for this topic, drawn from Conquering the Physics GRE' +
-        (previewCount > 0 ? ' plus the preview set.' : '.');
+    // Break the topic bank down by source so the copy names the default-pool
+    // species that are actually loaded: book (cpg), ETS drill (ets-drill),
+    // and preview. Exam-only items never appear in questionsForTopic.
+    var nBook = 0, nDrill = 0, nPreview = 0;
+    bank.forEach(function (q) {
+      if (!q) return;
+      if (q.src === 'cpg') nBook++;
+      else if (q.src === 'ets-drill') nDrill++;
+      else if (q.src === 'preview') nPreview++;
+    });
+    var bits = [];
+    if (nBook) bits.push(nBook + ' book');
+    if (nDrill) bits.push(nDrill + ' drill');
+    if (nPreview) bits.push(nPreview + ' preview');
+    var bankSub = bits.length ? bits.join(' · ') : 'none in the default pool';
+
+    var sources = [];
+    if (nBook) sources.push('Conquering the Physics GRE');
+    if (nDrill) sources.push('the ETS drill sets (GR8677/GR9277)');
+    if (nPreview) sources.push('the preview set');
+    var nQ = bank.length;
+    var practiceCopy;
+    if (nQ === 0) {
+      practiceCopy = 'The default pool has no questions for this topic.';
+    } else if (!sources.length) {
+      practiceCopy = 'The bank holds ' + nQ + ' question' + (nQ === 1 ? '' : 's') +
+        ' for this topic.';
     } else {
-      bankSub = 'preview set';
-      practiceCopy = 'The bank holds ' + bank.length + ' preview question' + (bank.length === 1 ? '' : 's') +
-        ' for this topic — it grows when the book content is imported.';
+      var drawn = sources.length === 1 ? sources[0]
+        : sources.length === 2 ? sources[0] + ' and ' + sources[1]
+        : sources[0] + ', ' + sources[1] + ', and ' + sources[2];
+      practiceCopy = 'The bank holds ' + nQ + ' question' + (nQ === 1 ? '' : 's') +
+        ' for this topic, drawn from ' + drawn + '.';
     }
 
     var html = '<div class="card portal-head">' +

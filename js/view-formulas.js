@@ -158,9 +158,8 @@ PGRE.views.formulas = (function () {
   function setMnemonic(id, text) {
     var s = PGRE.store.state;
     if (!s.cardNotes) s.cardNotes = {};
-    text = (text || '').trim();
-    if (!text) delete s.cardNotes[id];
-    else s.cardNotes[id] = { text: text, updatedAt: new Date().toISOString() };
+    if (!text) { delete s.cardNotes[id]; PGRE.store.tombstone('cardNotes', id); }
+    else { s.cardNotes[id] = { text: text, updatedAt: new Date().toISOString() }; PGRE.store.untombstone('cardNotes', id); }
     PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
     PGRE.store.save();
   }
@@ -1226,32 +1225,86 @@ PGRE.views.formulas = (function () {
      but guard the quote/backslash cases regardless). */
   function cssAttr(s) { return String(s).replace(/["\\]/g, '\\$&'); }
 
-  /* ——— Daily picker: due reviews first, then upcoming, then new ———
-     The only surface that composes a batch from scratch; browse chips and
-     search Add edit the same batch one card at a time. No cap: the daily
-     target is a soft suggestion shown live in the count line. */
+  /* ——— Daily picker: chapters collapsed, rows lazy ———
+     Composes the same formulaDay batch as before (Save → setFormulaDayPicks;
+     Fill → fillFormulaDayIfEmpty). Grouped by cpgf-<ch>.<eq>. Collapsed
+     chapters keep rows out of the DOM so the 334-card deck is not a wall.
+     The pick set lives in memory so Save still sees collapsed chapters. */
   function renderPicker() {
     if (PGRE.nav) PGRE.nav.setTrail(['Pick today’s cards']);   // BUNDLE G
     var ui = PGRE.ui, srs = PGRE.srs;
     var batch = srs.formulaDay(deck);
     var T = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
-    var inBatch = {};
-    batch.reviewIds.concat(batch.newIds).forEach(function (id) { inBatch[id] = 1; });
+    var picked = {};
+    var locked = {};
+    batch.reviewIds.concat(batch.newIds).forEach(function (id) { picked[id] = 1; });
+    deck.forEach(function (c) {
+      if (srs.studiedToday(srs.cardState(c.id))) {
+        locked[c.id] = 1;
+        picked[c.id] = 1;
+      }
+    });
+
+    function chapterKey(id) {
+      var m = String(id || '').match(/^cpgf-(\d+)\./);
+      return m ? m[1] : 'other';
+    }
+    var byChapter = {};
+    var chOrder = [];
+    deck.forEach(function (c) {
+      var ch = chapterKey(c.id);
+      if (!byChapter[ch]) {
+        byChapter[ch] = [];
+        chOrder.push(ch);
+      }
+      byChapter[ch].push(c);
+    });
+    chOrder.sort(function (a, b) {
+      if (a === 'other') return 1;
+      if (b === 'other') return -1;
+      return parseInt(a, 10) - parseInt(b, 10);
+    });
+
+    function chapterTitle(ch, cards) {
+      if (ch === 'other') return 'Other';
+      var counts = {}, best = '', n = -1;
+      cards.forEach(function (c) {
+        var t = c.topic || '';
+        counts[t] = (counts[t] || 0) + 1;
+      });
+      Object.keys(counts).forEach(function (t) {
+        if (counts[t] > n) { n = counts[t]; best = t; }
+      });
+      var topic = PGRE.topicById(best);
+      return 'Chapter ' + ch + (topic ? ' · ' + topic.name : '');
+    }
+
+    var hay = {};
+    deck.forEach(function (c) {
+      hay[c.id] = (c.id + ' ' + cardName(c) + ' ' + (c.eq || '') + ' ' +
+        (c.front || '') + ' ' + (c.back || '')).toLowerCase();
+    });
+    var filterQ = '';
+    function cardMatches(c) {
+      return !filterQ || (hay[c.id] && hay[c.id].indexOf(filterQ) !== -1);
+    }
 
     var html = '<div class="card"><h2>Pick today’s cards</h2>' +
-      '<p class="muted">Choose which formulas to recall today — due cards first, ' +
-      'then upcoming and never-studied. Cards already studied today are locked in.</p>' +
-      '<div class="picker-bar"><input type="text" id="picker-filter" ' +
-      'placeholder="Filter by name">' +
+      '<p class="muted">Browse by chapter — expand one to see formulas. ' +
+      'Fill today’s batch adds up to the daily target of unseen cards, ' +
+      'or tick cards yourself. Cards already studied today stay in.</p>' +
+      '<div class="picker-bar"><input type="text" class="picker-filter" id="picker-filter" ' +
+      'placeholder="Filter by id or formula">' +
       '<span class="picker-count" id="picker-count"></span>' +
       '<div class="btn-row picker-actions">' +
-      '<button class="btn btn-primary" id="picker-save">Save picks</button>' +
-      '<button class="btn btn-ghost" id="picker-clear">Clear all</button>' +
-      '<button class="btn btn-ghost" id="picker-cancel">Cancel</button></div></div>';
+      '<button type="button" class="btn btn-ghost" id="picker-fill">Fill today’s batch</button>' +
+      '<button type="button" class="btn btn-primary" id="picker-save">Save picks</button>' +
+      '<button type="button" class="btn btn-ghost" id="picker-clear">Clear all</button>' +
+      '<button type="button" class="btn btn-ghost" id="picker-cancel">Cancel</button></div></div>';
 
     function rowHTML(c) {
       var st = srs.cardState(c.id);
-      var locked = srs.studiedToday(st);
+      var isLocked = !!locked[c.id];
       var chip;
       if (!st) {
         chip = '<span class="due-chip">new</span>';
@@ -1260,137 +1313,220 @@ PGRE.views.formulas = (function () {
         chip = '<span class="due-chip' + (du <= 0 ? ' due-now' : '') + '">' +
           (du <= 0 ? 'due now' : 'due in ' + srs.ivlLabel(du)) + '</span>';
       }
-      if (locked) chip += '<span class="due-chip today-chip">done today</span>';
+      if (isLocked) chip += '<span class="due-chip today-chip">done today</span>';
+      var title = cardName(c);
+      var label = ui.esc(c.id) + (title ? ' · ' + ui.esc(title) : '');
       return '<div class="picker-item">' +
-        '<div class="picker-row' + (locked ? ' is-locked' : '') + '" data-cardid="' +
+        '<div class="picker-row' + (isLocked ? ' is-locked' : '') + '" data-cardid="' +
           ui.esc(c.id) + '">' +
           '<label class="picker-check"><input type="checkbox" class="picker-box" value="' +
-            ui.esc(c.id) + '"' + (inBatch[c.id] ? ' checked' : '') +
-            (locked ? ' disabled data-locked="1"' : '') + '></label>' +
-          '<span class="deck-name">' + ui.esc(cardName(c)) + '</span>' + chip +
+            ui.esc(c.id) + '"' + (picked[c.id] ? ' checked' : '') +
+            (isLocked ? ' disabled data-locked="1"' : '') + '></label>' +
+          '<span class="deck-name">' + label + '</span>' + chip +
         '</div>' +
-        '<div class="browse-peek picker-peek" data-peek="' + ui.esc(c.id) + '" hidden></div>' +
+        '<div class="browse-peek picker-peek picker-preview">' +
+          formulaHTML(c.back) +
+        '</div>' +
       '</div>';
     }
 
-    // Three sections, each topic-grouped: due now, upcoming, never-studied.
-    var today = srs.today();
-    var sections = [
-      { title: 'Due now', test: function (st) { return !!st && st.due <= today; } },
-      { title: 'Upcoming', test: function (st) { return !!st && st.due > today; } },
-      { title: 'New', test: function (st) { return !st; } }
-    ];
-    sections.forEach(function (sec) {
-      var anySec = false, secHTML = '';
-      PGRE.TOPICS.forEach(function (t) {
-        var cards = deck.filter(function (c) {
-          return c.topic === t.id && sec.test(srs.cardState(c.id));
-        });
-        if (!cards.length) return;
-        anySec = true;
-        secHTML += '<div class="picker-topic"><div class="picker-topic-head">' +
-          '<label class="picker-selall"><input type="checkbox" class="picker-selall-box"> ' +
-            ui.monogram(t) + ' ' + ui.esc(t.name) +
-          '</label></div>' + cards.map(rowHTML).join('') + '</div>';
+    chOrder.forEach(function (ch) {
+      var cards = byChapter[ch];
+      var topic = null;
+      cards.some(function (c) {
+        topic = PGRE.topicById(c.topic);
+        return !!topic;
       });
-      if (anySec) {
-        html += '<h3 class="picker-section">' + sec.title + '</h3>' + secHTML;
-      }
+      html += '<div class="picker-topic picker-chapter" data-ch="' + ui.esc(ch) + '">' +
+        '<div class="picker-topic-head">' +
+          '<span class="picker-ch-toggle" role="button" tabindex="0" aria-expanded="false">' +
+            (topic ? ui.monogram(topic) + ' ' : '') +
+            ui.esc(chapterTitle(ch, cards)) +
+            '<span class="muted picker-ch-count"> · ' + cards.length + '</span>' +
+          '</span>' +
+          '<label class="picker-selall"><input type="checkbox" class="picker-selall-box"> All</label>' +
+        '</div>' +
+        '<div class="picker-chapter-body" hidden></div>' +
+      '</div>';
     });
     html += '</div>';
 
     body().innerHTML = html;
-    PGRE.typesetMath(body());
 
-    var boxes = body().querySelectorAll('.picker-box');
-    var lockedCount = 0;
-    boxes.forEach(function (b) { if (b.getAttribute('data-locked')) lockedCount++; });
+    function isOpen(tp) { return tp.getAttribute('data-open') === '1'; }
 
-    function selectable() { // non-locked checkboxes
-      return Array.prototype.filter.call(boxes, function (b) { return !b.getAttribute('data-locked'); });
+    function chapterSelectable(ch) {
+      return byChapter[ch].filter(function (c) {
+        return !locked[c.id] && cardMatches(c);
+      });
     }
-    function countChecked() {
-      var n = lockedCount;
-      selectable().forEach(function (b) { if (b.checked) n++; });
+
+    function syncBoxes(scope) {
+      (scope || body()).querySelectorAll('.picker-box').forEach(function (b) {
+        if (b.getAttribute('data-locked')) return;
+        b.checked = !!picked[b.value];
+      });
+    }
+
+    function wireChapterBody(wrap) {
+      wrap.querySelectorAll('.picker-box').forEach(function (b) {
+        if (b.getAttribute('data-locked')) return;
+        b.addEventListener('change', function () {
+          if (b.checked) picked[b.value] = 1;
+          else delete picked[b.value];
+          refresh();
+        });
+      });
+      wrap.querySelectorAll('.picker-row').forEach(function (row) {
+        row.addEventListener('click', function (e) {
+          if (e.target.closest('.picker-check') || e.target.closest('.picker-box')) return;
+          var b = row.querySelector('.picker-box');
+          if (!b || b.getAttribute('data-locked')) return;
+          b.checked = !b.checked;
+          if (b.checked) picked[b.value] = 1;
+          else delete picked[b.value];
+          refresh();
+        });
+      });
+    }
+
+    function paintChapter(tp) {
+      var ch = tp.getAttribute('data-ch');
+      var wrap = tp.querySelector('.picker-chapter-body');
+      if (!wrap) return;
+      if (!isOpen(tp)) {
+        wrap.innerHTML = '';
+        wrap.hidden = true;
+        return;
+      }
+      var htmlRows = '';
+      byChapter[ch].forEach(function (c) {
+        if (cardMatches(c)) htmlRows += rowHTML(c);
+      });
+      wrap.innerHTML = htmlRows;
+      wrap.hidden = false;
+      if (PGRE.typesetMath) PGRE.typesetMath(wrap);
+      wireChapterBody(wrap);
+    }
+
+    function toggleChapter(tp) {
+      var toggle = tp.querySelector('.picker-ch-toggle');
+      if (isOpen(tp)) {
+        tp.removeAttribute('data-open');
+        if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        paintChapter(tp);
+      } else {
+        tp.setAttribute('data-open', '1');
+        if (toggle) toggle.setAttribute('aria-expanded', 'true');
+        paintChapter(tp);
+      }
+    }
+
+    function countPicked() {
+      var n = 0;
+      Object.keys(picked).forEach(function (id) { if (picked[id]) n++; });
       return n;
     }
-    /* Unlocked rows under this heading that the name filter has not hidden.
-       Same topic in another Due now / Upcoming / New section is a different group. */
-    function groupSelectable(tp) {
-      var out = [];
-      if (!tp) return out;
-      tp.querySelectorAll('.picker-item').forEach(function (item) {
-        if (item.hidden) return;
-        var b = item.querySelector('.picker-box');
-        if (b && !b.getAttribute('data-locked')) out.push(b);
-      });
-      return out;
-    }
+
     function syncHeadings() {
-      body().querySelectorAll('.picker-selall-box').forEach(function (sa) {
-        var rows = groupSelectable(sa.closest('.picker-topic'));
-        sa.disabled = rows.length === 0;
-        var allOn = rows.length > 0;
-        rows.forEach(function (b) { if (!b.checked) allOn = false; });
-        sa.checked = allOn;
+      body().querySelectorAll('.picker-chapter').forEach(function (tp) {
+        var ch = tp.getAttribute('data-ch');
+        var rows = chapterSelectable(ch);
+        var sa = tp.querySelector('.picker-selall-box');
+        if (sa) {
+          sa.disabled = rows.length === 0;
+          var allOn = rows.length > 0;
+          rows.forEach(function (c) { if (!picked[c.id]) allOn = false; });
+          sa.checked = allOn;
+        }
+        var countEl = tp.querySelector('.picker-ch-count');
+        if (countEl) {
+          var nPicked = 0;
+          byChapter[ch].forEach(function (c) { if (picked[c.id]) nPicked++; });
+          countEl.textContent = ' · ' + nPicked + '/' + byChapter[ch].length;
+        }
       });
     }
+
     function refresh() {
-      var n = countChecked();
       var cc = document.getElementById('picker-count');
-      if (cc) cc.textContent = n + ' picked · target ' + T;
+      if (cc) cc.textContent = countPicked() + ' picked · target ' + T;
       syncHeadings();
     }
-    boxes.forEach(function (b) {
-      if (b.getAttribute('data-locked')) return;
-      b.addEventListener('change', refresh);
-    });
-    body().querySelectorAll('.picker-selall-box').forEach(function (sa) {
-      sa.addEventListener('change', function () {
-        var on = sa.checked;
-        groupSelectable(sa.closest('.picker-topic')).forEach(function (b) {
-          b.checked = on;
+
+    function applyFilter() {
+      chOrder.forEach(function (ch) {
+        var tp = body().querySelector('.picker-chapter[data-ch="' + cssAttr(ch) + '"]');
+        if (!tp) return;
+        var any = byChapter[ch].some(cardMatches);
+        tp.hidden = !any;
+        if (isOpen(tp)) paintChapter(tp);
+      });
+      refresh();
+    }
+
+    body().querySelectorAll('.picker-chapter').forEach(function (tp) {
+      var toggle = tp.querySelector('.picker-ch-toggle');
+      if (toggle) {
+        toggle.addEventListener('click', function (e) {
+          e.preventDefault();
+          toggleChapter(tp);
         });
+        toggle.addEventListener('keydown', function (e) {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          toggleChapter(tp);
+        });
+      }
+      var sa = tp.querySelector('.picker-selall-box');
+      if (sa) sa.addEventListener('change', function () {
+        var on = sa.checked;
+        chapterSelectable(tp.getAttribute('data-ch')).forEach(function (c) {
+          if (on) picked[c.id] = 1;
+          else delete picked[c.id];
+        });
+        syncBoxes(tp);
         refresh();
       });
     });
-    // Name filter: hide non-matching items (row + peek), then empty topics.
+
     var filter = document.getElementById('picker-filter');
     if (filter) filter.addEventListener('input', function () {
-      var q = filter.value.trim().toLowerCase();
-      body().querySelectorAll('.picker-item').forEach(function (item) {
-        var name = item.querySelector('.deck-name');
-        item.hidden = !!q && !!name && name.textContent.toLowerCase().indexOf(q) === -1;
+      filterQ = filter.value.trim().toLowerCase();
+      applyFilter();
+    });
+
+    var fillBtn = document.getElementById('picker-fill');
+    if (fillBtn) fillBtn.addEventListener('click', function () {
+      // stage into the pick set only — Save persists, Cancel still cancels
+      var room = T - countPicked();
+      if (room <= 0) return;
+      srs.newInDeck(deck).some(function (c) {
+        if (!c || !c.id || locked[c.id] || srs.isSuspended(c.id)) return false;
+        picked[c.id] = 1;
+        return --room <= 0;
       });
-      body().querySelectorAll('.picker-topic').forEach(function (tp) {
-        var visible = Array.prototype.some.call(
-          tp.querySelectorAll('.picker-item'), function (r) { return !r.hidden; });
-        tp.hidden = !visible;
-      });
+      syncBoxes();
       refresh();
     });
-    body().querySelectorAll('.picker-row').forEach(function (row) {
-      row.addEventListener('click', function (e) {
-        if (e.target.closest('.picker-check') || e.target.closest('.picker-box')) return;
-        var id = row.getAttribute('data-cardid');
-        var peek = row.parentNode &&
-          row.parentNode.querySelector('[data-peek="' + cssAttr(id) + '"]');
-        openPeekFor(row, peek, id);
-      });
-    });
-    refresh();
-
     document.getElementById('picker-clear').addEventListener('click', function () {
-      selectable().forEach(function (b) { b.checked = false; });
+      Object.keys(picked).forEach(function (id) {
+        if (!locked[id]) delete picked[id];
+      });
+      syncBoxes();
       refresh();
     });
     document.getElementById('picker-cancel').addEventListener('click', renderHome);
     document.getElementById('picker-save').addEventListener('click', function () {
       var ids = [];
-      selectable().forEach(function (b) { if (b.checked) ids.push(b.value); });
+      deck.forEach(function (c) {
+        if (picked[c.id] && !locked[c.id]) ids.push(c.id);
+      });
       PGRE.srs.setFormulaDayPicks(deck, ids);
       renderHome();
     });
+
+    refresh();
   }
 
   function startStudy(cards) {
