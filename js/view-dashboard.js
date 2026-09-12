@@ -416,14 +416,21 @@ PGRE.views.dashboard = (function () {
   }
   PGRE.nextMockPointer = nextMockPointer;
 
+  /* One "today" decision surface: mixed practice, SRS dues (mistakes +
+     formulas), and the next intact mock. */
   function todayAgendaHTML() {
     var ui = PGRE.ui;
     var mock = nextMockPointer();
+    var dueM = PGRE.srs.dueMistakes().length;
     var html = '<div class="card review-queue" id="today-agenda">' +
       '<h2>Today</h2><div class="rq-rows">' +
       '<div class="rq-row"><span class="rq-label">Mixed practice</span>' +
         '<span class="rq-count">Questions from the daily pool</span>' +
         '<a class="btn btn-primary btn-sm" href="#/practice/all">Practice →</a></div>' +
+      '<div class="rq-row"><span class="rq-label">Mistake book</span>' +
+        '<span class="rq-count">' + (dueM ? dueM + ' due now' : 'nothing due') + '</span>' +
+        '<a class="btn ' + (dueM ? 'btn-primary' : 'btn-ghost') + ' btn-sm" href="#/mistakes">' +
+          (dueM ? 'Drill →' : 'Open →') + '</a></div>' +
       '<div class="rq-row"><span class="rq-label">Formula review</span>' +
         '<span class="rq-count" id="today-formulas">…</span>' +
         '<button type="button" class="btn btn-primary btn-sm" id="today-formulas-btn">Study →</button></div>';
@@ -460,9 +467,7 @@ PGRE.views.dashboard = (function () {
   function startFormulaFromToday(ev) {
     if (ev && ev.preventDefault) ev.preventDefault();
     var todayBtn = document.getElementById('today-formulas-btn');
-    var rqBtn = document.getElementById('rq-formulas-btn');
     if (todayBtn) todayBtn.disabled = true;
-    if (rqBtn) rqBtn.disabled = true;
     PGRE.formulaDeck().then(function (deck) {
       PGRE.srs.fillFormulaDayIfEmpty(deck);
       if (PGRE.views.formulas && PGRE.views.formulas.armStudyFromFill) {
@@ -512,18 +517,6 @@ PGRE.views.dashboard = (function () {
       ui.statTile('Accuracy', accuracy) +
       ui.statTile('Days active', s.daysActive.length) +
     '</div>';
-
-    // Review queue — the day's due work from the two SRS systems
-    var dueM = PGRE.srs.dueMistakes().length;
-    html += '<div class="card review-queue"><h2>Review queue</h2><div class="rq-rows">' +
-      '<div class="rq-row"><span class="rq-label">Mistake book</span>' +
-        '<span class="rq-count">' + (dueM ? dueM + ' due now' : 'nothing due') + '</span>' +
-        '<a class="btn ' + (dueM ? 'btn-primary' : 'btn-ghost') + ' btn-sm" href="#/mistakes">' +
-          (dueM ? 'Drill →' : 'Open →') + '</a></div>' +
-      '<div class="rq-row"><span class="rq-label">Formula recall</span>' +
-        '<span class="rq-count" id="rq-formulas">…</span>' +
-        '<button type="button" class="btn btn-ghost btn-sm" id="rq-formulas-btn">Open →</button></div>' +
-    '</div></div>';
 
     // #7 Question of the day — a low-friction daily hook that feeds the streak
     html += qotdCard();
@@ -745,30 +738,23 @@ PGRE.views.dashboard = (function () {
 
     var tfBtn = document.getElementById('today-formulas-btn');
     if (tfBtn) tfBtn.addEventListener('click', startFormulaFromToday);
-    var rqOpen = document.getElementById('rq-formulas-btn');
-    if (rqOpen) rqOpen.addEventListener('click', startFormulaFromToday);
 
     // formula due count arrives async from the IndexedDB-backed deck
     PGRE.formulaDeck().then(function (deck) {
       var st = formulaStatus(deck);
-      var el = document.getElementById('rq-formulas');
-      if (el) el.textContent = st.text;
       var todayEl = document.getElementById('today-formulas');
       if (todayEl) todayEl.textContent = st.text;
-      var rqBtn = document.getElementById('rq-formulas-btn');
-      if (rqBtn && st.remaining) {
-        rqBtn.classList.remove('btn-ghost');
-        rqBtn.classList.add('btn-primary');
-        rqBtn.textContent = 'Study →';
-      }
       if (tfBtn && !tfBtn.disabled) {
-        if (st.remaining) tfBtn.textContent = 'Study →';
-        else if (st.unlearned && !st.picked) tfBtn.textContent = 'Study ' + st.target + ' →';
+        if (st.remaining) {
+          tfBtn.classList.remove('btn-ghost');
+          tfBtn.classList.add('btn-primary');
+          tfBtn.textContent = 'Study →';
+        } else if (st.unlearned && !st.picked) tfBtn.textContent = 'Study ' + st.target + ' →';
         else tfBtn.textContent = 'Open →';
       }
       // remaining counts may tween; do not tween "N not yet introduced"
       if (PGRE.motion && !PGRE.motion.reduced && st.remaining) {
-        if (el) countUpText(el, 600);
+        if (todayEl) countUpText(todayEl, 600);
       }
     });
   }
