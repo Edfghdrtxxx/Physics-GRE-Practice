@@ -3116,14 +3116,31 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
    pinned to the foot of the sidebar. app.js keeps the label in sync
    ("Dark mode" / "Light mode"). The footer sits outside the scrolling
    #sidebar-nav, so it needs no sticky positioning.
+
+   The scrollport clips mid-row against this edge (OW at 900px, Library
+   at ~700px). A --panel flap the height of one nav row owns that band
+   so a label is never sliced by the hairline; pointer-events catch
+   the covered slice so it is not a hidden hit target.
    ================================================================== */
 #sidebar { display: flex; flex-direction: column; }
 .brand, #sidebar-footer { flex: none; }
 #sidebar-footer {
   margin-top: auto;
+  position: relative;
+  z-index: 1;
   background: var(--panel);
   padding: 14px 4px 4px;
   border-top: 1px solid var(--line);
+}
+#sidebar-footer::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  right: -16px;
+  bottom: 100%;
+  height: 28px;
+  pointer-events: auto;
+  background: linear-gradient(to bottom, transparent 0%, var(--panel) 45%, var(--panel) 100%);
 }
 #theme-toggle {
   display: flex;
