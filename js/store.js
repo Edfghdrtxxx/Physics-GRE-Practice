@@ -150,7 +150,14 @@ PGRE.store = {
       contentMeta: [],
       // deletion markers for user-deletable maps (notes/bookmarks/cardNotes/
       // formulaSuspended) — stops a stale sibling heap resurrecting them
-      tombstones: {}
+      tombstones: {},
+      // last completed practice agent receipt (Website A durability). Also
+      // mirrored at localStorage['pgre-agent-receipt']; packReceipts keeps
+      // per-pack copies so a later non-pack sitting can overwrite last
+      // without losing pack NN.
+      lastAgentReceipt: null,
+      // pack id '01'..'35' -> receipt object (kind: pgre-agent-receipt)
+      packReceipts: {}
     };
   },
 
@@ -307,6 +314,23 @@ PGRE.store = {
         if ((disk.timer.lastCredit || 0) > (st.timer.lastCredit || 0)) st.timer.lastCredit = disk.timer.lastCredit;
         st.timer.pausedMs = Math.max(st.timer.pausedMs || 0, disk.timer.pausedMs || 0);
         if (st.timer.goalMin == null) st.timer.goalMin = disk.timer.goalMin;
+      }
+    }
+    // agent receipts: later completedAt wins for last; per-pack map unions
+    // with the same timestamp rule so a sibling's pack copy is not dropped.
+    if (disk.lastAgentReceipt) {
+      var dRec = disk.lastAgentReceipt, lRec = st.lastAgentReceipt;
+      if (!lRec || ((dRec.completedAt || '') > (lRec.completedAt || ''))) {
+        st.lastAgentReceipt = dRec;
+      }
+    }
+    if (isObj(disk.packReceipts)) {
+      if (!isObj(st.packReceipts)) st.packReceipts = {};
+      for (var pk in disk.packReceipts) {
+        var dPk = disk.packReceipts[pk], lPk = st.packReceipts[pk];
+        if (!lPk || ((dPk && dPk.completedAt) || '') > ((lPk && lPk.completedAt) || '')) {
+          st.packReceipts[pk] = dPk;
+        }
       }
     }
     // settings: prefer live — the storage listener keeps idle heaps current,

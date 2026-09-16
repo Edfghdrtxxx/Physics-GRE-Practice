@@ -3,8 +3,9 @@
 
    Feature-wave additions (proposals #3/#4/#6/#14):
    - #3 Custom quiz: #/practice/custom consumes sessionStorage['pgre-quiz-config']
-     ({ ids, label, criteria? }) written by the builder (js/view-build.js) and runs
-     it as a labelled session. A criteria-built quiz stores its filter snapshot so
+     ({ ids, label, criteria? }) written by the builder (js/view-build.js) or
+     PGRE.launchPack (js/packs.js; also #/practice/pack/<NN>) and runs it as a
+     labelled session. A criteria-built quiz stores its filter snapshot so
      the summary's replay can resample a fresh draw; ID-based sets replay exactly.
    - #4 Pace trainer: a live per-question timer chip (state.settings.paceTrainer)
      against the target pace (state.settings.paceTargetSec), with over/under-pace
@@ -397,11 +398,13 @@ PGRE.views.practice = (function () {
     opts = opts || {};
     var topicId = opts.topicId || 'all';
     clearSaved(); // a fresh set replaces whatever was left part-way
+    var packId = inferPackId(qs.map(function (q) { return q.id; }), opts.label);
     session = { topicId: topicId, qs: qs, i: 0, correct: 0, xpEarned: 0, answers: [],
                 qStart: Date.now(), label: opts.label || null, custom: !!opts.custom,
                 criteria: opts.criteria || null,
                 filter: opts.filter || null, stage: 'question', assess: null,
-                sid: PGRE.gamify.beginSession(topicId, 'practice', qs.length) };
+                sid: PGRE.gamify.beginSession(topicId, 'practice', qs.length,
+                  { label: opts.label || null, pack: packId }) };
     renderQuestion();
   }
 
@@ -507,6 +510,7 @@ PGRE.views.practice = (function () {
     session.assess = PGRE.assess.bind(fb, q, isCorrect);
     bindNotes(fb, q);
     saveSession();
+    if (session.answers.length === session.qs.length) persistAgentReceipt(buildAgentReceipt());
     if (window.PGRE && PGRE.motion && PGRE.motion.countUp) {
       var xpEl = fb.querySelector('.fb-xp');
       if (xpEl) PGRE.motion.countUp(xpEl, xp, { duration: 600, format: function (n) { return '+' + Math.round(n) + ' XP'; } });
@@ -533,6 +537,177 @@ PGRE.views.practice = (function () {
     else renderSummary();
   }
 
+  /* ——— Agent receipt (OrbitOS /practice-physics-gre-set log path) ———
+     Builds a stable JSON payload the user copies into chat after a set.
+     Durable write: sessionStorage + localStorage['pgre-agent-receipt'] +
+     state.lastAgentReceipt (+ state.packReceipts[NN] for two-digit packs). */
+  function sittingComplete(sess) {
+    return !!(sess && sess.qs && sess.qs.length &&
+              sess.answers && sess.answers.length === sess.qs.length);
+  }
+
+  function inferPackId(ids, label) {
+    if (PGRE.PACKS && ids && ids.length) {
+      for (var k in PGRE.PACKS) {
+        if (!Object.prototype.hasOwnProperty.call(PGRE.PACKS, k)) continue;
+        var p = PGRE.PACKS[k];
+        if (p && p.ids && sameIds(p.ids, ids)) return k;
+      }
+    }
+    var m = String(label || '').match(/\b(?:pack|set)\s*0*(\d{1,2})\b/i);
+    if (!m) return null;
+    var n = parseInt(m[1], 10);
+    if (n < 1 || n > 35) return null;
+    return n < 10 ? '0' + n : String(n);
+  }
+
+  function sessionSpanMin(sid) {
+    var arr = (PGRE.store && PGRE.store.state && PGRE.store.state.sessions) || [];
+    for (var i = arr.length - 1; i >= 0; i--) {
+      if (arr[i].id !== sid) continue;
+      if (!arr[i].startedAt || !arr[i].endedAt) return null;
+      var ms = new Date(arr[i].endedAt) - new Date(arr[i].startedAt);
+      if (!isFinite(ms) || ms < 0) return null;
+      return Math.max(1, Math.round(ms / 60000));
+    }
+    return null;
+  }
+
+  function buildAgentReceipt() {
+    if (!session) return null;
+    var ids = session.qs.map(function (q) { return q.id; });
+    var miss = session.answers.filter(function (a) { return !a.correct; }).map(function (a) {
+      return {
+        qid: a.q.id,
+        topic: a.q.topic || null,
+        picked: typeof a.picked === 'number' ? a.picked : null
+      };
+    });
+    var n = session.qs.length;
+    var correct = session.correct;
+    var pct = n ? Math.round(100 * correct / n) : 0;
+    var pack = inferPackId(ids, session.label);
+    var durationMin = sessionSpanMin(session.sid);
+    return {
+      v: 1,
+      kind: 'pgre-agent-receipt',
+      pack: pack,
+      label: session.label || null,
+      score: { correct: correct, n: n, pct: pct },
+      durationMin: durationMin,
+      missQids: miss.map(function (m) { return m.qid; }),
+      misses: miss,
+      ids: ids,
+      origin: (typeof location !== 'undefined' && location.href) ? location.href.split('#')[0] : null,
+      sessionId: session.sid || null,
+      xp: session.xpEarned || 0,
+      completedAt: new Date().toISOString()
+    };
+  }
+
+  function persistAgentReceipt(receipt, sess) {
+    sess = sess || session;
+    if (!receipt || !sittingComplete(sess)) return;
+    var json = JSON.stringify(receipt);
+    try { sessionStorage.setItem('pgre-agent-receipt', json); } catch (e) { /* quota / private mode */ }
+    try { localStorage.setItem('pgre-agent-receipt', json); } catch (e2) { /* quota / private mode */ }
+    var st = PGRE.store && PGRE.store.state;
+    if (!st) return;
+    st.lastAgentReceipt = receipt;
+    var pack = receipt.pack;
+    if (pack != null && /^\d{2}$/.test(String(pack))) {
+      if (!st.packReceipts || typeof st.packReceipts !== 'object') st.packReceipts = {};
+      st.packReceipts[String(pack)] = receipt;
+    }
+    PGRE.store.save();
+  }
+
+  function receiptFileName(receipt) {
+    var day = '';
+    if (PGRE.store && typeof PGRE.store.today === 'function') {
+      day = String(PGRE.store.today()).replace(/-/g, '');
+    }
+    if (!/^\d{8}$/.test(day)) {
+      var d = new Date();
+      day = String(d.getFullYear()) +
+        ('0' + (d.getMonth() + 1)).slice(-2) +
+        ('0' + d.getDate()).slice(-2);
+    }
+    if (receipt && receipt.pack) return 'pgre-receipt-pack-' + receipt.pack + '-' + day + '.json';
+    return 'pgre-receipt-' + day + '.json';
+  }
+
+  function downloadAgentReceipt(receipt) {
+    if (!receipt) return;
+    var blob = new Blob([JSON.stringify(receipt, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = receiptFileName(receipt);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+  }
+
+  function copyAgentReceipt(receipt, btn) {
+    var text = JSON.stringify(receipt, null, 2);
+    function ok() {
+      if (!btn) return;
+      btn.textContent = 'Copied — paste in chat (“done” / log GRE set)';
+      btn.classList.add('btn-ok');
+      setTimeout(function () {
+        btn.textContent = 'Copy agent receipt';
+        btn.classList.remove('btn-ok');
+      }, 3500);
+    }
+    function fail() {
+      if (btn) btn.textContent = 'Copy failed — select JSON below';
+      // last resort: show a selectable block once
+      if (el().querySelector('#agent-receipt-fallback')) return;
+      var pre = document.createElement('pre');
+      pre.id = 'agent-receipt-fallback';
+      pre.className = 'agent-receipt-fallback';
+      pre.textContent = text;
+      el().querySelector('.btn-row').insertAdjacentElement('afterend', pre);
+      try {
+        var range = document.createRange();
+        range.selectNodeContents(pre);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } catch (e2) { /* ignore */ }
+    }
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      navigator.clipboard.writeText(text).then(ok).catch(function () {
+        // file:// often blocks clipboard — execCommand fallback
+        try {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          var worked = document.execCommand('copy');
+          document.body.removeChild(ta);
+          if (worked) ok(); else fail();
+        } catch (e) { fail(); }
+      });
+      return;
+    }
+    try {
+      var ta2 = document.createElement('textarea');
+      ta2.value = text;
+      ta2.setAttribute('readonly', '');
+      ta2.style.position = 'fixed';
+      ta2.style.left = '-9999px';
+      document.body.appendChild(ta2);
+      ta2.select();
+      var worked2 = document.execCommand('copy');
+      document.body.removeChild(ta2);
+      if (worked2) ok(); else fail();
+    } catch (e3) { fail(); }
+  }
+
   /* ——— Summary ——— */
   function renderSummary() {
     clearPace();
@@ -546,6 +721,8 @@ PGRE.views.practice = (function () {
                   pct >= 80 ? 'Strong work.' :
                   pct >= 60 ? 'Solid — review the misses below.' :
                   'Rough set — the reworking is where the learning happens.';
+    var receipt = buildAgentReceipt();
+    persistAgentReceipt(receipt);
     var html = '<div class="card practice-card">' +
       '<h1>Session complete</h1>' +
       (session.label ? '<p class="muted session-label-line">' + PGRE.ui.esc(session.label) + '</p>' : '') +
@@ -566,8 +743,14 @@ PGRE.views.practice = (function () {
     html += '<div class="btn-row">' +
       '<button class="btn btn-primary" id="again-btn">' +
         (custom ? (session.criteria ? 'Draw a fresh set' : 'Run this set again') : 'Practice again') + '</button>' +
+      '<button class="btn btn-ghost" type="button" id="agent-receipt-btn" title="Copy JSON for OrbitOS agent log">' +
+        'Copy agent receipt</button>' +
+      '<button class="btn btn-ghost" type="button" id="agent-receipt-download-btn" title="Download JSON receipt">' +
+        'Download .json</button>' +
       '<a class="btn btn-ghost" href="' + backLink + '">Done</a>' +
-    '</div></div>';
+    '</div>' +
+    '<p class="muted agent-receipt-hint">OrbitOS: copy or download the receipt, then in chat say you are done (or paste the JSON) so the agent can tick the daily row and log misses.</p>' +
+    '</div>';
     var topicId = session.topicId, filter = session.filter;
     el().innerHTML = html;
     PGRE.typesetMath(el());
@@ -580,6 +763,22 @@ PGRE.views.practice = (function () {
       if (custom) startCustom(true);
       else renderConfig(topicId, filter);
     });
+    var receiptBtn = document.getElementById('agent-receipt-btn');
+    if (receiptBtn && receipt) {
+      receiptBtn.addEventListener('click', function () {
+        if (Date.now() - lastRenderAt < 300) return;
+        persistAgentReceipt(receipt);
+        copyAgentReceipt(receipt, receiptBtn);
+      });
+    }
+    var dlBtn = document.getElementById('agent-receipt-download-btn');
+    if (dlBtn && receipt) {
+      dlBtn.addEventListener('click', function () {
+        if (Date.now() - lastRenderAt < 300) return;
+        persistAgentReceipt(receipt);
+        downloadAgentReceipt(receipt);
+      });
+    }
   }
 
   /* ——— Keyboard-first practice (#14) ——— */
@@ -629,7 +828,14 @@ PGRE.views.practice = (function () {
       if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
       var id = params.id || 'all';
       if (id === 'custom') startCustom();
-      else renderConfig(id, params.sub2); // #/practice/<id>/new | /done
-    }
+      else if (id === 'pack') {
+        // #/practice/pack/<NN> writes the pack config and jumps to custom.
+        if (PGRE.launchPack(params.sub2)) return;
+        renderNoCustom();
+      } else renderConfig(id, params.sub2); // #/practice/<id>/new | /done
+    },
+    persistAgentReceipt: persistAgentReceipt,
+    inferPackId: inferPackId,
+    sittingComplete: sittingComplete
   };
 })();

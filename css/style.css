@@ -503,6 +503,22 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 .card .btn-ghost { margin-top: 12px; }
 .card .btn-row > .btn { margin-top: 0; }
 
+.agent-receipt-hint { margin-top: 10px; font-size: 13px; max-width: 42rem; }
+.agent-receipt-fallback {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--ivory);
+  border: 1px solid var(--line);
+  border-radius: var(--ctl-r);
+  font-family: var(--mono, ui-monospace, Menlo, monospace);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
+}
+#agent-receipt-btn.btn-ok { border-color: var(--good, #2f6b4f); color: var(--good, #2f6b4f); }
+
 /* ——— Chips ——— */
 .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
 .chip {

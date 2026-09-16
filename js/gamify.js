@@ -289,13 +289,18 @@ PGRE.gamify = {
   },
 
   /* ——— Sessions: one record per practice run / mistake drill ——— */
-  beginSession: function (topicId, mode, planned) {
+  beginSession: function (topicId, mode, planned, meta) {
     var s = PGRE.store.state;
     var id = 's-' + Date.now().toString(36) + '-' +
              Math.floor(Math.random() * 1e6).toString(36);
-    s.sessions.push({ id: id, mode: mode || 'practice', topicId: topicId,
-                      startedAt: new Date().toISOString(), endedAt: null,
-                      planned: planned || 0, answered: 0, correct: 0, xp: 0 });
+    var row = { id: id, mode: mode || 'practice', topicId: topicId,
+                startedAt: new Date().toISOString(), endedAt: null,
+                planned: planned || 0, answered: 0, correct: 0, xp: 0 };
+    if (meta) {
+      if (meta.label) row.label = meta.label;
+      if (meta.pack) row.pack = meta.pack;
+    }
+    s.sessions.push(row);
     PGRE.store.save();
     return id;
   },
