@@ -303,8 +303,8 @@ For unit mass in one dimension, $T = \\frac12\\dot{q}^{2}$ and $U = U(q)$. In a 
         { value: 'harmonic', label: 'Harmonic: $U = \\frac12 q^{2}$' },
         { value: 'double', label: 'Double well: $U = 2(q^{2}-1)^{2}$' },
         { value: 'cosine', label: 'Pendulum: $U = 1 - \\cos q$' }
-      ]},
-      { id: 'amp', label: 'Release $q(0)$', type: 'range', min: 0.35, max: 1.85, step: 0.05, value: 1.20, default: 1.20 },
+      ], hint: 'Selects $U(q)$. Harmonic $U=\\frac12 q^{2}$ makes $L$ oscillate at $2\\omega$; the double well can trap or let the particle cross $U(0)=2$; the pendulum $U=1-\\cos q$ is $2\\pi$-periodic.' },
+      { id: 'amp', label: 'Release $q(0)$', type: 'range', min: 0.35, max: 1.85, step: 0.05, value: 1.20, default: 1.20, hint: 'Release from rest at this $q(0)$. Larger amplitude raises $E=T+U$ on the well; $L=T-U$ still changes sign twice per period in the harmonic case.' },
       SPEED_PARAM
     ],
     init: function (container, state, redraw) {
@@ -366,11 +366,11 @@ For unit mass in one dimension, $T = \\frac12\\dot{q}^{2}$ and $U = U(q)$. In a 
         : (kind === 'double' ? (Emech < 2 ? 'trapped in one well' : 'crosses the barrier $U(0)=2$') : 'pendulum well');
 
       legend('$L = T - U$', [
-        { label: '$T$', value: fmt(Tkin, 3) },
-        { label: '$U$', value: fmt(Upot, 3) },
-        { label: '$L = T - U$', value: fmt(Lval, 3) },
-        { label: '$E = T + U$', value: fmt(Emech, 3) },
-        { label: 'motion', value: omegaNote }
+        { label: '$T$', value: fmt(Tkin, 3), hint: 'Kinetic energy $T=\\frac12\\dot{q}^{2}$ (unit mass). Peaks at the bottom of $U$, where the particle is fastest.' },
+        { label: '$U$', value: fmt(Upot, 3), hint: 'Potential at the present $q$. The force in the Euler–Lagrange equation is $-\\partial U/\\partial q$.' },
+        { label: '$L = T - U$', value: fmt(Lval, 3), hint: 'Lagrangian $L=T-U$, the difference not the sum. Hamilton\'s principle makes $\\int L\\,dt$ stationary; $E=T+U$ is the conserved energy.' },
+        { label: '$E = T + U$', value: fmt(Emech, 3), hint: 'Mechanical energy $E=T+U$. For this conservative $U(q)$ it is constant along the motion, while $L$ is not.' },
+        { label: 'motion', value: omegaNote, hint: 'In the harmonic well $L$ oscillates at $2\\omega$. Double well: $E<2$ traps in one pocket; $E>2$ crosses the barrier. Pendulum: libration in $U=1-\\cos q$.' }
       ]);
 
       var padL = 36;
@@ -489,6 +489,19 @@ For unit mass in one dimension, $T = \\frac12\\dot{q}^{2}$ and $U = U(q)$. In a 
       haloLabel(ctx, bx + colW * 0.5, height - 14, 'T', GOLD, 'center');
       haloLabel(ctx, bx + colW + gap + colW * 0.5, height - 14, 'U', CORAL, 'center');
       haloLabel(ctx, bx + 2 * (colW + gap) + colW * 0.5, height - 14, 'L', TEAL, 'center');
+
+      var vxTip = px + vPix * tx / tlen;
+      var vyTip = py + vPix * tyScreen / tlen;
+      if (PGRE.setVizHotspots) {
+        PGRE.setVizHotspots([
+          { id: 'particle', kind: 'circle', x: px, y: py, r: 14, title: 'Particle', body: 'Unit mass at $q=' + fmt(state.q, 2) + '$, $\\dot{q}=' + fmt(state.v, 2) + '$. $T=' + fmt(Tkin, 3) + '$, $U=' + fmt(Upot, 3) + '$, so $L=T-U=' + fmt(Lval, 3) + '$ while $E=T+U=' + fmt(Emech, 3) + '$ stays put.' },
+          { id: 'qdot', kind: 'segment', x1: px, y1: py, x2: vxTip, y2: vyTip, halfW: 8, title: 'Velocity $\\dot{q}$', body: 'Tangent to $U(q)$ with $\\dot{q}=' + fmt(state.v, 2) + '$. Kinetic $T=\\frac12\\dot{q}^{2}=' + fmt(Tkin, 3) + '$; the gold arrow vanishes at turning points.' },
+          { id: 'barT', kind: 'rect', x: bx, y: by, w: colW, h: bh, title: 'Kinetic $T$', body: '$T=\\frac12\\dot{q}^{2}=' + fmt(Tkin, 3) + '$. It trades with $U$ so that $E=T+U=' + fmt(Emech, 3) + '$ is constant.' },
+          { id: 'barU', kind: 'rect', x: bx + colW + gap, y: by, w: colW, h: bh, title: 'Potential $U$', body: '$U(q)=' + fmt(Upot, 3) + '$ at $q=' + fmt(state.q, 2) + '$. The coral bar is $U$; $L$ is gold minus coral, not the sum.' },
+          { id: 'barL', kind: 'rect', x: bx + 2 * (colW + gap), y: by, w: colW, h: bh, title: 'Lagrangian $L$', body: '$L=T-U=' + fmt(Lval, 3) + '$ can be negative (bar drops below the zero line). Stationary action uses this difference, not $E$.' },
+          { id: 'Uq', kind: 'rect', x: lx, y: ly, w: lw, h: lh, title: 'Potential $U(q)$', body: 'Coral curve is $U(q)$ on $q\\in[' + fmt(qLo, 1) + ',' + fmt(qHi, 1) + ']$. The particle slides on this well; $-\\partial U/\\partial q=' + fmt(-dUq, 2) + '$ is the generalized force.' }
+        ]);
+      }
     },
     challenge: {
       question: "A particle moves in 1D under a potential $U(x) = \\frac{1}{2}kx^{2}$. If the Lagrangian is $L = \\frac{1}{2}m\\dot{x}^{2} - \\frac{1}{2}kx^{2}$, which of the following modified Lagrangians produces the EXACT SAME physical equations of motion?",
@@ -534,9 +547,9 @@ The wire's normal never appears. Equilibria satisfy $(\\omega^{2}\\cos\\theta - 
       { trap: 'Centrifugal term', description: 'The $m R^{2}\\omega^{2}\\sin^{2}\\theta$ piece of $T$ produces $\\partial L/\\partial\\theta \\supset m R^{2}\\omega^{2}\\sin\\theta\\cos\\theta$. It is not an extra Newtonian force you add by hand in the inertial frame.' }
     ],
     parameters: [
-      { id: 'omega', label: 'Hoop spin $\\omega$', type: 'range', min: 0, max: 6, step: 0.1, value: 3.5, default: 3.5, unit: 'rad/s' },
-      { id: 'g', label: 'Gravity $g$', type: 'range', min: 1, max: 20, step: 0.5, value: 9.8, default: 9.8, unit: 'm/s²' },
-      { id: 'theta0', label: 'Release $\\theta_0$', type: 'range', min: -3.14, max: 3.14, step: 0.05, value: 0.8, default: 0.8 },
+      { id: 'omega', label: 'Hoop spin $\\omega$', type: 'range', min: 0, max: 6, step: 0.1, value: 3.5, default: 3.5, unit: 'rad/s', hint: 'Spin about the vertical diameter. For $\\omega>\\omega_c=\\sqrt{g/R}$ the bottom is unstable and two stable latitudes appear at $\\cos\\theta_{\\mathrm{eq}}=g/(R\\omega^{2})$.' },
+      { id: 'g', label: 'Gravity $g$', type: 'range', min: 1, max: 20, step: 0.5, value: 9.8, default: 9.8, unit: 'm/s²', hint: 'Gravitational acceleration. Raising $g$ increases $\\omega_c=\\sqrt{g/R}$ and, at fixed $\\omega$, pulls $\\theta_{\\mathrm{eq}}$ toward the bottom.' },
+      { id: 'theta0', label: 'Release $\\theta_0$', type: 'range', min: -3.14, max: 3.14, step: 0.05, value: 0.8, default: 0.8, hint: 'Release angle from the bottom with $\\dot{\\theta}=0$. $\\theta=0$ is always an equilibrium; above $\\omega_c$ it is unstable, so a kick is needed to leave it.' },
       SPEED_PARAM
     ],
     init: function (container, state, redraw) {
@@ -591,12 +604,12 @@ The wire's normal never appears. Equilibria satisfy $(\\omega^{2}\\cos\\theta - 
       var Ejac = 0.5 * R * R * state.thetaDot * state.thetaDot + Ueff;
 
       legend('Bead on a rotating hoop', [
-        { label: '$\\omega / \\omega_c$', value: fmt(omega / Math.max(omegaC, 1e-6), 2) + '  ($\\omega_c=\\sqrt{g/R}$)' },
-        { label: 'regime', value: supercritical ? 'supercritical — $\\theta=0$ unstable' : 'subcritical — $\\theta=0$ stable' },
-        { label: '$\\theta$', value: fmt(state.theta * 180 / Math.PI, 0) + '°' },
-        { label: '$\\theta_{\\mathrm{eq}}$', value: supercritical ? '$\\pm$' + fmt(thetaEq * 180 / Math.PI, 0) + '°' : '$0^{\\circ}$' },
-        { label: '$E$ (Jacobi)', value: fmt(Ejac, 2) },
-        { label: 'friction', value: 'none; kick to leave $\\theta=0$' }
+        { label: '$\\omega / \\omega_c$', value: fmt(omega / Math.max(omegaC, 1e-6), 2) + '  ($\\omega_c=\\sqrt{g/R}$)', hint: 'Ratio to the pitchfork threshold $\\omega_c=\\sqrt{g/R}$. Greater than $1$ is supercritical: $\\theta=0$ is a local maximum of $U_{\\mathrm{eff}}$.' },
+        { label: 'regime', value: supercritical ? 'supercritical — $\\theta=0$ unstable' : 'subcritical — $\\theta=0$ stable', hint: 'Subcritical: only the bottom is stable. Supercritical: two stable latitudes, and $\\theta=0$ is unstable.' },
+        { label: '$\\theta$', value: fmt(state.theta * 180 / Math.PI, 0) + '°', hint: 'Angle from the bottom. Euler–Lagrange gives $\\ddot{\\theta}=(\\omega^{2}\\cos\\theta-g/R)\\sin\\theta$; the wire\'s constraint force never appears.' },
+        { label: '$\\theta_{\\mathrm{eq}}$', value: supercritical ? '$\\pm$' + fmt(thetaEq * 180 / Math.PI, 0) + '°' : '$0^{\\circ}$', hint: 'Stable latitude. $\\cos\\theta_{\\mathrm{eq}}=g/(R\\omega^{2})$ when $\\omega>\\omega_c$; otherwise $\\theta_{\\mathrm{eq}}=0$.' },
+        { label: '$E$ (Jacobi)', value: fmt(Ejac, 2), hint: 'Jacobi integral $\\frac12 R^{2}\\dot{\\theta}^{2}+U_{\\mathrm{eff}}$, with $U_{\\mathrm{eff}}=-gR\\cos\\theta-\\frac12\\omega^{2}R^{2}\\sin^{2}\\theta$. Conserved for this scleronomic constraint.' },
+        { label: 'friction', value: 'none; kick to leave $\\theta=0$', hint: 'No dissipation: the bead oscillates in whichever well of $U_{\\mathrm{eff}}$ it occupies. Use Kick bead to leave $\\theta=0$.' }
       ]);
 
       var cx = width * 0.5;
@@ -692,6 +705,30 @@ The wire's normal never appears. Equilibria satisfy $(\\omega^{2}\\cos\\theta - 
 
       axisText(ctx, 'bottom  θ = 0', cx, height - 8, 'center');
       axisText(ctx, 'top', cx, 16, 'center');
+
+      var hoopSpots = [
+        { id: 'bead', kind: 'circle', x: bead.sx, y: bead.sy, r: 14, title: 'Bead', body: 'Slides on the wire at $\\theta=' + fmt(state.theta * 180 / Math.PI, 0) + '^{\\circ}$, $\\dot{\\theta}=' + fmt(state.thetaDot, 2) + '\\,\\mathrm{rad/s}$. Euler–Lagrange already eliminated the hoop\'s normal.' }
+      ];
+      if (supercritical) {
+        hoopSpots.push(
+          { id: 'eqA', kind: 'circle', x: eqA.sx, y: eqA.sy, r: 10, title: 'Equilibrium $\\theta_{\\mathrm{eq}}$', body: 'Stable latitude $\\theta_{\\mathrm{eq}}=' + fmt(thetaEq * 180 / Math.PI, 0) + '^{\\circ}$ where $\\cos\\theta_{\\mathrm{eq}}=g/(R\\omega^{2})=' + fmt(g / (R * omega * omega), 2) + '$.' },
+          { id: 'eqB', kind: 'circle', x: eqB.sx, y: eqB.sy, r: 10, title: 'Equilibrium $-\\theta_{\\mathrm{eq}}$', body: 'The pitchfork partner at $-\\theta_{\\mathrm{eq}}$. Both are minima of $U_{\\mathrm{eff}}$ for $\\omega/\\omega_c=' + fmt(omega / Math.max(omegaC, 1e-6), 2) + '$.' }
+        );
+      } else {
+        var botPt = proj(0);
+        hoopSpots.push({ id: 'bottomEq', kind: 'circle', x: botPt.sx, y: botPt.sy, r: 10, title: 'Bottom $\\theta=0$', body: 'Subcritical: $\\omega/\\omega_c=' + fmt(omega / Math.max(omegaC, 1e-6), 2) + '<1$, so $\\theta=0$ is the only stable equilibrium of $U_{\\mathrm{eff}}$.' });
+      }
+      hoopSpots.push(
+        { id: 'mg', kind: 'segment', x1: bead.sx, y1: bead.sy, x2: bead.sx, y2: bead.sy + gLen, halfW: 8, title: 'Gravity $mg$', body: 'True gravity $g=' + fmt(g, 1) + '\\,\\mathrm{m/s}^{2}$ points down. The centrifugal piece of $T$ is already in $L$, not drawn as an extra force.' }
+      );
+      if (supercritical) {
+        hoopSpots.push({ id: 'latitude', kind: 'ring', x: cx, y: cy + s * Math.cos(thetaEq), r: Math.max(4, s * Math.abs(Math.sin(thetaEq))), halfW: 8, title: 'Equilibrium latitude', body: 'Circle of constant $\\theta=\\pm\\theta_{\\mathrm{eq}}$. The bead\'s equilibria are where this parallel meets the wire.' });
+      }
+      hoopSpots.push(
+        { id: 'omegaAxis', kind: 'segment', x1: cx, y1: cy - s - 16, x2: cx, y2: cy + s + 12, halfW: 8, title: 'Rotation axis', body: 'Vertical diameter. The hoop spins at $\\omega=' + fmt(omega, 1) + '\\,\\mathrm{rad/s}$; $\\omega_c=\\sqrt{g/R}=' + fmt(omegaC, 2) + '\\,\\mathrm{rad/s}$.' },
+        { id: 'hoop', kind: 'ring', x: cx, y: cy, r: s, halfW: 10, title: 'Rotating hoop', body: 'Wire of radius $R=1$. The bead is constrained to this circle; $\\theta$ from the bottom is the only generalized coordinate.' }
+      );
+      if (PGRE.setVizHotspots) PGRE.setVizHotspots(hoopSpots);
     },
     challenge: {
       question: "A bead of mass $m$ slides without friction on a circular hoop of radius $R$ rotating at constant angular speed $\\omega$ about its vertical diameter. What is the critical angular frequency $\\omega_c$ above which a stable non-zero equilibrium angle $\\theta \\neq 0$ exists?",
@@ -739,12 +776,12 @@ is strictly constant: it is the $x$-coordinate of the cyclotron guiding center. 
       { trap: 'Dimensions', description: 'If $q_i$ is an angle, $p_i$ has dimensions of angular momentum. The product $p_i q_i$ always has dimensions of action.' }
     ],
     parameters: [
-      { id: 'B', label: 'Magnetic field $B$', type: 'range', min: 0.5, max: 3.0, step: 0.1, value: 1.5, default: 1.5, unit: 'T' },
-      { id: 'q', label: 'Charge $q$', type: 'range', min: -2, max: 2, step: 1, value: 1, default: 1 },
+      { id: 'B', label: 'Magnetic field $B$', type: 'range', min: 0.5, max: 3.0, step: 0.1, value: 1.5, default: 1.5, unit: 'T', hint: 'Uniform $\\mathbf{B}=B\\hat{\\mathbf{z}}$. Cyclotron frequency $\\omega_c=qB/m$; larger $B$ shrinks the gyroradius $\\rho=v_\\perp/|\\omega_c|$.' },
+      { id: 'q', label: 'Charge $q$', type: 'range', min: -2, max: 2, step: 1, value: 1, default: 1, hint: 'Particle charge. The sign of $q$ flips $\\omega_c$ and the sense of gyration. Canonical $\\mathbf{p}=m\\mathbf{v}+q\\mathbf{A}$, so $q=0$ recovers $p=mv$.' },
       { id: 'gauge', label: 'Gauge choice', type: 'select', value: 'landau', default: 'landau', options: [
         { value: 'landau', label: 'Landau: $\\mathbf{A} = (0, Bx, 0)$' },
         { value: 'symmetric', label: 'Symmetric: $\\mathbf{A} = \\frac12 B(-y, x)$' }
-      ]},
+      ], hint: 'Choice of $\\mathbf{A}$ with $\\nabla\\times\\mathbf{A}=\\mathbf{B}$. Landau $\\mathbf{A}=(0,Bx,0)$ makes $y$ cyclic so $p_y$ is conserved; the symmetric gauge conserves $p_\\theta$ instead. The orbit itself is gauge-invariant.' },
       SPEED_PARAM
     ],
     init: function (container, state, redraw) {
@@ -825,11 +862,11 @@ is strictly constant: it is the $x$-coordinate of the cyclotron guiding center. 
       var oscillating = landau ? pMechY : Lz;
 
       legend('Canonical $p = \\partial L/\\partial\\dot{q}$', [
-        { label: 'gauge', value: landau ? '$\\mathbf{A}=(0,Bx,0)$, $y$ cyclic' : '$\\mathbf{A}=\\frac12 B(-y,x)$, $\\theta$ cyclic' },
-        { label: landau ? '$p_y = mv_y + qBx$' : '$p_\\theta = L_z + \\frac12 q B r^{2}$', value: fmt(conserved, 3) },
-        { label: landau ? '$mv_y$' : '$L_z$', value: fmt(oscillating, 3) },
-        { label: '$|m\\mathbf{v}|$', value: fmt(Math.hypot(pMechX, pMechY), 3) },
-        { label: landau ? 'geometry' : 'orbit', value: landau ? '$x=X_c=p_y/(qB)$ is the gold line' : 'same cyclotron; different conserved $p$' }
+        { label: 'gauge', value: landau ? '$\\mathbf{A}=(0,Bx,0)$, $y$ cyclic' : '$\\mathbf{A}=\\frac12 B(-y,x)$, $\\theta$ cyclic', hint: 'Which coordinate is cyclic depends on the gauge, not on $\\mathbf{B}$. The trajectory is gauge-invariant; which $p_i$ is constant is not.' },
+        { label: landau ? '$p_y = mv_y + qBx$' : '$p_\\theta = L_z + \\frac12 q B r^{2}$', value: fmt(conserved, 3), hint: 'Canonical $p_i=\\partial L/\\partial\\dot{q}_i$. Landau: $p_y=mv_y+qBx=qB X_c$ (guiding-center $x$). Symmetric: $p_\\theta=L_z+\\frac12 q B r^{2}$.' },
+        { label: landau ? '$mv_y$' : '$L_z$', value: fmt(oscillating, 3), hint: 'Mechanical $mv_y$ (or $L_z$) still oscillates with the cyclotron motion. It is not the conserved canonical momentum.' },
+        { label: '$|m\\mathbf{v}|$', value: fmt(Math.hypot(pMechX, pMechY), 3), hint: 'Speed is constant in a static $\\mathbf{B}$ (magnetic force does no work). $|m\\mathbf{v}|$ is not the canonical $|\\mathbf{p}|$.' },
+        { label: landau ? 'geometry' : 'orbit', value: landau ? '$x=X_c=p_y/(qB)$ is the gold line' : 'same cyclotron; different conserved $p$', hint: 'Landau: the gold line $x=X_c=p_y/(qB)$ never moves. Symmetric: the same cyclotron circle, but the conserved quantity is $p_\\theta$, not a Cartesian line.' }
       ]);
 
       var pad = 18;
@@ -914,6 +951,24 @@ is strictly constant: it is the $x$-coordinate of the cyclotron guiding center. 
 
       axisText(ctx, 'x', sx(viewR) - 6, cy - 6, 'right');
       axisText(ctx, 'y', cx + 8, sy(viewR) + 12, 'left');
+
+      var cycSpots = [
+        { id: 'charge', kind: 'circle', x: px, y: py, r: 14, title: 'Charged particle', body: 'At $(' + fmt(state.x, 2) + ',' + fmt(state.y, 2) + ')$ with $q=' + fmt(qCh, 0) + '$, $B=' + fmt(B, 1) + '\\,\\mathrm{T}$. Mechanical $\\mathbf{p}_{\\mathrm{mech}}=m\\mathbf{v}$; canonical $\\mathbf{p}=m\\mathbf{v}+q\\mathbf{A}$.' },
+        { id: 'mv', kind: 'segment', x1: px, y1: py, x2: mx2, y2: my2, halfW: 8, title: 'Mechanical $m\\mathbf{v}$', body: '$m\\mathbf{v}=(' + fmt(pMechX, 2) + ',' + fmt(pMechY, 2) + ')$. This coral arrow turns with the cyclotron motion; it is not conserved in Landau gauge.' },
+        { id: 'Pcan', kind: 'segment', x1: px, y1: py, x2: Px2, y2: Py2, halfW: 8, title: 'Canonical $\\mathbf{p}$', body: '$\\mathbf{p}=m\\mathbf{v}+q\\mathbf{A}=(' + fmt(pCanonX, 2) + ',' + fmt(pCanonY, 2) + ')$. Landau conserves $p_y=' + fmt(pCanonY, 3) + '$; the symmetric gauge conserves $p_\\theta=' + fmt(pTheta, 3) + '$ instead.' }
+      ];
+      if (Math.hypot(qCh * Ax, qCh * Ay) > 0.04) {
+        cycSpots.push({ id: 'qA', kind: 'segment', x1: px, y1: py, x2: ax2, y2: ay2, halfW: 8, title: 'Minimal coupling $q\\mathbf{A}$', body: '$q\\mathbf{A}=(' + fmt(qCh * Ax, 2) + ',' + fmt(qCh * Ay, 2) + ')$. This gold piece is what makes $\\mathbf{p}\\neq m\\mathbf{v}$; it is gauge-dependent.' });
+      }
+      if (Math.abs(omegaC) > 1e-8) {
+        var rhoPix = Math.max(2, Math.hypot(state.x - Xc, state.y - Yc) * scale);
+        cycSpots.push({ id: 'guide', kind: 'circle', x: sx(Xc), y: sy(Yc), r: 10, title: 'Guiding center', body: 'Cyclotron center $(X_c,Y_c)=(' + fmt(Xc, 2) + ',' + fmt(Yc, 2) + ')$. In Landau gauge $X_c=p_y/(qB)$ is an exact constant of motion.' });
+        if (landau) {
+          cycSpots.push({ id: 'Xc', kind: 'segment', x1: sx(Xc), y1: sy(-viewR), x2: sx(Xc), y2: sy(viewR), halfW: 8, title: 'Conserved $x=X_c$', body: 'Landau gauge: $y$ is cyclic so $p_y=mv_y+qBx=' + fmt(pCanonY, 3) + '$ is constant, hence this gold line $x=X_c=' + fmt(Xc, 2) + '$ never moves.' });
+        }
+        cycSpots.push({ id: 'orbit', kind: 'ring', x: sx(Xc), y: sy(Yc), r: rhoPix, halfW: 8, title: 'Cyclotron orbit', body: 'Gyroradius $\\rho=' + fmt(Math.hypot(state.x - Xc, state.y - Yc), 2) + '$ at $\\omega_c=qB/m=' + fmt(omegaC, 2) + '\\,\\mathrm{rad/s}$. The circle is gauge-invariant; which $p_i$ is conserved is not.' });
+      }
+      if (PGRE.setVizHotspots) PGRE.setVizHotspots(cycSpots);
     },
     challenge: {
       question: "A particle of mass $m$ and charge $q$ moves in a uniform magnetic field $\\mathbf{B} = B \\hat{\\mathbf{z}}$ using the Landau gauge $\\mathbf{A} = (0, Bx, 0)$. Which quantity is an exact constant of motion?",

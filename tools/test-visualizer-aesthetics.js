@@ -19,7 +19,7 @@ var EXPECTED_IDS = [
   'cpgf-1.26', 'cpgf-1.27', 'cpgf-1.15',
   'cpgf-1.28', 'cpgf-1.29', 'cpgf-1.30',
   'cpgf-1.31', 'cpgf-1.32', 'cpgf-1.33',
-  'cpgf-1.9', 'cpgf-2.4', 'cpgf-2.8', 'cpgf-2.33',
+  'cpgf-1.9', 'cpgf-2.4', 'cpgf-2.6', 'cpgf-2.8', 'cpgf-2.15', 'cpgf-2.32', 'cpgf-2.33', 'cpgf-2.43',
   'cpgf-2.70', 'cpgf-4.14', 'cpgf-4.32', 'cpgf-5.18',
   'cpgf-5.27', 'cpgf-6.18', 'cpgf-7.17'
 ];
@@ -483,6 +483,32 @@ function makeEl(tag, owner) {
   el.focus = function () { /* no-op */ };
   el.blur = function () { /* no-op */ };
   el.click = function () { /* no-op */ };
+  el.contains = function (node) {
+    var n = node;
+    while (n) {
+      if (n === el) return true;
+      n = n.parentNode;
+    }
+    return false;
+  };
+  el.closest = function (sel) {
+    var n = el;
+    while (n && n.nodeType === 1) {
+      if (matchesSimple(n, sel)) return n;
+      n = n.parentNode;
+    }
+    return null;
+  };
+  Object.defineProperty(el, 'isConnected', {
+    get: function () {
+      var n = el;
+      while (n) {
+        if (n.nodeType === 9) return true;
+        n = n.parentNode;
+      }
+      return false;
+    }
+  });
 
   return el;
 }
@@ -632,6 +658,12 @@ function loadShipped() {
     },
     cancelAnimationFrame: function (id) {
       rafCbs = rafCbs.filter(function (x) { return x.id !== id; });
+    },
+    // Test hook: run every queued rAF callback once (callbacks re-queue themselves).
+    _runFrame: function (now) {
+      var batch = rafCbs;
+      rafCbs = [];
+      batch.forEach(function (x) { x.cb(now); });
     },
     setTimeout: function () { return 0; },
     clearTimeout: function () { /* no-op — do not run delayed modal teardown */ },
@@ -870,12 +902,17 @@ if (probeId) {
     var actions = backdrop && backdrop.querySelector('.viz-header-actions');
     assert(!!actions, 'draw modal header has .viz-header-actions');
     var actionKids = elementChildren(actions);
-    assert(actionKids[0] && actionKids[0].id === 'viz-params-btn',
-      'Parameters button is immediately left of close');
-    assert(actionKids[1] && actionKids[1].id === 'viz-close-btn',
-      'close button remains last in the header actions');
-    assert(actionKids[0] && /^\s*Parameters\s*$/.test(actionKids[0].textContent),
+    var kidIds = actionKids.map(function (k) { return k.id || k.className; });
+    assert(actionKids.length === 4 && classHas(actionKids[0], 'viz-nav-group') &&
+      actionKids[1].id === 'viz-pause-btn' && actionKids[2].id === 'viz-params-btn' && actionKids[3].id === 'viz-close-btn',
+      'header actions are nav group, Pause, Parameters, close (got ' + kidIds.join(', ') + ')');
+    var navKids = elementChildren(actionKids[0] || {});
+    assert(navKids[0] && navKids[0].id === 'viz-prev-btn' && navKids[navKids.length - 1] && navKids[navKids.length - 1].id === 'viz-next-btn',
+      'nav group is Previous … Next');
+    assert(actionKids[2] && /^\s*Parameters\s*$/.test(actionKids[2].textContent),
       'Parameters button is text-only');
+    assert(actionKids[1] && /^\s*Pause\s*$/.test(actionKids[1].textContent),
+      'Pause button is text-only and starts unpaused');
 
     var overlay = loaded.document.getElementById('viz-controls-panel');
     assert(!!overlay && classHas(overlay, 'viz-params-overlay'),
@@ -934,6 +971,174 @@ if (probeId) {
     assert(false, 'renderInlineVisualizer threw: ' + err.message);
   }
 }
+
+console.log('\n(b1) hover explanations, pause, reset, previous/next');
+(function testInteractions() {
+  var win = loaded.sandbox;
+  var doc = loaded.document;
+
+  function fire(el, type, extra) {
+    var list = el && el.listeners && el.listeners[type];
+    if (!list) return;
+    var evt = Object.assign({ type: type, target: el, preventDefault: function () {}, stopPropagation: function () {} }, extra || {});
+    for (var i = 0; i < list.length; i++) list[i](evt);
+  }
+  function bubble(el, type, extra) {
+    var n = el;
+    while (n && n.nodeType === 1) {
+      fire(n, type, Object.assign({ target: el }, extra || {}));
+      n = n.parentNode;
+    }
+  }
+  function tipEl() {
+    return doc.querySelector('.viz-tip');
+  }
+
+  // A synthetic card so the assertions do not depend on any trio's picture.
+  var drawCalls = [];
+  PGRE.visualizers['cpgf-test-a'] = {
+    title: 'Test A', formulaLatex: 'a = b', physicalStory: 'First paragraph.\n\nSecond paragraph.',
+    parameters: [
+      { id: 'k', label: 'Spring constant $k$', min: 1, max: 9, step: 1, default: 4, unit: 'N/m', hint: 'Stiffer spring, faster oscillation.' },
+      { id: 'showV', label: 'Velocity arrow', type: 'toggle', default: true },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3, step: 0.2, default: 1, unit: 'x' }
+    ],
+    init: function (c, state) { state._t = 0; state._inits = (state._inits || 0) + 1; },
+    draw: function (ctx, w, h, state, dt) {
+      drawCalls.push(dt);
+      state._t += dt;
+      ctx.fillStyle = CREAM; ctx.fillRect(0, 0, w, h);
+      PGRE.appendVizLegend('Readout', [
+        { label: '$x$', value: '1.0', hint: 'Displacement from equilibrium.' },
+        { label: 'plain', value: '2' }
+      ]);
+      PGRE.setVizHotspots([
+        { id: 'panel', kind: 'rect', x: 0, y: 0, w: 320, h: 300, title: 'Panel', body: 'Whole left half.' },
+        { id: 'mass', kind: 'circle', x: 100, y: 100, r: 20, title: 'Mass $m$', body: 'The bob. Hint value ' + state.k + '.' },
+        { id: 'spring', kind: 'segment', x1: 0, y1: 100, x2: 80, y2: 100, halfW: 6, title: 'Spring', body: 'Hooke.' }
+      ]);
+    }
+  };
+  PGRE.visualizers['cpgf-test-b'] = {
+    title: 'Test B', formulaLatex: 'c = d', physicalStory: 'B.',
+    parameters: [],
+    draw: function (ctx, w, h) { ctx.fillStyle = CREAM; ctx.fillRect(0, 0, w, h); }
+  };
+
+  try {
+    PGRE.openVisualizerModal('cpgf-test-a');
+    var backdrop = doc.getElementById('viz-modal-backdrop');
+    var canvas = doc.getElementById('viz-canvas');
+    var story = doc.getElementById('viz-pane-story');
+    assert(story && story.querySelectorAll('p').length === 2, 'physicalStory paragraphs render as separate <p>');
+
+    // Control hints: authored beats generated; simSpeed gets the shared wording.
+    var rows = doc.getElementById('viz-params-container').querySelectorAll('.viz-param-row');
+    assert(rows.length === 3 && rows[0].getAttribute('data-viz-tip') === 'Stiffer spring, faster oscillation.',
+      'authored parameter hint is exposed on the control row');
+    assert(/Show or hide Velocity arrow/.test(rows[1].getAttribute('data-viz-tip') || ''),
+      'toggle without hint gets a generated explanation');
+    assert(/Playback rate/.test(rows[2].getAttribute('data-viz-tip') || ''),
+      'simSpeed gets the shared playback explanation');
+    var tabs = backdrop.querySelectorAll('[data-viz-tab]');
+    assert(tabs.length === 4 && tabs.every(function (t) { return !!t.getAttribute('data-viz-tip'); }),
+      'every info tab carries a hover explanation');
+    assert(!!backdrop.querySelector('.viz-formula-banner[data-viz-tip]'), 'formula banner carries a hover explanation');
+
+    // Chrome tip: hovering a control row shows the popover with its title.
+    bubble(rows[0], 'mouseover');
+    assert(tipEl() && classHas(tipEl(), 'is-on') && /Stiffer spring/.test(tipEl().textContent),
+      'hovering a control shows its explanation in .viz-tip');
+    assert(/Spring constant/.test(tipEl().textContent), 'control tip is titled with the control label');
+    bubble(rows[0], 'mouseout', { relatedTarget: null });
+    assert(!classHas(tipEl(), 'is-on'), 'leaving the control hides the tip');
+
+    // First frame: legend rows with hints are hoverable; hotspots registered.
+    win._runFrame(1000);
+    var legendRows = doc.getElementById('viz-legend-strip').querySelectorAll('.viz-legend-row');
+    assert(legendRows.length === 2 && classHas(legendRows[0], 'has-tip') && !classHas(legendRows[1], 'has-tip'),
+      'legend rows with a hint are marked hoverable, rows without are not');
+    assert(legendRows[0].getAttribute('data-viz-tip') === 'Displacement from equilibrium.', 'legend row hint is exposed');
+
+    // Canvas hotspot: pointer over the mass -> tip + highlight painted after draw.
+    var ctx = canvas.getContext('2d');
+    fire(canvas, 'pointermove', { clientX: 100, clientY: 100 });
+    ctx._ops.length = 0;
+    win._runFrame(1016);
+    assert(classHas(tipEl(), 'is-on') && /The bob/.test(tipEl().textContent) && /Mass/.test(tipEl().textContent),
+      'hovering a canvas hotspot shows its title and body');
+    var arcs = ctx._ops.filter(function (op) { return op.op === 'arc'; });
+    assert(arcs.length >= 1, 'hovered circle hotspot paints a highlight ring after draw()');
+    assert(canvas.style.cursor === 'help', 'canvas cursor becomes help over a hotspot');
+    fire(canvas, 'pointermove', { clientX: 40, clientY: 103 });
+    win._runFrame(1032);
+    assert(/Hooke/.test(tipEl().textContent) && !/Panel/.test(tipEl().textContent),
+      'segment hotspot hit-tests by distance to the line and beats the broad panel listed first');
+    fire(canvas, 'pointermove', { clientX: 250, clientY: 250 });
+    win._runFrame(1040);
+    assert(/Whole left half/.test(tipEl().textContent), 'broad panel still receives the pointer where nothing smaller sits');
+    fire(canvas, 'pointermove', { clientX: 500, clientY: 300 });
+    win._runFrame(1048);
+    assert(!classHas(tipEl(), 'is-on') && canvas.style.cursor === '', 'moving off every hotspot hides the tip');
+
+    // Pause: dt reaches draw as 0 while frames keep running; Space toggles.
+    var pauseBtn = doc.getElementById('viz-pause-btn');
+    fireClick(pauseBtn);
+    assert(/Resume/.test(pauseBtn.textContent) && pauseBtn.getAttribute('aria-pressed') === 'true', 'Pause button flips to Resume');
+    drawCalls.length = 0;
+    win._runFrame(1064);
+    win._runFrame(1080);
+    assert(drawCalls.length === 2 && drawCalls[0] === 0 && drawCalls[1] === 0, 'paused stage still draws but with dt = 0');
+    var keyHandlers = win._winListeners && win._winListeners.keydown || [];
+    keyHandlers.forEach(function (fn) { fn({ key: ' ', preventDefault: function () {} }); });
+    assert(/Pause/.test(pauseBtn.textContent) && pauseBtn.getAttribute('aria-pressed') === 'false', 'Space resumes');
+    drawCalls.length = 0;
+    win._runFrame(1096);
+    assert(drawCalls.length === 1 && drawCalls[0] > 0, 'after resume dt flows again');
+
+    // Reset: slider moved, then Reset returns state, control and init.
+    var slider = doc.getElementById('viz-ctrl-k');
+    slider.value = '9';
+    fire(slider, 'input');
+    var badge = doc.getElementById('viz-val-k');
+    assert(badge.textContent === '9 N/m', 'slider input updates the value badge');
+    fireClick(doc.getElementById('viz-reset-btn'));
+    assert(slider.value === '4' && badge.textContent === '4 N/m', 'Reset restores the slider and badge to the default');
+    win._runFrame(1112);
+    var massSpot = PGRE._vizHotspots.filter(function (h) { return h.id === 'mass'; })[0] || {};
+    assert(/Hint value 4/.test(massSpot.body || ''), 'Reset restores state seen by draw()');
+
+    // Previous / Next follow registration order; disabled at the ends.
+    var order = Object.keys(PGRE.visualizers).filter(function (k) { return k.indexOf('cpgf-') === 0 && typeof PGRE.visualizers[k].draw === 'function'; });
+    var nextBtn = doc.getElementById('viz-next-btn');
+    var prevBtn = doc.getElementById('viz-prev-btn');
+    assert(order[order.length - 1] === 'cpgf-test-b' && order[order.length - 2] === 'cpgf-test-a', 'test cards sit last in registration order');
+    assert(!prevBtn.disabled && !nextBtn.disabled, 'card with neighbours on both sides enables both nav buttons');
+    fireClick(nextBtn);
+    var title = doc.querySelector('.viz-header-title');
+    assert(title && title.textContent === 'Test B', 'Next opens the following card in the same window');
+    assert(doc.getElementById('viz-next-btn').disabled && !doc.getElementById('viz-prev-btn').disabled, 'last card disables Next only');
+    var counter = doc.querySelector('.viz-nav-counter');
+    assert(counter && counter.textContent === (order.length + ' / ' + order.length), 'counter shows position / total');
+    keyHandlers.forEach(function (fn) { fn({ key: 'ArrowLeft', preventDefault: function () {} }); });
+    assert(doc.querySelector('.viz-header-title').textContent === 'Test A', 'Left arrow opens the previous card');
+
+    // Tab memory: pick GRE Traps, step to next card, still on GRE Traps.
+    function modalTab(key) { return doc.getElementById('viz-modal-backdrop').querySelector('[data-viz-tab="' + key + '"]'); }
+    fireClick(modalTab('traps'));
+    fireClick(doc.getElementById('viz-next-btn'));
+    assert(classHas(modalTab('traps'), 'viz-tab-active') && classHas(doc.getElementById('viz-pane-traps'), 'viz-pane-active'),
+      'the next card reopens on the last-used tab');
+    fireClick(modalTab('story'));
+
+    PGRE.closeVisualizerModal();
+    assert(!classHas(tipEl(), 'is-on'), 'closing the modal hides any tip');
+  } catch (err) {
+    assert(false, 'interaction tests threw: ' + err.message + '\n' + err.stack);
+  }
+  delete PGRE.visualizers['cpgf-test-a'];
+  delete PGRE.visualizers['cpgf-test-b'];
+})();
 
 console.log('\n(b2) comprehensive detail modal for non-visualizer cards');
 PGRE.TOPICS = [
@@ -1071,6 +1276,8 @@ EXPECTED_IDS.forEach(function (id) {
   var ctx = makeRecordingCtx(LAB_W, LAB_H);
   var threwDraw = null;
   try {
+    PGRE.resetVizLegend();
+    PGRE.resetVizHotspots();
     viz.draw(ctx, LAB_W, LAB_H, state, 0.016);
   } catch (err) {
     threwDraw = err;
@@ -1095,6 +1302,35 @@ EXPECTED_IDS.forEach(function (id) {
   if (!cream && bg && firstFull.fillStyle === bg) cream = isCreamColor(bg);
   assert(cream, id + ' first full-canvas fill is cream ' + CREAM +
     ' / CV.colors.bg (got ' + JSON.stringify(firstFull.fillStyle) + ')');
+
+  // Hover coverage: every control explains itself, every readout explains
+  // itself, and the picture publishes hit targets with well-formed geometry.
+  var missingHints = (viz.parameters || []).filter(function (p) {
+    return p && p.id !== 'simSpeed' && !(p.hint || p.tip || p.description);
+  }).map(function (p) { return p.id; });
+  assert(missingHints.length === 0, id + ' every parameter has a hover hint' +
+    (missingHints.length ? (' (missing: ' + missingHints.join(', ') + ')') : ''));
+  var rowsNoHint = [];
+  (PGRE._vizLegendSections || []).forEach(function (sec) {
+    (sec.rows || []).forEach(function (row) { if (!(row.hint || row.tip)) rowsNoHint.push(row.label); });
+  });
+  assert(rowsNoHint.length === 0, id + ' every legend row has a hover hint' +
+    (rowsNoHint.length ? (' (missing: ' + rowsNoHint.join(' | ') + ')') : ''));
+  var spots = PGRE._vizHotspots || [];
+  assert(spots.length >= 1, id + ' draw() publishes canvas hotspots (got ' + spots.length + ')');
+  var badSpots = spots.filter(function (h) {
+    if (!h || !(h.body || h.text || h.hint)) return true;
+    var k = h.kind || (h.x1 != null ? 'segment' : (h.w != null ? 'rect' : 'circle'));
+    var nums;
+    if (k === 'rect') nums = [h.x, h.y, h.w, h.h];
+    else if (k === 'segment') nums = [h.x1, h.y1, h.x2, h.y2];
+    else if (k === 'annulus') nums = [h.x != null ? h.x : h.cx, h.y != null ? h.y : h.cy, h.r0 != null ? h.r0 : h.rInner, h.r1 != null ? h.r1 : h.rOuter];
+    else if (k === 'ring' || k === 'circle' || k === 'disk') nums = [h.x != null ? h.x : h.cx, h.y != null ? h.y : h.cy, h.r];
+    else return true;
+    return nums.some(function (n) { return typeof n !== 'number' || !isFinite(n); });
+  });
+  assert(badSpots.length === 0, id + ' hotspots have finite geometry and a body' +
+    (badSpots.length ? (' (' + badSpots.length + ' bad: ' + JSON.stringify(badSpots[0]).slice(0, 120) + ')') : ''));
 });
 
 console.log('\n(d) LaTeX formatting and typesetting integrity');

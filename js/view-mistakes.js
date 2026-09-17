@@ -10,6 +10,45 @@ PGRE.views.mistakes = (function () {
   var drill = null; // { qs, st, i, skipped, done, sid, qStart, assess } — see startDrill
   var lastRenderAt = 0; // stamps each drill render so a double-click can't click through
   var keyBound = false; // the document keydown listener is installed once
+  var paceTimer = null; // live per-question chip; same contract as view-practice.js
+
+  function settings() { return PGRE.store.state.settings || {}; }
+
+  /* ——— Pace trainer (mirrors js/view-practice.js #4) ———
+     Mistake drills already stamp attempt.ms via recordAnswer; this is the
+     missing live chip + post-answer over/under mark gated by paceTrainer. */
+  var PACE_GRACE_MS = 5000; // a click inside the first 5 s is not pace data
+
+  function clearPace() {
+    if (paceTimer) { clearInterval(paceTimer); paceTimer = null; }
+  }
+
+  function startPaceTimer() {
+    clearPace();
+    if (!settings().paceTrainer) return;
+    if (!drill || drill.done) return;
+    paceTimer = setInterval(tickPace, 1000);
+  }
+
+  function tickPace() {
+    var chip = document.getElementById('pace-chip');
+    if (!chip || !drill || drill.done) { clearPace(); return; }
+    var sec = Math.round((Date.now() - drill.qStart) / 1000);
+    var target = settings().paceTargetSec || 103;
+    chip.textContent = sec + ' s';
+    chip.classList.toggle('pace-over', sec > target);
+  }
+
+  function paceMark(elapsedMs) {
+    if (!settings().paceTrainer) return '';
+    if (elapsedMs == null || elapsedMs < PACE_GRACE_MS) return '';
+    var sec = Math.round(elapsedMs / 1000);
+    var target = settings().paceTargetSec || 103;
+    var over = sec > target;
+    return '<div class="pace-mark ' + (over ? 'pace-over' : 'pace-under') + '">' +
+      sec + ' s — ' + (over ? 'over pace' : 'under pace') +
+      ' <span class="pace-target">(target ' + target + ' s)</span></div>';
+  }
 
   function root() { return document.getElementById('mistakes-root'); }
 
@@ -189,6 +228,7 @@ PGRE.views.mistakes = (function () {
   }
 
   function renderBook() {
+    clearPace();
     drill = null;
     if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: book list is the base screen
     var open = PGRE.srs.openMistakes();
@@ -288,7 +328,7 @@ PGRE.views.mistakes = (function () {
       b.addEventListener('click', function () {
         var mk = PGRE.store.state.mistakes[b.getAttribute('data-archive')];
         if (!mk) return;
-        mk.archivedAt = new Date().toISOString();
+        mk.archivedAt = mk.lastTouchedAt = new Date().toISOString();
         PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
         PGRE.store.save();
         PGRE.toast('Archived — it stays in the book, hidden from drills. A new miss reopens it.', 'info');
@@ -300,6 +340,7 @@ PGRE.views.mistakes = (function () {
         var mk = PGRE.store.state.mistakes[b.getAttribute('data-restore')];
         if (!mk) return;
         mk.archivedAt = null;
+        mk.lastTouchedAt = new Date().toISOString();
         PGRE.store.save();
         PGRE.toast('Restored to the active book.', 'info');
         renderBook();
@@ -468,6 +509,7 @@ PGRE.views.mistakes = (function () {
                                  '; back to the bottom of the ladder') + '</strong>' +
       '<span class="fb-xp">+' + st.xp + ' XP</span>' +
     '</div>';
+    html += paceMark(st.ms != null ? st.ms : (st.row && st.row.ms));
     if (fresh) {
       html += PGRE.assess.html(PGRE.store.state.settings.keyboard);
     } else {
@@ -516,6 +558,9 @@ PGRE.views.mistakes = (function () {
         '<span class="chip">' + t.name + '</span>' +
         '<span class="chip">' + done + ' answered</span>' +
         (drill.skipped ? '<span class="chip">' + drill.skipped + ' skipped</span>' : '') +
+        (settings().paceTrainer && !show
+          ? '<span class="chip pace-chip" id="pace-chip" title="Time on this question">0 s</span>'
+          : '') +
       '</div>' +
       PGRE.ui.meter(100 * done / drill.qs.length, 'meter-thin') +
       '<div class="q-text">' + q.q + '</div>' +
@@ -568,6 +613,9 @@ PGRE.views.mistakes = (function () {
     // keeps your place; only actually moving to another question scrolls up.
     if (!opts.fresh && !opts.reveal) window.scrollTo(0, 0);
     drill.qStart = Date.now();
+    if (show) clearPace();
+    else startPaceTimer();
+
 
     root().querySelectorAll('.choice').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -632,11 +680,12 @@ PGRE.views.mistakes = (function () {
     var mkBefore = s.mistakes[q.id] ? JSON.parse(JSON.stringify(s.mistakes[q.id])) : null;
     var qRecBefore = s.questions[q.id] ? JSON.parse(JSON.stringify(s.questions[q.id])) : null;
     var isCorrect = idx === q.answer;
-    var xp = PGRE.gamify.recordAnswer(q, isCorrect, Date.now() - drill.qStart,
+    var elapsed = Date.now() - drill.qStart;
+    var xp = PGRE.gamify.recordAnswer(q, isCorrect, elapsed,
                                       { picked: idx, sid: drill.sid, mode: 'mistakes' });
     if (isCorrect) PGRE.srs.clearLucky(q.id);   // a correct re-drill retires the lucky flag
     drill.st[drill.i] = {
-      q: q, picked: idx, correct: isCorrect, xp: xp,
+      q: q, picked: idx, correct: isCorrect, xp: xp, ms: elapsed,
       row: s.attempts[s.attempts.length - 1],   // the row recordAnswer just pushed
       day: s.today.date, sid: drill.sid,
       mkBefore: mkBefore, qRecBefore: qRecBefore
@@ -658,6 +707,7 @@ PGRE.views.mistakes = (function () {
   }
 
   function renderDrillSummary() {
+    clearPace();
     if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: drill over — back to base
     lastRenderAt = Date.now();
     drill.done = true;                     // the keys stop answering from here on
@@ -745,6 +795,7 @@ PGRE.views.mistakes = (function () {
   return {
     render: function () { return '<div id="mistakes-root"></div>'; },
     mount: function () {
+      clearPace();
       if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
       renderBook();
     }

@@ -159,7 +159,7 @@ assert(!d.notes.q09, 'deleted note stays deleted after stale sibling save');
 assert(d.tombstones && d.tombstones.notes && d.tombstones.notes.q09,
   'tombstone persisted to disk');
 tab1.store.untombstone('notes', 'q09');
-tab1.store.state.notes['q09'] = { text: 're-added', updatedAt: '2026-09-14T00:00:00Z' };
+tab1.store.state.notes['q09'] = { text: 're-added', updatedAt: '2099-01-01T00:00:00Z' };
 tab1.store.save();
 assert(diskState().notes.q09.text === 're-added',
   'deliberate re-add clears the tombstone and persists');
@@ -203,6 +203,105 @@ tab1.store.save();
 d = diskState();
 assert(d._rev === revBefore + 1, '_rev increments each save');
 assert(d.notes.q01.text === 'hi', 'normal writes still persist');
+
+console.log('\ncards: stale sibling save must not rewind a newer review');
+deliverEvents = false;
+tab1.store.state.cards['card-clobber'] = {
+  reviews: 6, due: '2026-09-25', lastReviewedAt: '2026-09-15T12:00:00Z',
+  interval: 10, ease: 2.5, lastGrade: 'good'
+};
+tab1.store.save();                       // tab2 misses this write
+tab2.store.state.cards['card-clobber'] = {
+  reviews: 5, due: '2026-09-16', lastReviewedAt: '2026-09-14T12:00:00Z',
+  interval: 1, ease: 2.5, lastGrade: 'good'
+};
+assert(tab2.store.state.cards['card-clobber'].reviews === 5, 'tab2 heap is stale (missed event)');
+tab2.store.save();                       // pre-save merge must keep tab1's card
+d = diskState();
+assert(d.cards['card-clobber'].reviews === 6,
+  'disk kept the newer card (was: stale reviews/due clobber)');
+assert(d.cards['card-clobber'].due === '2026-09-25', 'disk kept the later due');
+deliverEvents = true;
+
+console.log('\ncards: live stale heap heals when disk has higher reviews');
+tab2.store.state.cards['card-heal'] = {
+  reviews: 2, due: '2026-09-12', lastReviewedAt: '2026-09-08T00:00:00Z'
+};
+tab1.store.state.cards['card-heal'] = {
+  reviews: 4, due: '2026-09-22', lastReviewedAt: '2026-09-15T00:00:00Z'
+};
+tab1.store.save();                       // storage event must adopt into tab2
+assert(tab2.store.state.cards['card-heal'].reviews === 4,
+  'storage event adopted the newer disk card into the stale heap');
+assert(tab2.store.state.cards['card-heal'].due === '2026-09-22',
+  'healed card kept the later due');
+
+console.log('\ncards: equal reviews, later lastReviewedAt wins');
+deliverEvents = false;
+tab1.store.state.cards['card-tie'] = {
+  reviews: 3, due: '2026-09-20', lastReviewedAt: '2026-09-15T10:00:00Z'
+};
+tab1.store.save();
+tab2.store.state.cards['card-tie'] = {
+  reviews: 3, due: '2026-09-18', lastReviewedAt: '2026-09-14T10:00:00Z'
+};
+tab2.store.save();
+d = diskState();
+assert(d.cards['card-tie'].lastReviewedAt === '2026-09-15T10:00:00Z',
+  'later lastReviewedAt wins on a reviews tie');
+assert(d.cards['card-tie'].due === '2026-09-20', 'tied-reviews winner keeps its due');
+deliverEvents = true;
+
+console.log('\nmistakes: higher misses+solves wins on collision');
+deliverEvents = false;
+tab1.store.state.mistakes['q-mk'] = {
+  misses: 3, solves: 2, firstMissedAt: '2026-09-01T00:00:00Z'
+};
+tab1.store.save();
+tab2.store.state.mistakes['q-mk'] = {
+  misses: 2, solves: 1, firstMissedAt: '2026-09-01T00:00:00Z',
+  archivedAt: '2026-09-14T00:00:00Z'
+};
+tab2.store.save();
+d = diskState();
+assert(d.mistakes['q-mk'].misses === 3 && d.mistakes['q-mk'].solves === 2,
+  'disk kept the more-advanced mistake record');
+assert(!d.mistakes['q-mk'].archivedAt,
+  'stale archive flag did not beat higher misses+solves');
+deliverEvents = true;
+
+console.log('\ncards: equal reviews+lastReviewedAt, later due wins (migrateEasy10 shape)');
+deliverEvents = false;
+tab1.store.state.cards['card-easy'] = {
+  reviews: 5, lastReviewedAt: '2026-09-10T00:00:00Z', due: '2026-10-01', lastGrade: 'easy'
+};
+tab1.store.save();
+tab2.store.state.cards['card-easy'] = {
+  reviews: 5, lastReviewedAt: '2026-09-10T00:00:00Z', due: '2026-09-20', lastGrade: 'easy'
+};
+tab2.store.save();
+assert(diskState().cards['card-easy'].due === '2026-10-01',
+  'later due survives a stale sibling save (was: migrateEasy10 clobber)');
+deliverEvents = true;
+
+console.log('\nmistakes: equal counters, later lastTouchedAt wins (archive flag)');
+deliverEvents = false;
+tab1.store.state.mistakes['q-arch'] = {
+  misses: 2, solves: 1, firstMissedAt: '2026-09-01T00:00:00Z',
+  archivedAt: '2026-09-15T12:00:00Z', lastTouchedAt: '2026-09-15T12:00:00Z'
+};
+tab1.store.save();
+tab2.store.state.mistakes['q-arch'] = {
+  misses: 2, solves: 1, firstMissedAt: '2026-09-01T00:00:00Z',
+  archivedAt: null, lastTouchedAt: '2026-09-10T00:00:00Z'
+};
+tab2.store.save();
+d = diskState();
+assert(d.mistakes['q-arch'].archivedAt === '2026-09-15T12:00:00Z',
+  'disk kept the archived record (later lastTouchedAt, equal counters)');
+assert(d.mistakes['q-arch'].lastTouchedAt === '2026-09-15T12:00:00Z',
+  'disk kept the newer lastTouchedAt');
+deliverEvents = true;
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

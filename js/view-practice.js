@@ -194,6 +194,55 @@ PGRE.views.practice = (function () {
       ' <span class="pace-target">(target ' + target + ' s)</span></div>';
   }
 
+  /* ——— Question palette (same overview as mistake drill) ———
+     Practice stays one-way (answer → next); the grid is a progress map, not
+     free navigation. Live cells stay disabled so a click cannot skip ahead.
+     Summary uses correct/miss tints once the set is closed. answers[n] lines
+     up with qs[n] because practice never skips. */
+  function paletteHTML(results) {
+    if (!session || !session.qs || !session.qs.length) return '';
+    var cells = '';
+    session.qs.forEach(function (q, n) {
+      var ans = (n < session.answers.length) ? session.answers[n] : null;
+      var cls = 'pal-cell';
+      if (ans) cls += results ? (ans.correct ? ' is-correct' : ' is-wrong') : ' is-answered';
+      if (!results && n === session.i) cls += ' is-current';
+      cells += '<button type="button" class="' + cls + '" disabled' +
+        ' aria-label="Question ' + (n + 1) +
+        (ans ? (results ? (ans.correct ? ', correct' : ', missed') : ', answered') : ', unanswered') +
+        (!results && n === session.i ? ', current' : '') +
+        '">' + (n + 1) + '</button>';
+    });
+    return '<div class="drill-palette practice-palette">' +
+      '<div class="exam-palette-title">' +
+        (results ? 'How this set went' : 'Questions in this set') + '</div>' +
+      '<div class="exam-palette-grid">' + cells + '</div>' +
+      '<div class="exam-legend drill-legend">' +
+        (results
+          ? '<span class="exam-legend-item"><span class="pal-swatch sw-correct"></span>Correct</span>' +
+            '<span class="exam-legend-item"><span class="pal-swatch sw-wrong"></span>Missed</span>' +
+            '<span class="exam-legend-item"><span class="pal-swatch"></span>Not answered</span>'
+          : '<span class="exam-legend-item"><span class="pal-swatch"></span>Unanswered</span>' +
+            '<span class="exam-legend-item"><span class="pal-swatch sw-answered"></span>Answered</span>') +
+      '</div></div>';
+  }
+
+  function paintPalette() {
+    var root = el().querySelector('.practice-palette');
+    if (!root || !session) return;
+    var buttons = root.querySelectorAll('.pal-cell');
+    for (var n = 0; n < buttons.length; n++) {
+      var btn = buttons[n];
+      var ans = (n < session.answers.length) ? session.answers[n] : null;
+      btn.classList.toggle('is-answered', !!ans);
+      btn.classList.toggle('is-current', n === session.i);
+      btn.setAttribute('aria-label', 'Question ' + (n + 1) +
+        (ans ? ', answered' : ', unanswered') +
+        (n === session.i ? ', current' : ''));
+    }
+  }
+
+
   /* ——— Mid-session persistence ———
      Leaving #/practice/<id> mid-set used to drop the queue silently. The
      in-flight session is mirrored to sessionStorage (same transient handoff
@@ -439,7 +488,7 @@ PGRE.views.practice = (function () {
         '<span class="key-hint">A</span>–<span class="key-hint">E</span> or ' +
         '<span class="key-hint">1</span>–<span class="key-hint">5</span> to answer</div>';
     }
-    html += '<div id="feedback"></div></div></div>';
+    html += '<div id="feedback"></div>' + paletteHTML(false) + '</div></div>';
     el().innerHTML = html;
     PGRE.typesetMath(el());
     if (window.PGRE && PGRE.motion && PGRE.motion.animateMeter) {
@@ -472,6 +521,7 @@ PGRE.views.practice = (function () {
     if (isCorrect) session.correct++;
     session.answers.push({ q: q, picked: idx, correct: isCorrect });
     session.stage = 'feedback';
+    paintPalette();
 
     el().querySelectorAll('.choice').forEach(function (b) {
       var i = parseInt(b.getAttribute('data-idx'), 10);
@@ -729,6 +779,7 @@ PGRE.views.practice = (function () {
       '<div class="summary-score">' + session.correct + ' / ' + session.qs.length +
         '<span class="summary-pct">' + pct + '%</span></div>' +
       '<p class="muted">' + verdict + ' You earned <strong>' + session.xpEarned + ' XP</strong> this session.</p>';
+    html += paletteHTML(true);
 
     var misses = session.answers.filter(function (a) { return !a.correct; });
     if (misses.length) {

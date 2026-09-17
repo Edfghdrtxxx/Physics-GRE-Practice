@@ -218,8 +218,8 @@
     ],
 
     parameters: [
-      { id: 'k', label: 'Wavenumber $k$', min: 1.6, max: 5.6, step: 0.2, default: 3.2, unit: '' },
-      { id: 'sigma', label: 'Packet width $\\sigma$', min: 0.7, max: 2.2, step: 0.1, default: 1.2, unit: '' },
+      { id: 'k', label: 'Wavenumber $k$', min: 1.6, max: 5.6, step: 0.2, default: 3.2, unit: '', hint: 'Wavenumber of the carrier. With $\\hbar = m = 1$, $p = k$, the envelope rides at $v_g = k$, and every phase crest at $v_p = k/2$.' },
+      { id: 'sigma', label: 'Packet width $\\sigma$', min: 0.7, max: 2.2, step: 0.1, default: 1.2, unit: '', hint: 'Gaussian envelope width. Larger $\\sigma$ is a narrower $\\Delta k$ packet; $\\sigma$ is held fixed in time so the $v_g = 2 v_p$ slip stays visible.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
 
@@ -383,15 +383,92 @@
 
       ctx.restore();
 
+      var envHalfX = 2.4 * sigma;
+      var envLeft = Math.max(plotX, mapX(xc - envHalfX));
+      var envRight = Math.min(plotX + plotW, mapX(xc + envHalfX));
+      PGRE.setVizHotspots([
+        {
+          id: 'peak',
+          kind: 'circle',
+          x: peakX,
+          y: peakY,
+          r: 12,
+          title: 'Envelope peak (group)',
+          body: 'Gold marker is the packet maximum at $x_c = ' + xc.toFixed(2) + '$. It rides at $v_g = d\\omega/dk = k = ' + vg.toFixed(2) + '$, the classical $p/m$.'
+        },
+        {
+          id: 'crest',
+          kind: 'circle',
+          x: crestX,
+          y: crestY,
+          r: 11,
+          title: 'Carrier crest (phase)',
+          body: 'Teal marker tags one phase crest at $x = ' + xcr.toFixed(2) + '$, moving at $v_p = \\omega/k = k/2 = ' + vp.toFixed(2) + '$. It slips backward through the envelope.'
+        },
+        {
+          id: 'vgArrow',
+          kind: 'segment',
+          x1: ax0,
+          y1: baseY,
+          x2: ax0 + vgLen,
+          y2: baseY,
+          halfW: 8,
+          title: 'Group velocity $v_g$',
+          body: 'Envelope speed $v_g = k = ' + vg.toFixed(2) + '$. Quadratic Schrödinger dispersion $\\omega = k^2/2$ makes this twice the phase speed.'
+        },
+        {
+          id: 'vpArrow',
+          kind: 'segment',
+          x1: ax0,
+          y1: baseY + 14,
+          x2: ax0 + vpLen,
+          y2: baseY + 14,
+          halfW: 8,
+          title: 'Phase velocity $v_p$',
+          body: 'Crest speed $v_p = k/2 = ' + vp.toFixed(2) + '$. GRE: for $E = p^2/(2m)$, $v_p = v/2$, not $v$.'
+        },
+        {
+          id: 'slip',
+          kind: 'segment',
+          x1: peakX,
+          y1: midY + 8,
+          x2: crestX,
+          y2: midY + 8,
+          halfW: 8,
+          title: 'Phase lag behind the envelope',
+          body: 'Gap between the gold peak and the tagged crest grows as $(v_g - v_p)t = (k/2)t$. That factor of two is the whole picture.'
+        },
+        {
+          id: 'envelope',
+          kind: 'rect',
+          x: envLeft,
+          y: midY - amp,
+          w: Math.max(8, envRight - envLeft),
+          h: amp + 8,
+          title: 'Wave-packet envelope',
+          body: 'Gaussian $|\\Psi|$ of width $\\sigma = ' + sigma.toFixed(1) + '$. The teal fill rides at $v_g$ while the coral carrier $\\mathrm{Re}\\,\\Psi$ oscillates at $\\omega = ' + omega.toFixed(2) + '$.'
+        },
+        {
+          id: 'plot',
+          kind: 'rect',
+          x: plotX,
+          y: plotY,
+          w: plotW,
+          h: plotH,
+          title: 'Free-particle wave vs $x$',
+          body: 'Coral is $\\mathrm{Re}\\,\\Psi$ under a Gaussian envelope. Free-particle dispersion $\\omega = k^2/2$ (units $\\hbar = m = 1$) forces $v_g = 2 v_p$.'
+        }
+      ]);
+
       vizLegend('Free-particle packet', [
-        { label: 'Units', value: '$\\hbar = m = 1$' },
-        { label: '$k$', value: '$' + k.toFixed(1) + '$' },
-        { label: '$\\omega = k^2/2$', value: '$' + omega.toFixed(2) + '$' },
-        { label: 'Gold peak / long arrow', value: 'envelope at $v_g = k$' },
-        { label: 'Teal crest / short arrow', value: 'phase at $v_p = k/2$' },
-        { label: '$v_g$', value: '$' + vg.toFixed(2) + '$' },
-        { label: '$v_p$', value: '$' + vp.toFixed(2) + '$' },
-        { label: '$v_g / v_p$', value: '$2$' }
+        { label: 'Units', value: '$\\hbar = m = 1$', hint: 'Natural units so $\\omega = k^2/2$, $v_g = k$, and $v_p = k/2$ with no extra constants.' },
+        { label: '$k$', value: '$' + k.toFixed(1) + '$', hint: 'Carrier wavenumber. de Broglie momentum is $p = \\hbar k = k$ here.' },
+        { label: '$\\omega = k^2/2$', value: '$' + omega.toFixed(2) + '$', hint: 'Schrödinger dispersion $\\omega(k) = k^2/2$ is quadratic, so $v_p = \\omega/k$ is half of $v_g = d\\omega/dk$.' },
+        { label: 'Gold peak / long arrow', value: 'envelope at $v_g = k$', hint: 'The packet maximum tracks $x_0 + v_g t$ with $v_g = d\\omega/dk = k$, the classical particle speed.' },
+        { label: 'Teal crest / short arrow', value: 'phase at $v_p = k/2$', hint: 'A tagged phase crest tracks $x_0 + v_p t$ with $v_p = \\omega/k = k/2$ and slips backward through the envelope.' },
+        { label: '$v_g$', value: '$' + vg.toFixed(2) + '$', hint: 'Group velocity $v_g = d\\omega/dk = k$. This is $p/m$, what a GRE item means by the particle speed.' },
+        { label: '$v_p$', value: '$' + vp.toFixed(2) + '$', hint: 'Phase velocity $v_p = \\omega/k = k/2$. For a non-relativistic free particle it is exactly $v/2$, not $v$.' },
+        { label: '$v_g / v_p$', value: '$2$', hint: 'The ratio is identically $2$ for $E = p^2/2m$, independent of $k$. Favorite GRE trap: quoting $v_p = v$.' }
       ]);
     },
 
@@ -485,12 +562,12 @@
     ],
 
     parameters: [
-      { id: 'beta', label: 'Velocity ratio $\\beta = v/c$', min: 0.0, max: 0.99, step: 0.01, default: 0.80, unit: '' },
+      { id: 'beta', label: 'Velocity ratio $\\beta = v/c$', min: 0.0, max: 0.99, step: 0.01, default: 0.80, unit: '', hint: 'Speed in units of $c$. $\\gamma = (1-\\beta^2)^{-1/2}$ diverges as $\\beta \\to 1$, so $T = (\\gamma-1)mc^2$ grows without bound while $v$ only asymptotes $c$.' },
       { id: 'particle', label: 'Particle', type: 'select', options: [
         { value: 'electron', label: '$e^-$ $(0.511\\,\\mathrm{MeV})$' },
         { value: 'muon', label: '$\\mu^-$ $(105.7\\,\\mathrm{MeV})$' },
         { value: 'proton', label: '$p$ $(938.3\\,\\mathrm{MeV})$' }
-      ], default: 'electron' }
+      ], default: 'electron', hint: 'Chooses the rest energy $mc^2$ that converts the dimensionless mass-shell plot into MeV. The hyperbola shape is universal; only the MeV scale changes.' }
     ],
 
     draw: function (ctx, width, height, state) {
@@ -657,18 +734,82 @@
       var lightLabelU = Math.min(uMax * 0.72, eMax * 0.72);
       haloLabel(ctx, 'light', mapU(lightLabelU) + 10, mapE(lightLabelU) - 8, { color: ROSE, align: 'left' });
 
+      PGRE.setVizHotspots([
+        {
+          id: 'relMarker',
+          kind: 'circle',
+          x: xR,
+          y: yR,
+          r: 12,
+          title: 'Current state on the mass shell',
+          body: 'Relativistic particle at $\\beta = ' + beta.toFixed(2) + '$, $\\gamma = ' + gamma.toFixed(3) + '$. Total energy $E = \\gamma mc^2$, so $T = (\\gamma-1)mc^2 = ' + T_rel.toFixed(3) + '\\,\\mathrm{MeV}$.'
+        },
+        {
+          id: 'classMarker',
+          kind: 'circle',
+          x: xC,
+          y: yC,
+          r: 10,
+          title: 'Newtonian comparison at the same $\\beta$',
+          body: 'Classical $T_N = \\frac{1}{2}mv^2 = ' + T_class.toFixed(3) + '\\,\\mathrm{MeV}$ plotted as $E_N = mc^2 + T_N$. It undercounts $T$ by $' + newtonRelErr.toFixed(1) + '\\%$.'
+        },
+        {
+          id: 'Triser',
+          kind: 'segment',
+          x1: xR,
+          y1: yRest,
+          x2: xR,
+          y2: yR,
+          halfW: 8,
+          title: 'Kinetic energy $T$',
+          body: 'Vertical rise from the rest line $E = mc^2$ up to the mass shell. That gap is $T = E - mc^2 = ' + T_rel.toFixed(3) + '\\,\\mathrm{MeV}$.'
+        },
+        {
+          id: 'restLine',
+          kind: 'segment',
+          x1: originX,
+          y1: yRest,
+          x2: originX + plotW,
+          y2: yRest,
+          halfW: 7,
+          title: 'Rest energy $mc^2$',
+          body: 'Horizontal line $E = mc^2 = ' + restMassMeV.toFixed(3) + '\\,\\mathrm{MeV}$. Kinetic energy is everything above this line; photons ($m = 0$) have no such floor.'
+        },
+        {
+          id: 'light',
+          kind: 'segment',
+          x1: originX,
+          y1: originY,
+          x2: lightX,
+          y2: lightY,
+          halfW: 8,
+          title: 'Light cone $E = pc$',
+          body: 'Massless ray $E = pc$. The mass shell only asymptotes this line as $\\gamma \\to \\infty$; a massive particle never reaches $c$.'
+        },
+        {
+          id: 'plot',
+          kind: 'rect',
+          x: originX,
+          y: originY - plotH,
+          w: plotW,
+          h: plotH,
+          title: 'Mass shell $(pc, E)$',
+          body: 'Coral hyperbola $E^2 - (pc)^2 = (mc^2)^2$ is the relativistic curve. Gold dashes are the Newtonian $E = mc^2 + \\frac{1}{2}mv^2$ at the same $\\beta$. Axes in units of $mc^2$.'
+        }
+      ]);
+
       vizLegend('Mass shell', [
-        { label: 'Particle', value: particle },
-        { label: 'Coral curve', value: '$E^2 - (pc)^2 = (mc^2)^2$' },
-        { label: 'Coral riser', value: '$T = E - mc^2$' },
-        { label: 'Gold curve / dot', value: 'same $\\beta$, $T_N = \\frac{1}{2}mv^2$' },
-        { label: '$\\beta = v/c$', value: '$' + beta.toFixed(2) + '$' },
-        { label: '$\\gamma$', value: '$' + gamma.toFixed(3) + '$' },
-        { label: '$mc^2$', value: '$' + restMassMeV.toFixed(3) + '\\text{ MeV}$' },
-        { label: '$T = (\\gamma-1)mc^2$', value: '$' + T_rel.toFixed(3) + '\\text{ MeV}$' },
-        { label: '$T_N = \\frac{1}{2}mv^2$', value: '$' + T_class.toFixed(3) + '\\text{ MeV}$' },
-        { label: '$pc$', value: '$' + pc_MeV.toFixed(3) + '\\text{ MeV}$' },
-        { label: '$(T - T_N)/T_N$', value: '$' + newtonRelErr.toFixed(1) + '\\%$' }
+        { label: 'Particle', value: particle, hint: 'Rest mass used for the MeV conversion. The hyperbola shape in $(pc,E)$ is independent of $m$.' },
+        { label: 'Coral curve', value: '$E^2 - (pc)^2 = (mc^2)^2$', hint: 'Mass shell of a free massive particle. Allowed states live on this hyperbola, never inside it.' },
+        { label: 'Coral riser', value: '$T = E - mc^2$', hint: 'Kinetic energy $T = (\\gamma-1)mc^2$ is the vertical gap from the rest line up to the mass shell.' },
+        { label: 'Gold curve / dot', value: 'same $\\beta$, $T_N = \\frac{1}{2}mv^2$', hint: 'Newtonian comparison at the same $\\beta$. It never reaches $c$ and undercounts the true $T$ once $\\beta \\gtrsim 0.1$.' },
+        { label: '$\\beta = v/c$', value: '$' + beta.toFixed(2) + '$', hint: 'Live speed in units of $c$. As $\\beta \\to 1$, $\\gamma$ and $T$ diverge while $v$ only asymptotes $c$.' },
+        { label: '$\\gamma$', value: '$' + gamma.toFixed(3) + '$', hint: 'Lorentz factor $\\gamma = (1-\\beta^2)^{-1/2}$. Total energy is $E = \\gamma mc^2$.' },
+        { label: '$mc^2$', value: '$' + restMassMeV.toFixed(3) + '\\text{ MeV}$', hint: 'Rest energy of the chosen particle. Subtract it from $E$ to get $T$; do not confuse $E$ with $T$.' },
+        { label: '$T = (\\gamma-1)mc^2$', value: '$' + T_rel.toFixed(3) + '\\text{ MeV}$', hint: 'Relativistic kinetic energy. GRE trap: if $E = 3 mc^2$ then $\\gamma = 3$ and $T = 2 mc^2$, not $3 mc^2$.' },
+        { label: '$T_N = \\frac{1}{2}mv^2$', value: '$' + T_class.toFixed(3) + '\\text{ MeV}$', hint: 'Classical kinetic energy at this $\\beta$. At $\\beta = 0.8$ it is already wrong by more than a factor of two.' },
+        { label: '$pc$', value: '$' + pc_MeV.toFixed(3) + '\\text{ MeV}$', hint: 'Useful GRE identity: $pc = \\sqrt{T(T+2mc^2)}$, no need to compute $\\gamma$ or $v$ first.' },
+        { label: '$(T - T_N)/T_N$', value: '$' + newtonRelErr.toFixed(1) + '\\%$', hint: 'Fractional error of $\\frac{1}{2}mv^2$. Switch to $T = (\\gamma-1)mc^2$ once $\\beta \\gtrsim 0.1$.' }
       ]);
     },
 
@@ -778,11 +919,11 @@
     ],
 
     parameters: [
-      { id: 'tHalf', label: 'Half-life $t_{1/2}$', min: 2.0, max: 12.0, step: 0.5, default: 5.0, unit: 's' },
-      { id: 'n0', label: 'Sample $N_0$', min: 24, max: 96, step: 8, default: 64, unit: '' },
-      { id: 'playing', label: 'Run decay', type: 'toggle', default: true },
+      { id: 'tHalf', label: 'Half-life $t_{1/2}$', min: 2.0, max: 12.0, step: 0.5, default: 5.0, unit: 's', hint: 'Half-life $t_{1/2} = \\tau \\ln 2$. The gold corner is where $N$ hits $N_0/2$; mean life $\\tau$ is always later.' },
+      { id: 'n0', label: 'Sample $N_0$', min: 24, max: 96, step: 8, default: 64, unit: '', hint: 'Initial parent count. Larger $N_0$ hugs the exponential; a small sample makes the staircase jump.' },
+      { id: 'playing', label: 'Run decay', type: 'toggle', default: true, hint: 'Pause to freeze the Monte Carlo sample, or run to watch parents (coral) flip into daughters (faded).' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' },
-      { id: 'reseed', label: 'Reset sample', type: 'toggle', default: false }
+      { id: 'reseed', label: 'Reset sample', type: 'toggle', default: false, hint: 'Resets the random waiting times and returns every nucleus to the parent state at $t = 0$.' }
     ],
 
     init: function (container, state) {
@@ -989,17 +1130,81 @@
         ctx.fill();
       }
 
+      PGRE.setVizHotspots([
+        {
+          id: 'now',
+          kind: 'circle',
+          x: nowX,
+          y: nowY,
+          r: 12,
+          title: 'Current $N(t)$',
+          body: 'Theory $N(t) = N_0 e^{-t/\\tau} = ' + nTheory.toFixed(1) + '$ at $t = ' + curTime.toFixed(2) + '\\,\\mathrm{s}$. The sample has $' + surviving + '$ parents left.'
+        },
+        {
+          id: 'halfLife',
+          kind: 'segment',
+          x1: tHalfX,
+          y1: yHalf,
+          x2: tHalfX,
+          y2: originY,
+          halfW: 8,
+          title: 'Half-life $t_{1/2}$',
+          body: 'Gold marker: $N(t_{1/2}) = N_0/2$ at $t_{1/2} = ' + tHalf.toFixed(1) + '\\,\\mathrm{s}$. Because $\\ln 2 < 1$, half-life is earlier than mean life.'
+        },
+        {
+          id: 'meanLife',
+          kind: 'segment',
+          x1: tauX,
+          y1: yTau,
+          x2: tauX,
+          y2: originY,
+          halfW: 8,
+          title: 'Mean lifetime $\\tau$',
+          body: 'Teal marker: $N(\\tau) = N_0/e$ at $\\tau = t_{1/2}/\\ln 2 = ' + tau.toFixed(2) + '\\,\\mathrm{s}$. GRE trap: do not swap $\\tau$ with $t_{1/2}$.'
+        },
+        {
+          id: 'lifeGap',
+          kind: 'rect',
+          x: tHalfX,
+          y: originY - plotH,
+          w: Math.max(4, tauX - tHalfX),
+          h: plotH,
+          title: 'Gap $t_{1/2} < \\tau$',
+          body: 'Shaded band between half-life and mean life. $t_{1/2} = \\tau \\ln 2 \\approx 0.693\\,\\tau$, so the gold corner always precedes the teal one.'
+        },
+        {
+          id: 'nuclei',
+          kind: 'rect',
+          x: originX,
+          y: stripY - 10,
+          w: plotW,
+          h: 20,
+          title: 'Parent / daughter sample',
+          body: 'Coral dots are still-parent nuclei ($N_X = ' + surviving + '$ of $' + totalAtoms + '$). Faded dots are daughters ($N_Y = ' + daughters + '$). Each wait is memoryless with rate $\\lambda = 1/\\tau$.'
+        },
+        {
+          id: 'plot',
+          kind: 'rect',
+          x: originX,
+          y: originY - plotH,
+          w: plotW,
+          h: plotH,
+          title: 'Decay law $N(t)$',
+          body: 'Coral curve is the expectation $N_0 e^{-t/\\tau}$. Ink staircase is one finite sample. After $n$ half-lives, $N_Y/N_X = 2^n - 1$, not $2^n$.'
+        }
+      ]);
+
       vizLegend('Radioactive decay', [
-        { label: 'Gold corner', value: '$N_0/2$ at $t_{1/2}$' },
-        { label: 'Teal corner', value: '$N_0/e$ at $\\tau$' },
-        { label: 'Coral curve', value: '$N_0 e^{-t/\\tau}$' },
-        { label: 'Ink staircase', value: 'one finite sample' },
-        { label: '$t$', value: '$' + curTime.toFixed(2) + '\\text{ s}$' },
-        { label: '$t_{1/2}$', value: '$' + tHalf.toFixed(1) + '\\text{ s}$' },
-        { label: '$\\tau = t_{1/2}/\\ln 2$', value: '$' + tau.toFixed(2) + '\\text{ s}$' },
-        { label: '$N_{\\text{parent}}$', value: '$' + surviving + '/' + totalAtoms + '$' },
-        { label: '$N_Y/N_X$', value: isFinite(ratio) ? '$' + ratio.toFixed(2) + '$' : '$\\infty$' },
-        { label: '$A = \\lambda N$', value: '$' + activity.toFixed(1) + '\\text{ Bq}$' }
+        { label: 'Gold corner', value: '$N_0/2$ at $t_{1/2}$', hint: 'Half-life marker: $N(t_{1/2}) = N_0/2$. Because $\\ln 2 < 1$, this comes before the mean life.' },
+        { label: 'Teal corner', value: '$N_0/e$ at $\\tau$', hint: 'Mean lifetime $\\tau = 1/\\lambda$. $N(\\tau) = N_0/e$, later than $t_{1/2}$. Do not swap $\\tau$ and $t_{1/2}$.' },
+        { label: 'Coral curve', value: '$N_0 e^{-t/\\tau}$', hint: 'Ensemble expectation $N(t) = N_0 e^{-t/\\tau}$. Activity $A = \\lambda N$ follows the same exponential.' },
+        { label: 'Ink staircase', value: 'one finite sample', hint: 'One Monte Carlo realization. Each nucleus decays independently; the stair is not the smooth law.' },
+        { label: '$t$', value: '$' + curTime.toFixed(2) + '\\text{ s}$', hint: 'Elapsed simulation time. The sample is still running toward several half-lives.' },
+        { label: '$t_{1/2}$', value: '$' + tHalf.toFixed(1) + '\\text{ s}$', hint: 'Slider half-life. $N$ drops by $1/2$ each $t_{1/2}$, independent of how much remains.' },
+        { label: '$\\tau = t_{1/2}/\\ln 2$', value: '$' + tau.toFixed(2) + '\\text{ s}$', hint: 'Mean life $\\tau = 1/\\lambda$. Always $\\tau > t_{1/2}$; if a problem says lifetime $10\\,\\mathrm{s}$, half-life is $6.93\\,\\mathrm{s}$.' },
+        { label: '$N_{\\text{parent}}$', value: '$' + surviving + '/' + totalAtoms + '$', hint: 'Parents still undecayed. Theory expects $N_0 e^{-t/\\tau} = ' + nTheory.toFixed(1) + '$ at this $t$.' },
+        { label: '$N_Y/N_X$', value: isFinite(ratio) ? '$' + ratio.toFixed(2) + '$' : '$\\infty$', hint: 'Daughter-to-parent ratio. After $n$ half-lives this is $2^n-1$ (e.g. $7$ after three), not $2^n$ or $1/8$.' },
+        { label: '$A = \\lambda N$', value: '$' + activity.toFixed(1) + '\\text{ Bq}$', hint: 'Activity $A = \\lambda N = N/\\tau$. Same $N$ with half the lifetime has twice the activity.' }
       ]);
     },
 

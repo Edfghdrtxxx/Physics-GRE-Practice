@@ -232,7 +232,10 @@ nav-badge path that runs before IndexedDB resolves):
   cards first, then upcoming, then never-studied, each section topic-grouped, with a name
   filter. Save replaces the batch wholesale; `studiedToday` members are locked (a grade
   committed today is not undone by un-picking). No cap — the count line shows
-  "N picked · target T" as a nudge only.
+  "today N · ever M · target T" (N = today's pick set, M = cards with state after
+  first grade, T = daily target). Chapter headers show lifetime ever-studied /
+  chapter size, not today's picks. The checkbox is filled for ever-studied cards
+  even when they are not in today's batch; Save still writes only the today set.
 - **Browse chips / Search Add** (`srs.addFormulaDaySoft` / `removeFormulaDaySoft`): edit the
   same batch one card at a time. No state → `newIds`; has state → `reviewIds` (including
   not-yet-due); suspended → unsuspend then add. Not-yet-due learned adds are pinned in

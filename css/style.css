@@ -909,6 +909,45 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 .toast-error { background: var(--bad); }
 .toast-xp .toast-xp, .toast .toast-xp { opacity: 0.85; }
 
+/* ——— Chart tooltip (js/chart-tip.js) ———
+   Fixed popover for [data-tip] marks. z-index 80 sits above the in-app
+   modal (60) and toasts (50), below the skip-link (2000). pointer-events
+   none so moving onto the tip never steals hover from the mark. */
+.chart-tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 80;
+  pointer-events: none;
+  max-width: 260px;
+  padding: 8px 11px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--ctl-r);
+  box-shadow: 0 1px 3px var(--shadow);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: pre-line;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s ease;
+}
+.chart-tip.is-on {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.chart-tip.is-fast {
+  transition-duration: 0.05s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chart-tip { transition: none; }
+}
+
+
 /* ——— Exam teaser ——— */
 .exam-teaser .soon-chip { margin-top: 4px; }
 
@@ -1525,7 +1564,13 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
   border-radius: 50%;
   background: var(--accent-deep);
 }
-.pal-cell.is-current { outline: 2px solid var(--ink); outline-offset: 1px; }
+/* Ring draws inside the cell — exterior outline + 1px offset ate the 6px
+   gap and kissed the next pill on 5-wide practice/drill grids. */
+.pal-cell.is-current {
+  border-color: var(--ink);
+  border-width: 2px;
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
 
 .exam-legend {
   display: flex;
@@ -1641,6 +1686,8 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
    --ink-700, which this app's token layer does not carry; --ink-2 is the
    nearest step that also re-derives correctly in dark.) */
 .an-bar { fill: var(--ink-2); }
+.an-hit { fill: none; pointer-events: all; }
+
 .an-empty-dot { fill: var(--ink-3); opacity: 0.5; }
 .an-budget { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; }
 .an-budget-label { fill: var(--ink); font-weight: 600; }
@@ -2172,6 +2219,8 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .picker-count { font-weight: 500; font-size: 14px; color: var(--ink-2); }
 .picker-actions { margin-top: 0; }
 .picker-section { margin: 16px 0 8px; font-size: 15px; }
+.picker-due-band { margin: 0; }
+.picker-view-tabs { margin-top: 2px; }
 .picker-topic { margin-bottom: 14px; }
 .picker-topic-head {
   display: flex;
@@ -2228,7 +2277,12 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .picker-row.open { border-bottom-color: transparent; }
 .picker-row .deck-name { flex: 1; min-width: 0; }
 .picker-row.is-locked { color: var(--ink-3); }
-.picker-box { cursor: pointer; }
+/* One box, two jobs: filled = ever-studied or in today's batch. A coral
+   inset bar marks today membership; learned-only stays filled without it. */
+.picker-row.picker-today { box-shadow: inset 3px 0 0 var(--accent); }
+.picker-row.picker-learned-only .deck-name { color: var(--ink-2); }
+.picker-box { cursor: pointer; accent-color: var(--accent); }
+.picker-row.picker-learned-only .picker-box { accent-color: var(--ink-3); }
 .picker-box:disabled { cursor: not-allowed; }
 
 /* ——— Browse sub-tabs + expandable peek rows ——— */
@@ -4135,6 +4189,28 @@ a.today-learn:focus-visible { text-decoration: none; color: inherit; }
 
 .st-lead { margin-bottom: 12px; }
 .st-note { margin-top: 12px; font-size: 12.5px; }
+
+.st-at-action { margin-top: 14px; }
+.st-at-action .btn { margin-top: 0; }
+
+.st-at-meter { position: relative; margin-top: 8px; }
+.st-at-meter .meter-thin { margin-top: 0; }
+.st-at-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: var(--accent-tint);
+  border-left: 1px dashed var(--ink-3);
+  border-right: 1px dashed var(--ink-3);
+  opacity: 0.55;
+  z-index: 1;
+}
+.meter-week .meter-fill { background: var(--ink-2); }
+/* Exam runway — warm bronze (medal ramp). Third step after today's coral
+   and this week's ink-gray; no cool teal on cream. */
+.meter-horizon .meter-fill { background: var(--bronze); }
+
 
 /* Daily activity — 28 pure-div bars sharing the forecast-strip look. */
 .stbar-strip {

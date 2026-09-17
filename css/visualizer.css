@@ -986,3 +986,119 @@
   .viz-modal-window { max-height: 96vh; }
   .viz-info-tab-btn { padding: 0.55rem 0.8rem; font-size: 0.78rem; }
 }
+
+/* ——— Hover explanations (js/visualizer-engine.js) ———
+   One fixed popover for every hover target: canvas hotspots (follows the
+   pointer), controls, readout rows, tabs, header buttons, formula banner
+   (anchored above the element). z-index above the 9999 modal backdrop.
+   pointer-events none so moving onto the card never steals the hover. */
+.viz-tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 10050;
+  pointer-events: none;
+  max-width: 300px;
+  padding: 9px 12px;
+  background: var(--surface, #faf9f5);
+  color: var(--ink, #141413);
+  border: 1px solid var(--line, #e6dfd8);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(20, 20, 19, 0.14), 0 1px 3px rgba(20, 20, 19, 0.08);
+  font-family: var(--sans, Inter, -apple-system, sans-serif);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s ease;
+}
+.viz-tip.is-on {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.viz-tip-title {
+  font-weight: 650;
+  color: var(--ink, #141413);
+  margin: 0 0 4px;
+}
+.viz-tip-body {
+  color: var(--ink-2, #6c6a64);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.viz-tip-body .katex {
+  font-size: 1.05em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .viz-tip { transition: none; }
+}
+
+/* Hoverable chrome gets a quiet affordance: readout rows with a hint show a
+   dotted underline on the label; control rows and the banner a help cursor. */
+.viz-legend-row.has-tip {
+  cursor: help;
+  border-radius: 4px;
+  outline: none;
+}
+.viz-legend-row.has-tip .viz-legend-label {
+  text-decoration: underline dotted var(--ink-3, #8e8b82);
+  text-underline-offset: 2px;
+}
+.viz-legend-row.has-tip:hover .viz-legend-label,
+.viz-legend-row.has-tip:focus-visible .viz-legend-label {
+  color: var(--ink, #141413);
+  text-decoration-color: var(--accent, #cc785c);
+}
+.viz-param-row[data-viz-tip] .viz-param-label,
+.viz-formula-banner[data-viz-tip] {
+  cursor: help;
+}
+
+/* Header: Previous / counter / Next cluster, then Pause, Parameters, close. */
+.viz-nav-group {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding-right: 0.45rem;
+  margin-right: 0.15rem;
+  border-right: 1px solid var(--line, #e6dfd8);
+}
+.viz-nav-counter {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  color: var(--ink-2, #6c6a64);
+  min-width: 3.4em;
+  text-align: center;
+  cursor: help;
+}
+.viz-params-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  background: var(--surface, #faf9f5);
+}
+.viz-params-btn.active {
+  background: var(--accent, #cc785c);
+  border-color: var(--accent, #cc785c);
+  color: #ffffff;
+}
+.viz-params-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+/* Inline card heading holds the Reset button on the right. */
+.viz-controls-panel:not(.viz-params-overlay) .viz-controls-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .viz-nav-counter { display: none; }
+  .viz-header-actions { flex-wrap: wrap; justify-content: flex-end; }
+}

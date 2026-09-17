@@ -282,11 +282,11 @@
       }
     ],
     parameters: [
-      { id: 'L', label: 'Length ($L$)', min: 0.2, max: 2.5, step: 0.05, default: 1.0, unit: 'm' },
-      { id: 'g', label: 'Gravity ($g$)', min: 1.0, max: 25.0, step: 0.1, default: 9.8, unit: 'm/s²' },
-      { id: 'theta0_deg', label: 'Initial Angle ($\\theta_0$)', min: 5, max: 170, step: 5, default: 75, unit: 'deg' },
-      { id: 'isRod', label: 'Uniform rod (physical pendulum)', type: 'toggle', default: false },
-      { id: 'damping', label: 'Damping ($\\gamma$)', min: 0.0, max: 0.2, step: 0.01, default: 0.0, unit: 's⁻¹' },
+      { id: 'L', label: 'Length ($L$)', min: 0.2, max: 2.5, step: 0.05, default: 1.0, unit: 'm', hint: 'Simple-pendulum length, or rod length if the physical-pendulum toggle is on. $T_0=2\\pi\\sqrt{L_{\\mathrm{eff}}/g}$ grows as $\\sqrt{L}$.' },
+      { id: 'g', label: 'Gravity ($g$)', min: 1.0, max: 25.0, step: 0.1, default: 9.8, unit: 'm/s²', hint: 'Local gravitational field. Larger $g$ raises $\\omega_0=\\sqrt{g/L_{\\mathrm{eff}}}$ and shortens the small-angle period.' },
+      { id: 'theta0_deg', label: 'Initial Angle ($\\theta_0$)', min: 5, max: 170, step: 5, default: 75, unit: 'deg', hint: 'Release amplitude. Exact $T=T_0\\,(2/\\pi)K(\\sin^2(\\theta_0/2))$ grows with $\\theta_0$ and diverges as $\\theta_0\\to\\pi$; the linear ghost ignores that.' },
+      { id: 'isRod', label: 'Uniform rod (physical pendulum)', type: 'toggle', default: false, hint: 'Off: point bob, $L_{\\mathrm{eff}}=L$. On: uniform rod pivoted at one end, $I=\\frac13 mL^2$ and $d=L/2$, so $L_{\\mathrm{eff}}=2L/3$.' },
+      { id: 'damping', label: 'Damping ($\\gamma$)', min: 0.0, max: 0.2, step: 0.01, default: 0.0, unit: 's⁻¹', hint: 'Linear drag $-\\gamma\\dot{\\theta}$. The GRE formula is the conservative $\\gamma=0$ case; a little damping just lets the trail decay.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     challenge: {
@@ -562,15 +562,115 @@
         ? ('$' + T_exact.toFixed(3) + '\\,\\mathrm{s}\\ (+' + pct.toFixed(1) + '\\%)$')
         : 'diverges ($\\theta_0\\to\\pi$)';
       vizLegend('Pendulum', [
-        { label: 'Type', value: isRod ? 'Uniform rod,  $L_{\\mathrm{eff}}=2L/3$' : 'Simple pendulum,  $L_{\\mathrm{eff}}=L$' },
-        { label: '$\\omega_0=\\sqrt{g/L_{\\mathrm{eff}}}$', value: latexNum(omega0, 2, '\\mathrm{rad/s}') },
-        { label: '$T_0=2\\pi/\\omega_0$', value: latexNum(T0, 3, '\\mathrm{s}') },
-        { label: '$T(\\theta_0)=(2/\\pi)K\\,T_0$', value: tExactStr },
-        { label: 'Series $T_0(1+\\theta_0^2/16+\\cdots)$', value: latexNum(series, 3, '\\mathrm{s}') },
-        { label: '$\\theta(t)$ exact / linear', value: '$' + ((sim.theta * 180) / Math.PI).toFixed(1) + '^\\circ$ / $' + ((sim.theta_lin * 180) / Math.PI).toFixed(1) + '^\\circ$' },
-        { label: 'Traces', value: 'coral = $\\sin\\theta$;  teal dashed = linear $\\theta$' },
-        { label: 'Drag', value: sim.isDragging ? 'setting release angle' : 'drag the bob to set $\\theta_0$' }
+        { label: 'Type', value: isRod ? 'Uniform rod,  $L_{\\mathrm{eff}}=2L/3$' : 'Simple pendulum,  $L_{\\mathrm{eff}}=L$', hint: 'Point bob: $L_{\\mathrm{eff}}=L$. Uniform rod about one end: $I=\\frac13 mL^2$, $d=L/2$, so $L_{\\mathrm{eff}}=2L/3$ and a higher $\\omega_0$.' },
+        { label: '$\\omega_0=\\sqrt{g/L_{\\mathrm{eff}}}$', value: latexNum(omega0, 2, '\\mathrm{rad/s}'), hint: 'Small-angle frequency from $\\ddot{\\theta}+(g/L_{\\mathrm{eff}})\\theta=0$. Bob mass $m$ cancels; only $g$ and $L_{\\mathrm{eff}}$ enter.' },
+        { label: '$T_0=2\\pi/\\omega_0$', value: latexNum(T0, 3, '\\mathrm{s}'), hint: 'Isochronous SHM period. Exact finite-amplitude motion is always slower than this $T_0$.' },
+        { label: '$T(\\theta_0)=(2/\\pi)K\\,T_0$', value: tExactStr, hint: 'Complete elliptic integral $T=T_0(2/\\pi)K(\\sin^2(\\theta_0/2))$. It diverges as $\\theta_0\\to\\pi$, where the restoring torque vanishes.' },
+        { label: 'Series $T_0(1+\\theta_0^2/16+\\cdots)$', value: latexNum(series, 3, '\\mathrm{s}'), hint: 'GRE expansion $T\\approx T_0(1+\\theta_0^2/16+11\\theta_0^4/3072)$. At $60^\\circ$ the first correction is already $\\sim 7\\%$.' },
+        { label: '$\\theta(t)$ exact / linear', value: '$' + ((sim.theta * 180) / Math.PI).toFixed(1) + '^\\circ$ / $' + ((sim.theta_lin * 180) / Math.PI).toFixed(1) + '^\\circ$', hint: 'Coral integrates $\\sin\\theta$; teal integrates $\\theta$. They coincide only while $\\theta$ stays small.' },
+        { label: 'Traces', value: 'coral = $\\sin\\theta$;  teal dashed = linear $\\theta$', hint: 'Coral trail is the exact swing; dashed teal is the linear ghost that GRE small-angle items assume.' },
+        { label: 'Drag', value: sim.isDragging ? 'setting release angle' : 'drag the bob to set $\\theta_0$', hint: 'Drag the bob around the pivot to set a new amplitude $\\theta_0$; both integrators restart from rest at that angle.' }
       ]);
+
+      var thDeg = ((sim.theta * 180) / Math.PI).toFixed(1);
+      var thLinDeg = ((sim.theta_lin * 180) / Math.PI).toFixed(1);
+      var spots147 = [];
+      spots147.push({
+        id: 'pivot',
+        kind: 'circle',
+        x: pivotX,
+        y: pivotY,
+        r: 12,
+        title: 'Pivot',
+        body: 'Fixed suspension. Torque $\\tau=-mg L_{\\mathrm{eff}}\\sin\\theta$ is taken about this point.'
+      });
+      spots147.push({
+        id: 'ghost',
+        kind: 'circle',
+        x: ghostX,
+        y: ghostY,
+        r: isRod ? 10 : 13,
+        title: 'Linear ghost',
+        body: 'Small-angle model $\\ddot{\\theta}=-(g/L_{\\mathrm{eff}})\\theta$. Now $\\theta_{\\mathrm{lin}}=' + thLinDeg + '^\\circ$ while exact $\\theta=' + thDeg + '^\\circ$.'
+      });
+      if (isRod) {
+        spots147.push({
+          id: 'cm',
+          kind: 'circle',
+          x: cmX,
+          y: cmY,
+          r: 10,
+          title: 'Center of mass',
+          body: 'Uniform rod: CM at $L/2$. Gravity acts here, so $L_{\\mathrm{eff}}=I/(md)=2L/3=' + Leff.toFixed(2) + '\\,\\mathrm{m}$.'
+        });
+        spots147.push({
+          id: 'rod',
+          kind: 'segment',
+          x1: pivotX,
+          y1: pivotY,
+          x2: bobX,
+          y2: bobY,
+          halfW: 10,
+          title: 'Uniform rod',
+          body: 'Physical pendulum with $I=\\frac13 mL^2$ about the end. $L=' + L.toFixed(2) + '\\,\\mathrm{m}$, $\\omega_0=' + omega0.toFixed(2) + '\\,\\mathrm{rad/s}$.'
+        });
+      } else {
+        spots147.push({
+          id: 'bob',
+          kind: 'circle',
+          x: bobX,
+          y: bobY,
+          r: bobR + 4,
+          title: 'Point bob',
+          body: 'All mass at $L=' + L.toFixed(2) + '\\,\\mathrm{m}$. $I=mL^2$, so $\\omega_0=\\sqrt{g/L}=' + omega0.toFixed(2) + '\\,\\mathrm{rad/s}$. Mass $m$ cancels from the EOM.'
+        });
+        spots147.push({
+          id: 'string',
+          kind: 'segment',
+          x1: pivotX,
+          y1: pivotY,
+          x2: bobX,
+          y2: bobY,
+          halfW: 7,
+          title: 'Massless rod',
+          body: 'Constraint of length $L=' + L.toFixed(2) + '\\,\\mathrm{m}$. It supplies tension but no torque about the pivot.'
+        });
+      }
+      spots147.push({
+        id: 'ghostArm',
+        kind: 'segment',
+        x1: pivotX,
+        y1: pivotY,
+        x2: ghostX,
+        y2: ghostY,
+        halfW: 7,
+        title: 'Linear arm',
+        body: 'Dashed teal path of the $\\sin\\theta\\approx\\theta$ integrator. At large amplitude it runs fast compared with the exact coral bob.'
+      });
+      if (Math.abs(sim.theta) > 0.04) {
+        spots147.push({
+          id: 'arc',
+          kind: 'ring',
+          x: pivotX,
+          y: pivotY,
+          r: arcR,
+          halfW: 8,
+          title: 'Angle $\\theta$',
+          body: 'From the downward vertical. Exact EOM $\\ddot{\\theta}+(g/L_{\\mathrm{eff}})\\sin\\theta=0$. Now $\\theta=' + thDeg + '^\\circ$.'
+        });
+      }
+      spots147.push({
+        id: 'vertical',
+        kind: 'segment',
+        x1: pivotX,
+        y1: pivotY,
+        x2: pivotX,
+        y2: pivotY + armLengthPx + 8,
+        halfW: 6,
+        title: 'Downward vertical',
+        body: '$\\theta=0$ stable equilibrium. Restoring torque vanishes here; $\\theta=\\pi$ is the unstable separatrix where $T$ diverges.'
+      });
+      PGRE.setVizHotspots(spots147);
     }
   };
 
@@ -640,11 +740,11 @@
       }
     ],
     parameters: [
-      { id: 'shapeType', label: 'Rigid Geometry', type: 'select', options: ['Uniform Thin Rod', 'Solid Disk / Cylinder', 'Thin Hoop / Ring', 'Solid Sphere', 'Non-Uniform Power Rod (x^n)'], default: 'Solid Disk / Cylinder' },
-      { id: 'massVal', label: 'Mass ($M$)', min: 0.5, max: 5.0, step: 0.1, default: 2.0, unit: 'kg' },
-      { id: 'radVal', label: 'Radius / Length ($R$ or $L$)', min: 0.5, max: 3.0, step: 0.1, default: 1.5, unit: 'm' },
-      { id: 'powerN', label: 'Density Exponent ($n$)', min: 0, max: 6, step: 1, default: 2, unit: 'power' },
-      { id: 'numSlices', label: 'Integration Slices ($N$)', min: 4, max: 64, step: 4, default: 24, unit: 'elements' },
+      { id: 'shapeType', label: 'Rigid Geometry', type: 'select', options: ['Uniform Thin Rod', 'Solid Disk / Cylinder', 'Thin Hoop / Ring', 'Solid Sphere', 'Non-Uniform Power Rod (x^n)'], default: 'Solid Disk / Cylinder', hint: 'Which mass distribution is integrated. The $r_\\perp^2$ weight is why a hoop ($c=1$) resists spin more than a disk ($c=1/2$) of the same $M$ and $R$.' },
+      { id: 'massVal', label: 'Mass ($M$)', min: 0.5, max: 5.0, step: 0.1, default: 2.0, unit: 'kg', hint: 'Total mass $M$. At fixed shape factor $c$, $I=cMR^2$ (or $cML^2$) scales linearly with $M$.' },
+      { id: 'radVal', label: 'Radius / Length ($R$ or $L$)', min: 0.5, max: 3.0, step: 0.1, default: 1.5, unit: 'm', hint: 'Outer radius $R$ for disk, hoop, or sphere; rod length $L$ otherwise. $I$ scales as the square of this size.' },
+      { id: 'powerN', label: 'Density Exponent ($n$)', min: 0, max: 6, step: 1, default: 2, unit: 'power', hint: 'Used only for $\\lambda\\propto x^n$. Raising $n$ packs mass toward the far end, so $c=(n+1)/(n+3)\\to 1$.' },
+      { id: 'numSlices', label: 'Integration Slices ($N$)', min: 4, max: 64, step: 4, default: 24, unit: 'elements', hint: 'Riemann partition of the body. More slices make the $r^2$ weighting in the paint clearer; the analytic $I$ does not depend on $N$.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     onParamChange: function (id, val, state) {
@@ -905,14 +1005,234 @@
       pill(ctx, axisNote, 14, height - 16, MUTED, 'left');
 
       vizLegend('Continuous $I$', [
-        { label: 'Geometry', value: state.shapeType },
-        { label: '$I = \\int r_\\perp^2\\,\\mathrm{d}m$', value: latexNum(I_exact, 3, '\\mathrm{kg\\,m}^2') },
-        { label: 'Formula', value: '$I = ' + formulaTex + '$' },
-        { label: cLabel, value: '$' + cFactor.toFixed(3) + '$' },
-        { label: '$\\mathrm{d}m$', value: dmTex },
-        { label: 'Paint', value: isDisk ? 'ring opacity $\\propto r^2$' : (isPowerRod ? 'opacity $\\propto \\lambda(x)\\,x^2$' : 'gold tracers: $v=\\omega r_\\perp$') },
-        { label: 'Slices $N$', value: '$' + N + '$' }
+        { label: 'Geometry', value: state.shapeType, hint: 'Which mass distribution is being integrated. Changing shape changes $c=I/(MR^2)$ (or $ML^2$), not just a label.' },
+        { label: '$I = \\int r_\\perp^2\\,\\mathrm{d}m$', value: latexNum(I_exact, 3, '\\mathrm{kg\\,m}^2'), hint: 'Exact inertia for this geometry. $r_\\perp$ is the perpendicular distance to the chosen axis, not the spherical radius.' },
+        { label: 'Formula', value: '$I = ' + formulaTex + '$', hint: 'Closed form: disk $\\frac12 MR^2$, hoop $MR^2$, sphere $\\frac25 MR^2$, uniform rod about CM $\\frac1{12}ML^2$.' },
+        { label: cLabel, value: '$' + cFactor.toFixed(3) + '$', hint: 'Shape factor. Pure rolling down an incline has $a=g\\sin\\theta/(1+c)$, so smaller $c$ wins independent of $M$ and $R$.' },
+        { label: '$\\mathrm{d}m$', value: dmTex, hint: 'Mass element in the integral. Disk: an annulus $\\sigma 2\\pi r\\,\\mathrm{d}r$. Rod: a strip $\\lambda\\,\\mathrm{d}x$.' },
+        { label: 'Paint', value: isDisk ? 'ring opacity $\\propto r^2$' : (isPowerRod ? 'opacity $\\propto \\lambda(x)\\,x^2$' : 'gold tracers: $v=\\omega r_\\perp$'), hint: 'Opacity tracks the $r_\\perp^2$ weight, so outer mass looks heavier in $I$. Gold tracers mark $v=\\omega r_\\perp$.' },
+        { label: 'Slices $N$', value: '$' + N + '$', hint: 'Riemann partition of the body. The highlighted gold strip or ring is one $\\mathrm{d}m$ in that sum.' }
       ]);
+
+      var spots124 = [];
+      var tr124 = tracers.length ? tracers[tracers.length - 1] : { x: cx, y: cy };
+      if (isSphere) {
+        var rPerpM = (rPerp / Math.max(renderRad, 1)) * R;
+        spots124.push({
+          id: 'dm',
+          kind: 'circle',
+          x: elX,
+          y: elY,
+          r: 10,
+          title: 'Mass element $\\mathrm{d}m$',
+          body: 'On the surface. The integral uses $r_\\perp=R\\sin\\vartheta=' + rPerpM.toFixed(2) + '\\,\\mathrm{m}$, not the spherical radius $R$.'
+        });
+        spots124.push({
+          id: 'rperp',
+          kind: 'segment',
+          x1: cx,
+          y1: elY,
+          x2: elX,
+          y2: elY,
+          halfW: 7,
+          title: 'Perpendicular distance $r_\\perp$',
+          body: 'Cylindrical distance to the vertical diameter. $I=\\int r_\\perp^2\\,\\mathrm{d}m=\\frac25 MR^2=' + I_exact.toFixed(3) + '\\,\\mathrm{kg\\,m}^2$.'
+        });
+        spots124.push({
+          id: 'rvec',
+          kind: 'segment',
+          x1: cx,
+          y1: cy,
+          x2: elX,
+          y2: elY,
+          halfW: 6,
+          title: 'Position $r$',
+          body: 'Spherical radius to $\\mathrm{d}m$. Do not square this $r$ in $I$; only the component perpendicular to the axis counts.'
+        });
+        spots124.push({
+          id: 'axis',
+          kind: 'segment',
+          x1: cx,
+          y1: cy - renderRad - 14,
+          x2: cx,
+          y2: cy + renderRad + 14,
+          halfW: 7,
+          title: 'Diameter axis',
+          body: 'Rotation axis through the center. Solid sphere about a diameter: $I=\\frac25 MR^2$, $c=0.4$.'
+        });
+        spots124.push({
+          id: 'tracer',
+          kind: 'circle',
+          x: tr124.x,
+          y: tr124.y,
+          r: 8,
+          title: 'Velocity tracer',
+          body: 'Marks $v=\\omega r_\\perp$. Equatorial mass has the largest $r_\\perp$ and dominates $I$.'
+        });
+        spots124.push({
+          id: 'sphere',
+          kind: 'circle',
+          x: cx,
+          y: cy,
+          r: renderRad,
+          title: 'Solid sphere',
+          body: '$M=' + M.toFixed(1) + '\\,\\mathrm{kg}$, $R=' + R.toFixed(2) + '\\,\\mathrm{m}$. Mass near the axis contributes little, hence $c=2/5<1$.'
+        });
+      } else if (isHoop) {
+        var midAng = phi + dAng / 2;
+        var dmRHoop = renderRad - hoopThick * 0.5;
+        spots124.push({
+          id: 'dm',
+          kind: 'circle',
+          x: cx + dmRHoop * Math.cos(midAng),
+          y: cy + dmRHoop * Math.sin(midAng),
+          r: Math.max(10, hoopThick * 0.7),
+          title: 'Hoop element $\\mathrm{d}m$',
+          body: 'Every gram sits at $r_\\perp=R$, so $I=MR^2=' + I_exact.toFixed(3) + '\\,\\mathrm{kg\\,m}^2$ with $c=1$.'
+        });
+        spots124.push({
+          id: 'tracer',
+          kind: 'circle',
+          x: tr124.x,
+          y: tr124.y,
+          r: 8,
+          title: 'Velocity tracer',
+          body: 'Marks $v=\\omega R$ on the hoop. All tracers share the same $r_\\perp=R=' + R.toFixed(2) + '\\,\\mathrm{m}$.'
+        });
+        spots124.push({
+          id: 'R',
+          kind: 'segment',
+          x1: cx,
+          y1: cy,
+          x2: cx + renderRad * Math.cos(phi),
+          y2: cy + renderRad * Math.sin(phi),
+          halfW: 7,
+          title: 'Radius $R$',
+          body: 'All mass of a thin hoop is at this $R=' + R.toFixed(2) + '\\,\\mathrm{m}$. That is why it loses an incline race to any filled shape of the same $M,R$.'
+        });
+        spots124.push({
+          id: 'axis',
+          kind: 'circle',
+          x: cx,
+          y: cy,
+          r: 10,
+          title: 'CM axis',
+          body: 'Axis through the center, out of the page. $I=MR^2$ about this axis.'
+        });
+        spots124.push({
+          id: 'hoop',
+          kind: 'annulus',
+          x: cx,
+          y: cy,
+          r0: Math.max(4, renderRad - hoopThick),
+          r1: renderRad + 4,
+          title: 'Thin hoop',
+          body: '$I=MR^2$ because $r_\\perp=R$ for every $\\mathrm{d}m$. $M=' + M.toFixed(1) + '\\,\\mathrm{kg}$.'
+        });
+      } else if (isDisk) {
+        var dmR = (hi + 0.5) * dr;
+        spots124.push({
+          id: 'dm',
+          kind: 'ring',
+          x: cx,
+          y: cy,
+          r: dmR,
+          halfW: Math.max(6, dr * 0.9),
+          title: 'Annular $\\mathrm{d}m$',
+          body: 'Ring at $r=' + (R * dmR / Math.max(renderRad, 1)).toFixed(2) + '\\,\\mathrm{m}$. $\\mathrm{d}m=2\\pi r\\,\\mathrm{d}r\\,\\sigma$; paint opacity $\\propto r^2$ so outer rings dominate $I$.'
+        });
+        spots124.push({
+          id: 'tracer',
+          kind: 'circle',
+          x: tr124.x,
+          y: tr124.y,
+          r: 8,
+          title: 'Velocity tracer',
+          body: 'Marks $v=\\omega r_\\perp$. Outer tracers sweep faster because $v\\propto r_\\perp$.'
+        });
+        spots124.push({
+          id: 'R',
+          kind: 'segment',
+          x1: cx,
+          y1: cy,
+          x2: cx + renderRad * Math.cos(phi),
+          y2: cy + renderRad * Math.sin(phi),
+          halfW: 7,
+          title: 'Radius $R$',
+          body: 'Outer radius $R=' + R.toFixed(2) + '\\,\\mathrm{m}$. Disk about this central axis: $I=\\frac12 MR^2=' + I_exact.toFixed(3) + '\\,\\mathrm{kg\\,m}^2$.'
+        });
+        spots124.push({
+          id: 'axis',
+          kind: 'circle',
+          x: cx,
+          y: cy,
+          r: 10,
+          title: 'CM axis',
+          body: 'Axis through the center, out of the page. $I=\\int r^2\\,\\mathrm{d}m$ with $r$ the cylindrical radius in the plane.'
+        });
+        spots124.push({
+          id: 'disk',
+          kind: 'circle',
+          x: cx,
+          y: cy,
+          r: renderRad,
+          title: 'Solid disk / cylinder',
+          body: '$M=' + M.toFixed(1) + '\\,\\mathrm{kg}$, $c=1/2$. A hoop of the same $M,R$ would have twice this $I$.'
+        });
+      } else {
+        var cosp = Math.cos(phi * 0.35);
+        var sinp = Math.sin(phi * 0.35);
+        var gpx = rodStartX + (goldI + 0.5) * dx - axisX;
+        var gdx = axisX + gpx * cosp;
+        var gdy = cy + gpx * sinp;
+        spots124.push({
+          id: 'dm',
+          kind: 'circle',
+          x: gdx,
+          y: gdy,
+          r: Math.max(10, rodThick * 0.6),
+          title: 'Strip $\\mathrm{d}m$',
+          body: isPowerRod
+            ? ('$\\lambda\\propto x^{' + nPow + '}$. Mass piles toward the far end, so $c=(n+1)/(n+3)=' + cFactor.toFixed(3) + '$.')
+            : ('Uniform $\\lambda=M/L$. This strip sits at some $x$ from the CM; $I_{\\mathrm{CM}}=\\frac1{12}ML^2=' + I_exact.toFixed(3) + '\\,\\mathrm{kg\\,m}^2$.')
+        });
+        spots124.push({
+          id: 'tracer',
+          kind: 'circle',
+          x: tr124.x,
+          y: tr124.y,
+          r: 8,
+          title: 'Velocity tracer',
+          body: 'Marks $v=\\omega |x|$ along the rod. Farther mass has both more lever arm and (for $n>0$) more $\\lambda$.'
+        });
+        var e0 = rodStartX - axisX;
+        var e1 = rodStartX + rodLenPx - axisX;
+        spots124.push({
+          id: 'rod',
+          kind: 'segment',
+          x1: axisX + e0 * cosp,
+          y1: cy + e0 * sinp,
+          x2: axisX + e1 * cosp,
+          y2: cy + e1 * sinp,
+          halfW: Math.max(10, rodThick * 0.5),
+          title: isPowerRod ? 'Power-law rod' : 'Uniform rod',
+          body: isPowerRod
+            ? ('$I=\\frac{n+1}{n+3}ML^2=' + I_exact.toFixed(3) + '\\,\\mathrm{kg\\,m}^2$ about the light end $x=0$, with $n=' + nPow + '$.')
+            : ('About the CM, $I=\\frac1{12}ML^2=' + I_exact.toFixed(3) + '\\,\\mathrm{kg\\,m}^2$. End-axis inertia is $\\frac13 ML^2$ by Steiner.')
+        });
+        spots124.push({
+          id: 'axis',
+          kind: 'circle',
+          x: axisX,
+          y: cy,
+          r: 12,
+          title: isRod ? 'CM axis' : 'Axis $x=0$',
+          body: isRod
+            ? 'Perpendicular axis through the midpoint. End-axis inertia is $\\frac13 ML^2$ by Steiner: $\\frac1{12}ML^2+M(L/2)^2$.'
+            : ('Light end of $\\lambda\\propto x^n$. $I=\\frac{n+1}{n+3}ML^2$ about this end, $n=' + nPow + '$.')
+        });
+      }
+      PGRE.setVizHotspots(spots124);
     },
     challenge: {
       question: 'A thin straight rod of length $L$ and total mass $M$ has a non-uniform linear mass density $\\lambda(x) = \\lambda_0 \\frac{x^2}{L^2}$ for $0 \\le x \\le L$, where $x=0$ is one end of the rod. What is the moment of inertia $I$ of the rod about a perpendicular axis passing through the end $x=0$?',
@@ -999,11 +1319,11 @@
       }
     ],
     parameters: [
-      { id: 'bodyShape', label: 'Body Geometry', type: 'select', options: ['Uniform Thin Rod (L)', 'Solid Disk (R)', 'Hollow Ring (R)'], default: 'Uniform Thin Rod (L)' },
-      { id: 'bodyMass', label: 'Mass ($M$)', min: 0.5, max: 4.0, step: 0.1, default: 1.5, unit: 'kg' },
-      { id: 'bodyDim', label: 'Size ($L$ or $R$)', min: 0.5, max: 2.5, step: 0.1, default: 1.2, unit: 'm' },
-      { id: 'pivotShift', label: 'Shift Distance ($d$)', min: 0, max: 2.5, step: 0.02, default: 0.35, unit: 'm' },
-      { id: 'paused', label: 'Pause rotation', type: 'toggle', default: false },
+      { id: 'bodyShape', label: 'Body Geometry', type: 'select', options: ['Uniform Thin Rod (L)', 'Solid Disk (R)', 'Hollow Ring (R)'], default: 'Uniform Thin Rod (L)', hint: 'Sets $I_{\\mathrm{CM}}$: rod $ML^2/12$, disk $MR^2/2$, ring $MR^2$. Steiner then adds the same $Md^2$ about any parallel axis.' },
+      { id: 'bodyMass', label: 'Mass ($M$)', min: 0.5, max: 4.0, step: 0.1, default: 1.5, unit: 'kg', hint: 'Total mass $M$. The extra term in $I_P=I_{\\mathrm{CM}}+Md^2$ is this mass treated as a point at the CM.' },
+      { id: 'bodyDim', label: 'Size ($L$ or $R$)', min: 0.5, max: 2.5, step: 0.1, default: 1.2, unit: 'm', hint: 'Rod length $L$ or disk/ring radius $R$. It fixes $I_{\\mathrm{CM}}$ and the gyration radius $k_g=\\sqrt{I_{\\mathrm{CM}}/M}$.' },
+      { id: 'pivotShift', label: 'Shift Distance ($d$)', min: 0, max: 2.5, step: 0.02, default: 0.35, unit: 'm', hint: 'Parallel offset from the CM axis to the new pivot $P$. $I_P$ is smallest at $d=0$; the physical-pendulum period is smallest at $d=k_g$.' },
+      { id: 'paused', label: 'Pause rotation', type: 'toggle', default: false, hint: 'Freeze the Steiner triangle so $d$, $k_g$, and $k_P$ can be read without the body spinning.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     onParamChange: function (id, val, state) {
@@ -1166,15 +1486,142 @@
       }
 
       vizLegend('Parallel-axis theorem', [
-        { label: 'Body', value: state.bodyShape },
-        { label: '$I_{\\mathrm{CM}}$', value: latexNum(I_cm, 3, '\\mathrm{kg\\,m}^2') },
-        { label: '$Md^2$', value: latexNum(M * d * d, 3, '\\mathrm{kg\\,m}^2') },
-        { label: '$I_P = I_{\\mathrm{CM}} + Md^2$', value: latexNum(I_p, 3, '\\mathrm{kg\\,m}^2') },
-        { label: '$k_g,\\ d,\\ k_P$', value: '$' + k_g.toFixed(3) + ',\\ ' + d.toFixed(2) + ',\\ ' + k_p.toFixed(3) + '\\,\\mathrm{m}$' },
-        { label: '$k_P^2 = k_g^2 + d^2$', value: latexNum(k_p * k_p, 3, '\\mathrm{m}^2') },
-        { label: '$T(d)$ physical pendulum', value: isFinite(curT) ? latexNum(curT, 2, '\\mathrm{s}') : 'infinite ($d = 0$)' },
-        { label: '$T_{\\min}$ at $d = k_g$', value: latexNum(minT, 2, '\\mathrm{s}') }
+        { label: 'Body', value: state.bodyShape, hint: 'Which rigid body, and therefore which $I_{\\mathrm{CM}}$. The $Md^2$ shift is the same construction for all three.' },
+        { label: '$I_{\\mathrm{CM}}$', value: latexNum(I_cm, 3, '\\mathrm{kg\\,m}^2'), hint: 'Inertia about the center-of-mass axis (this direction). It is the minimum $I$ among all parallel axes.' },
+        { label: '$Md^2$', value: latexNum(M * d * d, 3, '\\mathrm{kg\\,m}^2'), hint: 'Point-mass contribution of the CM orbiting the new axis. Dominates when $d\\gg k_g$.' },
+        { label: '$I_P = I_{\\mathrm{CM}} + Md^2$', value: latexNum(I_p, 3, '\\mathrm{kg\\,m}^2'), hint: 'Steiner: you cannot jump from one non-CM axis to another without going through the CM first.' },
+        { label: '$k_g,\\ d,\\ k_P$', value: '$' + k_g.toFixed(3) + ',\\ ' + d.toFixed(2) + ',\\ ' + k_p.toFixed(3) + '\\,\\mathrm{m}$', hint: 'Radius of gyration $k_g=\\sqrt{I_{\\mathrm{CM}}/M}$, shift $d$, and $k_P=\\sqrt{I_P/M}$. They form a right triangle.' },
+        { label: '$k_P^2 = k_g^2 + d^2$', value: latexNum(k_p * k_p, 3, '\\mathrm{m}^2'), hint: 'Geometric form of Steiner. The gold triangle in the figure is that identity.' },
+        { label: '$T(d)$ physical pendulum', value: isFinite(curT) ? latexNum(curT, 2, '\\mathrm{s}') : 'infinite ($d = 0$)', hint: 'Period $T=2\\pi\\sqrt{I_P/(Mgd)}$. It diverges as $d\\to 0$ because the restoring torque $Mgd$ vanishes.' },
+        { label: '$T_{\\min}$ at $d = k_g$', value: latexNum(minT, 2, '\\mathrm{s}'), hint: 'Kater minimum: $T$ is smallest at $d=k_g$, where $T_{\\min}=2\\pi\\sqrt{2k_g/g}$.' }
       ]);
+
+      var spots125 = [];
+      spots125.push({
+        id: 'P',
+        kind: 'circle',
+        x: px,
+        y: py,
+        r: 12,
+        title: 'Shifted axis $P$',
+        body: 'New parallel axis. $I_P=I_{\\mathrm{CM}}+Md^2=' + I_p.toFixed(3) + '\\,\\mathrm{kg\\,m}^2$ with $d=' + d.toFixed(2) + '\\,\\mathrm{m}$.'
+      });
+      spots125.push({
+        id: 'CM',
+        kind: 'circle',
+        x: cmx,
+        y: cmy,
+        r: 12,
+        title: 'Center of mass',
+        body: 'Axis through the CM minimizes $I$ for this direction: $I_{\\mathrm{CM}}=' + I_cm.toFixed(3) + '\\,\\mathrm{kg\\,m}^2$, $k_g=' + k_g.toFixed(3) + '\\,\\mathrm{m}$.'
+      });
+      spots125.push({
+        id: 'gyration',
+        kind: 'circle',
+        x: gx,
+        y: gy,
+        r: 10,
+        title: 'Gyration vertex',
+        body: 'Completes $k_P^2=k_g^2+d^2$. Physical-pendulum $T$ is smallest when $d=k_g=' + k_g.toFixed(3) + '\\,\\mathrm{m}$.'
+      });
+      if (dPx > 6) {
+        spots125.push({
+          id: 'd',
+          kind: 'segment',
+          x1: px,
+          y1: py,
+          x2: cmx,
+          y2: cmy,
+          halfW: 8,
+          title: 'Offset $d$',
+          body: 'Parallel shift from CM to $P$. Extra inertia $Md^2=' + (M * d * d).toFixed(3) + '\\,\\mathrm{kg\\,m}^2$.'
+        });
+      }
+      if (kgPx > 8) {
+        spots125.push({
+          id: 'kg',
+          kind: 'segment',
+          x1: cmx,
+          y1: cmy,
+          x2: gx,
+          y2: gy,
+          halfW: 7,
+          title: 'Radius of gyration $k_g$',
+          body: '$k_g=\\sqrt{I_{\\mathrm{CM}}/M}=' + k_g.toFixed(3) + '\\,\\mathrm{m}$. A point mass at $k_g$ from the CM has the same $I_{\\mathrm{CM}}$.'
+        });
+      }
+      spots125.push({
+        id: 'kP',
+        kind: 'segment',
+        x1: px,
+        y1: py,
+        x2: gx,
+        y2: gy,
+        halfW: 7,
+        title: 'Radius of gyration $k_P$',
+        body: '$k_P=\\sqrt{I_P/M}=' + k_p.toFixed(3) + '\\,\\mathrm{m}$. Hypotenuse of the Steiner right triangle.'
+      });
+      if (kgPx > 8) {
+        spots125.push({
+          id: 'kgRing',
+          kind: 'ring',
+          x: cmx,
+          y: cmy,
+          r: kgPx,
+          halfW: 8,
+          title: 'CM gyration circle',
+          body: 'All mass of an equivalent hoop about the CM would sit here. $I_{\\mathrm{CM}}=Mk_g^2$.'
+        });
+      }
+      if (dPx > 6) {
+        spots125.push({
+          id: 'dOrbit',
+          kind: 'ring',
+          x: px,
+          y: py,
+          r: dPx,
+          halfW: 7,
+          title: 'CM orbit about $P$',
+          body: 'The CM travels in a circle of radius $d$ about the new axis. That orbit is exactly the $Md^2$ term.'
+        });
+      }
+      if (isRodBody) {
+        var yA = dPx - rodLenPx * 0.5;
+        var yB = yA + rodLenPx;
+        spots125.push({
+          id: 'body',
+          kind: 'segment',
+          x1: px + yA * Math.sin(ang),
+          y1: py + yA * Math.cos(ang),
+          x2: px + yB * Math.sin(ang),
+          y2: py + yB * Math.cos(ang),
+          halfW: 10,
+          title: 'Uniform rod',
+          body: '$I_{\\mathrm{CM}}=ML^2/12$ about the midpoint. $L=' + L.toFixed(2) + '\\,\\mathrm{m}$, $I_P=' + I_p.toFixed(3) + '\\,\\mathrm{kg\\,m}^2$.'
+        });
+      } else if (isRingBody) {
+        spots125.push({
+          id: 'body',
+          kind: 'ring',
+          x: cmx,
+          y: cmy,
+          r: diskRadPx,
+          halfW: 10,
+          title: 'Hollow ring',
+          body: '$I_{\\mathrm{CM}}=MR^2$ already, so $I_P=M(R^2+d^2)$. $R=' + L.toFixed(2) + '\\,\\mathrm{m}$.'
+        });
+      } else {
+        spots125.push({
+          id: 'body',
+          kind: 'circle',
+          x: cmx,
+          y: cmy,
+          r: diskRadPx,
+          title: 'Solid disk',
+          body: '$I_{\\mathrm{CM}}=\\frac12 MR^2$. About a parallel axis: $I_P=\\frac12 MR^2+Md^2$. $R=' + L.toFixed(2) + '\\,\\mathrm{m}$.'
+        });
+      }
+      PGRE.setVizHotspots(spots125);
     },
     challenge: {
       question: 'A uniform thin disk of mass $M$ and radius $R$ is pivoted to oscillate as a physical pendulum about a horizontal axis located on its outer rim (pivot distance $d = R$). What is the period $T$ of small-amplitude oscillations?',
@@ -1279,12 +1726,12 @@
       }
     ],
     parameters: [
-      { id: 'm', label: 'Mass ($m$)', min: 0.2, max: 4.0, step: 0.1, default: 1.0, unit: 'kg' },
-      { id: 'I', label: 'Inertia about pivot ($I$)', min: 0.05, max: 8.0, step: 0.05, default: 0.40, unit: 'kg m²' },
-      { id: 'R', label: 'Pivot to CM ($R$)', min: 0.15, max: 1.20, step: 0.05, default: 0.50, unit: 'm' },
-      { id: 'g', label: 'Gravity ($g$)', min: 1.0, max: 25.0, step: 0.1, default: 9.8, unit: 'm/s²' },
-      { id: 'theta0_deg', label: 'Initial Angle ($\\theta_0$)', min: 5, max: 170, step: 5, default: 30, unit: 'deg' },
-      { id: 'damping', label: 'Damping ($\\gamma$)', min: 0.0, max: 0.2, step: 0.01, default: 0.0, unit: 's⁻¹' },
+      { id: 'm', label: 'Mass ($m$)', min: 0.2, max: 4.0, step: 0.1, default: 1.0, unit: 'kg', hint: 'Body mass. $\\omega=\\sqrt{mgR/I}$ still depends on $m$ here because $I$ is an independent slider; for a similar body $I\\propto m$ and $m$ would cancel.' },
+      { id: 'I', label: 'Inertia about pivot ($I$)', min: 0.05, max: 8.0, step: 0.05, default: 0.40, unit: 'kg m²', hint: 'Moment of inertia about the pivot, not the CM. Parallel-axis forbids $I\\le mR^2$; values below that bound are clamped.' },
+      { id: 'R', label: 'Pivot to CM ($R$)', min: 0.15, max: 1.20, step: 0.05, default: 0.50, unit: 'm', hint: 'Pivot-to-CM distance. Restoring torque is $-mgR\\sin\\theta$, and $L_{\\mathrm{eff}}=I/(mR)>R$ for any real body.' },
+      { id: 'g', label: 'Gravity ($g$)', min: 1.0, max: 25.0, step: 0.1, default: 9.8, unit: 'm/s²', hint: 'Gravitational field. Small-angle $\\omega\\propto\\sqrt{g}$, same scaling as a simple pendulum.' },
+      { id: 'theta0_deg', label: 'Initial Angle ($\\theta_0$)', min: 5, max: 170, step: 5, default: 30, unit: 'deg', hint: 'Release amplitude. The card $\\omega=\\sqrt{mgR/I}$ is the small-angle value; coral ($\\sin\\theta$) lags the teal linear ghost when $\\theta_0$ is large.' },
+      { id: 'damping', label: 'Damping ($\\gamma$)', min: 0.0, max: 0.2, step: 0.01, default: 0.0, unit: 's⁻¹', hint: 'Linear drag $-\\gamma\\dot{\\theta}$. The GRE frequency formula assumes $\\gamma=0$.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     challenge: {
@@ -1568,15 +2015,98 @@
       var iVal = latexNum(I, 3, '\\mathrm{kg\\,m}^2');
       var iMinVal = latexNum(mR2, 3, '\\mathrm{kg\\,m}^2');
       vizLegend('Physical pendulum', [
-        { label: '$\\omega=\\sqrt{mgR/I}$', value: latexNum(omega0, 2, '\\mathrm{rad/s}') },
-        { label: '$T=2\\pi/\\omega$', value: latexNum(T0, 3, '\\mathrm{s}') },
-        { label: '$L_{\\mathrm{eff}}=I/(mR)$', value: latexNum(Leff, 3, '\\mathrm{m}') },
-        { label: '$I$ vs $mR^2$', value: iVal + ' / ' + iMinVal + (clamped ? ' (clamped $I>mR^2$)' : '') },
-        { label: '$\\kappa=I/(mR^2)$', value: latexNum(kappa, 2) },
-        { label: '$\\theta(t)$ exact / linear', value: '$' + ((sim.theta * 180) / Math.PI).toFixed(1) + '^\\circ$ / $' + ((sim.theta_lin * 180) / Math.PI).toFixed(1) + '^\\circ$' },
-        { label: 'Traces', value: 'coral = $\\sin\\theta$;  teal dashed = linear $\\theta$' },
-        { label: 'Drag', value: sim.isDragging ? 'setting release angle' : 'drag the body to set $\\theta_0$' }
+        { label: '$\\omega=\\sqrt{mgR/I}$', value: latexNum(omega0, 2, '\\mathrm{rad/s}'), hint: 'Small-angle frequency from $I\\ddot{\\theta}=-mgR\\theta$. $I$ is about the pivot, not the CM.' },
+        { label: '$T=2\\pi/\\omega$', value: latexNum(T0, 3, '\\mathrm{s}'), hint: 'Small-angle period $T=2\\pi\\sqrt{I/(mgR)}$. Exact large-amplitude swings run slower.' },
+        { label: '$L_{\\mathrm{eff}}=I/(mR)$', value: latexNum(Leff, 3, '\\mathrm{m}'), hint: 'Equivalent simple-pendulum length $L_{\\mathrm{eff}}=R+I_{\\mathrm{CM}}/(mR)>R$ for any extended body.' },
+        { label: '$I$ vs $mR^2$', value: iVal + ' / ' + iMinVal + (clamped ? ' (clamped $I>mR^2$)' : ''), hint: 'Parallel-axis: $I=I_{\\mathrm{CM}}+mR^2\\ge mR^2$. If you drag $I$ below $mR^2$ the card clamps it.' },
+        { label: '$\\kappa=I/(mR^2)$', value: latexNum(kappa, 2), hint: 'Inertial factor $\\kappa>1$. Simple pendulum is the $\\kappa=1$ bound; this body is slower than $\\sqrt{g/R}$.' },
+        { label: '$\\theta(t)$ exact / linear', value: '$' + ((sim.theta * 180) / Math.PI).toFixed(1) + '^\\circ$ / $' + ((sim.theta_lin * 180) / Math.PI).toFixed(1) + '^\\circ$', hint: 'Coral integrates $\\ddot{\\theta}=-(mgR/I)\\sin\\theta$; teal uses $\\sin\\theta\\to\\theta$.' },
+        { label: 'Traces', value: 'coral = $\\sin\\theta$;  teal dashed = linear $\\theta$', hint: 'Coral is exact; dashed teal is the SHM the GRE card writes down.' },
+        { label: 'Drag', value: sim.isDragging ? 'setting release angle' : 'drag the body to set $\\theta_0$', hint: 'Drag the body around the pivot to set $\\theta_0$; both models restart from that amplitude.' }
       ]);
+
+      var thDeg48 = ((sim.theta * 180) / Math.PI).toFixed(1);
+      var thLinDeg48 = ((sim.theta_lin * 180) / Math.PI).toFixed(1);
+      var yTop = Math.max(4, armLengthPx - halfBody);
+      var yBot = yTop + 2 * halfBody;
+      var sth = Math.sin(sim.theta);
+      var cth = Math.cos(sim.theta);
+      var sthL = Math.sin(sim.theta_lin);
+      var cthL = Math.cos(sim.theta_lin);
+      var spots148 = [];
+      spots148.push({
+        id: 'pivot',
+        kind: 'circle',
+        x: pivotX,
+        y: pivotY,
+        r: 12,
+        title: 'Pivot',
+        body: 'Fixed axis. $I$ in $\\omega=\\sqrt{mgR/I}$ is about this point, not the CM. $I=' + I.toFixed(3) + '\\,\\mathrm{kg\\,m}^2$.'
+      });
+      spots148.push({
+        id: 'cm',
+        kind: 'circle',
+        x: cmX,
+        y: cmY,
+        r: 12,
+        title: 'Center of mass',
+        body: 'Gravity acts here, a distance $R=' + R.toFixed(2) + '\\,\\mathrm{m}$ from the pivot. Restoring torque $\\tau=-mgR\\sin\\theta$.'
+      });
+      spots148.push({
+        id: 'ghost',
+        kind: 'circle',
+        x: ghostX,
+        y: ghostY,
+        r: 10,
+        title: 'Linear ghost',
+        body: 'Small-angle model $\\ddot{\\theta}=-(mgR/I)\\theta$. Now $\\theta_{\\mathrm{lin}}=' + thLinDeg48 + '^\\circ$ while exact $\\theta=' + thDeg48 + '^\\circ$.'
+      });
+      if (Math.abs(sim.theta) > 0.04) {
+        spots148.push({
+          id: 'arc',
+          kind: 'ring',
+          x: pivotX,
+          y: pivotY,
+          r: arcR,
+          halfW: 8,
+          title: 'Angle $\\theta$',
+          body: 'From the downward vertical. Card formula $\\omega=\\sqrt{mgR/I}$ assumes $\\theta\\ll 1$. Now $\\theta=' + thDeg48 + '^\\circ$.'
+        });
+      }
+      spots148.push({
+        id: 'body',
+        kind: 'segment',
+        x1: pivotX + yTop * sth,
+        y1: pivotY + yTop * cth,
+        x2: pivotX + yBot * sth,
+        y2: pivotY + yBot * cth,
+        halfW: Math.max(8, bodyW * 0.6),
+        title: 'Compound body',
+        body: 'Extended rigid body, $L_{\\mathrm{eff}}=I/(mR)=' + Leff.toFixed(3) + '\\,\\mathrm{m} > R$. $\\kappa=I/(mR^2)=' + kappa.toFixed(2) + '$.'
+      });
+      spots148.push({
+        id: 'ghostBody',
+        kind: 'segment',
+        x1: pivotX + yTop * sthL,
+        y1: pivotY + yTop * cthL,
+        x2: pivotX + yBot * sthL,
+        y2: pivotY + yBot * cthL,
+        halfW: Math.max(7, bodyW * 0.5),
+        title: 'Linear ghost body',
+        body: 'Teal outline of the $\\sin\\theta\\approx\\theta$ motion. At large amplitude it leads the exact coral body.'
+      });
+      spots148.push({
+        id: 'R',
+        kind: 'segment',
+        x1: pivotX,
+        y1: pivotY,
+        x2: cmX,
+        y2: cmY,
+        halfW: 7,
+        title: 'Pivot to CM',
+        body: 'Lever arm $R=' + R.toFixed(2) + '\\,\\mathrm{m}$. A simple pendulum of this length would have $\\omega=\\sqrt{g/R}$, faster than this body.'
+      });
+      PGRE.setVizHotspots(spots148);
     }
   };
 

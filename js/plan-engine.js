@@ -39,7 +39,10 @@ PGRE.weekTasks = function (w) {
   }
   function setTitle(n) {
     var id = pad2(n);
-    return (PGRE.PLAN_SETS && PGRE.PLAN_SETS[id]) || ('Set ' + id);
+    var title = (PGRE.PLAN_SETS && PGRE.PLAN_SETS[id]) || ('Set ' + id);
+    var pack = PGRE.PACKS && PGRE.PACKS[id];
+    if (pack && pack.n) title += ' (n=' + pack.n + ')';
+    return title;
   }
   function localDay(iso) {
     var d = new Date(iso);

@@ -59,7 +59,7 @@ PGRE.store = {
       // { id, mode, topicId, startedAt, endedAt, planned, answered, correct, xp }
       sessions: [],
       // mistake book: qid -> { firstMissedAt, lastMissedAt, lastPick, wrongPicks[],
-      //   misses, solves, srs: { step, due }, archivedAt } — permanent until
+      //   misses, solves, srs: { step, due }, archivedAt, lastTouchedAt } — permanent until
       //   archived; a correct-but-guessed answer may add lucky: true
       mistakes: {},
       // mock-exam sessions (engine: js/exam-engine.js), newest last:
@@ -90,7 +90,14 @@ PGRE.store = {
                   // F5 focus-timer SFX id (js/focus-sound.js catalog). Default
                   // 'off' so existing users are not surprised by sudden sound;
                   // migrate() backfills the key on older saves.
-                  focusSound: 'off' },
+                  focusSound: 'off',
+                  // daily activity target in minutes (js/view-study-time.js).
+                  // Counts all active time (tab heartbeat + focus timer), not
+                  // just focus. 0 = off (editor only, no meter). Default 120;
+                  // migrate() backfills the key on older saves via the nested
+                  // settings pass.
+                  dailyTargetMin: 120 },
+
       // today's progressive formula batch (js/srs.js): rebuilt when the date
       // rolls over — { date, reviewIds: [], newIds: [] }
       formulaDay: null,
@@ -162,10 +169,9 @@ PGRE.store = {
   },
 
   /* Merge a sibling tab's disk state into the live heap. Collections union by
-     identity, counters take max, scalars prefer live (an idle heap is kept
-     current by the storage listener, so live-is-authoritative only ever wins
-     for a change this tab genuinely made). Returns nothing — mutates
-     this.state in place. */
+     identity, counters take max, scalars prefer live. Keyed maps fill missing
+     keys; collisions take the strictly newer record per map, else live.
+     Returns nothing — mutates this.state in place. */
   _mergeFromDisk: function (disk) {
     var st = this.state;
     if (!st || !disk || typeof disk !== 'object') return;
@@ -215,8 +221,36 @@ PGRE.store = {
         }
       }
     }
-    // keyed records: union; on key collision prefer live (this tab's latest
-    // write) except where the field is monotonic.
+    // keyed records: union missing keys; on collision cards prefer higher
+    // reviews then later lastReviewedAt then later due, mistakes higher
+    // misses+solves then later lastTouchedAt, notes/cardNotes later
+    // updatedAt, bookmarks/formulaSuspended later ISO;
+    // questions/topics/plan/flags/migrations stay fill-missing. Else live.
+    function recNewer(map, diskVal, liveVal) {
+      if (map === 'cards') {
+        var dR = (diskVal && diskVal.reviews) || 0, lR = (liveVal && liveVal.reviews) || 0;
+        if (dR > lR) return true;
+        if (dR < lR) return false;
+        var dAt = (diskVal && diskVal.lastReviewedAt) || '', lAt = (liveVal && liveVal.lastReviewedAt) || '';
+        if (dAt > lAt) return true;
+        if (dAt < lAt) return false;
+        return ((diskVal && diskVal.due) || '') > ((liveVal && liveVal.due) || '');
+      }
+      if (map === 'mistakes') {
+        var dN = ((diskVal && diskVal.misses) || 0) + ((diskVal && diskVal.solves) || 0);
+        var lN = ((liveVal && liveVal.misses) || 0) + ((liveVal && liveVal.solves) || 0);
+        if (dN > lN) return true;
+        if (dN < lN) return false;
+        return ((diskVal && diskVal.lastTouchedAt) || '') > ((liveVal && liveVal.lastTouchedAt) || '');
+      }
+      if (map === 'notes' || map === 'cardNotes') {
+        return ((diskVal && diskVal.updatedAt) || '') > ((liveVal && liveVal.updatedAt) || '');
+      }
+      if (map === 'bookmarks' || map === 'formulaSuspended') {
+        return (diskVal || '') > (liveVal || '');
+      }
+      return false;
+    }
     ['questions', 'topics', 'plan', 'mistakes', 'notes', 'bookmarks',
      'flags', 'cards', 'cardNotes', 'formulaSuspended', 'migrations'].forEach(function (k) {
       if (!isObj(disk[k])) return;
@@ -228,7 +262,7 @@ PGRE.store = {
           if (!rt || rt <= tombed[key]) continue;      // stale copy — tombstone wins
           delete tombed[key];                          // newer record = re-add
         }
-        if (!(key in st[k])) st[k][key] = disk[k][key];
+        if (!(key in st[k]) || recNewer(k, disk[k][key], st[k][key])) st[k][key] = disk[k][key];
       }
     });
     for (var tm2 in TOMBED) {
@@ -447,6 +481,12 @@ PGRE.store = {
   migrate: function () {
     var d = this.defaults(), st = this.state;
     for (var k in d) if (!(k in st)) st[k] = d[k];
+    if (st.settings && typeof st.settings === 'object' && !Array.isArray(st.settings)) {
+      if (st.settings.dailyTargetMin === undefined && typeof st.settings.focusDailyMin === 'number') {
+        st.settings.dailyTargetMin = st.settings.focusDailyMin;
+      }
+      delete st.settings.focusDailyMin;
+    }
     ['settings', 'today', 'timer', 'formulaCheckIn', 'streak'].forEach(function (k) {
       if (!st[k] || typeof st[k] !== 'object' || Array.isArray(st[k])) st[k] = d[k];
       for (var kk in d[k]) if (!(kk in st[k])) st[k][kk] = d[k][kk];

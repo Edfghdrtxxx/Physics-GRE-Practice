@@ -272,7 +272,9 @@
   }
 
   function scaledDt(dt, state) {
-    return Math.min(dt || 0.016, 0.05) * simSpeedOf(state);
+    var n = Number(dt);
+    if (!isFinite(n) || n < 0) n = 0.016;
+    return Math.min(n, 0.05) * simSpeedOf(state);
   }
 
   function findVizCanvas(container) {
@@ -498,10 +500,10 @@
       }
     ],
     parameters: [
-      { id: 'm', label: 'Mass ($m$)', min: 0.2, max: 4.0, step: 0.1, default: 1.0, unit: 'kg' },
-      { id: 'k', label: 'Spring Constant ($k$)', min: 2.0, max: 40.0, step: 1.0, default: 16.0, unit: 'N/m' },
-      { id: 'A', label: 'Initial Amplitude ($A$)', min: 0.2, max: 2.0, step: 0.1, default: 1.2, unit: 'm' },
-      { id: 'damping', label: 'Damping Ratio ($\\zeta$)', min: 0.0, max: 0.3, step: 0.01, default: 0.0, unit: '' },
+      { id: 'm', label: 'Mass ($m$)', min: 0.2, max: 4.0, step: 0.1, default: 1.0, unit: 'kg', hint: 'Inertia in $m\\ddot{x}=-kx$. Raising $m$ drops $\\omega_0=\\sqrt{k/m}$ and lengthens $T_0=2\\pi\\sqrt{m/k}$; a finite $k$ on huge $m$ does not pin the mass at rest.' },
+      { id: 'k', label: 'Spring Constant ($k$)', min: 2.0, max: 40.0, step: 1.0, default: 16.0, unit: 'N/m', hint: 'Stiffness of $V=\\tfrac12 k x^2$. Larger $k$ raises $\\omega_0$. Cutting a uniform spring in half doubles $k$, so $\\omega\'=\\sqrt{2}\\,\\omega_0$.' },
+      { id: 'A', label: 'Initial Amplitude ($A$)', min: 0.2, max: 2.0, step: 0.1, default: 1.2, unit: 'm', hint: 'Release from rest at $x=A$, $v=0$. Undamped $E=\\tfrac12 k A^2$ is quadratic in $A$; turning points sit at $\\pm A$.' },
+      { id: 'damping', label: 'Damping Ratio ($\\zeta$)', min: 0.0, max: 0.3, step: 0.01, default: 0.0, unit: '', hint: 'Ratio $\\zeta$ in $\\gamma=2\\zeta\\omega_0$. Zero keeps $E$ fixed so $T$ and $V$ trade at a $\\pi/2$ lag; $\\zeta>0$ drops the $E$ line as the motion spirals in.' },
       SPEED_PARAM
     ],
     challenge: {
@@ -795,17 +797,102 @@
       );
 
       legend('Oscillator', [
-        { label: '$\\omega_0=\\sqrt{k/m}$', value: '$' + omega0.toFixed(2) + '\\,\\mathrm{rad/s}$' },
-        { label: '$T_0=2\\pi/\\omega_0$', value: '$' + (2 * Math.PI / omega0).toFixed(3) + '\\,\\mathrm{s}$' },
-        { label: '$x$', value: '$' + sim.x.toFixed(3) + '\\,\\mathrm{m}$' },
-        { label: '$v$', value: '$' + sim.v.toFixed(3) + '\\,\\mathrm{m/s}$' }
+        { label: '$\\omega_0=\\sqrt{k/m}$', value: '$' + omega0.toFixed(2) + '\\,\\mathrm{rad/s}$', hint: 'Root of $\\ddot{x}+\\omega_0^2 x=0$. Independent of amplitude $A$, and independent of $g$ on a vertical spring (gravity only shifts the equilibrium).' },
+        { label: '$T_0=2\\pi/\\omega_0$', value: '$' + (2 * Math.PI / omega0).toFixed(3) + '\\,\\mathrm{s}$', hint: 'One full cycle $T_0=2\\pi\\sqrt{m/k}$. The GRE trap is writing $2\\pi\\sqrt{k/m}$ or dropping the $2\\pi$.' },
+        { label: '$x$', value: '$' + sim.x.toFixed(3) + '\\,\\mathrm{m}$', hint: 'Displacement from the unstretched point $x=0$. Restoring force is $F=-kx$, always toward the origin.' },
+        { label: '$v$', value: '$' + sim.v.toFixed(3) + '\\,\\mathrm{m/s}$', hint: 'At $x=0$, $|v|$ is maximum and $T=E$. At a turning point $v=0$ and $V=E$.' }
       ]);
       legend('Energy well', [
-        { label: '$T=E-V$', value: '$' + T.toFixed(2) + '\\,\\mathrm{J}$' },
-        { label: '$V=\\tfrac12 k x^2$', value: '$' + V.toFixed(2) + '\\,\\mathrm{J}$' },
-        { label: damping > 1e-6 ? '$E$ ($\\zeta>0$, decaying)' : '$E$ ($\\zeta=0$, conserved)', value: '$' + E.toFixed(2) + '\\,\\mathrm{J}$' },
-        { label: '$x_{\\mathrm{tp}}=\\pm\\sqrt{2E/k}$', value: '$' + (A_E).toFixed(3) + '\\,\\mathrm{m}$' }
+        { label: '$T=E-V$', value: '$' + T.toFixed(2) + '\\,\\mathrm{J}$', hint: 'Kinetic energy is the vertical gap from $V(x)$ up to the $E$ line. This plot is energy, not a physical hill: the mass still moves on the $x$-axis.' },
+        { label: '$V=\\tfrac12 k x^2$', value: '$' + V.toFixed(2) + '\\,\\mathrm{J}$', hint: 'Universal quadratic well near a stable equilibrium. Hooke restoring force is $F=-\\mathrm{d}V/\\mathrm{d}x=-kx$.' },
+        { label: damping > 1e-6 ? '$E$ ($\\zeta>0$, decaying)' : '$E$ ($\\zeta=0$, conserved)', value: '$' + E.toFixed(2) + '\\,\\mathrm{J}$', hint: damping > 1e-6 ? 'Damping drains $E=T+V$, so the turning points shrink and the $E$ line falls as the motion spirals into the origin.' : 'Undamped mechanical energy $T+V=\\tfrac12 k A^2$ is invariant. $T$ and $V$ trade with a $\\pi/2$ phase lag.' },
+        { label: '$x_{\\mathrm{tp}}=\\pm\\sqrt{2E/k}$', value: '$' + (A_E).toFixed(3) + '\\,\\mathrm{m}$', hint: 'Classical turning points where $V=E$ and $v=0$. Allowed motion is $|x|\\le\\sqrt{2E/k}$.' }
       ]);
+
+      var spots139 = [];
+      if (E > 1e-6 && A_E > 1e-4) {
+        var hsXNow = toX(sim.x);
+        var hsYV = toY(V);
+        var hsYTop = toY(E);
+        if (hsYV > hsYTop + 1) {
+          spots139.push({
+            id: 'KE',
+            kind: 'rect',
+            x: hsXNow - 8,
+            y: hsYTop,
+            w: 16,
+            h: hsYV - hsYTop,
+            title: 'Kinetic gap $T=E-V$',
+            body: '$T=' + T.toFixed(2) + '\\,\\mathrm{J}$ at this $x$. Maximum at $x=0$; zero at the turning points $\\pm\\sqrt{2E/k}$.'
+          });
+        }
+        spots139.push({
+          id: 'Eline',
+          kind: 'segment',
+          x1: toX(-A_E),
+          y1: hsYTop,
+          x2: toX(A_E),
+          y2: hsYTop,
+          halfW: 7,
+          title: 'Total energy $E$',
+          body: '$E=T+V=' + E.toFixed(2) + '\\,\\mathrm{J}$. Turning points at $x=\\pm ' + A_E.toFixed(3) + '\\,\\mathrm{m}$.' + (damping > 1e-6 ? ' Damping is lowering this line.' : ' Conserved for $\\zeta=0$.')
+        });
+      }
+      if (fCap.ok && Math.abs(forceVal) > 0.08) {
+        spots139.push({
+          id: 'force',
+          kind: 'segment',
+          x1: fFrom,
+          y1: massY - massSize / 2 - 14,
+          x2: fFrom + fCap.dx,
+          y2: massY - massSize / 2 - 14,
+          halfW: 8,
+          title: 'Restoring force $F=-kx$',
+          body: '$F=' + forceVal.toFixed(2) + '\\,\\mathrm{N}$, always opposite $x$. Newton: $m\\ddot{x}=F$ with $m=' + m.toFixed(2) + '\\,\\mathrm{kg}$.'
+        });
+      }
+      spots139.push(
+        {
+          id: 'mass',
+          kind: 'circle',
+          x: massX,
+          y: massY,
+          r: massSize * 0.62,
+          title: 'Mass $m$',
+          body: 'Moves on the rail under $m\\ddot{x}=-kx$. Now $x=' + sim.x.toFixed(3) + '\\,\\mathrm{m}$, $v=' + sim.v.toFixed(3) + '\\,\\mathrm{m/s}$. Drag to set a new amplitude.'
+        },
+        {
+          id: 'wellDot',
+          kind: 'circle',
+          x: toX(sim.x),
+          y: toY(V),
+          r: 10,
+          title: 'State on $V(x)$',
+          body: 'Same $x$ as the mass, plotted at height $V=\\tfrac12 k x^2=' + V.toFixed(2) + '\\,\\mathrm{J}$. The gold $E$ line sits at $E=' + E.toFixed(2) + '\\,\\mathrm{J}$.'
+        },
+        {
+          id: 'eq',
+          kind: 'segment',
+          x1: originX,
+          y1: vZeroY,
+          x2: originX,
+          y2: railY + 6,
+          halfW: 8,
+          title: 'Equilibrium $x=0$',
+          body: 'Unstretched point: $F=0$, $V=0$, and $|v|$ is maximum. $\\omega_0=\\sqrt{k/m}=' + omega0.toFixed(2) + '\\,\\mathrm{rad/s}$ is set here, independent of $A$.'
+        },
+        {
+          id: 'well',
+          kind: 'rect',
+          x: wellX,
+          y: wellY,
+          w: wellW,
+          h: wellH,
+          title: 'Energy well $V(x)$',
+          body: 'Vertical is energy, not height. $V=\\tfrac12 k x^2$ (coral). Allowed region is $V\\le E$; $T=E-V$ is the gap. $\\omega_0=' + omega0.toFixed(2) + '\\,\\mathrm{rad/s}$.'
+        }
+      );
+      PGRE.setVizHotspots(spots139);
     }
   };
 
@@ -887,10 +974,10 @@
       }
     ],
     parameters: [
-      { id: 'omega', label: 'Angular Frequency ($\\omega$)', min: 0.5, max: 5.0, step: 0.1, default: 2.0, unit: 'rad/s' },
-      { id: 'amplitude', label: 'Amplitude ($A_0$)', min: 0.5, max: 2.5, step: 0.1, default: 1.5, unit: 'm' },
-      { id: 'phase', label: 'Initial Phase ($\\phi_0$)', min: -3.1, max: 3.1, step: 0.1, default: 0.0, unit: 'rad' },
-      { id: 'decay', label: 'Decay Constant ($\\gamma$)', min: 0.0, max: 0.5, step: 0.02, default: 0.0, unit: 's⁻¹' },
+      { id: 'omega', label: 'Angular Frequency ($\\omega$)', min: 0.5, max: 5.0, step: 0.1, default: 2.0, unit: 'rad/s', hint: 'Rotation rate of the phasor $z$. Physical $x=A_0\\cos(\\omega t+\\phi_0)$ shares this $\\omega$; the period is $T=2\\pi/\\omega$.' },
+      { id: 'amplitude', label: 'Amplitude ($A_0$)', min: 0.5, max: 2.5, step: 0.1, default: 1.5, unit: 'm', hint: 'Phasor length $|\\tilde{A}|=A_0$ when $\\gamma=0$. Drag the tip to set $A_0$; the observable $x=\\mathrm{Re}(z)$ never exceeds $A_0 e^{-\\gamma t}$.' },
+      { id: 'phase', label: 'Initial Phase ($\\phi_0$)', min: -3.1, max: 3.1, step: 0.1, default: 0.0, unit: 'rad', hint: 'Argument of $\\tilde{A}=A_0 e^{i\\phi_0}$. $\\phi_0=0$ is release from rest at $+A_0$; $\\phi_0=-\\pi/2$ is a kick through the origin.' },
+      { id: 'decay', label: 'Decay Constant ($\\gamma$)', min: 0.0, max: 0.5, step: 0.02, default: 0.0, unit: 's⁻¹', hint: 'Envelope of $z(t)=A_0 e^{-\\gamma t}e^{i(\\omega t+\\phi_0)}$. Zero keeps a circle; $\\gamma>0$ draws a log spiral inward. Physical $x$ is still $\\mathrm{Re}(z)$.' },
       SPEED_PARAM
     ],
     challenge: {
@@ -1000,13 +1087,17 @@
       var v_val = -decay * x_val - omega * y_val;
       var a_val = (decay * decay - omega * omega) * x_val + 2 * decay * omega * y_val;
 
-      sim.waveHistory.push({ t: sim.t, x: x_val });
-      if (sim.waveHistory.length > sim.maxWaveLen) sim.waveHistory.shift();
-      if (decay > 0.005) {
-        sim.phasorTrail.push({ x: x_val, y: y_val });
-        if (sim.phasorTrail.length > 200) sim.phasorTrail.shift();
-      } else {
-        sim.phasorTrail = [];
+      // One sample per advanced frame; a paused frame (dt = 0) must not scroll the trace.
+      var lastSample = sim.waveHistory.length ? sim.waveHistory[sim.waveHistory.length - 1] : null;
+      if (!lastSample || lastSample.t !== sim.t) {
+        sim.waveHistory.push({ t: sim.t, x: x_val });
+        if (sim.waveHistory.length > sim.maxWaveLen) sim.waveHistory.shift();
+        if (decay > 0.005) {
+          sim.phasorTrail.push({ x: x_val, y: y_val });
+          if (sim.phasorTrail.length > 200) sim.phasorTrail.shift();
+        } else {
+          sim.phasorTrail = [];
+        }
       }
 
       stageFill(ctx, width, height);
@@ -1160,14 +1251,86 @@
       ctx.restore();
 
       legend('Phasor', [
-        { label: '$\\omega$', value: '$' + omega.toFixed(2) + '\\,\\mathrm{rad/s}$' },
-        { label: '$\\theta(t)=\\omega t+\\phi_0$', value: '$' + wrapAngle(theta).toFixed(2) + '\\,\\mathrm{rad}$' },
-        { label: '$|z|=A_0 e^{-\\gamma t}$', value: '$' + envelope.toFixed(2) + '\\,\\mathrm{m}$' }
+        { label: '$\\omega$', value: '$' + omega.toFixed(2) + '\\,\\mathrm{rad/s}$', hint: 'Rotation rate of $z$ in the complex plane. Velocity is $\\dot{z}=i\\omega z$, so $v$ leads $x$ by $\\pi/2$.' },
+        { label: '$\\theta(t)=\\omega t+\\phi_0$', value: '$' + wrapAngle(theta).toFixed(2) + '\\,\\mathrm{rad}$', hint: 'Instantaneous argument of $z$. Physical $x=|z|\\cos\\theta$; acceleration is antiparallel ($\\theta+\\pi$) when $\\gamma=0$.' },
+        { label: '$|z|=A_0 e^{-\\gamma t}$', value: '$' + envelope.toFixed(2) + '\\,\\mathrm{m}$', hint: 'Phasor length. Constant on the circle when $\\gamma=0$; $A_0 e^{-\\gamma t}$ when damped.' }
       ]);
       legend('Projection', [
-        { label: '$x=\\mathrm{Re}(z)$', value: '$' + x_val.toFixed(3) + '\\,\\mathrm{m}$' },
-        { label: '$v=\\dot{x}$', value: '$' + v_val.toFixed(3) + '\\,\\mathrm{m/s}$' },
-        { label: '$a=\\ddot{x}$', value: '$' + a_val.toFixed(3) + '\\,\\mathrm{m/s}^2$' }
+        { label: '$x=\\mathrm{Re}(z)$', value: '$' + x_val.toFixed(3) + '\\,\\mathrm{m}$', hint: 'The GRE observable is $\\mathrm{Re}(z)$, not $|z|$. Energy uses $[\\mathrm{Re}(z)]^2$, never $\\mathrm{Re}(z^2)$.' },
+        { label: '$v=\\dot{x}$', value: '$' + v_val.toFixed(3) + '\\,\\mathrm{m/s}$', hint: 'Real part of $i\\omega z$ (plus the $\\gamma$ decay term). It is $90^\\circ$ ahead of $x$: when $x$ peaks, $v=0$.' },
+        { label: '$a=\\ddot{x}$', value: '$' + a_val.toFixed(3) + '\\,\\mathrm{m/s}^2$', hint: 'When $\\gamma=0$, $a=-\\omega^2 x$: acceleration is $180^\\circ$ out of phase with displacement (Hooke restoring).' }
+      ]);
+
+      PGRE.setVizHotspots([
+        {
+          id: 'tip',
+          kind: 'circle',
+          x: tipX,
+          y: tipY,
+          r: 10,
+          title: 'Phasor tip $z(t)$',
+          body: '$z=|z|e^{i\\theta}$ with $|z|=' + envelope.toFixed(2) + '\\,\\mathrm{m}$ and $\\theta=' + wrapAngle(theta).toFixed(2) + '\\,\\mathrm{rad}$. Drag to set $A_0$ and $\\phi_0$.'
+        },
+        {
+          id: 'proj',
+          kind: 'circle',
+          x: tipX,
+          y: cy,
+          r: 10,
+          title: 'Real projection $x=\\mathrm{Re}(z)$',
+          body: 'Physical coordinate $x=' + x_val.toFixed(3) + '\\,\\mathrm{m}$. Energy uses $[\\mathrm{Re}(z)]^2$, not $\\mathrm{Re}(z^2)$.'
+        },
+        {
+          id: 'waveDot',
+          kind: 'circle',
+          x: curWaveX,
+          y: curWaveY,
+          r: 9,
+          title: 'Now on $x(t)$',
+          body: 'Same $x=' + x_val.toFixed(3) + '\\,\\mathrm{m}$ copied onto the time trace. $v=' + v_val.toFixed(3) + '\\,\\mathrm{m/s}$.'
+        },
+        {
+          id: 'z',
+          kind: 'segment',
+          x1: cx,
+          y1: cy,
+          x2: tipX,
+          y2: tipY,
+          halfW: 8,
+          title: 'Phasor $z(t)$',
+          body: 'Rotates at $\\omega=' + omega.toFixed(2) + '\\,\\mathrm{rad/s}$. $\\dot{z}=i\\omega z$ so velocity leads $x$ by $\\pi/2$; $\\ddot{z}=-\\omega^2 z$.'
+        },
+        {
+          id: 'drop',
+          kind: 'segment',
+          x1: tipX,
+          y1: tipY,
+          x2: tipX,
+          y2: cy,
+          halfW: 7,
+          title: 'Drop to the real axis',
+          body: 'The shadow of $z$ on $\\mathrm{Re}$. That shadow is $x(t)$, copied to the trace on the right.'
+        },
+        {
+          id: 'circle',
+          kind: 'ring',
+          x: cx,
+          y: cy,
+          r: Math.max(4, envelope * scale),
+          halfW: 8,
+          title: 'Phasor circle $|z|$',
+          body: 'Radius $A_0 e^{-\\gamma t}=' + envelope.toFixed(2) + '\\,\\mathrm{m}$. Uniform circular motion when $\\gamma=0$; a log spiral when $\\gamma>0$.'
+        },
+        {
+          id: 'xt',
+          kind: 'rect',
+          x: waveX,
+          y: waveY,
+          w: waveW,
+          h: waveH,
+          title: 'Trace $x(t)=\\mathrm{Re}(z)$',
+          body: '$x=A_0 e^{-\\gamma t}\\cos(\\omega t+\\phi_0)$. Now $x=' + x_val.toFixed(3) + '\\,\\mathrm{m}$ at $t=' + sim.t.toFixed(2) + '\\,\\mathrm{s}$.'
+        }
       ]);
     }
   };
@@ -1250,15 +1413,15 @@
       }
     ],
     parameters: [
-      { id: 'm', label: 'Mass $m_1=m_2$ ($m$)', min: 0.2, max: 3.0, step: 0.1, default: 1.0, unit: 'kg' },
-      { id: 'k_wall', label: 'Wall Spring ($k$)', min: 2.0, max: 25.0, step: 1.0, default: 8.0, unit: 'N/m' },
-      { id: 'k_couple', label: 'Coupling Spring ($k_c$)', min: 0.0, max: 25.0, step: 1.0, default: 6.0, unit: 'N/m' },
+      { id: 'm', label: 'Mass $m_1=m_2$ ($m$)', min: 0.2, max: 3.0, step: 0.1, default: 1.0, unit: 'kg', hint: 'Equal masses. Both $\\omega_1=\\sqrt{k/m}$ and $\\omega_2=\\sqrt{(k+2k_c)/m}$ fall as $1/\\sqrt{m}$.' },
+      { id: 'k_wall', label: 'Wall Spring ($k$)', min: 2.0, max: 25.0, step: 1.0, default: 8.0, unit: 'N/m', hint: 'Outer springs. They set $\\omega_1=\\sqrt{k/m}$ completely: in the symmetric mode the coupler is idle, so $\\omega_1$ does not depend on $k_c$.' },
+      { id: 'k_couple', label: 'Coupling Spring ($k_c$)', min: 0.0, max: 25.0, step: 1.0, default: 6.0, unit: 'N/m', hint: 'Raises only the anti-phase root. When $x_1=-x_2$ the coupler stretches by $2x$, giving the factor of $2$ in $k+2k_c$. At $k_c=0$, $\\omega_1=\\omega_2$ and there are no beats.' },
       { id: 'mode', label: 'Normal Mode', type: 'select', options: [
         { value: 'beat', label: 'Beat (m1 released)' },
         { value: 'in-phase', label: 'In-phase (symmetric)' },
         { value: 'anti-phase', label: 'Anti-phase (antisymmetric)' }
-      ], default: 'beat' },
-      { id: 'damping', label: 'Damping Ratio ($\\zeta$)', min: 0.0, max: 0.1, step: 0.005, default: 0.0, unit: '' },
+      ], default: 'beat', hint: 'Beat (one mass released) fills a $(Q_1,Q_2)$ rectangle. In-phase is a line on $Q_1$ ($k_c$ idle); anti-phase is a line on $Q_2$ (the factor of $2$ in $k+2k_c$).' },
+      { id: 'damping', label: 'Damping Ratio ($\\zeta$)', min: 0.0, max: 0.1, step: 0.005, default: 0.0, unit: '', hint: 'Light $\\zeta$ decays both normal coordinates. Beats remain visible while the Lissajous figure shrinks.' },
       SPEED_PARAM
     ],
     challenge: {
@@ -1545,16 +1708,132 @@
       inkLabel(ctx, 'Q2', qCx + 12, qY + 14, { color: MUTED, font: fontSans(11), align: 'left', pad: true });
 
       legend('Normal modes', [
-        { label: '$\\omega_1=\\sqrt{k/m}$ (in-phase)', value: '$' + omega1.toFixed(2) + '\\,\\mathrm{rad/s}$' },
-        { label: '$Q_1=(x_1+x_2)/\\sqrt{2}$', value: '$' + Q1now.toFixed(2) + '\\,\\mathrm{m}$' },
-        { label: '$\\omega_2=\\sqrt{(k+2k_c)/m}$ (anti-phase)', value: '$' + omega2.toFixed(2) + '\\,\\mathrm{rad/s}$' },
-        { label: '$Q_2=(x_1-x_2)/\\sqrt{2}$', value: '$' + Q2now.toFixed(2) + '\\,\\mathrm{m}$' },
-        { label: '$\\omega_{\\mathrm{beat}}=|\\omega_2-\\omega_1|$', value: '$' + Math.abs(omega2 - omega1).toFixed(2) + '\\,\\mathrm{rad/s}$' },
-        { label: 'Mode', value: kc < 1e-9 ? 'uncoupled ($k_c=0$)' : '$\\text{' + mode + '}$' }
+        { label: '$\\omega_1=\\sqrt{k/m}$ (in-phase)', value: '$' + omega1.toFixed(2) + '\\,\\mathrm{rad/s}$', hint: 'Symmetric eigenfrequency. $x_1=x_2$ leaves $k_c$ unstretched, so $\\omega_1=\\sqrt{k/m}$ with no $k_c$ in it.' },
+        { label: '$Q_1=(x_1+x_2)/\\sqrt{2}$', value: '$' + Q1now.toFixed(2) + '\\,\\mathrm{m}$', hint: 'In-phase normal coordinate. Independent SHM at $\\omega_1$. A line along $Q_1$ is a pure symmetric mode.' },
+        { label: '$\\omega_2=\\sqrt{(k+2k_c)/m}$ (anti-phase)', value: '$' + omega2.toFixed(2) + '\\,\\mathrm{rad/s}$', hint: 'Anti-phase eigenfrequency. Relative stretch $2x$ puts $2k_c$ in the effective spring. GRE trap: forgetting that factor of $2$.' },
+        { label: '$Q_2=(x_1-x_2)/\\sqrt{2}$', value: '$' + Q2now.toFixed(2) + '\\,\\mathrm{m}$', hint: 'Difference mode. Independent SHM at $\\omega_2$. A line along $Q_2$ is pure anti-phase.' },
+        { label: '$\\omega_{\\mathrm{beat}}=|\\omega_2-\\omega_1|$', value: '$' + Math.abs(omega2 - omega1).toFixed(2) + '\\,\\mathrm{rad/s}$', hint: 'Envelope of energy exchange between the two masses. Zero when $k_c=0$ (degenerate frequencies, no transfer).' },
+        { label: 'Mode', value: kc < 1e-9 ? 'uncoupled ($k_c=0$)' : '$\\text{' + mode + '}$', hint: 'Current excitation. Dragging a mass writes a general superposition of both $Q$s; a pure-mode selector starts on one axis.' }
       ]);
       legend('Mode energy', [
-        { label: '$E_{Q_1}=\\tfrac12 m\\dot Q_1^2+\\tfrac12 k Q_1^2$', value: '$' + EQ1.toFixed(2) + '\\,\\mathrm{J}$' },
-        { label: '$E_{Q_2}=\\tfrac12 m\\dot Q_2^2+\\tfrac12(k+2k_c)Q_2^2$', value: '$' + EQ2.toFixed(2) + '\\,\\mathrm{J}$' }
+        { label: '$E_{Q_1}=\\tfrac12 m\\dot Q_1^2+\\tfrac12 k Q_1^2$', value: '$' + EQ1.toFixed(2) + '\\,\\mathrm{J}$', hint: 'Energy stored in the in-phase oscillator. Conserved (undamped) and does not leak into $Q_2$.' },
+        { label: '$E_{Q_2}=\\tfrac12 m\\dot Q_2^2+\\tfrac12(k+2k_c)Q_2^2$', value: '$' + EQ2.toFixed(2) + '\\,\\mathrm{J}$', hint: 'Energy in the anti-phase oscillator. For a beat, $E_{Q_1}$ and $E_{Q_2}$ stay separately constant while $x_1,x_2$ trade amplitude.' }
+      ]);
+
+      var wallH = floorY - (centerY - 50) + 4;
+      PGRE.setVizHotspots([
+        {
+          id: 'm1',
+          kind: 'circle',
+          x: m1X,
+          y: centerY,
+          r: blockSize * 0.62,
+          title: 'Mass $m_1$',
+          body: '$x_1=' + sim.x1.toFixed(3) + '\\,\\mathrm{m}$, $v_1=' + sim.v1.toFixed(3) + '\\,\\mathrm{m/s}$. Drag to write a new superposition of $Q_1$ and $Q_2$.'
+        },
+        {
+          id: 'm2',
+          kind: 'circle',
+          x: m2X,
+          y: centerY,
+          r: blockSize * 0.62,
+          title: 'Mass $m_2$',
+          body: '$x_2=' + sim.x2.toFixed(3) + '\\,\\mathrm{m}$, $v_2=' + sim.v2.toFixed(3) + '\\,\\mathrm{m/s}$. Equal mass $m=' + m.toFixed(2) + '\\,\\mathrm{kg}$.'
+        },
+        {
+          id: 'qDot',
+          kind: 'circle',
+          x: qCx + Q1now * qS,
+          y: qCy - Q2now * qS,
+          r: 9,
+          title: 'State $(Q_1,Q_2)$',
+          body: '$Q_1=' + Q1now.toFixed(2) + '\\,\\mathrm{m}$ (in-phase), $Q_2=' + Q2now.toFixed(2) + '\\,\\mathrm{m}$ (anti-phase). A pure mode is a line along one axis.'
+        },
+        {
+          id: 'springL',
+          kind: 'segment',
+          x1: wallLeftX + wallW,
+          y1: centerY,
+          x2: m1X - blockSize / 2,
+          y2: centerY,
+          halfW: 8,
+          title: 'Wall spring $k$ (left)',
+          body: 'Force $-k x_1$ on $m_1$. Sets $\\omega_1=\\sqrt{k/m}=' + omega1.toFixed(2) + '\\,\\mathrm{rad/s}$ with no $k_c$ in it.'
+        },
+        {
+          id: 'springC',
+          kind: 'segment',
+          x1: m1X + blockSize / 2,
+          y1: centerY,
+          x2: m2X - blockSize / 2,
+          y2: centerY,
+          halfW: 8,
+          title: 'Coupling spring $k_c$',
+          body: 'Force $\\pm k_c(x_2-x_1)$. Idle in the symmetric mode ($x_1=x_2$); double stretch $2x$ in anti-phase, hence $\\omega_2=\\sqrt{(k+2k_c)/m}=' + omega2.toFixed(2) + '\\,\\mathrm{rad/s}$.'
+        },
+        {
+          id: 'springR',
+          kind: 'segment',
+          x1: m2X + blockSize / 2,
+          y1: centerY,
+          x2: wallRightX,
+          y2: centerY,
+          halfW: 8,
+          title: 'Wall spring $k$ (right)',
+          body: 'Force $-k x_2$ on $m_2$. Same $k=' + k.toFixed(1) + '\\,\\mathrm{N/m}$ as the left wall spring.'
+        },
+        {
+          id: 'eq1',
+          kind: 'segment',
+          x1: eq1X,
+          y1: pad + 18,
+          x2: eq1X,
+          y2: floorY + 6,
+          halfW: 7,
+          title: 'Equilibrium of $m_1$',
+          body: 'Unstretched seat of $m_1$. $x_1$ is measured from here. Now $x_1=' + sim.x1.toFixed(3) + '\\,\\mathrm{m}$.'
+        },
+        {
+          id: 'eq2',
+          kind: 'segment',
+          x1: eq2X,
+          y1: pad + 18,
+          x2: eq2X,
+          y2: floorY + 6,
+          halfW: 7,
+          title: 'Equilibrium of $m_2$',
+          body: 'Unstretched seat of $m_2$. $x_2$ is measured from here. Now $x_2=' + sim.x2.toFixed(3) + '\\,\\mathrm{m}$.'
+        },
+        {
+          id: 'wallL',
+          kind: 'rect',
+          x: wallLeftX,
+          y: centerY - 50,
+          w: wallW,
+          h: wallH,
+          title: 'Left wall',
+          body: 'Fixed end of the left $k$ spring. The two walls define the lab frame in which $x_1$ and $x_2$ are measured.'
+        },
+        {
+          id: 'wallR',
+          kind: 'rect',
+          x: wallRightX,
+          y: centerY - 50,
+          w: wallW,
+          h: wallH,
+          title: 'Right wall',
+          body: 'Fixed end of the right $k$ spring. Normal modes are standing patterns between these two walls.'
+        },
+        {
+          id: 'qPlot',
+          kind: 'rect',
+          x: qX,
+          y: qY,
+          w: qSide,
+          h: qSide,
+          title: 'Normal-mode plane',
+          body: 'Axes $Q_1=(x_1+x_2)/\\sqrt{2}$ and $Q_2=(x_1-x_2)/\\sqrt{2}$. Beat ($k_c>0$) fills a rectangle; $k_c=0$ makes $\\omega_1=\\omega_2$ and energy does not transfer.'
+        }
       ]);
     }
   };
@@ -1641,10 +1920,10 @@
       }
     ],
     parameters: [
-      { id: 'omega0', label: 'Natural Frequency ($\\omega_0$)', min: 1.5, max: 8.0, step: 0.1, default: 4.0, unit: 'rad/s' },
-      { id: 'beta', label: 'Damping ($\\beta=b/2m$)', min: 0.05, max: 6.0, step: 0.05, default: 0.80, unit: 'rad/s' },
-      { id: 'omega', label: 'Drive Frequency ($\\omega$)', min: 0.05, max: 16.0, step: 0.05, default: 3.80, unit: 'rad/s' },
-      { id: 'f0m', label: 'Drive Strength ($F_0/m$)', min: 1.0, max: 20.0, step: 0.5, default: 8.0, unit: 'm/s²' },
+      { id: 'omega0', label: 'Natural Frequency ($\\omega_0$)', min: 1.5, max: 8.0, step: 0.1, default: 4.0, unit: 'rad/s', hint: 'Undamped $\\sqrt{k/m}$. Velocity and time-averaged power peak exactly here; displacement amplitude does not.' },
+      { id: 'beta', label: 'Damping ($\\beta=b/2m$)', min: 0.05, max: 6.0, step: 0.05, default: 0.80, unit: 'rad/s', hint: 'Amplitude peak sits at $\\omega_R=\\sqrt{\\omega_0^2-2\\beta^2}$ only if $\\beta<\\omega_0/\\sqrt{2}$. Heavier damping kills the peak; that is not the free critical line $\\beta=\\omega_0$.' },
+      { id: 'omega', label: 'Drive Frequency ($\\omega$)', min: 0.05, max: 16.0, step: 0.05, default: 3.80, unit: 'rad/s', hint: 'Frequency of $F_0\\cos\\omega t$. Drag the gold marker on $A(\\omega)$. Steady state is $x=A(\\omega)\\cos(\\omega t-\\varphi)$.' },
+      { id: 'f0m', label: 'Drive Strength ($F_0/m$)', min: 1.0, max: 20.0, step: 0.5, default: 8.0, unit: 'm/s²', hint: 'Scales $A(\\omega)$ uniformly. It does not shift $\\omega_R$: the peak location is set only by $\\omega_0$ and $\\beta$.' },
       SPEED_PARAM
     ],
     challenge: {
@@ -1909,17 +2188,107 @@
       );
 
       legend('Resonance', [
-        { label: '$\\omega_R=\\sqrt{\\omega_0^2-2\\beta^2}$', value: hasRes ? '$' + wR.toFixed(2) + '\\,\\mathrm{rad/s}$' : 'none ($\\beta\\ge\\omega_0/\\sqrt{2}$)' },
-        { label: '$\\omega_d=\\sqrt{\\omega_0^2-\\beta^2}$', value: hasWd ? '$' + wd.toFixed(2) + '\\,\\mathrm{rad/s}$' : 'none' },
-        { label: '$\\omega_0$', value: '$' + w0.toFixed(2) + '\\,\\mathrm{rad/s}$' },
-        { label: '$\\omega$', value: '$' + omega.toFixed(2) + '\\,\\mathrm{rad/s}$' },
-        { label: '$A(\\omega)$', value: '$' + Anow.toFixed(3) + '$' },
-        { label: '$\\varphi=\\mathrm{atan2}(2\\beta\\omega,\\,\\omega_0^2-\\omega^2)$', value: '$' + phi.toFixed(2) + '\\,\\mathrm{rad}$' }
+        { label: '$\\omega_R=\\sqrt{\\omega_0^2-2\\beta^2}$', value: hasRes ? '$' + wR.toFixed(2) + '\\,\\mathrm{rad/s}$' : 'none ($\\beta\\ge\\omega_0/\\sqrt{2}$)', hint: 'Amplitude-resonance root. Real only for $\\beta<\\omega_0/\\sqrt{2}$. Always $\\omega_R<\\omega_d<\\omega_0$ when all three exist.' },
+        { label: '$\\omega_d=\\sqrt{\\omega_0^2-\\beta^2}$', value: hasWd ? '$' + wd.toFixed(2) + '\\,\\mathrm{rad/s}$' : 'none', hint: 'Free damped frequency of the transient. Not the driven amplitude peak (that one has a $2\\beta^2$ shift, not $\\beta^2$).' },
+        { label: '$\\omega_0$', value: '$' + w0.toFixed(2) + '\\,\\mathrm{rad/s}$', hint: 'Bare $\\sqrt{k/m}$. Velocity amplitude $\\omega A(\\omega)$ and time-averaged power peak exactly here for any $\\beta$.' },
+        { label: '$\\omega$', value: '$' + omega.toFixed(2) + '\\,\\mathrm{rad/s}$', hint: 'Instantaneous drive. The gold marker is the operating point on $A(\\omega)$; drag it along the curve.' },
+        { label: '$A(\\omega)$', value: '$' + Anow.toFixed(3) + '$', hint: 'Steady-state displacement amplitude $(F_0/m)/\\sqrt{(\\omega_0^2-\\omega^2)^2+4\\beta^2\\omega^2}$.' },
+        { label: '$\\varphi=\\mathrm{atan2}(2\\beta\\omega,\\,\\omega_0^2-\\omega^2)$', value: '$' + phi.toFixed(2) + '\\,\\mathrm{rad}$', hint: 'Phase lag of $x$ behind the drive. $\\varphi\\to 0$ as $\\omega\\to 0$, $\\varphi=\\pi/2$ at $\\omega_0$, $\\varphi\\to\\pi$ as $\\omega\\to\\infty$.' }
       ]);
       legend('Peak', [
-        { label: hasRes ? '$A_{\\max}=(F_0/m)/(2\\beta\\omega_d)$' : '$A(0)=(F_0/m)/\\omega_0^2$', value: '$' + Amax.toFixed(3) + '$' },
-        { label: '$\\beta/\\omega_0$', value: '$' + (beta / w0).toFixed(3) + '$' }
+        { label: hasRes ? '$A_{\\max}=(F_0/m)/(2\\beta\\omega_d)$' : '$A(0)=(F_0/m)/\\omega_0^2$', value: '$' + Amax.toFixed(3) + '$', hint: hasRes ? 'Peak height when $\\omega_R$ exists. Diverges as $\\beta\\to 0$; the $F_0/m$ prefactor does not move $\\omega_R$.' : 'No interior peak: $A(\\omega)$ falls from the static value $A(0)=(F_0/m)/\\omega_0^2=F_0/k$.' },
+        { label: '$\\beta/\\omega_0$', value: '$' + (beta / w0).toFixed(3) + '$', hint: 'Damping ratio. The amplitude peak vanishes at $1/\\sqrt{2}\\approx 0.707$, not at critical damping $\\beta/\\omega_0=1$.' }
       ]);
+
+      var spots145 = [
+        {
+          id: 'drive',
+          kind: 'circle',
+          x: toX(omega),
+          y: toY(Anow),
+          r: 12,
+          title: 'Drive $\\omega$ on $A(\\omega)$',
+          body: 'Operating point $\\omega=' + omega.toFixed(2) + '\\,\\mathrm{rad/s}$, $A=' + Anow.toFixed(3) + '$, $\\varphi=' + phi.toFixed(2) + '\\,\\mathrm{rad}$. Drag along the curve.'
+        },
+        {
+          id: 'mass',
+          kind: 'circle',
+          x: xPix,
+          y: centerY,
+          r: blockSize * 0.62,
+          title: 'Mass $m$ (steady state)',
+          body: '$x=A\\cos(\\omega t-\\varphi)=' + xNow.toFixed(3) + '$ with $A=' + Anow.toFixed(3) + '$. Transient free motion at $\\omega_d$ has already died.'
+        },
+        {
+          id: 'spring',
+          kind: 'segment',
+          x1: wallX + wallW,
+          y1: centerY,
+          x2: xPix - blockSize / 2,
+          y2: centerY,
+          halfW: 8,
+          title: 'Spring $k$',
+          body: 'Restoring $-kx$ plus damping $b\\dot{x}$ and drive $F_0\\cos\\omega t$. Natural $\\omega_0=\\sqrt{k/m}=' + w0.toFixed(2) + '\\,\\mathrm{rad/s}$.'
+        }
+      ];
+      if (hasRes) {
+        spots145.unshift({
+          id: 'peak',
+          kind: 'circle',
+          x: toX(wR),
+          y: toY(Aof(wR)),
+          r: 10,
+          title: 'Amplitude peak $\\omega_R$',
+          body: '$\\omega_R=\\sqrt{\\omega_0^2-2\\beta^2}=' + wR.toFixed(2) + '\\,\\mathrm{rad/s}$, $A_{\\max}=' + Amax.toFixed(3) + '$. Not $\\omega_0$ and not $\\omega_d' + (hasWd ? ('=' + wd.toFixed(2)) : '') + '$.'
+        });
+      }
+      if (hasWd) {
+        spots145.push({
+          id: 'wd',
+          kind: 'segment',
+          x1: toX(wd),
+          y1: plotY,
+          x2: toX(wd),
+          y2: plotY + plotH,
+          halfW: 6,
+          title: 'Damped natural $\\omega_d$',
+          body: 'Free-decay frequency $\\sqrt{\\omega_0^2-\\beta^2}=' + wd.toFixed(2) + '\\,\\mathrm{rad/s}$. Transient only; the driven peak is at $\\omega_R$, not here.'
+        });
+      }
+      spots145.push(
+        {
+          id: 'w0',
+          kind: 'segment',
+          x1: toX(w0),
+          y1: plotY,
+          x2: toX(w0),
+          y2: plotY + plotH,
+          halfW: 6,
+          title: 'Natural $\\omega_0$',
+          body: 'Bare $\\sqrt{k/m}=' + w0.toFixed(2) + '\\,\\mathrm{rad/s}$. Velocity and time-averaged power peak exactly here, independent of $\\beta$.'
+        },
+        {
+          id: 'wall',
+          kind: 'rect',
+          x: wallX,
+          y: centerY - 44,
+          w: wallW,
+          h: floorY - (centerY - 44) + 4,
+          title: 'Fixed wall',
+          body: 'Immobile end of the spring. The strip shows the particular solution at the chosen drive $\\omega$, not the transient.'
+        },
+        {
+          id: 'curve',
+          kind: 'rect',
+          x: plotX,
+          y: plotY,
+          w: plotW,
+          h: plotH,
+          title: 'Amplitude $A(\\omega)$',
+          body: '$A=(F_0/m)/\\sqrt{(\\omega_0^2-\\omega^2)^2+4\\beta^2\\omega^2}$. Peak at $\\omega_R=\\sqrt{\\omega_0^2-2\\beta^2}$ only if $\\beta<\\omega_0/\\sqrt{2}$. Now $A(' + omega.toFixed(2) + ')=' + Anow.toFixed(3) + '$.'
+        }
+      );
+      PGRE.setVizHotspots(spots145);
     }
   };
 

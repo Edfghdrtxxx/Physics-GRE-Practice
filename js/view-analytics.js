@@ -28,6 +28,14 @@ PGRE.views.analytics = (function () {
     return (s < 10 ? s.toFixed(1) : Math.round(s)) + ' s';
   }
 
+  /* Attribute helper for the shared chart tooltip (js/chart-tip.js). */
+  function tipAttr(line1, line2) {
+    var s = line2 ? line1 + '\\n' + line2 : line1;
+    return ' data-tip="' + PGRE.ui.esc(s) + '"';
+  }
+
+
+
   /* ——— Aggregation over the attempt log ——— */
   function aggregate() {
     var s = PGRE.store.state;
@@ -59,7 +67,9 @@ PGRE.views.analytics = (function () {
       var rec = byWeek[key] || { total: 0, correct: 0 };
       weeks.push({
         label: (mon.getMonth() + 1) + '/' + mon.getDate(),
+        monLabel: MONTHS[mon.getMonth()] + ' ' + mon.getDate(),
         n: rec.total,
+        correct: rec.correct || 0,
         acc: rec.total ? Math.round(100 * rec.correct / rec.total) : null
       });
     }
@@ -78,14 +88,16 @@ PGRE.views.analytics = (function () {
     });
     weeks.forEach(function (w, i) {
       var cx = padL + slot * i + slot / 2;
+      var tip = w.n > 0
+        ? tipAttr('Week of ' + w.monLabel, w.acc + '% accuracy · ' + w.correct + '/' + w.n + ' answers')
+        : tipAttr('Week of ' + w.monLabel, 'No answers');
       if (w.n > 0) {
         var y = yFor(w.acc), h = Math.max(base - y, 2), yTop = base - h;
         svg += '<rect class="an-bar" x="' + (cx - bw / 2).toFixed(1) + '" y="' + yTop.toFixed(1) +
-          '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="2">' +
-          '<title>' + w.label + ': ' + w.acc + '% over ' + w.n + ' answer' + (w.n === 1 ? '' : 's') + '</title></rect>';
+          '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="2"' + tip + '/>';
         svg += '<text class="an-val" x="' + cx.toFixed(1) + '" y="' + (yTop - 5).toFixed(1) + '" text-anchor="middle">' + w.acc + '%</text>';
       } else {
-        svg += '<circle class="an-empty-dot" cx="' + cx.toFixed(1) + '" cy="' + base + '" r="1.6"/>';
+        svg += '<circle class="an-empty-dot" cx="' + cx.toFixed(1) + '" cy="' + base + '" r="1.6"' + tip + '/>';
       }
       svg += '<text class="an-axis" x="' + cx.toFixed(1) + '" y="' + (H - padB + 16) + '" text-anchor="middle">' + w.label + '</text>';
       svg += '<text class="an-axis an-axis-sm" x="' + cx.toFixed(1) + '" y="' + (H - padB + 27) + '" text-anchor="middle">' +
@@ -122,7 +134,9 @@ PGRE.views.analytics = (function () {
       html += '<div class="an-topics">';
       pl.withData.forEach(function (r) {
         var accPct = Math.round(r.acc * 100);
-        html += '<div class="an-topic-row">' +
+        html += '<div class="an-topic-row"' +
+          tipAttr(r.t.name, r.t.weight + '% weight · ' + accPct + '% accuracy · ' +
+            r.total + ' answers · ≈' + r.lost.toFixed(1) + ' pts at risk') + '>' +
           ui.monogram(r.t) +
           '<div class="an-topic-main">' +
             '<div class="an-topic-line"><span class="an-topic-name">' + ui.esc(r.t.name) + '</span>' +
@@ -133,6 +147,7 @@ PGRE.views.analytics = (function () {
           '</div>' +
         '</div>';
       });
+
       html += '</div>';
     }
     if (pl.noData.length) {
@@ -197,12 +212,21 @@ PGRE.views.analytics = (function () {
       var h = c ? Math.max((plotH - 4) * c / max, 2) : 0, yTop = base - h;
       if (c) {
         svg += '<rect class="an-bar" x="' + (cx - bw / 2).toFixed(1) + '" y="' + yTop.toFixed(1) +
-          '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="2"><title>' +
-          c + ' answer' + (c === 1 ? '' : 's') + ' in ' + defs[i].label + '</title></rect>';
+          '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="2"/>';
         svg += '<text class="an-val" x="' + cx.toFixed(1) + '" y="' + (yTop - 5).toFixed(1) + '" text-anchor="middle">' + c + '</text>';
       }
       svg += '<text class="an-axis" x="' + cx.toFixed(1) + '" y="' + (H - padB + 16) + '" text-anchor="middle">' + defs[i].label + '</text>';
     });
+    counts.forEach(function (c, i) {
+      var pace = i < 3 ? 'under pace' : 'over pace';
+      var tip = c
+        ? tipAttr(c + ' answers · ' + Math.round(100 * c / timed.length) + '% of timed',
+            defs[i].label + ' (' + pace + ')')
+        : tipAttr('0 answers in ' + defs[i].label, '');
+      svg += '<rect class="an-hit" x="' + (padL + slot * i).toFixed(1) + '" y="' + padT +
+        '" width="' + slot.toFixed(1) + '" height="' + plotH.toFixed(1) + '"' + tip + '/>';
+    });
+
     svg += '</svg>';
 
     var upct = Math.round(100 * under / timed.length), opct = 100 - upct;
@@ -250,9 +274,10 @@ PGRE.views.analytics = (function () {
         if (key > todayKey) { cols += '<span class="an-heat-cell an-heat-future"></span>'; continue; }
         var a = byDay[key] || 0, sec = log[key] || 0, lvl = heatLevel(a, sec);
         var mins = Math.round(sec / 60);
-        var tip = MONTHS[d.getMonth()] + ' ' + d.getDate() + ' · ' + a + ' answered' +
-          (mins ? ' · ' + mins + ' min studied' : '');
-        cols += '<span class="an-heat-cell an-heat-l' + lvl + '" title="' + tip + '"></span>';
+        var line2 = a + ' answered' + (mins ? ' · ' + mins + ' min studied' : '');
+        cols += '<span class="an-heat-cell an-heat-l' + lvl + '"' +
+          tipAttr(MONTHS[d.getMonth()] + ' ' + d.getDate(), line2) + '></span>';
+
       }
     }
     var daylabels = '';

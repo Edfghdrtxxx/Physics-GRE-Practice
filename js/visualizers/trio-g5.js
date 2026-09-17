@@ -281,10 +281,10 @@ Hang the body from any rim point $P$. Gravity exerts no torque about the CM, so 
       }
     ],
     parameters: [
-      { id: 'holeRadius', label: 'Hole radius ($r_h$)', min: 0.15, max: 0.55, step: 0.05, default: 0.45, unit: '$R$' },
-      { id: 'holeOffset', label: 'Hole offset ($x_h$)', min: -0.5, max: 0.5, step: 0.05, default: 0.40, unit: '$R$' },
-      { id: 'suspensionAngle', label: 'Pivot on rim', min: 0, max: 360, step: 15, default: 270, unit: 'deg' },
-      { id: 'showConstruction', label: 'Negative-mass lever', type: 'toggle', default: true },
+      { id: 'holeRadius', label: 'Hole radius ($r_h$)', min: 0.15, max: 0.55, step: 0.05, default: 0.45, unit: '$R$', hint: 'Larger $r_h$ removes more mass. For a uniform disk $M_h/M=(r_h/R)^2$, so $x_{\\mathrm{CM}}$ is pulled farther from the hole.' },
+      { id: 'holeOffset', label: 'Hole offset ($x_h$)', min: -0.5, max: 0.5, step: 0.05, default: 0.40, unit: '$R$', hint: 'The hole is a negative-mass disk at $x_h$. The remaining CM sits on the line of centers, opposite the hole.' },
+      { id: 'suspensionAngle', label: 'Pivot on rim', min: 0, max: 360, step: 15, default: 270, unit: 'deg', hint: 'Hang from rim point $P$. Gravity has no torque about the CM, so the unique equilibrium is the plumb line $P$–CM–down.' },
+      { id: 'showConstruction', label: 'Negative-mass lever', type: 'toggle', default: true, hint: 'Show the geometric origin $O$, the hole center, and the lever that locates the remaining CM by superposition.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     init: function (container, state, redraw) {
@@ -443,19 +443,34 @@ Hang the body from any rim point $P$. Gravity exerts no torque about the CM, so 
       }
 
       legend('Disk with hole, hanging from $P$', [
-        { label: '$x_{\\mathrm{CM}}/R$', value: '$' + x_cm.toFixed(3) + '$' },
-        { label: '$r_h/R$', value: '$' + r_h.toFixed(2) + '$' },
-        { label: '$x_h/R$', value: '$' + x_h.toFixed(2) + '$' },
-        { label: '$M_h/M$', value: '$' + MhOverM.toFixed(3) + '$' },
-        { label: '$M\'/M$', value: '$' + Mrem.toFixed(3) + '$' },
-        { label: 'recipe', value: '$(0 - M_h x_h)/(M - M_h)$' }
+        { label: '$x_{\\mathrm{CM}}/R$', value: '$' + x_cm.toFixed(3) + '$', hint: 'First-moment recipe $x_{\\mathrm{CM}}=(0-M_h x_h)/(M-M_h)$. Negative means the remaining CM sits opposite the hole.' },
+        { label: '$r_h/R$', value: '$' + r_h.toFixed(2) + '$', hint: 'Hole radius in units of $R$. Cutout area (and mass) scales as $(r_h/R)^2$.' },
+        { label: '$x_h/R$', value: '$' + x_h.toFixed(2) + '$', hint: 'Displacement of the hole center from the disk origin. If $x_h=0$, symmetry keeps $x_{\\mathrm{CM}}=0$.' },
+        { label: '$M_h/M$', value: '$' + MhOverM.toFixed(3) + '$', hint: 'Mass fraction of the hole, $(r_h/R)^2$ for a uniform disk. Treat it as negative mass.' },
+        { label: '$M\'/M$', value: '$' + Mrem.toFixed(3) + '$', hint: 'Remaining mass fraction $1-(r_h/R)^2$. This is the denominator of $x_{\\mathrm{CM}}$.' },
+        { label: 'recipe', value: '$(0 - M_h x_h)/(M - M_h)$', hint: 'Superposition: full disk at $O$ minus hole at $x_h$. The CM is a first moment, not a material point.' }
       ]);
       legend('GRE ranking from a diameter', [
-        { label: 'hoop', value: '$2R/\\pi \\approx 0.637R$' },
-        { label: 'hemispherical shell', value: '$R/2 = 0.500R$' },
-        { label: 'semicircular disk', value: '$4R/(3\\pi) \\approx 0.424R$' },
-        { label: 'solid hemisphere', value: '$3R/8 = 0.375R$' }
+        { label: 'hoop', value: '$2R/\\pi \\approx 0.637R$', hint: 'Thin semicircular hoop: all mass on the rim, so $y_{\\mathrm{CM}}=2R/\\pi\\approx 0.637R$ from the diameter — farthest of the four.' },
+        { label: 'hemispherical shell', value: '$R/2 = 0.500R$', hint: 'Thin hemispherical shell: $y_{\\mathrm{CM}}=R/2$. Ranked between hoop and disk.' },
+        { label: 'semicircular disk', value: '$4R/(3\\pi) \\approx 0.424R$', hint: 'Uniform semicircular lamina: $y_{\\mathrm{CM}}=4R/(3\\pi)\\approx 0.424R$ from the diameter.' },
+        { label: 'solid hemisphere', value: '$3R/8 = 0.375R$', hint: 'Uniform solid hemisphere: $y_{\\mathrm{CM}}=3R/8=0.375R$ — closest to the diameter of the four.' }
       ]);
+
+      var spots126 = [
+        { id: 'cm', kind: 'circle', x: CM.x, y: CM.y, r: 14, title: 'Remaining CM', body: 'First moment of the leftover lamina: $x_{\\mathrm{CM}}/R=' + x_cm.toFixed(3) + '$. Opposite the hole because the cutout is negative mass.' },
+        { id: 'pivot', kind: 'circle', x: pLabX, y: pLabY, r: 12, title: 'Pivot $P$', body: 'Rim hang point at $' + alphaDeg.toFixed(0) + '^\\circ$. The body is a physical pendulum about $P$; equilibrium is $P$–CM vertical.' },
+        { id: 'hole', kind: 'circle', x: H.x, y: H.y, r: Math.max(10, holeR), title: 'Hole (negative mass)', body: 'Cutout of radius $r_h=' + r_h.toFixed(2) + 'R$ centered at $x_h=' + x_h.toFixed(2) + 'R$. Mass fraction $M_h/M=' + MhOverM.toFixed(3) + '$.' },
+        { id: 'disk', kind: 'circle', x: O.x, y: O.y, r: Rpx, title: 'Parent disk', body: 'Uniform disk of radius $R$. Remaining mass $M\'/M=' + Mrem.toFixed(3) + '$. Superposition: $M\\mathbf{r}_O-M_h\\mathbf{r}_h$.' },
+        { id: 'plumb', kind: 'segment', x1: pLabX, y1: Math.max(8, pLabY - 18), x2: pLabX, y2: height - 10, halfW: 8, title: 'Local vertical', body: 'Plumb line through $P$. Gravity exerts no torque about the CM, so hang equilibrium is $P$–CM–down.' }
+      ];
+      if (showCon) {
+        spots126.splice(2, 0,
+          { id: 'origin', kind: 'circle', x: O.x, y: O.y, r: 10, title: 'Geometric origin $O$', body: 'Center of the parent disk. Not the CM unless the hole is concentric ($x_h=0$).' },
+          { id: 'lever', kind: 'segment', x1: H.x, y1: H.y, x2: CM.x, y2: CM.y, halfW: 8, title: 'Negative-mass lever', body: 'Line of centers. First-moment balance $M\\cdot 0-M_h x_h=M\' x_{\\mathrm{CM}}$ with $x_{\\mathrm{CM}}/R=' + x_cm.toFixed(3) + '$.' }
+        );
+      }
+      PGRE.setVizHotspots(spots126);
     },
     challenge: {
       question: 'A uniform circular flat disk of radius $R$ has a circular hole of radius $R/2$ drilled out of it. The edge of the hole passes through the center of the original disk (meaning the center of the hole is at distance $d = R/2$ along the $+x$-axis from the disk origin). Where is the Center of Mass of the remaining object?',
@@ -542,9 +557,9 @@ Internal forces cannot move the CM: a walker on a frictionless boat keeps $\\Del
         { value: 'seesaw', label: 'Seesaw (torque about CM)' },
         { value: 'boat', label: 'Walker on a boat ($F_{\\mathrm{ext},x}=0$)' },
         { value: 'explode', label: 'Exploding projectile' }
-      ]},
-      { id: 'numMasses', label: 'Mass count ($N$)', min: 2, max: 5, step: 1, default: 3, unit: '' },
-      { id: 'fulcrumShift', label: 'Fulcrum shift from CM', min: -0.35, max: 0.35, step: 0.05, default: 0, unit: '$L$' },
+      ], hint: 'Three GRE pictures of the same CM: torque balance on a seesaw, a walker on a frictionless boat ($F_{\\mathrm{ext},x}=0$), and fragments of an exploding projectile.' },
+      { id: 'numMasses', label: 'Mass count ($N$)', min: 2, max: 5, step: 1, default: 3, unit: '', hint: 'How many point masses sit on the seesaw. $x_{\\mathrm{CM}}=(\\sum m_i x_i)/M$. Used in the seesaw picture.' },
+      { id: 'fulcrumShift', label: 'Fulcrum shift from CM', min: -0.35, max: 0.35, step: 0.05, default: 0, unit: '$L$', hint: 'Displace the fulcrum from $x_{\\mathrm{CM}}$. Uniform $g$ produces zero net torque about the CM, so a shift makes the plank tip.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     init: function (container, state, redraw) {
@@ -701,6 +716,7 @@ Internal forces cannot move the CM: a walker on a frictionless boat keeps $\\Del
 
         var massRows = [];
         var netTau = 0;
+        var spotsSaw = [];
         for (i = 0; i < list.length; i++) {
           var p = list[i];
           var px0 = left + p.u * span;
@@ -725,7 +741,17 @@ Internal forces cannot move the CM: a walker on a frictionless boat keeps $\\Del
           labeledArrow(ctx, mx, my, mx, my + 28, theme().inkFade(0.45), '', { lineWidth: 1.4, arrowSize: 5 });
           massRows.push({
             label: '$m_{' + (i + 1) + '}$',
-            value: '$' + p.m.toFixed(1) + '\\,\\mathrm{kg},\\; x=' + (p.u - 0.5).toFixed(2) + '\\,L$'
+            value: '$' + p.m.toFixed(1) + '\\,\\mathrm{kg},\\; x=' + (p.u - 0.5).toFixed(2) + '\\,L$',
+            hint: 'Point mass $m=' + p.m.toFixed(1) + '\\,\\mathrm{kg}$ at $x=' + (p.u - 0.5).toFixed(2) + 'L$ from mid-plank. Drag it; $x_{\\mathrm{CM}}$ is the mass-weighted average.'
+          });
+          spotsSaw.push({
+            id: 'mass' + i,
+            kind: 'circle',
+            x: mx,
+            y: my,
+            r: rSize + 3,
+            title: 'Mass $m_{' + (i + 1) + '}$',
+            body: '$m=' + p.m.toFixed(1) + '\\,\\mathrm{kg}$ at $x=' + (p.u - 0.5).toFixed(2) + 'L$. Drag along the plank; the CM is $\\sum m_i x_i / M$.'
           });
         }
 
@@ -733,11 +759,16 @@ Internal forces cannot move the CM: a walker on a frictionless boat keeps $\\Del
         drawCMMark(ctx, cmLab.x, cmLab.y - 2, 7);
         labelHalo(ctx, cmLab.x + 14, cmLab.y - 16, 'CM', GOLD, 'left');
 
-        massRows.push({ label: '$M$', value: '$' + totalM.toFixed(1) + '\\,\\mathrm{kg}$' });
-        massRows.push({ label: '$x_{\\mathrm{CM}}$', value: '$' + ((uCM - 0.5) * 1).toFixed(3) + '\\,L$' });
-        massRows.push({ label: '$\\tau$ about fulcrum', value: Math.abs(shift) < 0.008 ? '$0$ (fulcrum at CM)' : (netTau > 0 ? 'CW (right heavy)' : 'CCW (left heavy)') });
-        massRows.push({ label: 'drag', value: 'slide any mass along the plank' });
+        massRows.push({ label: '$M$', value: '$' + totalM.toFixed(1) + '\\,\\mathrm{kg}$', hint: 'Total mass $M=\\sum m_i=' + totalM.toFixed(1) + '\\,\\mathrm{kg}$. The CM formula divides the first moment by this $M$.' });
+        massRows.push({ label: '$x_{\\mathrm{CM}}$', value: '$' + ((uCM - 0.5) * 1).toFixed(3) + '\\,L$', hint: 'Balance point $x_{\\mathrm{CM}}=(\\sum m_i x_i)/M=' + (uCM - 0.5).toFixed(3) + 'L$ from mid-plank. Uniform $g$ produces zero net torque about this point.' });
+        massRows.push({ label: '$\\tau$ about fulcrum', value: Math.abs(shift) < 0.008 ? '$0$ (fulcrum at CM)' : (netTau > 0 ? 'CW (right heavy)' : 'CCW (left heavy)'), hint: 'Net gravitational torque about the fulcrum. Vanishes when the fulcrum sits at the CM, independent of the individual $m_i$.' });
+        massRows.push({ label: 'drag', value: 'slide any mass along the plank', hint: 'Pointer-drag any mass along the plank. The CM and the tipping torque update from the new first moment.' });
         legend('Seesaw: gravity torques cancel about the CM', massRows);
+
+        spotsSaw.push({ id: 'cm', kind: 'circle', x: cmLab.x, y: cmLab.y - 2, r: 14, title: 'Center of mass', body: '$x_{\\mathrm{CM}}=' + (uCM - 0.5).toFixed(3) + 'L$ from mid-plank. Fulcrum offset $' + shift.toFixed(2) + 'L$; torque about the CM vanishes for uniform $g$.' });
+        spotsSaw.push({ id: 'fulcrum', kind: 'circle', x: xF, y: plankY0 + 14, r: 16, title: 'Fulcrum', body: 'Pivot of the plank. Shifted $' + shift.toFixed(2) + 'L$ from the CM. A nonzero offset produces a net gravitational torque and the beam tips.' });
+        spotsSaw.push({ id: 'plank', kind: 'segment', x1: A.x, y1: A.y, x2: B.x, y2: B.y, halfW: 10, title: 'Plank', body: 'Rigid beam. Gravity on each mass makes a torque $m g \\times$ (horizontal arm from the fulcrum); they cancel only about the CM.' });
+        PGRE.setVizHotspots(spotsSaw);
 
       } else if (state.simMode === 'boat') {
         var mMan = 60;
@@ -818,13 +849,26 @@ Internal forces cannot move the CM: a walker on a frictionless boat keeps $\\Del
         }
 
         legend('Isolated boat (starts at rest)', [
-          { label: '$m$ walker', value: '$' + mMan + '\\,\\mathrm{kg}$' },
-          { label: '$M$ boat', value: '$' + Mboat + '\\,\\mathrm{kg}$' },
-          { label: '$\\Delta X_{\\mathrm{CM}}$', value: '$0$' },
-          { label: 'walker on boat', value: '$' + ((state.boatPersonPos - 0.5) * 5).toFixed(2) + '\\,\\mathrm{m}$' },
-          { label: 'boat vs water', value: '$' + (boatShift * 5 / Lboat).toFixed(2) + '\\,\\mathrm{m}$' },
-          { label: 'shift formula', value: '$\\Delta x_{\\mathrm{boat}} = - m L / (m+M)$' }
+          { label: '$m$ walker', value: '$' + mMan + '\\,\\mathrm{kg}$', hint: 'Walker mass. Heavier $m$ shifts the boat more: $\\Delta x_{\\mathrm{boat}}=-mL/(m+M)$.' },
+          { label: '$M$ boat', value: '$' + Mboat + '\\,\\mathrm{kg}$', hint: 'Boat mass. Larger $M$ makes the boat recoil less for the same walker step.' },
+          { label: '$\\Delta X_{\\mathrm{CM}}$', value: '$0$', hint: 'No horizontal external force and rest initially freeze $X_{\\mathrm{CM}}$. The gold line never moves.' },
+          { label: 'walker on boat', value: '$' + ((state.boatPersonPos - 0.5) * 5).toFixed(2) + '\\,\\mathrm{m}$', hint: 'Walker position along the deck relative to the boat center. $F_{\\mathrm{ext},x}=0$ does not freeze this coordinate.' },
+          { label: 'boat vs water', value: '$' + (boatShift * 5 / Lboat).toFixed(2) + '\\,\\mathrm{m}$', hint: 'Boat displacement relative to the water, opposite the walker, magnitude $m|\\Delta x_{\\mathrm{rel}}|/(m+M)$.' },
+          { label: 'shift formula', value: '$\\Delta x_{\\mathrm{boat}} = - m L / (m+M)$', hint: 'Walker displaces $L$ on the boat; $X_{\\mathrm{CM}}$ fixed implies $\\Delta x_{\\mathrm{boat}}=-mL/(m+M)$.' }
         ]);
+
+        var spotsBoat = [
+          { id: 'walker', kind: 'circle', x: xPerson, y: waterY - 26, r: 18, title: 'Walker $m$', body: 'Mass $m=' + mMan + '\\,\\mathrm{kg}$ on the deck. Position on the boat $' + ((state.boatPersonPos - 0.5) * 5).toFixed(2) + '\\,\\mathrm{m}$ from center. Internal walk cannot move $X_{\\mathrm{CM}}$.' },
+          { id: 'cmline', kind: 'segment', x1: cmFixedX, y1: 18, x2: cmFixedX, y2: height - 8, halfW: 8, title: 'Fixed $X_{\\mathrm{CM}}$', body: '$F_{\\mathrm{ext},x}=0$ and $\\mathbf{v}_{\\mathrm{CM}}(0)=\\mathbf{0}$ freeze the gold line. Boat and walker shift in opposite directions about it.' },
+          { id: 'boat', kind: 'rect', x: bLeft - 14, y: waterY - 10, w: (bRight - bLeft) + 28, h: 26, title: 'Boat $M$', body: 'Mass $M=' + Mboat + '\\,\\mathrm{kg}$. Recoil vs water $' + (boatShift * 5 / Lboat).toFixed(2) + '\\,\\mathrm{m}$, equal to $-m\\,\\Delta x_{\\mathrm{rel}}/(m+M)$.' }
+        ];
+        if (Math.abs(u) > 8) {
+          var wDir = state.boatAnimDir > 0 ? 26 : -26;
+          spotsBoat.push({ id: 'walkArrow', kind: 'segment', x1: xPerson, y1: waterY - 8, x2: xPerson + wDir, y2: waterY - 8, halfW: 7, title: 'Walker step', body: 'Displacement relative to the boat. The boat recoils the other way so $m\\Delta x_m+M\\Delta x_M=0$.' });
+          spotsBoat.push({ id: 'recoil', kind: 'segment', x1: xBoat, y1: waterY + 6, x2: xBoat - (state.boatAnimDir > 0 ? 22 : -22), y2: waterY + 6, halfW: 7, title: 'Boat recoil', body: 'Opposite the walker. Formula $\\Delta x_{\\mathrm{boat}}=-m L/(m+M)$ for a full end-to-end walk of length $L$.' });
+        }
+        spotsBoat.push({ id: 'water', kind: 'rect', x: 0, y: waterY + 16, w: width, h: Math.max(8, height - waterY - 16), title: 'Frictionless water', body: 'No horizontal external force from the water, so the CM of boat plus walker cannot accelerate horizontally.' });
+        PGRE.setVizHotspots(spotsBoat);
 
       } else {
         if (state.projT === undefined) state.projT = 0;
@@ -869,6 +913,7 @@ Internal forces cannot move the CM: a walker on a frictionless boat keeps $\\Del
         var cmY = groundY + v0y * t + 0.5 * gPx * t * t;
         var airborne = cmY < groundY - 2;
 
+        var spotsExp = [];
         if (t < tExplode) {
           ctx.fillStyle = CORAL;
           ctx.beginPath();
@@ -877,6 +922,7 @@ Internal forces cannot move the CM: a walker on a frictionless boat keeps $\\Del
           ctx.strokeStyle = INK;
           ctx.lineWidth = 1.2;
           ctx.stroke();
+          spotsExp.push({ id: 'shell', kind: 'circle', x: cmX, y: cmY, r: 14, title: 'Intact shell', body: 'Before the split ($t=' + t.toFixed(2) + '<t_{\\mathrm{ex}}=' + tExplode.toFixed(2) + '$). The CM of the shell already follows $x=v_{0x}t$, $y=v_{0y}t+\\tfrac12 gt^2$.' });
         } else {
           var dtPost = t - tExplode;
           var xE = startX + v0x * tExplode;
@@ -907,18 +953,40 @@ Internal forces cannot move the CM: a walker on a frictionless boat keeps $\\Del
             labeledArrow(ctx, f1X, f1Y, f1X - 22, f1Y, TEAL, '', { lineWidth: 1.5, arrowSize: 5 });
             labeledArrow(ctx, f2X, f2Y, f2X + 22, f2Y, CORAL, '', { lineWidth: 1.5, arrowSize: 5 });
           }
+          spotsExp.push({ id: 'frag1', kind: 'circle', x: f1X, y: f1Y, r: 12, title: 'Fragment 1', body: 'Equal-mass piece kicked left in the CM frame. Internal impulse cancels against fragment 2, so the pair CM stays on the original parabola until a hit.' });
+          spotsExp.push({ id: 'frag2', kind: 'circle', x: f2X, y: f2Y, r: 12, title: 'Fragment 2', body: 'Equal-mass piece kicked right. CM-frame momenta cancel: $p_1+p_2=0$ internally, so $\\mathbf{a}_{\\mathrm{CM}}=\\mathbf{g}$ is unchanged.' });
         }
 
         if (airborne) {
           drawCMMark(ctx, cmX, cmY, 6);
           var cmPAlign = cmX > width * 0.72 ? 'right' : 'left';
           labelHalo(ctx, cmX + (cmPAlign === 'left' ? 12 : -12), cmY - 14, 'CM', GOLD, cmPAlign);
+          spotsExp.push({ id: 'cm', kind: 'circle', x: cmX, y: cmY, r: 12, title: 'CM of all fragments', body: 'Still on the original parabola while every piece is airborne. Internal kicks cannot change $\\mathbf{a}_{\\mathrm{CM}}=\\mathbf{g}$.' });
         }
 
+        var kPar;
+        for (kPar = 0; kPar < 6; kPar++) {
+          var t0p = (kPar / 6) * 3.2;
+          var t1p = ((kPar + 1) / 6) * 3.2;
+          spotsExp.push({
+            id: 'parab' + kPar,
+            kind: 'segment',
+            x1: startX + v0x * t0p,
+            y1: groundY + v0y * t0p + 0.5 * gPx * t0p * t0p,
+            x2: startX + v0x * t1p,
+            y2: groundY + v0y * t1p + 0.5 * gPx * t1p * t1p,
+            halfW: 8,
+            title: 'CM parabola',
+            body: 'Trajectory of the intact shell, and of the CM after the split, until the first fragment hits. $\\mathbf{F}_{\\mathrm{ext}}=M\\mathbf{g}$.'
+          });
+        }
+        spotsExp.push({ id: 'ground', kind: 'segment', x1: 16, y1: groundY, x2: width - 16, y2: groundY, halfW: 8, title: 'Ground', body: 'The first fragment to land feels a new external force. After that hit the airborne-CM theorem no longer applies to the whole set.' });
+        PGRE.setVizHotspots(spotsExp);
+
         legend('Equal-mass split (horizontal kick)', [
-          { label: 'CM path', value: t < tExplode ? 'intact shell' : (airborne ? 'original parabola' : 'a fragment has hit; CM no longer free') },
-          { label: '$\\mathbf{F}_{\\mathrm{ext}}$', value: '$M\\mathbf{g}$ while airborne' },
-          { label: 'CM-frame $p$', value: 'equal-mass kicks cancel' }
+          { label: 'CM path', value: t < tExplode ? 'intact shell' : (airborne ? 'original parabola' : 'a fragment has hit; CM no longer free'), hint: 'Internal impulses cancel. Until a fragment hits the ground, the CM of all pieces stays on the original parabola.' },
+          { label: '$\\mathbf{F}_{\\mathrm{ext}}$', value: '$M\\mathbf{g}$ while airborne', hint: 'Only gravity is external while airborne, so $\\mathbf{a}_{\\mathrm{CM}}=\\mathbf{g}$ — the same parabola the intact shell would follow.' },
+          { label: 'CM-frame $p$', value: 'equal-mass kicks cancel', hint: 'Equal-mass horizontal kicks are $\\pm$ pairs in the CM frame, so they cancel and do not move the CM.' }
         ]);
       }
     },
@@ -976,8 +1044,8 @@ Only the tangential piece of force does work: $dW = \\mathbf{F}\\cdot d\\mathbf{
         { value: 'conservative', label: 'Conservative: $\\mathbf{F}=(-x,-y)$' },
         { value: 'vortex', label: 'Curl: $\\mathbf{F}=(-y,x)$' },
         { value: 'gravity', label: 'Uniform: $\\mathbf{F}=(0,-mg)$' }
-      ]},
-      { id: 'detour', label: 'Path $C_2$ bulge', type: 'range', min: -2, max: 2, step: 0.1, default: 1.2, unit: '' },
+      ], hint: 'Switch among $\\mathbf{F}=(-x,-y)$ (conservative), $\\mathbf{F}=(-y,x)$ (constant curl), and uniform gravity. Only the curl field makes $W(C_1)\\neq W(C_2)$.' },
+      { id: 'detour', label: 'Path $C_2$ bulge', type: 'range', min: -2, max: 2, step: 0.1, default: 1.2, unit: '', hint: 'Signed bulge of $C_2$ off the straight segment $C_1$. For $\\mathbf{F}=(-y,x)$, Green\'s theorem gives $W_2-W_1=2\\times$ the enclosed area.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     init: function (container, state, redraw) {
@@ -1209,24 +1277,52 @@ Only the tangential piece of force does work: $dW = \\mathbf{F}\\cdot d\\mathbf{
       var fieldName = state.field === 'conservative' ? '$\\mathbf{F}=(-x,-y)$' : (state.field === 'vortex' ? '$\\mathbf{F}=(-y,x)$' : '$\\mathbf{F}=(0,-mg)$');
       var curlStr = state.field === 'vortex' ? '$2\\hat{\\mathbf{k}}$' : '$\\mathbf{0}$';
       var rows = [
-        { label: 'field', value: fieldName },
-        { label: '$\\nabla\\times\\mathbf{F}$', value: curlStr },
-        { label: '$W(C_1)$', value: '$' + W1.toFixed(2) + '$' },
-        { label: '$W(C_2)$', value: '$' + W2.toFixed(2) + '$' }
+        { label: 'field', value: fieldName, hint: 'Which $\\mathbf{F}$ is being integrated. Work is $\\int\\mathbf{F}\\cdot d\\mathbf{l}$, so only the tangential piece $F_\\parallel$ counts.' },
+        { label: '$\\nabla\\times\\mathbf{F}$', value: curlStr, hint: 'Stokes: $\\oint\\mathbf{F}\\cdot d\\mathbf{l}=\\iint(\\nabla\\times\\mathbf{F})\\cdot d\\mathbf{A}$. Vanishing curl means path independence.' },
+        { label: '$W(C_1)$', value: '$' + W1.toFixed(2) + '$', hint: 'Line integral of $\\mathbf{F}$ along the straight path $C_1$ from $A$ to $B$. Live value $W_1=' + W1.toFixed(2) + '$.' },
+        { label: '$W(C_2)$', value: '$' + W2.toFixed(2) + '$', hint: 'Line integral along the bulged path $C_2$. Live $W_2=' + W2.toFixed(2) + '$.' }
       ];
       if (state.field === 'vortex') {
-        rows.push({ label: 'enclosed area', value: '$' + area.toFixed(2) + '$' });
-        rows.push({ label: '$W_2-W_1$', value: '$' + (W2 - W1).toFixed(2) + ' = 2\\times\\mathrm{area}$' });
+        rows.push({ label: 'enclosed area', value: '$' + area.toFixed(2) + '$', hint: 'Signed area between $C_1$ and $C_2$. For $\\mathbf{F}=(-y,x)$, $\\nabla\\times\\mathbf{F}=2\\hat{\\mathbf{k}}$ so $W_2-W_1=2\\times$ this area.' });
+        rows.push({ label: '$W_2-W_1$', value: '$' + (W2 - W1).toFixed(2) + ' = 2\\times\\mathrm{area}$', hint: 'Mismatch of the two path integrals. Green\'s theorem converts it into $2\\times$ the enclosed area.' });
       } else if (state.field === 'conservative') {
         var UA = 0.5 * (pA.x * pA.x + pA.y * pA.y);
         var UB = 0.5 * (pB.x * pB.x + pB.y * pB.y);
-        rows.push({ label: '$U=\\tfrac12(x^2+y^2)$', value: '$W=-\\Delta U=' + (UA - UB).toFixed(2) + '$' });
-        rows.push({ label: 'path dependence', value: '$W_1=W_2$' });
+        rows.push({ label: '$U=\\tfrac12(x^2+y^2)$', value: '$W=-\\Delta U=' + (UA - UB).toFixed(2) + '$', hint: 'Potential $U=\\tfrac12(x^2+y^2)$ for $\\mathbf{F}=-\\nabla U$. Both paths pay $W=-\\Delta U=' + (UA - UB).toFixed(2) + '$.' });
+        rows.push({ label: 'path dependence', value: '$W_1=W_2$', hint: 'Curl-free field: $W$ depends only on the endpoints, so $W_1=W_2$.' });
       } else {
-        rows.push({ label: '$W=-mg\\Delta y$', value: 'both paths' });
-        rows.push({ label: 'path dependence', value: '$W_1=W_2$' });
+        rows.push({ label: '$W=-mg\\Delta y$', value: 'both paths', hint: 'Uniform $\\mathbf{F}=(0,-mg)$ does work $-mg\\Delta y$ on every path from $A$ to $B$.' });
+        rows.push({ label: 'path dependence', value: '$W_1=W_2$', hint: 'Constant force is conservative. Only the net displacement $\\Delta\\mathbf{r}$ survives, so both paths agree.' });
       }
       legend('$W=\\int \\mathbf{F}\\cdot d\\mathbf{l}$', rows);
+
+      var spotsW = [
+        { id: 'ptA', kind: 'circle', x: A.x, y: A.y, r: 12, title: 'Start $A$', body: 'Lower endpoint of both paths. Work is $\\int_A^B\\mathbf{F}\\cdot d\\mathbf{l}$, not a state function unless $\\nabla\\times\\mathbf{F}=\\mathbf{0}$.' },
+        { id: 'ptB', kind: 'circle', x: Bpt.x, y: Bpt.y, r: 12, title: 'End $B$', body: 'Upper endpoint. For a conservative field $W=-\\Delta U$ depends only on $A$ and $B$; here $W_1=' + W1.toFixed(2) + '$, $W_2=' + W2.toFixed(2) + '$.' },
+        { id: 'probe', kind: 'circle', x: curS.x, y: curS.y, r: 12, title: 'Running $W$ along $C_2$', body: 'Test particle on $C_2$. Instantaneous $dW=\\mathbf{F}\\cdot d\\mathbf{l}$; accumulated $W(C_2)=' + W2.toFixed(2) + '$. Only $F_\\parallel$ contributes.' },
+        { id: 'F', kind: 'segment', x1: curS.x, y1: curS.y, x2: Fsx, y2: Fsy, halfW: 8, title: 'Force $\\mathbf{F}$', body: fieldName + ' at the probe. The perpendicular piece does no work; $dW=F_\\parallel\\,dl$.' },
+        { id: 'C1', kind: 'segment', x1: A.x, y1: A.y, x2: Bpt.x, y2: Bpt.y, halfW: 8, title: 'Path $C_1$', body: 'Straight path from $A$ to $B$. Line integral $W_1=' + W1.toFixed(2) + '$.' }
+      ];
+      if (Math.abs(FdotT) > 0.05) {
+        spotsW.push({ id: 'Fpar', kind: 'segment', x1: curS.x, y1: curS.y, x2: paraX, y2: paraY, halfW: 7, title: 'Tangential $F_\\parallel$', body: 'Projection of $\\mathbf{F}$ along $d\\mathbf{l}$. This is the only piece that accumulates into $W$.' });
+      }
+      var si;
+      for (si = 0; si < 5; si++) {
+        var paC = toS(getPath2(si / 5));
+        var pbC = toS(getPath2((si + 1) / 5));
+        spotsW.push({ id: 'C2-' + si, kind: 'segment', x1: paC.x, y1: paC.y, x2: pbC.x, y2: pbC.y, halfW: 8, title: 'Path $C_2$', body: 'Bulged path (detour $' + detour.toFixed(1) + '$). Line integral $W_2=' + W2.toFixed(2) + '$.' });
+      }
+      spotsW.push({
+        id: 'field',
+        kind: 'rect',
+        x: cx - 2.6 * scale,
+        y: cy - 1.8 * scale,
+        w: 5.2 * scale,
+        h: 3.6 * scale,
+        title: 'Force field $\\mathbf{F}$',
+        body: fieldName + ', curl $' + (state.field === 'vortex' ? '2\\hat{\\mathbf{k}}' : '\\mathbf{0}') + '$. Arrows show $\\mathbf{F}$ sampled on the plane; $W=\\int\\mathbf{F}\\cdot d\\mathbf{l}$.'
+      });
+      PGRE.setVizHotspots(spotsW);
     },
     challenge: {
       question: 'A particle travels in the $xy$-plane from $(0,0)$ to $(1,1)$ under the force field $\\mathbf{F} = 2xy\\,\\hat{\\imath} + x^{2}\\hat{\\jmath}$. Path 1 is the line $y = x$; Path 2 is the parabola $y = x^{2}$. What is the work done along each path?',

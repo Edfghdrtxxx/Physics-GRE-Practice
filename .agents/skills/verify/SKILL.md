@@ -5,9 +5,10 @@ description: Launch and drive this site end-to-end (headless Chrome + CDP, isola
 
 # Verifying Physics GRE Prep Studio
 
-Static site, no build. State lives in localStorage/IndexedDB **per origin** — never
-verify against `http://localhost:8000` (the user's real progress lives on that origin).
-Serve on a different port for a clean slate:
+Static site, no build. State lives in localStorage/IndexedDB **per origin**.
+Never verify against the user's daily-progress origin (often
+`file:///…/Physics GRE/index.html`; sometimes `http://localhost:8000` — they do
+**not** share storage). Serve an isolated port + fresh profile:
 
     python3 -m http.server 8123   # from the repo root
 

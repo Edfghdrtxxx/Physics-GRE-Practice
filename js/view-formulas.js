@@ -886,12 +886,16 @@ PGRE.views.formulas = (function () {
     var days = [], i;
     for (i = 0; i < 14; i++) days.push(0);
     var total30 = 0;
+    var overdue = 0;
     deck.forEach(function (c) {
       var st = srs.cardState(c.id);
       if (!st) return;
       var du = srs.daysUntil(st.due);
-      if (du <= 0) { days[0]++; total30++; }
-      else {
+      if (du <= 0) {
+        days[0]++;
+        total30++;
+        if (du < 0) overdue++;
+      } else {
         if (du <= 13) days[du]++;
         if (du <= 29) total30++;
       }
@@ -899,11 +903,15 @@ PGRE.views.formulas = (function () {
     var max = 1;
     for (i = 0; i < 14; i++) if (days[i] > max) max = days[i];
     var bars = '';
+    var today = new Date();
     for (i = 0; i < 14; i++) {
       var n = days[i];
       var pctH = Math.round(100 * n / max);
-      var lbl = i === 0 ? 'today' : 'in ' + i + ' d';
-      bars += '<div class="fc-col" title="' + n + ' due ' + lbl + '">' +
+      var dt = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+      var dayLbl = dt.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+      var line2 = n === 1 ? '1 card due' : n + ' cards due';
+      if (i === 0 && overdue > 0) line2 += ' · includes ' + overdue + ' overdue';
+      bars += '<div class="fc-col" data-tip="' + PGRE.ui.esc(dayLbl + '\\n' + line2) + '">' +
         '<div class="fc-bar' + (n ? '' : ' fc-empty') + '" style="height:' +
         (n ? Math.max(4, pctH) : 0) + '%"></div>' +
         '<span class="fc-x">' + (i === 0 ? 'now' : (i % 7 === 0 ? '+' + i : '')) + '</span></div>';
@@ -913,6 +921,7 @@ PGRE.views.formulas = (function () {
       '<p class="muted forecast-total">' + total30 + ' review' +
       (total30 === 1 ? '' : 's') + ' due in the next 30 days.</p></div>';
   }
+
 
   function wireStepper() {
     function step(d) {
@@ -1225,11 +1234,15 @@ PGRE.views.formulas = (function () {
      but guard the quote/backslash cases regardless). */
   function cssAttr(s) { return String(s).replace(/["\\]/g, '\\$&'); }
 
-  /* ——— Daily picker: chapters collapsed, rows lazy ———
-     Composes the same formulaDay batch as before (Save → setFormulaDayPicks;
-     Fill → fillFormulaDayIfEmpty). Grouped by cpgf-<ch>.<eq>. Collapsed
-     chapters keep rows out of the DOM so the 334-card deck is not a wall.
-     The pick set lives in memory so Save still sees collapsed chapters. */
+  /* ——— Daily picker: Chapters / Schedule views, rows lazy ———
+     Empty landing (no remaining) offers Study N today (one-click
+     Fill → fillFormulaDayIfEmpty). Two panes share one pick set: chapters
+     (cpgf-<ch>.<eq>) and Schedule (learned cards grouped by due date).
+     Collapsed groups keep rows out of the DOM so the 334-card deck is not a
+     wall. The pick set lives in memory so Save still sees collapsed groups.
+     One checkbox, two jobs: filled if ever graded or in today's pick set;
+     a click still only toggles today membership. Learned-only fills are not
+     saved. */
   function renderPicker() {
     if (PGRE.nav) PGRE.nav.setTrail(['Pick today’s cards']);   // BUNDLE G
     var ui = PGRE.ui, srs = PGRE.srs;
@@ -1244,6 +1257,8 @@ PGRE.views.formulas = (function () {
         picked[c.id] = 1;
       }
     });
+    var nEver = srs.countEverStudied(deck);
+    function isEver(id) { return srs.everStudied(id); }
 
     function chapterKey(id) {
       var m = String(id || '').match(/^cpgf-(\d+)\./);
@@ -1289,8 +1304,36 @@ PGRE.views.formulas = (function () {
       return !filterQ || (hay[c.id] && hay[c.id].indexOf(filterQ) !== -1);
     }
 
+    var dueByKey = {};
+    var dueOrder = [];
+    deck.forEach(function (c, idx) {
+      var st = srs.cardState(c.id);
+      if (!st || srs.isSuspended(c.id)) return;
+      var du = srs.daysUntil(st.due);
+      var key, title;
+      if (du <= 0) { key = 'now'; title = 'Due now'; }
+      else if (du === 1) { key = '1'; title = 'Tomorrow'; }
+      else { key = 'in:' + srs.ivlLabel(du); title = 'In ' + srs.ivlLabel(du); }
+      if (!dueByKey[key]) {
+        dueByKey[key] = { title: title, sort: du, items: [] };
+        dueOrder.push(key);
+      }
+      var g = dueByKey[key];
+      if (du < g.sort) g.sort = du;
+      g.items.push({ c: c, du: du, idx: idx });
+    });
+    dueOrder.sort(function (a, b) { return dueByKey[a].sort - dueByKey[b].sort; });
+    dueOrder.forEach(function (key) {
+      var g = dueByKey[key];
+      g.items.sort(function (a, b) {
+        if (a.du !== b.du) return a.du - b.du;
+        return a.idx - b.idx;
+      });
+      g.cards = g.items.map(function (x) { return x.c; });
+    });
+
     var html = '<div class="card"><h2>Pick today’s cards</h2>' +
-      '<p class="muted">Browse by chapter — expand one to see formulas. ' +
+      '<p class="muted">Switch between chapters and your review schedule. ' +
       'Fill today’s batch adds up to the daily target of unseen cards, ' +
       'or tick cards yourself. Cards already studied today stay in.</p>' +
       '<div class="picker-bar"><input type="text" class="picker-filter" id="picker-filter" ' +
@@ -1302,9 +1345,25 @@ PGRE.views.formulas = (function () {
       '<button type="button" class="btn btn-ghost" id="picker-clear">Clear all</button>' +
       '<button type="button" class="btn btn-ghost" id="picker-cancel">Cancel</button></div></div>';
 
+    html += '<div class="browse-tabs picker-view-tabs" role="tablist">' +
+      '<button class="browse-tab active" role="tab" data-pview="chapters" aria-selected="true" tabindex="0">Chapters</button>' +
+      '<button class="browse-tab" role="tab" data-pview="schedule" aria-selected="false" tabindex="-1">Schedule</button>' +
+      '</div>';
+
+    function boxTitle(opts) {
+      if (opts.locked) return 'Done today — stays in today\'s batch';
+      if (opts.inToday && opts.learned) return 'In today\'s batch · already studied before';
+      if (opts.inToday) return 'In today\'s batch · not studied yet';
+      if (opts.learned) return 'Studied before · not in today\'s batch — click to add';
+      return 'Not studied · click to add to today';
+    }
+
     function rowHTML(c) {
       var st = srs.cardState(c.id);
       var isLocked = !!locked[c.id];
+      var inToday = !!picked[c.id];
+      var learned = isEver(c.id);
+      var filled = inToday || learned;
       var chip;
       if (!st) {
         chip = '<span class="due-chip">new</span>';
@@ -1316,11 +1375,14 @@ PGRE.views.formulas = (function () {
       if (isLocked) chip += '<span class="due-chip today-chip">done today</span>';
       var title = cardName(c);
       var label = ui.esc(c.id) + (title ? ' · ' + ui.esc(title) : '');
+      var kind = inToday ? ' picker-today' : (learned ? ' picker-learned-only' : '');
+      var tipText = ui.esc(boxTitle({ locked: isLocked, inToday: inToday, learned: learned }));
+      var tip = ' data-tip="' + tipText + '" data-tip-fast aria-label="' + tipText + '"';
       return '<div class="picker-item">' +
-        '<div class="picker-row' + (isLocked ? ' is-locked' : '') + '" data-cardid="' +
-          ui.esc(c.id) + '">' +
-          '<label class="picker-check"><input type="checkbox" class="picker-box" value="' +
-            ui.esc(c.id) + '"' + (picked[c.id] ? ' checked' : '') +
+        '<div class="picker-row' + (isLocked ? ' is-locked' : '') + kind + '" data-cardid="' +
+          ui.esc(c.id) + '"' + (inToday ? ' data-today="1"' : '') + '>' +
+          '<label class="picker-check"' + tip + '><input type="checkbox" class="picker-box" value="' +
+            ui.esc(c.id) + '"' + tip + (filled ? ' checked' : '') +
             (isLocked ? ' disabled data-locked="1"' : '') + '></label>' +
           '<span class="deck-name">' + label + '</span>' + chip +
         '</div>' +
@@ -1330,6 +1392,7 @@ PGRE.views.formulas = (function () {
       '</div>';
     }
 
+    html += '<div id="picker-view-chapters">';
     chOrder.forEach(function (ch) {
       var cards = byChapter[ch];
       var topic = null;
@@ -1342,7 +1405,7 @@ PGRE.views.formulas = (function () {
           '<span class="picker-ch-toggle" role="button" tabindex="0" aria-expanded="false">' +
             (topic ? ui.monogram(topic) + ' ' : '') +
             ui.esc(chapterTitle(ch, cards)) +
-            '<span class="muted picker-ch-count"> · ' + cards.length + '</span>' +
+            '<span class="muted picker-ch-count"> · ' + srs.countEverStudied(cards) + '/' + cards.length + '</span>' +
           '</span>' +
           '<label class="picker-selall"><input type="checkbox" class="picker-selall-box"> All</label>' +
         '</div>' +
@@ -1351,29 +1414,92 @@ PGRE.views.formulas = (function () {
     });
     html += '</div>';
 
+    html += '<div id="picker-view-schedule" class="picker-due-band" hidden>';
+    if (!dueOrder.length) {
+      html += '<p class="muted">No scheduled reviews yet</p>';
+    } else {
+      dueOrder.forEach(function (key) {
+        var g = dueByKey[key];
+        var open = key === 'now';
+        html += '<div class="picker-topic picker-due-group" data-due="' + ui.esc(key) + '"' +
+          (open ? ' data-open="1"' : '') + '>' +
+          '<div class="picker-topic-head">' +
+            '<span class="picker-ch-toggle" role="button" tabindex="0" aria-expanded="' +
+              (open ? 'true' : 'false') + '">' +
+              ui.esc(g.title) +
+              '<span class="muted picker-ch-count"> · ' + srs.countEverStudied(g.cards) + '/' + g.cards.length + '</span>' +
+            '</span>' +
+            '<label class="picker-selall"><input type="checkbox" class="picker-selall-box"> All</label>' +
+          '</div>' +
+          '<div class="picker-chapter-body" hidden></div>' +
+        '</div>';
+      });
+    }
+    html += '</div>';
+
+    html += '</div>';
+
     body().innerHTML = html;
 
     function isOpen(tp) { return tp.getAttribute('data-open') === '1'; }
 
-    function chapterSelectable(ch) {
-      return byChapter[ch].filter(function (c) {
+    function groupCards(tp) {
+      if (tp.hasAttribute('data-due')) {
+        var g = dueByKey[tp.getAttribute('data-due')];
+        return (g && g.cards) || [];
+      }
+      return byChapter[tp.getAttribute('data-ch')] || [];
+    }
+
+    function groupSelectable(tp) {
+      return groupCards(tp).filter(function (c) {
         return !locked[c.id] && cardMatches(c);
       });
     }
 
+    function toggleToday(id) {
+      if (!id || locked[id]) return;
+      if (picked[id]) delete picked[id];
+      else picked[id] = 1;
+    }
+
+    function syncOneRow(row) {
+      var id = row.getAttribute('data-cardid');
+      if (!id) return;
+      var inToday = !!picked[id];
+      var learned = isEver(id);
+      var box = row.querySelector('.picker-box');
+      var isLocked = !!locked[id] || !!(box && box.getAttribute('data-locked'));
+      if (box && !box.getAttribute('data-locked')) box.checked = inToday || learned;
+      var tip = boxTitle({ locked: isLocked, inToday: inToday, learned: learned });
+      if (box) {
+        box.setAttribute('data-tip', tip);
+        box.setAttribute('data-tip-fast', '');
+        box.setAttribute('aria-label', tip);
+        box.removeAttribute('title');
+      }
+      var lab = row.querySelector('.picker-check');
+      if (lab) {
+        lab.setAttribute('data-tip', tip);
+        lab.setAttribute('data-tip-fast', '');
+        lab.setAttribute('aria-label', tip);
+        lab.removeAttribute('title');
+      }
+      row.classList.toggle('picker-today', inToday);
+      row.classList.toggle('picker-learned-only', learned && !inToday);
+      if (inToday) row.setAttribute('data-today', '1');
+      else row.removeAttribute('data-today');
+    }
+
     function syncBoxes(scope) {
-      (scope || body()).querySelectorAll('.picker-box').forEach(function (b) {
-        if (b.getAttribute('data-locked')) return;
-        b.checked = !!picked[b.value];
-      });
+      (scope || body()).querySelectorAll('.picker-row').forEach(syncOneRow);
     }
 
     function wireChapterBody(wrap) {
       wrap.querySelectorAll('.picker-box').forEach(function (b) {
         if (b.getAttribute('data-locked')) return;
         b.addEventListener('change', function () {
-          if (b.checked) picked[b.value] = 1;
-          else delete picked[b.value];
+          toggleToday(b.value);
           refresh();
         });
       });
@@ -1382,16 +1508,13 @@ PGRE.views.formulas = (function () {
           if (e.target.closest('.picker-check') || e.target.closest('.picker-box')) return;
           var b = row.querySelector('.picker-box');
           if (!b || b.getAttribute('data-locked')) return;
-          b.checked = !b.checked;
-          if (b.checked) picked[b.value] = 1;
-          else delete picked[b.value];
+          toggleToday(b.value);
           refresh();
         });
       });
     }
 
-    function paintChapter(tp) {
-      var ch = tp.getAttribute('data-ch');
+    function paintGroup(tp) {
       var wrap = tp.querySelector('.picker-chapter-body');
       if (!wrap) return;
       if (!isOpen(tp)) {
@@ -1400,7 +1523,7 @@ PGRE.views.formulas = (function () {
         return;
       }
       var htmlRows = '';
-      byChapter[ch].forEach(function (c) {
+      groupCards(tp).forEach(function (c) {
         if (cardMatches(c)) htmlRows += rowHTML(c);
       });
       wrap.innerHTML = htmlRows;
@@ -1414,11 +1537,11 @@ PGRE.views.formulas = (function () {
       if (isOpen(tp)) {
         tp.removeAttribute('data-open');
         if (toggle) toggle.setAttribute('aria-expanded', 'false');
-        paintChapter(tp);
+        paintGroup(tp);
       } else {
         tp.setAttribute('data-open', '1');
         if (toggle) toggle.setAttribute('aria-expanded', 'true');
-        paintChapter(tp);
+        paintGroup(tp);
       }
     }
 
@@ -1428,44 +1551,46 @@ PGRE.views.formulas = (function () {
       return n;
     }
 
+    function syncOneHeading(tp) {
+      var cards = groupCards(tp);
+      var rows = groupSelectable(tp);
+      var sa = tp.querySelector('.picker-selall-box');
+      if (sa) {
+        sa.disabled = rows.length === 0;
+        var allOn = rows.length > 0;
+        rows.forEach(function (c) { if (!picked[c.id]) allOn = false; });
+        sa.checked = allOn;
+      }
+      var countEl = tp.querySelector('.picker-ch-count');
+      if (countEl) {
+        countEl.textContent = ' · ' + srs.countEverStudied(cards) + '/' + cards.length;
+      }
+    }
+
     function syncHeadings() {
-      body().querySelectorAll('.picker-chapter').forEach(function (tp) {
-        var ch = tp.getAttribute('data-ch');
-        var rows = chapterSelectable(ch);
-        var sa = tp.querySelector('.picker-selall-box');
-        if (sa) {
-          sa.disabled = rows.length === 0;
-          var allOn = rows.length > 0;
-          rows.forEach(function (c) { if (!picked[c.id]) allOn = false; });
-          sa.checked = allOn;
-        }
-        var countEl = tp.querySelector('.picker-ch-count');
-        if (countEl) {
-          var nPicked = 0;
-          byChapter[ch].forEach(function (c) { if (picked[c.id]) nPicked++; });
-          countEl.textContent = ' · ' + nPicked + '/' + byChapter[ch].length;
-        }
-      });
+      body().querySelectorAll('.picker-chapter').forEach(syncOneHeading);
+      body().querySelectorAll('.picker-due-group').forEach(syncOneHeading);
     }
 
     function refresh() {
       var cc = document.getElementById('picker-count');
-      if (cc) cc.textContent = countPicked() + ' picked · target ' + T;
+      if (cc) cc.textContent = 'today ' + countPicked() + ' · ever ' + nEver + ' · target ' + T;
+      syncBoxes();
       syncHeadings();
     }
 
     function applyFilter() {
-      chOrder.forEach(function (ch) {
-        var tp = body().querySelector('.picker-chapter[data-ch="' + cssAttr(ch) + '"]');
-        if (!tp) return;
-        var any = byChapter[ch].some(cardMatches);
+      function filterGroup(tp) {
+        var any = groupCards(tp).some(cardMatches);
         tp.hidden = !any;
-        if (isOpen(tp)) paintChapter(tp);
-      });
+        if (isOpen(tp)) paintGroup(tp);
+      }
+      body().querySelectorAll('.picker-chapter').forEach(filterGroup);
+      body().querySelectorAll('.picker-due-group').forEach(filterGroup);
       refresh();
     }
 
-    body().querySelectorAll('.picker-chapter').forEach(function (tp) {
+    function wireGroup(tp) {
       var toggle = tp.querySelector('.picker-ch-toggle');
       if (toggle) {
         toggle.addEventListener('click', function (e) {
@@ -1481,12 +1606,36 @@ PGRE.views.formulas = (function () {
       var sa = tp.querySelector('.picker-selall-box');
       if (sa) sa.addEventListener('change', function () {
         var on = sa.checked;
-        chapterSelectable(tp.getAttribute('data-ch')).forEach(function (c) {
+        groupSelectable(tp).forEach(function (c) {
           if (on) picked[c.id] = 1;
           else delete picked[c.id];
         });
-        syncBoxes(tp);
+        syncBoxes();
         refresh();
+      });
+    }
+
+    body().querySelectorAll('.picker-chapter').forEach(wireGroup);
+    body().querySelectorAll('.picker-due-group').forEach(wireGroup);
+    body().querySelectorAll('.picker-due-group[data-open="1"]').forEach(paintGroup);
+
+    function showPickerView(which) {
+      var chPane = document.getElementById('picker-view-chapters');
+      var schPane = document.getElementById('picker-view-schedule');
+      if (chPane) chPane.hidden = which !== 'chapters';
+      if (schPane) schPane.hidden = which !== 'schedule';
+      body().querySelectorAll('.picker-view-tabs .browse-tab').forEach(function (b) {
+        var on = b.getAttribute('data-pview') === which;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+        b.tabIndex = on ? 0 : -1;
+      });
+    }
+    body().querySelectorAll('.picker-view-tabs .browse-tab').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var which = b.getAttribute('data-pview');
+        if (!which) return;
+        showPickerView(which);
       });
     });
 

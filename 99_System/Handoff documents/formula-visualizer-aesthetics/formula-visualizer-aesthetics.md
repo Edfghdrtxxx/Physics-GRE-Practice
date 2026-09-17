@@ -42,7 +42,7 @@ Nothing here is committed. User directed to continue from this tree.
 - Not a hash. Route `#/formulas`, then tab `Visualizer Lab` (`mode === 'visual'` in `js/view-formulas.js`).
 - That tab is **disabled when the formula deck is empty** (`empty && t[0] !== 'study'`). Visualizers register from the trio files regardless; Lab UI still waits on the deck. Deck comes from gitignored `content/bank/cpg-formulas.js` via IndexedDB. If Lab is greyed out, the deck is missing — do not treat that as a missing visualizer.
 - Lab listing keeps `k.startsWith('cpgf-')`. Ignore extra keys `cluster3` and `cluster-5` if they reappear.
-- Inline path: Study mode, flip a card → `renderInlineVisualizer(c.id, backEl)`. Same chrome classes as the modal.
+- Study path: flip a card → **Open Simulation** → `PGRE.openVisualizerModal(id)`. `renderInlineVisualizer` is engine chrome (same stacked classes as the modal) and is gated by `tools/test-visualizer-aesthetics.js`; `js/view-formulas.js` does not call it on flip.
 
 **Engine contract (so children do not break the loop)**
 
@@ -68,7 +68,7 @@ Engine shell is ES5 (`var`, IIFE). Trio files use `const`/`let`/template strings
 1. Serve the repo root on a non-8000 port.
 2. `#/formulas` → **Visualizer Lab** → click a card → modal (`PGRE.openVisualizerModal`).
 3. Desktop window only (Reid waived phone-width checks).
-4. Inline spot-check: `#/formulas` Study → flip a card that has a matching `cpgf-` id.
+4. Study spot-check: `#/formulas` Study → flip a card with a matching `cpgf-` id → **Open Simulation** (modal). Flip alone does not mount the sim.
 
 ### Object / CSS hooks that every trio still shares
 

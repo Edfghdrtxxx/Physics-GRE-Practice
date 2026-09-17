@@ -3,10 +3,16 @@ I have little background in computer science. When a decision is required of me,
 
 `$HOME` is `/Users/leyi`. `/Users/Reid Hu` is the project parent, not home.
 
+# Progress origin
+- Study state is **per origin**. `file://…/index.html`, `http://localhost:8000`, and `http://127.0.0.1:8000` do not share localStorage/IndexedDB.
+- On this machine the rich daily store has lived on the **file://** Prep tab. Do not open a second origin for “practice” or you get an empty Studio.
+- Timed pack launch for the user is owned by OrbitOS `/practice-physics-gre-set` (reuse richest live tab; same-origin reload if packs scripts missing).
+- Automated verify/tests: isolated profile + non-user port only (see `.agents/skills/verify/SKILL.md`).
+
 # Repository Structure & Placement
 
 - `index.html`: SPA entry shell (hash-routed, offline KaTeX/marked).
-- `js/`: Application logic, state stores (`store.js`, `srs.js`, `gamify.js`, `bank.js`), static datasets (`data-*.js`), view modules (`view-*.js`), router (`app.js`), concept-visualization session (`view-concepts.js`, `concept-search.js`, `concept-door-fx.js`; teaching widgets in `js/visualizers/`). Engines/helpers: `exam-engine.js`, `visualizer-engine.js`, `plan-engine.js`, `timer.js`, `study-time.js`, `notes.js`, `search.js`, `formula-search.js`, `flashmodes.js`, `formula-checkin.js`, `motion.js`, `focus-sound.js`, `focus-fx.js`.
+- `js/`: Application logic, state stores (`store.js`, `srs.js`, `gamify.js`, `bank.js`), static datasets (`data-*.js`, including `data-packs.js` for timed-set packs 01–35), view modules (`view-*.js`), router (`app.js`), concept-visualization session (`view-concepts.js`, `concept-search.js`, `concept-door-fx.js`; teaching widgets in `js/visualizers/`). Engines/helpers: `exam-engine.js`, `visualizer-engine.js`, `plan-engine.js`, `packs.js` (pack lookup + `launchPack` → `#/practice/custom`), `timer.js`, `study-time.js`, `notes.js`, `search.js`, `formula-search.js`, `flashmodes.js`, `formula-checkin.js`, `chart-tip.js`, `motion.js`, `focus-sound.js`, `focus-fx.js`.
 - `css/`: Stylesheets (`style.css` Anthropic palette, `fonts.css`, `visualizer.css`, `concepts.css`, `print.css`, `motion.css`).
 - `simulations/`: Standalone interactive physics visualizers/sandboxes (`oscillator.html`, `simulations/README.md`).
 - `tools/`: Offline node/python build scripts, extraction pipelines, and unit test suites (`test-*.js`).
@@ -39,6 +45,9 @@ I have little background in computer science. When a decision is required of me,
 # Visualizer & Simulation Rules
 
 - **Animation speed control:** Animated content must offer adjustable playback (default 1.0x). Standalone sims: copy `oscillator.html`'s speed cluster. Lab cards: `simSpeed` parameter (0.2–3.0, default 1.0) scaling `dt`. Static cards exempt.
+- **Adding a formula-card visualizer:** Same pipeline for every later `cpgf-<eq>` card. Register `PGRE.visualizers['cpgf-<eq>']` in the matching `js/visualizers/trio-gN.js` — copy a sibling (`title`, `formulaLatex`, `physicalStory`, `derivationSteps`, `limitingCases`, `greTraps`, `parameters` including `simSpeed` if animated, `challenge`, `init`/`draw`). Add the id to `EXPECTED_IDS` in `tools/test-visualizer-aesthetics.js`. Bump the shared `?v=` in `index.html`. Gate with `node tools/test-visualizer-aesthetics.js`. Study flip shows **Open Simulation** (modal via `openVisualizerModal`); do not auto-mount `renderInlineVisualizer` on flip. Not concept widgets (`PGRE.conceptVisualizers`) and not `simulations/oscillator.html`.
+- **Hover explanations (every card):** the engine shows one `.viz-tip` popover for anything hovered. Three sources, all required for a finished card: (1) `parameters[].hint` — one or two sentences per slider/toggle/select (`simSpeed` has shared wording; omit); (2) legend rows `{ label, value, hint }` — hint per readout; (3) canvas hotspots published once per `draw()` via `PGRE.setVizHotspots([{ id, kind, ...geometry, title, body }])`, kinds `circle {x,y,r}`, `segment {x1,y1,x2,y2,halfW}`, `rect {x,y,w,h}`, `ring {x,y,r,halfW}`, `annulus {x,y,r0,r1}`, coordinates in the `width`/`height` space draw receives, specific targets before broad regions (first match wins). The engine hit-tests after draw, paints the coral highlight, and rebuilds `body` each frame so it may carry live numbers. Cards never paint hover rings or tooltips themselves. LaTeX in all hint/body text.
+- **Shell controls (engine-owned, do not reimplement in cards):** header `Previous / n / N / Next` (arrow keys) step through registered `cpgf-` cards in deck order; `Pause / Resume` (Space) freezes `dt` at 0 while frames keep painting; `Reset` in the Parameters panel restores every declared default and re-runs `init`, so `init` must be safe to call again on the same state object; the info tab last used is remembered across cards. `physicalStory` splits into paragraphs on blank lines.
 
 # Style Rules
 

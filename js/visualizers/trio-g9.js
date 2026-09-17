@@ -393,11 +393,11 @@ Then $I = n e v_d A$ and $E = V_R/L$ recover $V_R = I(\\rho_R L/A) = IR$. Stretc
     ],
 
     parameters: [
-      { id: 'emf', label: 'Battery EMF ($\\mathcal{E}$)', min: 1.0, max: 24.0, step: 0.5, default: 12.0, unit: 'V' },
-      { id: 'resistorR', label: 'Load ($R_0$)', min: 1.0, max: 20.0, step: 0.5, default: 6.0, unit: '\\Omega' },
-      { id: 'internalR', label: 'Internal ($r$)', min: 0.0, max: 5.0, step: 0.2, default: 1.0, unit: '\\Omega' },
-      { id: 'temperature', label: 'Lattice $T$', min: 80, max: 600, step: 10, default: 300, unit: 'K' },
-      { id: 'stretch2x', label: 'Stretch $L\\to 2L$ ($R\\to 4R$)', type: 'toggle', default: false },
+      { id: 'emf', label: 'Battery EMF ($\\mathcal{E}$)', min: 1.0, max: 24.0, step: 0.5, default: 12.0, unit: 'V', hint: 'Open-circuit voltage $\\mathcal{E}$. Loop current is $I=\\mathcal{E}/(R+r)$; raising $\\mathcal{E}$ at fixed load scales $I$, $V_R$, and the tiny drift $v_d$ together.' },
+      { id: 'resistorR', label: 'Load ($R_0$)', min: 1.0, max: 20.0, step: 0.5, default: 6.0, unit: '\\Omega', hint: 'Unstretched load $R_0$. Geometric resistance is $R_0$ or $4R_0$ if stretched; copper then adds $R(T)=R_{\\mathrm{geo}}[1+\\alpha(T-293\\,\\mathrm{K})]$ with $\\alpha\\approx 0.0039\\,\\mathrm{K}^{-1}$.' },
+      { id: 'internalR', label: 'Internal ($r$)', min: 0.0, max: 5.0, step: 0.2, default: 1.0, unit: '\\Omega', hint: 'Battery internal resistance $r$. Terminal load voltage is $V_R=\\mathcal{E} R/(R+r)$; matched power $P_{\\max}=\\mathcal{E}^2/(4r)$ occurs at $R=r$.' },
+      { id: 'temperature', label: 'Lattice $T$', min: 80, max: 600, step: 10, default: 300, unit: 'K', hint: 'Lattice temperature. Phonon amplitude grows with $T$, shortening $\\tau$ and raising $R$; thermal speed $v_{\\mathrm{th}}\\propto\\sqrt{T}$ while drift $v_d$ stays $\\sim\\mathrm{mm/s}$.' },
+      { id: 'stretch2x', label: 'Stretch $L\\to 2L$ ($R\\to 4R$)', type: 'toggle', default: false, hint: 'Uniform draw at constant volume: $L\\to 2L$ forces $A\\to A/2$, so $R=\\rho L/A$ quadruples. Never scale $R$ with $L$ alone.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
 
@@ -432,13 +432,13 @@ Then $I = n e v_d A$ and $E = V_R/L$ recover $V_R = I(\\rho_R L/A) = IR$. Stretc
       var vthPhys = 1.57e6 * Math.sqrt(T / 300);
 
       legend("Ohm $V_R = I R$", [
-        { label: '$I$', value: '$' + current.toFixed(2) + '\\,\\mathrm{A}$' },
-        { label: '$V_R$', value: '$' + vLoad.toFixed(2) + '\\,\\mathrm{V}$' },
-        { label: '$R$', value: '$' + effectiveR.toFixed(2) + '\\,\\Omega$' },
-        { label: '$r$', value: '$' + rInt.toFixed(1) + '\\,\\Omega$' },
-        { label: '$P = I V_R$', value: '$' + power.toFixed(2) + '\\,\\mathrm{W}$' },
-        { label: '$v_d$', value: '$' + (vdPhys * 1e3).toFixed(3) + '\\,\\mathrm{mm/s}$' },
-        { label: '$v_{\\mathrm{th}}/v_d$', value: vdPhys > 1e-12 ? '$' + (vthPhys / vdPhys).toExponential(1) + '$' : '—' }
+        { label: '$I$', value: '$' + current.toFixed(2) + '\\,\\mathrm{A}$', hint: 'Loop current $I=\\mathcal{E}/(R+r)$. Macroscopically $I=n e v_d A$; the sliders change $I$, not the enormous $v_{\\mathrm{th}}$.' },
+        { label: '$V_R$', value: '$' + vLoad.toFixed(2) + '\\,\\mathrm{V}$', hint: 'Load drop $V_R=IR$, the line integral of $\\mathbf{E}$ along the wire. Equals $\\mathcal{E}$ only if $r=0$.' },
+        { label: '$R$', value: '$' + effectiveR.toFixed(2) + '\\,\\Omega$', hint: 'Effective load $R=R_{\\mathrm{geo}}[1+\\alpha(T-293\\,\\mathrm{K})]$. Stretching ($R\\to 4R_0$) and heating both raise it.' },
+        { label: '$r$', value: '$' + rInt.toFixed(1) + '\\,\\Omega$', hint: 'Internal resistance in series with the load. The divider $R/(R+r)$ sets what fraction of $\\mathcal{E}$ appears as $V_R$.' },
+        { label: '$P = I V_R$', value: '$' + power.toFixed(2) + '\\,\\mathrm{W}$', hint: 'Joule power $P=I V_R=I^2 R$ in the load. Energy arrives via the Poynting flux, not the crawling electrons.' },
+        { label: '$v_d$', value: '$' + (vdPhys * 1e3).toFixed(3) + '\\,\\mathrm{mm/s}$', hint: 'Drift speed $v_d=I/(n e A)$. Millimetres per second even at ampere currents; the lamp does not wait for this crawl.' },
+        { label: '$v_{\\mathrm{th}}/v_d$', value: vdPhys > 1e-12 ? '$' + (vthPhys / vdPhys).toExponential(1) + '$' : '—', hint: 'Thermal-to-drift ratio. Fermi-scale $v_{\\mathrm{th}}\\sim 10^6\\,\\mathrm{m/s}$ dwarfs $v_d$, so the net leftward bias in the picture is tiny.' }
       ]);
 
       creamFill(ctx, width, height);
@@ -542,6 +542,73 @@ Then $I = n e v_d A$ and $E = V_R/L$ recover $V_R = I(\\rho_R L/A) = IR$. Stretc
       ctx.lineTo(wireX + wireW, wireY + wireH + 20);
       ctx.stroke();
       haloLabel(ctx, stretch ? '2L' : 'L', wireX + wireW / 2, wireY + wireH + 28, { color: C.muted });
+
+      PGRE.setVizHotspots([
+        {
+          id: 'E',
+          kind: 'segment',
+          x1: wireX + 36,
+          y1: eY,
+          x2: wireX + wireW - 36,
+          y2: eY,
+          halfW: 10,
+          title: 'Electric field $\\mathbf{E}$',
+          body: 'Uniform $E=V_R/L$ points from $+$ to $-$. Drift is $\\mathbf{v}_d=-(e\\tau/m_e)\\mathbf{E}$ (electrons against $\\mathbf{E}$), with $V_R=' + vLoad.toFixed(2) + '\\,\\mathrm{V}$.'
+        },
+        {
+          id: 'plus',
+          kind: 'rect',
+          x: wireX,
+          y: wireY,
+          w: 10,
+          h: wireH,
+          title: 'Positive terminal',
+          body: 'High-potential end of the load. Conventional current leaves here; electrons drift the other way. Battery $\\mathcal{E}=' + emf.toFixed(1) + '\\,\\mathrm{V}$.'
+        },
+        {
+          id: 'minus',
+          kind: 'rect',
+          x: wireX + wireW - 10,
+          y: wireY,
+          w: 10,
+          h: wireH,
+          title: 'Negative terminal',
+          body: 'Low-potential end. Electrons drift toward this contact. Load drop $V_R=' + vLoad.toFixed(2) + '\\,\\mathrm{V}$ is the potential difference between the two ends.'
+        },
+        {
+          id: 'carriers',
+          kind: 'rect',
+          x: innerX,
+          y: innerY,
+          w: innerW,
+          h: innerH,
+          title: 'Drifting electrons',
+          body: 'Thermal motion $v_{\\mathrm{th}}\\sim ' + (vthPhys / 1e6).toFixed(2) + '\\times 10^6\\,\\mathrm{m/s}$ with a leftward drift $v_d=' + (vdPhys * 1e3).toFixed(3) + '\\,\\mathrm{mm/s}$. Gold sites are lattice ions that randomize $\\mathbf{v}$ every $\\tau$.'
+        },
+        {
+          id: 'length',
+          kind: 'segment',
+          x1: wireX,
+          y1: wireY + wireH + 16,
+          x2: wireX + wireW,
+          y2: wireY + wireH + 16,
+          halfW: 10,
+          title: 'Wire length',
+          body: stretch
+            ? ('Drawn to $2L$ at constant volume, so $A\\to A/2$ and $R\\to 4R_0$. Effective $R=' + effectiveR.toFixed(2) + '\\,\\Omega$.')
+            : ('Length $L$ at the unstretched cross section. $R=\\rho L/A=' + effectiveR.toFixed(2) + '\\,\\Omega$ including the $T$ factor.')
+        },
+        {
+          id: 'wire',
+          kind: 'rect',
+          x: wireX,
+          y: wireY,
+          w: wireW,
+          h: wireH,
+          title: 'Resistive wire',
+          body: 'Ohmic cylinder: $I=' + current.toFixed(2) + '\\,\\mathrm{A}$ through $R=' + effectiveR.toFixed(2) + '\\,\\Omega$ gives $V_R=IR$. Constitutive law $\\mathbf{J}=\\sigma\\mathbf{E}$ with $\\sigma=n e^2\\tau/m_e$.'
+        }
+      ]);
     },
 
     challenge: {
@@ -656,9 +723,10 @@ On a $P$–$V$ diagram the work is the area under the path. Clockwise cycles enc
           { value: 'isobaric', label: 'Isobaric ($P$ const)' },
           { value: 'isochoric', label: 'Isochoric ($W = 0$)' }
         ],
-        default: 'isothermal'
+        default: 'isothermal',
+        hint: 'Which constraint is held fixed. $U$ is a state function; $Q$ and $W=\\int P\\,dV$ are path-dependent, so $\\Delta U=Q-W$ matches only for paths that share endpoints.'
       },
-      { id: 'vRatio', label: 'Extent ($V_f/V_i$ or $P_f/P_i$)', min: 1.2, max: 4.0, step: 0.1, default: 2.5, unit: 'x' },
+      { id: 'vRatio', label: 'Extent ($V_f/V_i$ or $P_f/P_i$)', min: 1.2, max: 4.0, step: 0.1, default: 2.5, unit: 'x', hint: 'Expansion (or pressure) ratio. Isothermal/adiabatic/isobaric use $V_f/V_i$; isochoric uses $P_f/P_i$. Larger extent grows the shaded work on expansion paths.' },
       {
         id: 'gasType',
         label: 'Gas',
@@ -667,7 +735,8 @@ On a $P$–$V$ diagram the work is the area under the path. Clockwise cycles enc
           { value: 'monatomic', label: 'Monatomic ($\\gamma = 5/3$)' },
           { value: 'diatomic', label: 'Diatomic ($\\gamma = 7/5$)' }
         ],
-        default: 'monatomic'
+        default: 'monatomic',
+        hint: 'Sets $\\gamma=C_P/C_V$ and $C_V=f R/2$. Monatomic $f=3$, $\\gamma=5/3$; diatomic (room $T$) $f=5$, $\\gamma=7/5$. Adiabats fall steeper than isotherms by $\\gamma$.'
       },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
@@ -757,14 +826,14 @@ On a $P$–$V$ diagram the work is the area under the path. Clockwise cycles enc
 
       var procName = process;
       legend('First law $\\Delta U = Q - W$', [
-        { label: 'Path', value: procName },
-        { label: '$P$', value: '$' + curP.toFixed(2) + '\\,P_0$' },
-        { label: '$V$', value: '$' + curV.toFixed(2) + '\\,V_0$' },
-        { label: '$T$', value: '$' + curT.toFixed(2) + '\\,T_0$' },
-        { label: '$Q$', value: '$' + (Q_val >= 0 ? '+' : '') + Q_val.toFixed(2) + '$' },
-        { label: '$W$', value: '$' + (W_val >= 0 ? '+' : '') + W_val.toFixed(2) + '$' },
-        { label: '$\\Delta U$', value: '$' + (DeltaU_val >= 0 ? '+' : '') + DeltaU_val.toFixed(2) + '$' },
-        { label: '$\\gamma$', value: isMonatomic ? '$5/3$' : '$7/5$' }
+        { label: 'Path', value: procName, hint: 'The constraint walking the $P$–$V$ plane. $U$ depends only on the endpoints; $Q$ and $W$ remember this particular path.' },
+        { label: '$P$', value: '$' + curP.toFixed(2) + '\\,P_0$', hint: 'Instantaneous pressure in units of $P_0$. For an ideal gas $PV\\propto T$ on every path.' },
+        { label: '$V$', value: '$' + curV.toFixed(2) + '\\,V_0$', hint: 'Instantaneous volume in units of $V_0$. Work $W=\\int P\\,dV$ is the shaded area under the path (zero if $dV=0$).' },
+        { label: '$T$', value: '$' + curT.toFixed(2) + '\\,T_0$', hint: 'Ideal-gas temperature from $T\\propto PV$ (here $nR=1$). $\\Delta U=n C_V\\Delta T$ depends only on this, not on the wiggly path.' },
+        { label: '$Q$', value: '$' + (Q_val >= 0 ? '+' : '') + Q_val.toFixed(2) + '$', hint: 'Heat absorbed so far. First law $Q=\\Delta U+W$ (physics sign: $W$ by the system). Isothermal: $Q=W$; adiabatic: $Q=0$.' },
+        { label: '$W$', value: '$' + (W_val >= 0 ? '+' : '') + W_val.toFixed(2) + '$', hint: 'Work by the gas $W=\\int P\\,dV$. On this diagram it is the coral area under the curve; isochoric forces $W=0$.' },
+        { label: '$\\Delta U$', value: '$' + (DeltaU_val >= 0 ? '+' : '') + DeltaU_val.toFixed(2) + '$', hint: 'Internal energy change $\\Delta U=n C_V\\Delta T=\\frac{f}{2}n R\\Delta T$. State function: same for any path between these $(P,V)$.' },
+        { label: '$\\gamma$', value: isMonatomic ? '$5/3$' : '$7/5$', hint: 'Heat-capacity ratio $\\gamma=C_P/C_V$. Adiabatic slope $(dP/dV)_{\\mathrm{ad}}=-\\gamma P/V$ is steeper than the isotherm $-P/V$.' }
       ]);
 
       creamFill(ctx, width, height);
@@ -876,6 +945,79 @@ On a $P$–$V$ diagram the work is the area under the path. Clockwise cycles enc
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
       for (i = 1; i <= 4; i++) ctx.fillText(String(i), originX - 8, mapP(i));
+
+      var pathBody;
+      if (process === 'isothermal') {
+        pathBody = 'Isotherm $PV=\\mathrm{const}$. $\\Delta U=0$ so $Q=W=nRT\\ln(V/V_i)=' + W_val.toFixed(2) + '$.';
+      } else if (process === 'adiabatic') {
+        pathBody = 'Adiabat $PV^{\\gamma}=\\mathrm{const}$ with $\\gamma=' + (isMonatomic ? '5/3' : '7/5') + '$. $Q=0$ so $\\Delta U=-W=' + DeltaU_val.toFixed(2) + '$; expansion cools the gas.';
+      } else if (process === 'isobaric') {
+        pathBody = 'Isobar $P=' + P1.toFixed(2) + '\\,P_0$. Heat $Q=n C_P\\Delta T$ pays for both $\\Delta U$ and $W=P\\Delta V=' + W_val.toFixed(2) + '$.';
+      } else {
+        pathBody = 'Isochor $V=' + V1.toFixed(2) + '\\,V_0$ so $W=0$ and $Q=\\Delta U=n C_V\\Delta T=' + Q_val.toFixed(2) + '$. Vertical line: no area.';
+      }
+      var spots414 = [
+        {
+          id: 'state',
+          kind: 'circle',
+          x: mapV(curV),
+          y: mapP(curP),
+          r: 10,
+          title: 'State point $(V,P)$',
+          body: 'Walks the path. Now $V=' + curV.toFixed(2) + '\\,V_0$, $P=' + curP.toFixed(2) + '\\,P_0$, $T=' + curT.toFixed(2) + '\\,T_0$. $\\Delta U=' + (DeltaU_val >= 0 ? '+' : '') + DeltaU_val.toFixed(2) + '$ depends only on $\\Delta T$.'
+        },
+        {
+          id: 'path',
+          kind: 'segment',
+          x1: mapV(curve[0].v),
+          y1: mapP(curve[0].p),
+          x2: mapV(curve[curve.length - 1].v),
+          y2: mapP(curve[curve.length - 1].p),
+          halfW: 12,
+          title: 'Process path',
+          body: pathBody
+        }
+      ];
+      if (process === 'adiabatic') {
+        spots414.push({
+          id: 'isotherm',
+          kind: 'segment',
+          x1: mapV(V1),
+          y1: mapP(P1),
+          x2: mapV(V2),
+          y2: mapP((P1 * V1) / V2),
+          halfW: 10,
+          title: 'Comparison isotherm',
+          body: 'Teal dashed $PV=\\mathrm{const}$ through the same start. The adiabat is steeper by $\\gamma=' + (isMonatomic ? '5/3' : '7/5') + '$.'
+        });
+      }
+      if (process !== 'isochoric' && curve.length > 1) {
+        var wx0 = Math.min(mapV(curve[0].v), mapV(curve[activeN - 1].v));
+        var wx1 = Math.max(mapV(curve[0].v), mapV(curve[activeN - 1].v));
+        var wTop = Math.min(mapP(curve[0].p), mapP(curve[activeN - 1].p));
+        var wBot = mapP(0);
+        spots414.push({
+          id: 'work',
+          kind: 'rect',
+          x: wx0,
+          y: wTop,
+          w: Math.max(6, wx1 - wx0),
+          h: Math.max(6, wBot - wTop),
+          title: 'Work $W=\\int P\\,dV$',
+          body: 'Shaded area under the path. Physics sign: work by the gas, currently $W=' + (W_val >= 0 ? '+' : '') + W_val.toFixed(2) + '$. Isochoric would give $W=0$.'
+        });
+      }
+      spots414.push({
+        id: 'plot',
+        kind: 'rect',
+        x: originX,
+        y: padT,
+        w: plotW,
+        h: plotH,
+        title: '$P$–$V$ diagram',
+        body: 'Work is the area under the path; $U$ is not. Gold dashed: isotherms $PV=\\mathrm{const}$. First law $\\Delta U=Q-W$ with $Q=' + (Q_val >= 0 ? '+' : '') + Q_val.toFixed(2) + '$.'
+      });
+      PGRE.setVizHotspots(spots414);
     },
 
     challenge: {
@@ -974,8 +1116,8 @@ Free evolution shears the ellipse: $\\dot x = p/m$, $\\dot p = 0$. The momentum 
     ],
 
     parameters: [
-      { id: 'sigmaX', label: 'Prepared width $\\sigma_x(0)$', min: 0.25, max: 1.8, step: 0.05, default: 0.7, unit: 'x_0' },
-      { id: 'evolve', label: 'Free evolution (shear)', type: 'toggle', default: true },
+      { id: 'sigmaX', label: 'Prepared width $\\sigma_x(0)$', min: 0.25, max: 1.8, step: 0.05, default: 0.7, unit: 'x_0', hint: 'Prepared RMS width $\\sigma_x(0)$ of the unchirped Gaussian. The bound $\\sigma_x\\sigma_p=\\hbar/2$ then forces $\\sigma_p=\\hbar/(2\\sigma_x(0))$; pinching $x$ fattens $p$.' },
+      { id: 'evolve', label: 'Free evolution (shear)', type: 'toggle', default: true, hint: 'Free evolution shears the phase-space ellipse ($\\dot x=p/m$, $\\dot p=0$). $\\sigma_p$ is frozen but $\\sigma_x(t)=\\sigma_x(0)\\sqrt{1+(t/\\tau)^2}$ grows, so the product rises above $\\hbar/2$.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
 
@@ -1017,11 +1159,11 @@ Free evolution shears the ellipse: $\\dot x = p/m$, $\\dot p = 0$. The momentum 
       var Sxp = xi / 2;
 
       legend('Heisenberg $\\sigma_x\\sigma_p\\ge\\hbar/2$', [
-        { label: '$\\sigma_x$', value: '$' + sigmaX.toFixed(2) + '$' },
-        { label: '$\\sigma_p$', value: '$' + sigmaP.toFixed(2) + '\\,\\hbar$' },
-        { label: '$\\sigma_x\\sigma_p$', value: '$' + product.toFixed(3) + '\\,\\hbar$' },
-        { label: 'Bound', value: '$\\hbar/2 = 0.500\\,\\hbar$' },
-        { label: 'State', value: isMin ? 'minimum (Gaussian)' : 'sheared (chirped)' }
+        { label: '$\\sigma_x$', value: '$' + sigmaX.toFixed(2) + '$', hint: 'Position RMS. At $t=0$ this is the slider; free flight spreads the packet as $\\sigma_x(t)=\\sigma_x(0)\\sqrt{1+(t/\\tau)^2}$ with $\\tau=2m\\sigma_x(0)^2/\\hbar$.' },
+        { label: '$\\sigma_p$', value: '$' + sigmaP.toFixed(2) + '\\,\\hbar$', hint: 'Momentum RMS, frozen under free evolution. Prepared at the bound $\\sigma_p=\\hbar/(2\\sigma_x(0))$, independent of $t$.' },
+        { label: '$\\sigma_x\\sigma_p$', value: '$' + product.toFixed(3) + '\\,\\hbar$', hint: 'Uncertainty product. Equals $\\hbar/2$ only for an unchirped Gaussian; shear (chirp) drives the axis-aligned product strictly above the bound while $\\det\\mathrm{Cov}$ stays $(\\hbar/2)^2$.' },
+        { label: 'Bound', value: '$\\hbar/2 = 0.500\\,\\hbar$', hint: 'Robertson relation $\\sigma_x\\sigma_p\\ge\\hbar/2$ from $[\\hat x,\\hat p]=i\\hbar$. The rigorous RMS bound is $\\hbar/2$, not $\\hbar$ or $h$.' },
+        { label: 'State', value: isMin ? 'minimum (Gaussian)' : 'sheared (chirped)', hint: 'Minimum-uncertainty Gaussian if untilted. After free flight the ellipse shears: a quadratic phase (chirp) lets $\\sigma_x$ grow at fixed $\\sigma_p$.' }
       ]);
 
       creamFill(ctx, width, height);
@@ -1097,6 +1239,66 @@ Free evolution shears the ellipse: $\\dot x = p/m$, $\\dot p = 0$. The momentum 
         ctx.arc(X(pt.x), P(pt.p), 2.6, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      var ellX = X(-sigmaX);
+      var ellY = P(sigmaP);
+      var ellW = X(sigmaX) - X(-sigmaX);
+      var ellH = P(-sigmaP) - P(sigmaP);
+      PGRE.setVizHotspots([
+        {
+          id: 'origin',
+          kind: 'circle',
+          x: ox,
+          y: oy,
+          r: 12,
+          title: 'Phase-space origin',
+          body: 'Mean $(\\langle x\\rangle,\\langle p\\rangle)=(0,0)$. The blob is the covariance ellipse of the Gaussian packet. Product $\\sigma_x\\sigma_p=' + product.toFixed(3) + '\\,\\hbar$.'
+        },
+        {
+          id: 'sigx',
+          kind: 'segment',
+          x1: X(-sigmaX),
+          y1: oy,
+          x2: X(sigmaX),
+          y2: oy,
+          halfW: 8,
+          title: 'Position width $\\sigma_x$',
+          body: 'Horizontal half-width of the ellipse is $\\sigma_x=' + sigmaX.toFixed(2) + '$. Free shear stretches this as $\\sqrt{1+(t/\\tau)^2}$.'
+        },
+        {
+          id: 'sigp',
+          kind: 'segment',
+          x1: ox,
+          y1: P(-sigmaP),
+          x2: ox,
+          y2: P(sigmaP),
+          halfW: 8,
+          title: 'Momentum width $\\sigma_p$',
+          body: 'Vertical half-width $\\sigma_p=' + sigmaP.toFixed(2) + '\\,\\hbar$ is frozen ($\\dot p=0$). Pinching $\\sigma_x(0)$ raises this floor.'
+        },
+        {
+          id: 'ellipse',
+          kind: 'rect',
+          x: ellX,
+          y: ellY,
+          w: ellW,
+          h: ellH,
+          title: 'Covariance ellipse',
+          body: isMin
+            ? ('Untilted Gaussian saturating $\\sigma_x\\sigma_p=\\hbar/2=' + product.toFixed(3) + '\\,\\hbar$. Teal dashed: the prepared $t=0$ ellipse.')
+            : ('Sheared (chirped) state. Axis-aligned product $\\sigma_x\\sigma_p=' + product.toFixed(3) + '\\,\\hbar$ exceeds $\\hbar/2$, but $\\det\\mathrm{Cov}=(\\hbar/2)^2$ is conserved. Teal dashed: $t=0$.')
+        },
+        {
+          id: 'plot',
+          kind: 'rect',
+          x: padL,
+          y: padT,
+          w: width - padL - padR,
+          h: height - padT - padB,
+          title: 'Phase space $(x,p)$',
+          body: 'Each gold dot is a Monte-Carlo sample of the Wigner blob. Free motion is horizontal shear $x\\mapsto x+(p/m)t$.'
+        }
+      ]);
     },
 
     challenge: {
@@ -1210,10 +1412,11 @@ Hence $C_P>C_V$. For an ideal gas Mayer's relation is $C_P-C_V=nR$. For any stab
           { value: 'diatomic_high', label: 'Diatomic + vib ($\\gamma=9/7$)' },
           { value: 'solid_dulong', label: 'Solid (Dulong–Petit)' }
         ],
-        default: 'diatomic_rt'
+        default: 'diatomic_rt',
+        hint: 'Degrees of freedom fix $C_V=f R/2$ and $C_P=C_V+R$ (ideal). Solid (Dulong–Petit) has $C_P\\approx C_V\\approx 3R$ because $\\beta\\to 0$ kills expansion work.'
       },
-      { id: 'heatInput', label: 'Heat pulse $\\Delta Q$', min: 100, max: 1000, step: 50, default: 500, unit: 'J' },
-      { id: 'tempK', label: 'Base $T_0$', min: 40, max: 1500, step: 10, default: 300, unit: 'K' },
+      { id: 'heatInput', label: 'Heat pulse $\\Delta Q$', min: 100, max: 1000, step: 50, default: 500, unit: 'J', hint: 'Same heat pulse $\\Delta Q$ dumped into both chambers. Locked: $\\Delta T_V=\\Delta Q/C_V$. Free: $\\Delta T_P=\\Delta Q/C_P<\\Delta T_V$ because part of $\\Delta Q$ leaves as $P\\,dV$ work.' },
+      { id: 'tempK', label: 'Base $T_0$', min: 40, max: 1500, step: 10, default: 300, unit: 'K', hint: 'Starting temperature $T_0$. For diatomic gas, room $T$ freezes vibration ($f=5$); high $T$ turns it on ($f=7$). The base $T$ also sets how much the free piston lifts for a given $\\Delta T$.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
 
@@ -1263,14 +1466,14 @@ Hence $C_P>C_V$. For an ideal gas Mayer's relation is $C_P-C_V=nR$. For any stab
       else if (isSolid) gasLabel = 'solid';
 
       legend('Heat capacity $C_P=(\\partial Q/\\partial T)_P$', [
-        { label: 'Model', value: gasLabel },
-        { label: '$C_P$', value: '$' + (Cp_m / R).toFixed(2) + '\\,R$' },
-        { label: '$C_V$', value: '$' + (Cv_m / R).toFixed(2) + '\\,R$' },
-        { label: '$\\gamma$', value: '$' + gamma.toFixed(3) + '$' },
-        { label: '$\\Delta T_P$', value: '$+' + DeltaT_P.toFixed(1) + '\\,\\mathrm{K}$' },
-        { label: '$\\Delta T_V$', value: '$+' + DeltaT_V.toFixed(1) + '\\,\\mathrm{K}$' },
-        { label: '$W_P$', value: '$' + W_P.toFixed(0) + '\\,\\mathrm{J}$' },
-        { label: '$\\Delta U_P$', value: '$' + DeltaU_P.toFixed(0) + '\\,\\mathrm{J}$' }
+        { label: 'Model', value: gasLabel, hint: 'Which quadratic degrees of freedom are live. Mayer $C_P-C_V=nR$ holds for the ideal gases; the solid nearly saturates $C_P=C_V$.' },
+        { label: '$C_P$', value: '$' + (Cp_m / R).toFixed(2) + '\\,R$', hint: 'Heat capacity at constant pressure, $(\\partial H/\\partial T)_P$. Larger $C_P$ means the free piston warms less for the same $\\Delta Q$.' },
+        { label: '$C_V$', value: '$' + (Cv_m / R).toFixed(2) + '\\,R$', hint: 'Heat capacity at constant volume, $(\\partial U/\\partial T)_V$. The locked chamber has $W=0$, so all heat becomes $\\Delta U=C_V\\Delta T$.' },
+        { label: '$\\gamma$', value: '$' + gamma.toFixed(3) + '$', hint: 'Ratio $\\gamma=C_P/C_V$. Monatomic $5/3$, diatomic $7/5$ (or $9/7$ with vibration). Adiabatic $PV^{\\gamma}$ uses this same $\\gamma$.' },
+        { label: '$\\Delta T_P$', value: '$+' + DeltaT_P.toFixed(1) + '\\,\\mathrm{K}$', hint: 'Temperature rise at constant $P$: $\\Delta T_P=\\Delta Q/C_P$. Smaller than $\\Delta T_V$ because enthalpy, not just $U$, is being filled.' },
+        { label: '$\\Delta T_V$', value: '$+' + DeltaT_V.toFixed(1) + '\\,\\mathrm{K}$', hint: 'Temperature rise at constant $V$: $\\Delta T_V=\\Delta Q/C_V$. GRE move: same $\\Delta Q$ $\\Rightarrow$ $\\Delta T_V>\\Delta T_P$.' },
+        { label: '$W_P$', value: '$' + W_P.toFixed(0) + '\\,\\mathrm{J}$', hint: 'Expansion work done by the free piston. Ideal gas: $W=nR\\Delta T_P=(R/C_P)\\Delta Q$. Locked side has $W=0$.' },
+        { label: '$\\Delta U_P$', value: '$' + DeltaU_P.toFixed(0) + '\\,\\mathrm{J}$', hint: 'Internal energy change of the free gas, $\\Delta U_P=\\Delta Q-W_P=C_V\\Delta T_P$. Still $C_V$, even though $P$ was held fixed.' }
       ]);
 
       creamFill(ctx, width, height);
@@ -1361,6 +1564,138 @@ Hence $C_P>C_V$. For an ideal gas Mayer's relation is $C_P-C_V=nR$. For any stab
       ctx.fillStyle = 'rgba(204, 120, 92, ' + glow + ')';
       ctx.fillRect(c1X, coilY, cylW, 10);
       ctx.fillRect(c2X, coilY, cylW, 10);
+
+      var spots432 = [
+        {
+          id: 'heatP',
+          kind: 'rect',
+          x: c1X,
+          y: coilY,
+          w: cylW,
+          h: 10,
+          title: 'Heat pulse (free)',
+          body: 'Same $\\Delta Q=' + heatInput.toFixed(0) + '\\,\\mathrm{J}$ into both sides. At constant $P$ this is $T\\,dS=dH$, so $\\Delta T_P=\\Delta Q/C_P=' + DeltaT_P.toFixed(1) + '\\,\\mathrm{K}$.'
+        },
+        {
+          id: 'heatV',
+          kind: 'rect',
+          x: c2X,
+          y: coilY,
+          w: cylW,
+          h: 10,
+          title: 'Heat pulse (locked)',
+          body: 'Identical $\\Delta Q$ at fixed $V$: $W=0$ so $\\Delta T_V=\\Delta Q/C_V=' + DeltaT_V.toFixed(1) + '\\,\\mathrm{K}$. The rigid box runs hotter.'
+        }
+      ];
+      if (isSolid) {
+        spots432.push(
+          {
+            id: 'crystalP',
+            kind: 'rect',
+            x: c1X,
+            y: cylY,
+            w: cylW,
+            h: cylH,
+            title: 'Free crystal ($C_P$)',
+            body: 'Dulong–Petit solid, weakly expanding. $\\beta$ is small so $C_P\\approx C_V$ and $\\Delta T_P=' + DeltaT_P.toFixed(1) + '\\,\\mathrm{K}$ nearly matches the locked side.'
+          },
+          {
+            id: 'crystalV',
+            kind: 'rect',
+            x: c2X,
+            y: cylY,
+            w: cylW,
+            h: cylH,
+            title: 'Clamped crystal ($C_V$)',
+            body: 'Volume pins freeze $V$. $C_V\\approx 3R$ and $\\Delta T_V=' + DeltaT_V.toFixed(1) + '\\,\\mathrm{K}$. $C_P-C_V=VT\\beta^2/\\kappa_T$ vanishes as $\\beta\\to 0$.'
+          }
+        );
+      } else {
+        var baseGasHHot = cylH * 0.48;
+        var expandHHot = baseGasHHot * clamp(vRatio_P, 1.0, 1.7);
+        var pistonY1Hot = cylY + cylH - expandHHot;
+        var gasH1Hot = cylY + cylH - pistonY1Hot;
+        var pistonY2Hot = cylY + cylH - baseGasHHot;
+        var gasH2Hot = baseGasHHot;
+        if (W_P > 8) {
+          spots432.push({
+            id: 'workArrow',
+            kind: 'segment',
+            x1: c1X + cylW - 12,
+            y1: pistonY1Hot - 6,
+            x2: c1X + cylW - 12,
+            y2: Math.max(cylY + 16, pistonY1Hot - 22),
+            halfW: 8,
+            title: 'Expansion work $W$',
+            body: 'Free piston does $W=P\\Delta V=nR\\Delta T_P=' + W_P.toFixed(0) + '\\,\\mathrm{J}$. That energy does not raise $T$.'
+          });
+        }
+        spots432.push(
+          {
+            id: 'pistonP',
+            kind: 'rect',
+            x: c1X + 2,
+            y: pistonY1Hot - 9,
+            w: cylW - 4,
+            h: 9,
+            title: 'Free piston',
+            body: 'Holds $P$ fixed. It rises as $T$ grows, spending $W=' + W_P.toFixed(0) + '\\,\\mathrm{J}$ of the heat pulse. $\\Delta U_P=' + DeltaU_P.toFixed(0) + '\\,\\mathrm{J}$ stays in the gas.'
+          },
+          {
+            id: 'pistonV',
+            kind: 'rect',
+            x: c2X + 2,
+            y: pistonY2Hot - 9,
+            w: cylW - 4,
+            h: 9,
+            title: 'Locked piston',
+            body: 'Pins freeze $V$, so $W=0$ and every joule becomes $\\Delta T_V=' + DeltaT_V.toFixed(1) + '\\,\\mathrm{K}$. GRE: same $\\Delta Q$ $\\Rightarrow$ $\\Delta T_V>\\Delta T_P$.'
+          },
+          {
+            id: 'gasP',
+            kind: 'rect',
+            x: c1X + 2,
+            y: pistonY1Hot,
+            w: cylW - 4,
+            h: Math.max(8, gasH1Hot - 2),
+            title: 'Constant-$P$ gas',
+            body: '$C_P=' + (Cp_m / R).toFixed(2) + '\\,R$. Particles thermalize at $T_P=' + T_P.toFixed(0) + '\\,\\mathrm{K}$. Part of $\\Delta Q$ left as $P\\,dV$ work.'
+          },
+          {
+            id: 'gasV',
+            kind: 'rect',
+            x: c2X + 2,
+            y: pistonY2Hot,
+            w: cylW - 4,
+            h: Math.max(8, gasH2Hot - 2),
+            title: 'Constant-$V$ gas',
+            body: '$C_V=' + (Cv_m / R).toFixed(2) + '\\,R$. Locked $T_V=' + T_V.toFixed(0) + '\\,\\mathrm{K}$ exceeds $T_P$ because $W=0$.'
+          }
+        );
+      }
+      spots432.push(
+        {
+          id: 'chP',
+          kind: 'rect',
+          x: leftX,
+          y: top,
+          w: colW,
+          h: colH,
+          title: 'Constant-$P$ chamber',
+          body: 'Enthalpy reservoir: $\\delta Q_P=dH=C_P\\,dT$. $\\Delta T_P=' + DeltaT_P.toFixed(1) + '\\,\\mathrm{K}$ for this pulse.'
+        },
+        {
+          id: 'chV',
+          kind: 'rect',
+          x: rightX,
+          y: top,
+          w: colW,
+          h: colH,
+          title: 'Constant-$V$ chamber',
+          body: 'Internal-energy reservoir: $\\delta Q_V=dU=C_V\\,dT$. $\\Delta T_V=' + DeltaT_V.toFixed(1) + '\\,\\mathrm{K}$.'
+        }
+      );
+      PGRE.setVizHotspots(spots432);
     },
 
     challenge: {

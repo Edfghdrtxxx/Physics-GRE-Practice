@@ -442,13 +442,13 @@ At the contact point the same gap plus $L$ reconstructs the Young identity $L + 
       { trap: 'Sign of Tangent Intercept', warning: 'The tangent line to $L(\\dot{q})$ at $\\dot{q}$ has equation $y = p \\xi - H(p)$. The y-intercept is $-H$, NOT $+H$.' }
     ],
     parameters: [
-      { id: 'qdot', label: 'Velocity $\\dot{q}$', type: 'range', min: -3, max: 3, step: 0.1, value: 1.5, default: 1.5, format: v => v.toFixed(1) },
-      { id: 'model', label: 'Kinetic model', type: 'select', value: 'classical', default: 'classical', options: [
+      { id: 'qdot', label: 'Velocity $\\dot{q}$', type: 'range', min: -3, max: 3, step: 0.1, value: 1.5, default: 1.5, format: v => v.toFixed(1), hint: 'Independent velocity where the tangent to $L(\\dot{q})$ is taken. Canonical momentum is that slope, $p = \\partial L/\\partial\\dot{q}$.' },
+      { id: 'model', label: 'Kinetic model', type: 'select', value: 'classical', default: 'classical', hint: 'Pick the kinetic term. Classical inverts as $p = m\\dot{q}$; relativistic $H = \\sqrt{p^2 c^2 + m^2 c^4}$; quartic scales as $H \\propto p^{4/3}$.', options: [
         { value: 'classical', label: 'Classical $L = \\frac{1}{2}m\\dot{q}^2$' },
         { value: 'relativistic', label: 'Relativistic $L = -mc^2\\sqrt{1-\\dot{q}^2/c^2}$' },
         { value: 'quartic', label: 'Nonlinear $L = \\frac{1}{4}\\alpha\\dot{q}^4$' }
       ]},
-      { id: 'roll', label: 'Roll the tangent', type: 'toggle', value: true, default: true },
+      { id: 'roll', label: 'Roll the tangent', type: 'toggle', value: true, default: true, hint: 'Sweeps $\\dot{q}$ so the tangent rolls on $L$ and the intercept $-H$ traces the dual. Turn off to freeze one contact.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, value: 1.0, default: 1.0, unit: 'x' }
     ],
     init(container, state, redraw) {
@@ -659,19 +659,129 @@ At the contact point the same gap plus $L$ reconstructs the Young identity $L + 
       if (model === 'quartic') modelLabel = 'Nonlinear $L = \\frac{1}{4}\\alpha\\dot{q}^4$';
 
       var legendRows31 = [
-        { label: 'model', value: modelLabel },
-        { label: '$\\dot{q}$', value: mathNum(curV) },
-        { label: '$L$', value: mathNum(curL) },
-        { label: '$p = \\partial L/\\partial\\dot{q}$', value: mathNum(curP) },
-        { label: '$H = p\\dot{q}-L$', value: mathNum(curH) },
-        { label: '$p\\dot{q}$', value: mathNum(pvProd) },
-        { label: '$L+H$', value: mathNum(curL + curH) },
-        { label: 'parallel gap', value: 'origin line $y=p\\xi$ minus tangent $= H$' }
+        { label: 'model', value: modelLabel, hint: 'Which $L(\\dot{q})$ is dualized. The Legendre geometry is the same; only the $p(\\dot{q})$ inversion changes.' },
+        { label: '$\\dot{q}$', value: mathNum(curV), hint: 'Contact abscissa. $p$ is the slope of $L$ here, and $H = p\\dot{q} - L$ is read from the intercept.' },
+        { label: '$L$', value: mathNum(curL), hint: 'Lagrangian at this $\\dot{q}$. The coral curve is $L$ versus velocity.' },
+        { label: '$p = \\partial L/\\partial\\dot{q}$', value: mathNum(curP), hint: 'Canonical momentum — slope of $L$ at this $\\dot{q}$. The dashed teal ray through the origin has the same slope.' },
+        { label: '$H = p\\dot{q}-L$', value: mathNum(curH), hint: 'Legendre dual. After inverting $p(\\dot{q})$, no $\\dot{q}$ may remain. The gold tangent $y = p\\xi - H$ has $y$-intercept $-H$, not $+H$.' },
+        { label: '$p\\dot{q}$', value: mathNum(pvProd), hint: 'Young pairing $p\\dot{q} = L + H$. The vertical gap from $L$ up to this product equals $H$.' },
+        { label: '$L+H$', value: mathNum(curL + curH), hint: 'Equals $p\\dot{q}$ at the contact (Young identity). A GRE check that $H$ was formed correctly.' },
+        { label: 'parallel gap', value: 'origin line $y=p\\xi$ minus tangent $= H$', hint: 'The origin line $y = p\\xi$ is parallel to the tangent. Their constant vertical separation is $H$ itself.' }
       ];
       if (model === 'relativistic') {
-        legendRows31.push({ label: '$\\sqrt{p^2 c^2 + m^2 c^4}$', value: mathNum(Hdisp) });
+        legendRows31.push({ label: '$\\sqrt{p^2 c^2 + m^2 c^4}$', value: mathNum(Hdisp), hint: 'On-shell relativistic energy. For $L = -mc^2\\sqrt{1-\\dot{q}^2/c^2}$ the Legendre transform is exactly this $H(p)$.' });
       }
       vizLegend('Legendre transform  $H = p\\dot{q} - L$', legendRows31);
+
+      var spots31 = [];
+      spots31.push({
+        id: 'contact',
+        kind: 'circle',
+        x: barX,
+        y: yL,
+        r: 10,
+        title: 'Contact $L(\\dot{q})$',
+        body: '$L = ' + curL.toFixed(2) + '$ at $\\dot{q} = ' + curV.toFixed(2) + '$. Canonical $p$ is the slope of the coral curve here.'
+      });
+      if (inBox(plot, Lmap.x(0), yNegH, 4)) {
+        spots31.push({
+          id: 'negH',
+          kind: 'circle',
+          x: Lmap.x(0),
+          y: yNegH,
+          r: 10,
+          title: 'Intercept $-H$',
+          body: 'Tangent $y = p\\xi - H$ meets the $L$-axis at $-H = ' + (-curH).toFixed(2) + '$, not $+H$.'
+        });
+      }
+      if (inBox(plot, barX, yPV, 6) && Math.abs(yPV - yL) > 10) {
+        spots31.push({
+          id: 'pqdot',
+          kind: 'circle',
+          x: barX,
+          y: yPV,
+          r: 8,
+          title: '$p\\dot{q}$',
+          body: '$p\\dot{q} = ' + pvProd.toFixed(2) + ' = L + H$ (Young identity at the contact).'
+        });
+      }
+      spots31.push({
+        id: 'Hbar',
+        kind: 'segment',
+        x1: barX,
+        y1: yL,
+        x2: barX,
+        y2: yPV,
+        halfW: 8,
+        title: 'Gap $H$',
+        body: 'Vertical gap from $L$ to $p\\dot{q}$ is $H = ' + curH.toFixed(2) + '$. Same $H$ as minus the tangent intercept.'
+      });
+      spots31.push({
+        id: 'Lbar',
+        kind: 'segment',
+        x1: barX,
+        y1: yZero,
+        x2: barX,
+        y2: yL,
+        halfW: 8,
+        title: 'Bar $L$',
+        body: 'Height from the $\\dot{q}$-axis to the coral curve is $L = ' + curL.toFixed(2) + '$.'
+      });
+      spots31.push({
+        id: 'tangent',
+        kind: 'segment',
+        x1: Lmap.x(vRange.lo),
+        y1: Lmap.y(tLeft),
+        x2: Lmap.x(vRange.hi),
+        y2: Lmap.y(tRight),
+        halfW: 7,
+        title: 'Tangent $y = p\\xi - H$',
+        body: 'Slope $p = \\partial L/\\partial\\dot{q} = ' + curP.toFixed(2) + '$. Intercept $-H = ' + (-curH).toFixed(2) + '.'
+      });
+      spots31.push({
+        id: 'originRay',
+        kind: 'segment',
+        x1: Lmap.x(vRange.lo),
+        y1: Lmap.y(curP * vRange.lo),
+        x2: Lmap.x(vRange.hi),
+        y2: Lmap.y(curP * vRange.hi),
+        halfW: 6,
+        title: 'Origin ray $y = p\\xi$',
+        body: 'Through the origin with slope $p = ' + curP.toFixed(2) + '$. Parallel to the tangent; the constant gap is $H$.'
+      });
+      if (pts.length >= 2) {
+        var iL = 0;
+        var best = Infinity;
+        var iC, dvC;
+        for (iC = 0; iC < pts.length; iC++) {
+          dvC = Math.abs(pts[iC].v - curV);
+          if (dvC < best) { best = dvC; iL = iC; }
+        }
+        var iA = Math.max(0, iL - 14);
+        var iB = Math.min(pts.length - 1, iL + 14);
+        spots31.push({
+          id: 'Lcurve',
+          kind: 'segment',
+          x1: Lmap.x(pts[iA].v),
+          y1: Lmap.y(pts[iA].L),
+          x2: Lmap.x(pts[iB].v),
+          y2: Lmap.y(pts[iB].L),
+          halfW: 10,
+          title: 'Lagrangian $L(\\dot{q})$',
+          body: 'Coral $L(\\dot{q})$ for this kinetic model. At $\\dot{q} = ' + curV.toFixed(2) + '$, $L = ' + curL.toFixed(2) + '$ and $p = ' + curP.toFixed(2) + '$.'
+        });
+      }
+      spots31.push({
+        id: 'plot',
+        kind: 'rect',
+        x: plot.x0,
+        y: plot.y0,
+        w: plot.w,
+        h: plot.h,
+        title: '$L$ versus $\\dot{q}$',
+        body: 'Legendre picture: trade slope $p$ of $L(\\dot{q})$ for intercept $-H$. Current $H = p\\dot{q} - L = ' + curH.toFixed(2) + '$.'
+      });
+      PGRE.setVizHotspots(spots31);
     },
     challenge: {
       question: "For a 1D system with Lagrangian L = ¼ α q̇⁴ - ½ k q², where α is a positive constant, what is the correct Hamiltonian H(q, p)?",
@@ -718,10 +828,10 @@ A bead on a rod spinning at constant $\\omega$ has $x = r\\cos\\omega t$, $y = r
       { trap: 'Confusing Energy Conservation with H Conservation', warning: 'A system can have conserved $H$ even when mechanical energy $E$ changes due to external constraint forces doing work.' }
     ],
     parameters: [
-      { id: 'omega', label: 'Rotation speed $\\omega$', type: 'range', min: 0, max: 4.5, step: 0.1, value: 2.5, default: 2.5, unit: 'rad/s', format: v => `${v.toFixed(1)} rad/s` },
-      { id: 'k', label: 'Spring constant $k$', type: 'range', min: 2, max: 20, step: 0.5, value: 10.0, default: 10.0, unit: 'N/m', format: v => `${v.toFixed(1)} N/m` },
+      { id: 'omega', label: 'Rotation speed $\\omega$', type: 'range', min: 0, max: 4.5, step: 0.1, value: 2.5, default: 2.5, unit: 'rad/s', format: v => `${v.toFixed(1)} rad/s`, hint: 'Lab-frame spin of the rod. Sets $T_0 = \\frac{1}{2}m\\omega^2 r^2$, so larger $\\omega$ drives $H = T_2 - T_0 + U$ farther from $E$.' },
+      { id: 'k', label: 'Spring constant $k$', type: 'range', min: 2, max: 20, step: 0.5, value: 10.0, default: 10.0, unit: 'N/m', format: v => `${v.toFixed(1)} N/m`, hint: 'Spring $U = \\frac{1}{2}k r^2$. Jacobi well $V_J = \\frac{1}{2}(k - m\\omega^2)r^2$ is bound only if $\\omega^2 < k/m$.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, value: 1.0, default: 1.0, unit: 'x' },
-      { id: 'perturb', label: 'Perturb bead', type: 'boolean', default: false }
+      { id: 'perturb', label: 'Perturb bead', type: 'boolean', default: false, hint: 'Kicks $r$ outward. $H$ stays the Jacobi integral of the conservative $V_J$, but $E$ jumps because $T_0$ depends on $r$.' }
     ],
     init(container, state, redraw) {
       state.omega = (typeof state.omega === 'number' && isFinite(state.omega)) ? state.omega : 2.5;
@@ -909,17 +1019,93 @@ A bead on a rod spinning at constant $\\omega$ has $x = r\\cos\\omega t$, $y = r
       var heq = Math.abs(T0) < 1e-4;
       var unbound = alphaR > 0;
       vizLegend('$H = T_2 - T_0 + U$ vs $E = T + U$', [
-        { label: '$E = T + U$', value: mathNum(E_total) },
-        { label: '$H = T_2 - T_0 + U$', value: mathNum(H_val) },
-        { label: '$E - H = 2T_0$', value: mathNum(E_total - H_val) },
-        { label: '$T_2$', value: mathNum(T2) },
-        { label: '$T_0$', value: mathNum(T0) },
-        { label: '$U$', value: mathNum(Uval) },
-        { label: '$r$', value: mathNum(state.r) },
-        { label: '$H$ vs $E$', value: heq ? '$H = E$ ($T_0 = 0$)' : '$H \\neq E$ ($T_0 \\neq 0$)' },
-        { label: 'radial', value: unbound ? '$\\omega^2 > k/m$ (unbound in $V_J$)' : '$\\omega^2 < k/m$ (oscillation in $V_J$)' },
-        { label: 'conservation', value: '$\\partial L/\\partial t = 0 \\Rightarrow dH/dt = 0$' }
+        { label: '$E = T + U$', value: mathNum(E_total), hint: 'Lab energy $T_2 + T_0 + U$. The spinning constraint does work, so $E$ is not conserved.' },
+        { label: '$H = T_2 - T_0 + U$', value: mathNum(H_val), hint: 'Jacobi integral $T_2 - T_0 + U$. $\\partial L/\\partial t = 0$ at fixed $\\omega$, so $dH/dt = 0$ between wall hits.' },
+        { label: '$E - H = 2T_0$', value: mathNum(E_total - H_val), hint: 'Always $2T_0 = m\\omega^2 r^2$. Vanishes only if $\\omega = 0$, which is the case $H = E$.' },
+        { label: '$T_2$', value: mathNum(T2), hint: 'Quadratic kinetic piece $\\frac{1}{2}m\\dot{r}^2$ from radial motion along the rod.' },
+        { label: '$T_0$', value: mathNum(T0), hint: 'Leftover $\\frac{1}{2}m\\omega^2 r^2$ from the time-dependent map $\\mathbf{r}(r,t)$. This is why $H \\neq E$.' },
+        { label: '$U$', value: mathNum(Uval), hint: 'Spring $\\frac{1}{2}k r^2$. Velocity-independent, so it enters $H$ and $E$ the same way.' },
+        { label: '$r$', value: mathNum(state.r), hint: 'Bead distance from the pivot. This is the single generalized coordinate.' },
+        { label: '$H$ vs $E$', value: heq ? '$H = E$ ($T_0 = 0$)' : '$H \\neq E$ ($T_0 \\neq 0$)', hint: 'Equal iff $T_0 = 0$ (time-independent $\\mathbf{r}(q)$). A spinning rod is the GRE counterexample.' },
+        { label: 'radial', value: unbound ? '$\\omega^2 > k/m$ (unbound in $V_J$)' : '$\\omega^2 < k/m$ (oscillation in $V_J$)', hint: 'Sign of $\\alpha = \\omega^2 - k/m$ selects oscillation versus runaway in $V_J$.' },
+        { label: 'conservation', value: '$\\partial L/\\partial t = 0 \\Rightarrow dH/dt = 0$', hint: 'No explicit $t$ in $L(r,\\dot{r})$ at constant $\\omega$ conserves $H$, not mechanical $E$.' }
       ]);
+
+      var spots32 = [];
+      spots32.push({
+        id: 'bead',
+        kind: 'circle',
+        x: bx,
+        y: by,
+        r: 12,
+        title: 'Bead',
+        body: 'Mass $m = 1$ at $r = ' + state.r.toFixed(2) + '$ with $\\dot{r} = ' + state.rDot.toFixed(2) + '$. Canonical coordinate is $r$ along the spinning rod.'
+      });
+      spots32.push({
+        id: 'pivot',
+        kind: 'circle',
+        x: cx,
+        y: cy,
+        r: 10,
+        title: 'Pivot',
+        body: 'Rotation axis. Lab map $x = r\\cos\\omega t$, $y = r\\sin\\omega t$ produces $T_0 = \\frac{1}{2}m\\omega^2 r^2$, so $H \\neq E$.'
+      });
+      if (omega > 0.05) {
+        spots32.push({
+          id: 'omegaArrow',
+          kind: 'circle',
+          x: cx + Math.cos(state.phi + 1.15) * 16,
+          y: cy + Math.sin(state.phi + 1.15) * 16,
+          r: 12,
+          title: 'Frame rotation $\\omega$',
+          body: 'Constant $\\omega = ' + omega.toFixed(2) + '\\,\\mathrm{rad/s}$. $\\partial L/\\partial t = 0$ at this $\\omega$, so $dH/dt = 0$ even while $E$ breathes.'
+        });
+      }
+      if (Math.abs(state.r) * scale > 10) {
+        spots32.push({
+          id: 'spring',
+          kind: 'segment',
+          x1: cx,
+          y1: cy,
+          x2: bx,
+          y2: by,
+          halfW: 8,
+          title: 'Spring',
+          body: '$U = \\frac{1}{2}k r^2$ with $k = ' + kSpr.toFixed(1) + '\\,\\mathrm{N/m}$. Velocity-independent, so $U$ enters $H$ and $E$ equally.'
+        });
+      }
+      spots32.push({
+        id: 'rod',
+        kind: 'segment',
+        x1: rx1,
+        y1: ry1,
+        x2: rx2,
+        y2: ry2,
+        halfW: 8,
+        title: 'Rotating rod',
+        body: 'Spins at $\\omega = ' + omega.toFixed(2) + '\\,\\mathrm{rad/s}$. The time-dependent map $\\mathbf{r}(r,t)$ is why $H \\neq E$.'
+      });
+      spots32.push({
+        id: 'wall',
+        kind: 'ring',
+        x: cx,
+        y: cy,
+        r: R_WALL * scale,
+        halfW: 8,
+        title: 'Radial wall',
+        body: 'Hard stop at $|r| = ' + R_WALL.toFixed(1) + '$. Jacobi $H = ' + H_val.toFixed(2) + '$ is conserved between hits; a bounce flips $\\dot{r}$ at fixed $H$.'
+      });
+      spots32.push({
+        id: 'lab',
+        kind: 'rect',
+        x: left.x0,
+        y: left.y0,
+        w: left.w,
+        h: left.h,
+        title: 'Lab-frame picture',
+        body: 'Bead on a spinning rod. $H = T_2 - T_0 + U = ' + H_val.toFixed(2) + '$ is conserved; $E = T + U = ' + E_total.toFixed(2) + '$ is not.'
+      });
+      PGRE.setVizHotspots(spots32);
     },
     challenge: {
       question: "A bead of mass m slides frictionlessly along a straight rod rotating in a horizontal plane with constant angular speed ω. If r is the radial distance from the rotation axis, what is the relationship between the Hamiltonian H and total mechanical energy E?",
@@ -962,15 +1148,15 @@ The minus sign is symplectic: $\\nabla_{(q,p)}\\cdot(\\dot{q},\\dot{p}) = 0$. A 
       { trap: 'Sign in Momentum Equation', warning: 'Remember that $\\dot{p} = -\\partial H/\\partial q$ carries a negative sign, reflecting that generalized force is the negative gradient of potential.' }
     ],
     parameters: [
-      { id: 'system', label: 'Phase System', type: 'select', value: 'pendulum', default: 'pendulum', options: [
+      { id: 'system', label: 'Phase System', type: 'select', value: 'pendulum', default: 'pendulum', hint: 'Chooses $H(q,p)$. SHO: nested ellipses. Pendulum: separatrix at $E = 2mgl$. Double well: saddle at $U(0)$.', options: [
         { value: 'sho', label: 'Harmonic Oscillator' },
         { value: 'pendulum', label: 'Nonlinear Pendulum (with Separatrix)' },
         { value: 'doublewell', label: 'Double Well Potential' }
       ]},
-      { id: 'energyFrac', label: 'Orbit energy / separatrix', type: 'range', min: 0.15, max: 1.7, step: 0.05, value: 0.45, default: 0.45 },
-      { id: 'swarm', label: 'Liouville patch', type: 'toggle', value: true, default: true, onText: 'Patch on', offText: 'Orbit only' },
+      { id: 'energyFrac', label: 'Orbit energy / separatrix', type: 'range', min: 0.15, max: 1.7, step: 0.05, value: 0.45, default: 0.45, hint: 'Orbit energy as a fraction of the reference separatrix (or SHO scale). Pendulum: below $1$ librates; above $1$ rotates.' },
+      { id: 'swarm', label: 'Liouville patch', type: 'toggle', value: true, default: true, onText: 'Patch on', offText: 'Orbit only', hint: 'Tiny blob of neighboring initial conditions. Hamiltonian flow is incompressible, so the enclosed area is Liouville-invariant.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, value: 1.0, default: 1.0, unit: 'x' },
-      { id: 'resetCloud', label: 'Reset patch', type: 'boolean', default: false }
+      { id: 'resetCloud', label: 'Reset patch', type: 'boolean', default: false, hint: 'Re-seeds the Liouville patch around the current $(q,p)$ so you can watch area preservation from a compact blob.' }
     ],
     init(container, state, redraw) {
       if (state.system !== 'sho' && state.system !== 'pendulum' && state.system !== 'doublewell') {
@@ -1160,32 +1346,152 @@ The minus sign is symplectic: $\\nabla_{(q,p)}\\cdot(\\dot{q},\\dot{p}) = 0$. A 
       var area0 = state._swarmArea0 || 0;
       var sepE = hamSepE(system);
       var legendRows = [
-        { label: 'system', value: sysLabel },
-        { label: '$q$', value: mathNum(state.q) },
-        { label: '$p$', value: mathNum(state.p) },
-        { label: '$\\dot{q} = \\partial H/\\partial p$', value: mathNum(qdotNow) },
-        { label: '$\\dot{p} = -\\partial H/\\partial q$', value: mathNum(pdotNow) },
-        { label: '$H$', value: mathNum(orbitE) }
+        { label: 'system', value: sysLabel, hint: 'Which $H$ generates the arrows. Autonomous orbits cannot leave their level set $H = E$.' },
+        { label: '$q$', value: mathNum(state.q), hint: 'Generalized coordinate. Hamilton says $\\dot{q} = \\partial H/\\partial p$.' },
+        { label: '$p$', value: mathNum(state.p), hint: 'Canonical momentum. Hamilton says $\\dot{p} = -\\partial H/\\partial q$ — the minus sign is the usual GRE trap.' },
+        { label: '$\\dot{q} = \\partial H/\\partial p$', value: mathNum(qdotNow), hint: 'Horizontal phase speed. For $T = p^2/2$ (here $m = 1$) this is just $p$.' },
+        { label: '$\\dot{p} = -\\partial H/\\partial q$', value: mathNum(pdotNow), hint: 'Vertical phase speed $-\\partial V/\\partial q$, the generalized force.' },
+        { label: '$H$', value: mathNum(orbitE), hint: 'Hamiltonian on this orbit. The coral contour is the level set $H = E$; the flow is tangent to it.' }
       ];
       if (system === 'sho') {
-        legendRows.push({ label: 'contour', value: 'closed ellipse (no separatrix)' });
+        legendRows.push({ label: 'contour', value: 'closed ellipse (no separatrix)', hint: 'Harmonic level sets are ellipses. No separatrix: every finite-$E$ orbit is closed.' });
       } else {
         legendRows.push({
           label: 'contour',
-          value: orbitE < sepE - 0.05 ? 'inside separatrix' : (orbitE > sepE + 0.05 ? 'outside / rotating' : 'near separatrix')
+          value: orbitE < sepE - 0.05 ? 'inside separatrix' : (orbitE > sepE + 0.05 ? 'outside / rotating' : 'near separatrix'),
+          hint: 'Inside the separatrix: libration. Outside: rotation. On it: approach the saddle in infinite time.'
         });
       }
       if (system === 'pendulum') {
-        legendRows.push({ label: 'dashed rose', value: 'separatrix $E = 2mgl$' });
+        legendRows.push({ label: 'dashed rose', value: 'separatrix $E = 2mgl$', hint: 'Homoclinic $E = 2mgl$. Divides swinging from circulating motion.' });
       }
       if (system === 'doublewell') {
-        legendRows.push({ label: 'dashed rose', value: 'saddle energy $U(0)$' });
+        legendRows.push({ label: 'dashed rose', value: 'saddle energy $U(0)$', hint: 'Barrier energy $U(0)$. Below it each well has its own closed orbits.' });
       }
       if (swarmOn && area0 > 0) {
-        legendRows.push({ label: 'Liouville area', value: mathNum(areaNow, 3) + ' / $A_0=' + fmt(area0, 3) + '$' });
+        legendRows.push({ label: 'Liouville area', value: mathNum(areaNow, 3) + ' / $A_0=' + fmt(area0, 3) + '$', hint: 'Shoelace area of the gold patch. The blob shears and filaments, but $A$ stays near $A_0$.' });
       }
-      legendRows.push({ label: 'flow', value: '$\\nabla\\cdot(\\dot{q},\\dot{p}) = 0$' });
+      legendRows.push({ label: 'flow', value: '$\\nabla\\cdot(\\dot{q},\\dot{p}) = 0$', hint: 'Symplectic identity $\\partial\\dot{q}/\\partial q + \\partial\\dot{p}/\\partial p = 0$. Phase volume is conserved.' });
       vizLegend("Hamilton's equations  (level sets of $H$)", legendRows);
+
+      var spots33 = [];
+      spots33.push({
+        id: 'phase',
+        kind: 'circle',
+        x: sx0,
+        y: sy0,
+        r: 10,
+        title: 'Phase point $(q, p)$',
+        body: 'Current state $q = ' + state.q.toFixed(2) + '$, $p = ' + state.p.toFixed(2) + '$. Autonomous flow stays on $H = ' + orbitE.toFixed(2) + '$.'
+      });
+      spots33.push({
+        id: 'flow',
+        kind: 'segment',
+        x1: sx0,
+        y1: sy0,
+        x2: sx0 + Math.cos(angFlow) * flowLen,
+        y2: sy0 + Math.sin(angFlow) * flowLen,
+        halfW: 8,
+        title: 'Hamiltonian vector $(\\dot{q}, \\dot{p})$',
+        body: '$\\dot{q} = \\partial H/\\partial p = ' + qdotNow.toFixed(2) + '$, $\\dot{p} = -\\partial H/\\partial q = ' + pdotNow.toFixed(2) + '$. The minus sign is symplectic.'
+      });
+      spots33.push({
+        id: 'origin',
+        kind: 'circle',
+        x: Pmap.x(0),
+        y: Pmap.y(0),
+        r: 9,
+        title: system === 'doublewell' ? 'Saddle $q = 0$' : 'Fixed point $q = 0$',
+        body: system === 'doublewell'
+          ? ('Barrier top $U(0)$. Separatrix energy $H = ' + sepE.toFixed(2) + '$ passes through this saddle.')
+          : ('Equilibrium at the origin. For the pendulum this is the hanging point; for SHO it is the unique center.')
+      });
+      if (system === 'pendulum') {
+        spots33.push({
+          id: 'saddleR',
+          kind: 'circle',
+          x: Pmap.x(Math.PI),
+          y: Pmap.y(0),
+          r: 9,
+          title: 'Separatrix saddle $\\pi$',
+          body: 'Unstable inverted point. Dashed rose is $E = 2mgl = ' + sepE.toFixed(2) + '$; it divides libration from rotation.'
+        });
+        spots33.push({
+          id: 'saddleL',
+          kind: 'circle',
+          x: Pmap.x(-Math.PI),
+          y: Pmap.y(0),
+          r: 9,
+          title: 'Separatrix saddle $-\\pi$',
+          body: 'The other copy of the inverted point on the periodic $q$-circle. Homoclinic orbits approach it in infinite time.'
+        });
+        var pSep = Math.sqrt(Math.max(0, 2 * (sepE - hamV(system, 0))));
+        spots33.push({
+          id: 'sepTop',
+          kind: 'circle',
+          x: Pmap.x(0),
+          y: Pmap.y(pSep),
+          r: 10,
+          title: 'Separatrix $E = 2mgl$',
+          body: 'Dashed rose contour $H = ' + sepE.toFixed(2) + '$. Divides closed libration from circulating rotation. Orbit $H = ' + orbitE.toFixed(2) + '$.'
+        });
+      }
+      if (system === 'doublewell') {
+        spots33.push({
+          id: 'wellR',
+          kind: 'circle',
+          x: Pmap.x(1),
+          y: Pmap.y(0),
+          r: 9,
+          title: 'Well $q = +1$',
+          body: 'Stable minimum. Below saddle energy $U(0) = ' + sepE.toFixed(2) + '$ the orbit is trapped in one well.'
+        });
+        spots33.push({
+          id: 'wellL',
+          kind: 'circle',
+          x: Pmap.x(-1),
+          y: Pmap.y(0),
+          r: 9,
+          title: 'Well $q = -1$',
+          body: 'The other minimum of $U = \\frac{3}{2}(q^2-1)^2$. Crossing needs $H > ' + sepE.toFixed(2) + '$.'
+        });
+      }
+      if (swarmOn && state.particles && state.particles.length > 2) {
+        var swMinX = Infinity, swMinY = Infinity, swMaxX = -Infinity, swMaxY = -Infinity;
+        var sk, spx, spy;
+        for (sk = 0; sk < state.particles.length; sk++) {
+          spx = Pmap.x(state.particles[sk].q);
+          spy = Pmap.y(state.particles[sk].p);
+          if (!isFinite(spx) || !isFinite(spy)) continue;
+          if (spx < swMinX) swMinX = spx;
+          if (spy < swMinY) swMinY = spy;
+          if (spx > swMaxX) swMaxX = spx;
+          if (spy > swMaxY) swMaxY = spy;
+        }
+        if (isFinite(swMinX) && swMaxX - swMinX > 4 && swMaxY - swMinY > 4) {
+          spots33.push({
+            id: 'swarm',
+            kind: 'rect',
+            x: swMinX,
+            y: swMinY,
+            w: swMaxX - swMinX,
+            h: swMaxY - swMinY,
+            title: 'Liouville patch',
+            body: 'Neighboring initial conditions. Area $A = ' + areaNow.toFixed(3) + '$ versus $A_0 = ' + area0.toFixed(3) + '$; Hamiltonian flow keeps $A$ fixed.'
+          });
+        }
+      }
+      spots33.push({
+        id: 'phasePlane',
+        kind: 'rect',
+        x: stage.x0,
+        y: stage.y0,
+        w: stage.w,
+        h: stage.h,
+        title: 'Phase plane $(q, p)$',
+        body: 'Level sets of $H$. Flow is tangent to $H = E = ' + orbitE.toFixed(2) + '$; $\\nabla\\cdot(\\dot{q},\\dot{p}) = 0$ (Liouville).'
+      });
+      PGRE.setVizHotspots(spots33);
     },
     challenge: {
       question: "For a 1D system with Hamiltonian H(q, p) = α q p, where α is a positive constant, what is the exact time dependence of the generalized coordinate q(t) with initial position q(0) = q_0?",

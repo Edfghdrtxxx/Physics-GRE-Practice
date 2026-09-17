@@ -213,10 +213,10 @@ If the net radial force suddenly ceases (for example, if a whirling tether snaps
     ],
 
     parameters: [
-      { id: 'mass', label: 'Mass ($m$)', min: 0.5, max: 5.0, step: 0.5, default: 2.0, unit: 'kg' },
-      { id: 'speed', label: 'Speed ($v$)', min: 1.0, max: 8.0, step: 0.5, default: 3.5, unit: 'm/s' },
-      { id: 'radius', label: 'Radius ($r$)', min: 0.40, max: 1.20, step: 0.05, default: 0.70, unit: 'm' },
-      { id: 'cutString', label: 'Cut tether (tangent fly-off)', type: 'toggle', default: false, unit: '' },
+      { id: 'mass', label: 'Mass ($m$)', min: 0.5, max: 5.0, step: 0.5, default: 2.0, unit: 'kg', hint: 'Inertia that must be given radial acceleration $v^2/r$. At fixed $v$ and $r$, $T = mv^2/r$ scales linearly with $m$.' },
+      { id: 'speed', label: 'Speed ($v$)', min: 1.0, max: 8.0, step: 0.5, default: 3.5, unit: 'm/s', hint: 'Tangential speed. Required centripetal force $mv^2/r$ grows as $v^2$, so doubling $v$ quadruples $T$.' },
+      { id: 'radius', label: 'Radius ($r$)', min: 0.40, max: 1.20, step: 0.05, default: 0.70, unit: 'm', hint: 'Radius of the constrained circle. At fixed $v$, a tighter $r$ raises $a_c = v^2/r$ and the tension that must supply it.' },
+      { id: 'cutString', label: 'Cut tether (tangent fly-off)', type: 'toggle', default: false, unit: '', hint: 'Snap the tether: $T=0$ so $\\mathbf{F}_{\\mathrm{net}}=0$. The mass then flies in a straight line along the instantaneous tangent $\\mathbf{v}$, never radially outward.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
 
@@ -422,25 +422,55 @@ If the net radial force suddenly ceases (for example, if a whirling tether snaps
 
       if (isCut) {
         legend('Centripetal dynamics', [
-          { label: '$F_{\\mathrm{net}}$', value: '$0$' },
-          { label: '$T$', value: '$0$ (cut)' },
-          { label: '$m$', value: '$' + m.toFixed(1) + '\\,\\mathrm{kg}$' },
-          { label: '$v$', value: '$' + v.toFixed(1) + '\\,\\mathrm{m/s}$' },
-          { label: '$r$', value: '$' + r.toFixed(2) + '\\,\\mathrm{m}$' },
-          { label: '$K = \\frac{1}{2}mv^2$', value: '$' + (0.5 * m * v * v).toFixed(1) + '\\,\\mathrm{J}$' },
-          { label: 'Path', value: 'inertial tangent (not radial)' }
+          { label: '$F_{\\mathrm{net}}$', value: '$0$', hint: 'With no real force after the cut, $\\mathbf{a}=0$ and $\\mathbf{v}$ is constant (Newton 1st law).' },
+          { label: '$T$', value: '$0$ (cut)', hint: 'A cut string cannot pull. Removing $T$ removes the only inward force that had been supplying $mv^2/r$.' },
+          { label: '$m$', value: '$' + m.toFixed(1) + '\\,\\mathrm{kg}$', hint: 'Inertia is unchanged by the cut. Because $T\\perp v$ before the snap, $K$ is unchanged too.' },
+          { label: '$v$', value: '$' + v.toFixed(1) + '\\,\\mathrm{m/s}$', hint: 'Speed just after the snap equals the orbital speed just before: the cut does no impulse along $\\mathbf{v}$.' },
+          { label: '$r$', value: '$' + r.toFixed(2) + '\\,\\mathrm{m}$', hint: 'Radius of the circle the mass was on. After the cut the path is straight, so this $r$ is no longer a curvature radius.' },
+          { label: '$K = \\frac{1}{2}mv^2$', value: '$' + (0.5 * m * v * v).toFixed(1) + '\\,\\mathrm{J}$', hint: 'Work by $T$ was always zero ($T\\perp v$), so kinetic energy is the same on the circle and on the fly-off.' },
+          { label: 'Path', value: 'inertial tangent (not radial)', hint: 'GRE trap: the mass does not fly radially outward. It continues along $\\mathbf{v}$ at the release point.' }
         ]);
       } else {
         legend('Centripetal dynamics', [
-          { label: '$T = mv^2/r$', value: '$' + Fc.toFixed(1) + '\\,\\mathrm{N}$' },
-          { label: '$m$', value: '$' + m.toFixed(1) + '\\,\\mathrm{kg}$' },
-          { label: '$v$', value: '$' + v.toFixed(1) + '\\,\\mathrm{m/s}$' },
-          { label: '$r$', value: '$' + r.toFixed(2) + '\\,\\mathrm{m}$' },
-          { label: '$\\omega = v/r$', value: '$' + omega.toFixed(2) + '\\,\\mathrm{rad/s}$' },
-          { label: 'Work by $T$', value: '$0$ ($T \\perp v$)' },
-          { label: 'Path', value: 'uniform circle' }
+          { label: '$T = mv^2/r$', value: '$' + Fc.toFixed(1) + '\\,\\mathrm{N}$', hint: 'This tension is the centripetal force. Do not draw a separate $F_c$ on an FBD; $T$ is the real inward force.' },
+          { label: '$m$', value: '$' + m.toFixed(1) + '\\,\\mathrm{kg}$', hint: 'Larger mass at the same $v$ and $r$ needs a proportionally larger $T$.' },
+          { label: '$v$', value: '$' + v.toFixed(1) + '\\,\\mathrm{m/s}$', hint: 'Speed on the circle. Because $T\\propto v^2$, a modest increase in $v$ is a large increase in tension.' },
+          { label: '$r$', value: '$' + r.toFixed(2) + '\\,\\mathrm{m}$', hint: 'Instantaneous radius of curvature. Shrinking $r$ at fixed $v$ raises $a_c = v^2/r$.' },
+          { label: '$\\omega = v/r$', value: '$' + omega.toFixed(2) + '\\,\\mathrm{rad/s}$', hint: 'Angular speed on the circle. Equivalently $T = m\\omega^2 r$.' },
+          { label: 'Work by $T$', value: '$0$ ($T \\perp v$)', hint: 'A force perpendicular to the displacement does no work, so $K$ is constant on the uniform circle.' },
+          { label: 'Path', value: 'uniform circle', hint: 'Uniform circular motion: $|\\mathbf{v}|$ is fixed and $\\mathbf{a}$ is purely radial inward.' }
         ]);
       }
+      var spots14 = [];
+      if (state._snapped && state._freePos && state._snapPos && state._snapVel) {
+        var smH = Math.hypot(state._snapVel.x, state._snapVel.y) || 1;
+        var sLenH = 36;
+        spots14.push(
+          { id: 'mass', kind: 'circle', x: state._freePos.x, y: state._freePos.y, r: massR + 8, title: 'Free mass $m$', body: 'Tether gone: $\\mathbf{F}_{\\mathrm{net}}=0$, so this mass coasts at constant $v = ' + v.toFixed(1) + '\\,\\mathrm{m/s}$ along the release tangent.' },
+          { id: 'v', kind: 'segment', x1: state._freePos.x, y1: state._freePos.y, x2: state._freePos.x + (state._snapVel.x / smH) * sLenH, y2: state._freePos.y + (state._snapVel.y / smH) * sLenH, halfW: 8, title: 'Velocity $\\mathbf{v}$', body: 'Frozen at the instant of the snap. Direction stays tangent to the old circle, never radial.' },
+          { id: 'release', kind: 'circle', x: state._snapPos.x, y: state._snapPos.y, r: 10, title: 'Release point', body: 'Where the string snapped. The fly-off line is the tangent here, not the outward radius.' },
+          { id: 'ghost', kind: 'circle', x: gx, y: gy, r: massR + 6, title: 'Would-be orbital mass', body: 'Faint marker of where $m$ would be if the tether still supplied $T = mv^2/r = ' + Fc.toFixed(1) + '\\,\\mathrm{N}$.' },
+          { id: 'stub', kind: 'segment', x1: cx, y1: cy, x2: cx + (state._snapPos.x - cx) * 0.22, y2: cy + (state._snapPos.y - cy) * 0.22, halfW: 8, title: 'Cut tether stub', body: '$T = 0$. The remaining stump cannot provide the centripetal force.' },
+          { id: 'tangent', kind: 'segment', x1: state._snapPos.x, y1: state._snapPos.y, x2: state._snapPos.x + (state._snapVel.x / smH) * tableR * 0.8, y2: state._snapPos.y + (state._snapVel.y / smH) * tableR * 0.8, halfW: 8, title: 'Inertial tangent', body: 'Straight-line coast $\\mathbf{r}(t)=\\mathbf{r}_0+\\mathbf{v}_0 t$. GRE trap: this is not a radial fly-out.' }
+        );
+      } else {
+        var tLenH = 18 + rDraw * 0.28 * tFrac;
+        var uxH = (cx - gx) / Math.max(rDraw, 1);
+        var uyH = (cy - gy) / Math.max(rDraw, 1);
+        var vLenH = Math.min(42, rDraw * 0.34);
+        spots14.push(
+          { id: 'mass', kind: 'circle', x: gx, y: gy, r: massR + 8, title: 'Orbiting mass $m$', body: '$m = ' + m.toFixed(1) + '\\,\\mathrm{kg}$ on a circle of $r = ' + r.toFixed(2) + '\\,\\mathrm{m}$ at $v = ' + v.toFixed(1) + '\\,\\mathrm{m/s}$.' },
+          { id: 'T', kind: 'segment', x1: gx, y1: gy, x2: gx + uxH * tLenH, y2: gy + uyH * tLenH, halfW: 8, title: 'Tension $\\mathbf{T}$', body: 'The real inward force. $T = mv^2/r = ' + Fc.toFixed(1) + '\\,\\mathrm{N}$. Do not also draw an $F_c$ on the FBD.' },
+          { id: 'v', kind: 'segment', x1: gx, y1: gy, x2: gx + tx * vLenH, y2: gy + ty * vLenH, halfW: 8, title: 'Velocity $\\mathbf{v}$', body: 'Tangential. $T\\perp v$ so tension does no work and $|\\mathbf{v}|$ stays $' + v.toFixed(1) + '\\,\\mathrm{m/s}$.' },
+          { id: 'tether', kind: 'segment', x1: cx, y1: cy, x2: gx, y2: gy, halfW: 8, title: 'Tether', body: 'Constraint that supplies $T$. Line thickness tracks $T = ' + Fc.toFixed(1) + '\\,\\mathrm{N}$.' }
+        );
+      }
+      spots14.push(
+        { id: 'pivot', kind: 'circle', x: cx, y: cy, r: 12, title: 'Fixed pivot', body: 'Origin of $\\mathbf{r}$. The string pulls the mass toward this point, producing $\\mathbf{a}_c = -v^2/r\\,\\hat{\\mathbf{r}}$.' },
+        { id: 'orbit', kind: 'ring', x: cx, y: cy, r: rDraw, halfW: 8, title: 'Constrained circle', body: 'Path of radius $r = ' + r.toFixed(2) + '\\,\\mathrm{m}$. Required $a_c = v^2/r = ' + (v * v / r).toFixed(2) + '\\,\\mathrm{m/s}^2$.' },
+        { id: 'table', kind: 'circle', x: cx, y: cy, r: tableR, title: 'Table', body: 'Horizontal plane of the motion. With no friction, the only horizontal force is the tether.' }
+      );
+      if (PGRE.setVizHotspots) PGRE.setVizHotspots(spots14);
     },
 
     challenge: {
@@ -492,10 +522,10 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
     ],
 
     parameters: [
-      { id: 'omega', label: 'Turntable spin ($\\Omega$)', min: -2.5, max: 2.5, step: 0.25, default: 1.0, unit: 'rad/s' },
-      { id: 'launchSpeed', label: 'Throw speed ($v_{\\mathrm{rot}}$)', min: 0.6, max: 2.2, step: 0.1, default: 1.2, unit: 'm/s' },
-      { id: 'launchAngle', label: 'Aim offset', min: -60, max: 60, step: 5, default: 0, unit: 'deg' },
-      { id: 'showForces', label: 'Show fictitious vectors', type: 'toggle', default: true, unit: '' },
+      { id: 'omega', label: 'Turntable spin ($\\Omega$)', min: -2.5, max: 2.5, step: 0.25, default: 1.0, unit: 'rad/s', hint: 'Signed table spin. $\\mathbf{F}_{\\mathrm{Cor}}=-2m(\\boldsymbol{\\Omega}\\times\\mathbf{v}_{\\mathrm{rot}})$: CCW ($\\Omega>0$) deflects to the right of $\\mathbf{v}_{\\mathrm{rot}}$; CW to the left. $\\Omega=0$ recovers a straight inertial throw.' },
+      { id: 'launchSpeed', label: 'Throw speed ($v_{\\mathrm{rot}}$)', min: 0.6, max: 2.2, step: 0.1, default: 1.2, unit: 'm/s', hint: 'Speed of the throw as measured on the table. Coriolis grows as $|\\mathbf{F}_{\\mathrm{Cor}}|=2m|\\Omega||v_{\\mathrm{rot}}|$; a stationary puck ($v_{\\mathrm{rot}}=0$) feels only centrifugal force.' },
+      { id: 'launchAngle', label: 'Aim offset', min: -60, max: 60, step: 5, default: 0, unit: 'deg', hint: 'Aim offset in the rotating frame. Nonzero angle tilts $\\mathbf{v}_{\\mathrm{rot}}$ off the thrower-catcher line, so even the inertial straight-line miss is biased before Coriolis curves it further.' },
+      { id: 'showForces', label: 'Show fictitious vectors', type: 'toggle', default: true, unit: '', hint: 'Toggle the fictitious vectors in the rotating panel. $\\mathbf{F}_{\\mathrm{Cor}}\\perp\\mathbf{v}_{\\mathrm{rot}}$ (does no work); $\\mathbf{F}_{\\mathrm{cent}}=m\\Omega^2\\mathbf{r}_\\perp$ is purely outward.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
 
@@ -582,10 +612,12 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
 
       if (!state._inertialTrail) state._inertialTrail = [];
       if (!state._rotTrail) state._rotTrail = [];
-      state._inertialTrail.push({ x: leftCX + xin * s, y: cy - yin * s });
-      state._rotTrail.push({ x: rightCX + xrot * s, y: cy - yrot * s });
-      if (state._inertialTrail.length > 80) state._inertialTrail.shift();
-      if (state._rotTrail.length > 80) state._rotTrail.shift();
+      if (dt > 0) {
+        state._inertialTrail.push({ x: leftCX + xin * s, y: cy - yin * s });
+        state._rotTrail.push({ x: rightCX + xrot * s, y: cy - yrot * s });
+        if (state._inertialTrail.length > 80) state._inertialTrail.shift();
+        if (state._rotTrail.length > 80) state._rotTrail.shift();
+      }
 
       ctx.save();
       ctx.strokeStyle = C.line;
@@ -748,12 +780,62 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
       if (Omega > 0.02) defl = 'right of $v$ (CCW)';
       else if (Omega < -0.02) defl = 'left of $v$ (CW)';
       legend('Coriolis dynamics', [
-        { label: '$\\Omega$', value: '$' + Omega.toFixed(2) + '\\,\\mathrm{rad/s}$' },
-        { label: '$|\\mathbf{F}_{\\mathrm{Cor}}|$ ($m=1$)', value: '$' + fCorAbs.toFixed(2) + '\\,\\mathrm{N}$' },
-        { label: '$|\\mathbf{v}_{\\mathrm{rot}}|$', value: '$' + vRotAbs.toFixed(2) + '\\,\\mathrm{m/s}$' },
-        { label: 'Deflection', value: defl },
-        { label: 'Work by $\\mathbf{F}_{\\mathrm{Cor}}$', value: '$0$ ($\\mathbf{F}_{\\mathrm{Cor}} \\perp \\mathbf{v}_{\\mathrm{rot}}$)' }
+        { label: '$\\Omega$', value: '$' + Omega.toFixed(2) + '\\,\\mathrm{rad/s}$', hint: 'The frame angular velocity. It is not a real force; it only appears when you write $m\\mathbf{a}_{\\mathrm{rot}}=\\mathbf{F}_{\\mathrm{real}}+\\mathbf{F}_{\\mathrm{fict}}$.' },
+        { label: '$|\\mathbf{F}_{\\mathrm{Cor}}|$ ($m=1$)', value: '$' + fCorAbs.toFixed(2) + '\\,\\mathrm{N}$', hint: 'Magnitude $2m|\\Omega||v_{\\mathrm{rot}}|$ with $m=1\\,\\mathrm{kg}$ here. The factor of 2 is a GRE favorite: one $\\Omega$ from rotating basis vectors, one from advecting $\\mathbf{v}_{\\mathrm{rot}}$.' },
+        { label: '$|\\mathbf{v}_{\\mathrm{rot}}|$', value: '$' + vRotAbs.toFixed(2) + '\\,\\mathrm{m/s}$', hint: 'Speed relative to the table. Coriolis vanishes if this is zero or if $\\mathbf{v}_{\\mathrm{rot}}\\parallel\\boldsymbol{\\Omega}$.' },
+        { label: 'Deflection', value: defl, hint: 'CCW rotation ($\\Omega>0$) deflects to the right of the velocity; CW to the left. Same rule as the Northern-Hemisphere weather mnemonic.' },
+        { label: 'Work by $\\mathbf{F}_{\\mathrm{Cor}}$', value: '$0$ ($\\mathbf{F}_{\\mathrm{Cor}} \\perp \\mathbf{v}_{\\mathrm{rot}}$)', hint: '$\\mathbf{F}_{\\mathrm{Cor}}\\cdot\\mathbf{v}_{\\mathrm{rot}}=0$ identically, so Coriolis changes direction but not rotating-frame speed.' }
       ]);
+      var spots22 = [
+        { id: 'puckIn', kind: 'circle', x: curInX, y: curInY, r: 12, title: 'Puck (inertial frame)', body: 'No real horizontal force, so the lab path is a straight line at $v_{\\mathrm{in}} = ' + Math.hypot(vinx, viny).toFixed(2) + '\\,\\mathrm{m/s}$.' },
+        { id: 'puckRot', kind: 'circle', x: curRotX, y: curRotY, r: 12, title: 'Puck (rotating frame)', body: 'Same motion, viewed from the table. The curve is fictitious: $\\mathbf{F}_{\\mathrm{Cor}}=-2m(\\boldsymbol{\\Omega}\\times\\mathbf{v}_{\\mathrm{rot}})$ with $|\\mathbf{F}_{\\mathrm{Cor}}| = ' + fCorAbs.toFixed(2) + '\\,\\mathrm{N}$.' },
+        { id: 'vIn', kind: 'segment', x1: curInX, y1: curInY, x2: curInX + (vinx / vInMag) * vInLen, y2: curInY - (viny / vInMag) * vInLen, halfW: 8, title: 'Inertial velocity', body: 'Constant lab velocity. $v_{\\mathrm{in}} = v_{\\mathrm{rot}}+\\boldsymbol{\\Omega}\\times\\mathbf{r}$ at launch, then never changes.' },
+        { id: 'vRot', kind: 'segment', x1: curRotX, y1: curRotY, x2: curRotX + (vrotX / vRotMag) * vRotLen, y2: curRotY - (vrotY / vRotMag) * vRotLen, halfW: 8, title: 'Rotating-frame velocity', body: '$|\\mathbf{v}_{\\mathrm{rot}}| = ' + vRotAbs.toFixed(2) + '\\,\\mathrm{m/s}$. Coriolis is always perpendicular to this vector, so it does no work.' },
+        { id: 'throwL', kind: 'circle', x: leftCX + xti * s, y: cy - yti * s, r: 10, title: 'Thrower (lab)', body: 'Launch seat, rotating with the table in the lab view. The puck leaves this point with $\\mathbf{v}_{\\mathrm{in}}=\\mathbf{v}_{\\mathrm{rot}}+\\boldsymbol{\\Omega}\\times\\mathbf{r}$.' },
+        { id: 'catchL', kind: 'circle', x: leftCX + xfi * s, y: cy - yfi * s, r: 10, title: 'Target (lab)', body: 'Catcher rotating with the table. The inertial straight line generally misses this moving seat.' },
+        { id: 'throwR', kind: 'circle', x: rightCX + xt * s, y: cy - yt * s, r: 10, title: 'Thrower (table frame)', body: 'Fixed on the table. Launch is from $x = ' + xt.toFixed(2) + '\\,R$ along the aimed $\\mathbf{v}_{\\mathrm{rot}}$.' },
+        { id: 'catchR', kind: 'circle', x: rightCX + xf * s, y: cy - yf * s, r: 10, title: 'Target (table frame)', body: 'Fixed catcher. In this frame the puck curves away from the intended dashed line under Coriolis.' },
+        { id: 'aimL', kind: 'segment', x1: leftCX + xti * s, y1: cy - yti * s, x2: leftCX + xfi * s, y2: cy - yfi * s, halfW: 8, title: 'Intended throw (lab)', body: 'Thrower-catcher chord, spinning with the table. The puck does not follow this line in the lab.' },
+        { id: 'aimR', kind: 'segment', x1: rightCX + xt * s, y1: cy - yt * s, x2: rightCX + xf * s, y2: cy - yf * s, halfW: 8, title: 'Intended throw (table)', body: 'Fixed dashed chord in the rotating frame. Coriolis peels the actual trail off this line.' },
+        { id: 'hubL', kind: 'circle', x: leftCX, y: cy, r: 14, title: 'Lab turntable hub', body: 'Table angle $\\phi=\\Omega t$ with $\\Omega = ' + Omega.toFixed(2) + '\\,\\mathrm{rad/s}$. The puck ignores this rotation and goes straight.' },
+        { id: 'hubR', kind: 'circle', x: rightCX, y: cy, r: 14, title: 'Rotating-frame origin', body: 'Here the table is at rest. Fictitious Coriolis and centrifugal forces are added so $m\\mathbf{a}_{\\mathrm{rot}}=\\mathbf{F}_{\\mathrm{real}}+\\mathbf{F}_{\\mathrm{fict}}$.' }
+      ];
+      if (showVecs) {
+        var fCorXh = 2 * Omega * vrotY;
+        var fCorYh = -2 * Omega * vrotX;
+        var fCorMagH = Math.hypot(fCorXh, fCorYh);
+        if (fCorMagH > 1e-3) {
+          spots22.push({ id: 'fCor', kind: 'segment', x1: curRotX, y1: curRotY, x2: curRotX + (fCorXh / fCorMagH) * 42, y2: curRotY - (fCorYh / fCorMagH) * 42, halfW: 8, title: 'Coriolis force', body: '$\\mathbf{F}_{\\mathrm{Cor}}=-2m(\\boldsymbol{\\Omega}\\times\\mathbf{v}_{\\mathrm{rot}})$, magnitude $' + fCorAbs.toFixed(2) + '\\,\\mathrm{N}$. Perpendicular to $\\mathbf{v}_{\\mathrm{rot}}$; CCW $\\Omega$ deflects to the right.' });
+        }
+        var fCentXh = Omega * Omega * xrot;
+        var fCentYh = Omega * Omega * yrot;
+        var fCentMagH = Math.hypot(fCentXh, fCentYh);
+        if (fCentMagH > 1e-3) {
+          spots22.push({ id: 'fCent', kind: 'segment', x1: curRotX, y1: curRotY, x2: curRotX + (fCentXh / fCentMagH) * 26, y2: curRotY - (fCentYh / fCentMagH) * 26, halfW: 8, title: 'Centrifugal force', body: '$\\mathbf{F}_{\\mathrm{cent}}=m\\Omega^2\\mathbf{r}_\\perp$, purely outward. It depends on position, not velocity, and is $' + fCentMagH.toFixed(2) + '\\,\\mathrm{N}$ here ($m=1$).' });
+        }
+      }
+      if (state._inertialTrail && state._inertialTrail.length >= 2) {
+        var tIn0 = state._inertialTrail[0];
+        var tIn1 = state._inertialTrail[state._inertialTrail.length - 1];
+        spots22.push({ id: 'trailIn', kind: 'segment', x1: tIn0.x, y1: tIn0.y, x2: tIn1.x, y2: tIn1.y, halfW: 9, title: 'Inertial trail', body: 'Straight lab path: Newton 1st law on a frictionless table. Curvature appears only after you switch frames.' });
+      }
+      if (state._rotTrail && state._rotTrail.length >= 2) {
+        var rtH = state._rotTrail;
+        var strideH = Math.max(1, Math.floor((rtH.length - 1) / 3));
+        var tiH;
+        for (tiH = 0; tiH < rtH.length - 1; tiH += strideH) {
+          var aH = rtH[tiH];
+          var bH = rtH[Math.min(tiH + strideH, rtH.length - 1)];
+          spots22.push({ id: 'trailRot' + tiH, kind: 'segment', x1: aH.x, y1: aH.y, x2: bH.x, y2: bH.y, halfW: 10, title: 'Rotating-frame trail', body: 'The same inertial straight line, sampled in the table frame. Sideways Coriolis makes it look curved; $|\\mathbf{v}_{\\mathrm{rot}}|$ is not changed by that force.' });
+        }
+      }
+      spots22.push(
+        { id: 'tableL', kind: 'circle', x: leftCX, y: cy, r: Rpx, title: 'Lab turntable', body: 'Disk spinning at $\\Omega = ' + Omega.toFixed(2) + '\\,\\mathrm{rad/s}$ in the lab. Spokes rotate; the puck does not stick to them.' },
+        { id: 'tableR', kind: 'circle', x: rightCX, y: cy, r: Rpx, title: 'Rotating turntable', body: 'Same disk, drawn at rest. All of the curvature and the fictitious arrows live in this frame.' },
+        { id: 'panelL', kind: 'rect', x: leftBounds.x, y: leftBounds.y, w: leftBounds.w, h: leftBounds.h, title: 'Lab (inertial) panel', body: 'Newton 1st law: straight line at constant speed. $\\Omega$ only moves the painted table under the puck.' },
+        { id: 'panelR', kind: 'rect', x: rightBounds.x, y: rightBounds.y, w: rightBounds.w, h: rightBounds.h, title: 'Table (rotating) panel', body: 'Non-inertial view. To keep $m\\mathbf{a}_{\\mathrm{rot}}=\\sum\\mathbf{F}$ you must add $\\mathbf{F}_{\\mathrm{Cor}}$ and $\\mathbf{F}_{\\mathrm{cent}}$.' }
+      );
+      if (PGRE.setVizHotspots) PGRE.setVizHotspots(spots22);
     },
 
     challenge: {
@@ -852,11 +934,11 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
       }
     ],
     parameters: [
-      { id: 'spinSpeed', label: 'Spin Rate ($\\omega_s$)', min: 5, max: 80, step: 1, default: 35, unit: 'rad/s' },
-      { id: 'tiltAngle', label: 'Tilt Angle ($\\theta$)', min: 10, max: 80, step: 1, default: 45, unit: 'deg' },
-      { id: 'axleLength', label: 'Axle Distance ($d$)', min: 5, max: 25, step: 1, default: 14, unit: 'cm' },
-      { id: 'rotorMass', label: 'Rotor Mass ($M$)', min: 0.2, max: 2.0, step: 0.1, default: 0.8, unit: 'kg' },
-      { id: 'torqueMode', label: 'Torque Mode', type: 'select', options: ['Gravity Precession', 'Axial Spin-Up (Parallel)', 'Impulse Perturbation'], default: 'Gravity Precession' },
+      { id: 'spinSpeed', label: 'Spin Rate ($\\omega_s$)', min: 5, max: 80, step: 1, default: 35, unit: 'rad/s', hint: 'Rotor spin $\\omega_s$. Fast-top formula $\\Omega_p=Mgd/(I_s\\omega_s)$: doubling spin halves the precession rate (gyroscopic rigidity).' },
+      { id: 'tiltAngle', label: 'Tilt Angle ($\\theta$)', min: 10, max: 80, step: 1, default: 45, unit: 'deg', hint: 'Lean $\\theta$ from the vertical. Gravitational torque is $Mgd\\sin\\theta$, but the $L$ cone radius is $L_s\\sin\\theta$, so $\\sin\\theta$ cancels and $\\Omega_p$ is independent of $\\theta$.' },
+      { id: 'axleLength', label: 'Axle Distance ($d$)', min: 5, max: 25, step: 1, default: 14, unit: 'cm', hint: 'CM offset $d$ from the pivot. Larger $d$ means larger $\\tau=Mgd\\sin\\theta$ and faster precession, $\\Omega_p\\propto d$.' },
+      { id: 'rotorMass', label: 'Rotor Mass ($M$)', min: 0.2, max: 2.0, step: 0.1, default: 0.8, unit: 'kg', hint: 'Rotor mass $M$. It cancels in $\\Omega_p=Mgd/(I_s\\omega_s)$ when $I_s\\propto M$, so a heavier disk precesses at the same rate if $\\omega_s$ is unchanged.' },
+      { id: 'torqueMode', label: 'Torque Mode', type: 'select', options: ['Gravity Precession', 'Axial Spin-Up (Parallel)', 'Impulse Perturbation'], default: 'Gravity Precession', hint: 'Gravity: $\\boldsymbol{\\tau}\\perp\\mathbf{L}$ so $L$ precesses at $\\Omega_p=Mgd/(I_s\\omega_s)$. Parallel: $\\boldsymbol{\\tau}\\parallel\\mathbf{L}$ changes $|L|$ (spin-up). Impulse: a knock plus the same slow precession, with decaying nutation.' },
       { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
     ],
     init: function (container, state, redraw) {
@@ -1166,14 +1248,47 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
       var Tprec = Omega_p > 0.01 ? (2 * Math.PI / Omega_p).toFixed(2) + '\\,\\mathrm{s}' : '\\infty';
       var modeStr = isSpinUp ? '$\\tau \\parallel L$ (spin-up)' : (isImpulse ? 'impulse + precession' : '$\\tau \\perp L$ (precession)');
       legend('Rotational dynamics', [
-        { label: 'Rule', value: '$d\\mathbf{L} = \\boldsymbol{\\tau}\\,dt$' },
-        { label: 'Mode', value: modeStr },
-        { label: '$\\omega_s$', value: '$' + omega_s.toFixed(1) + '\\,\\mathrm{rad/s}$' },
-        { label: '$L_s$', value: '$' + L_s.toFixed(3) + '\\,\\mathrm{kg\\,m}^2/\\mathrm{s}$' },
-        { label: '$\\tau_{\\mathrm{grav}}$', value: '$' + tau_mag.toFixed(3) + '\\,\\mathrm{N\\,m}$' },
-        { label: '$\\Omega_p = Mgd/(I_s\\omega_s)$', value: '$' + Omega_p.toFixed(3) + '\\,\\mathrm{rad/s}$' },
-        { label: '$T_{\\mathrm{prec}}$', value: '$' + Tprec + '$' }
+        { label: 'Rule', value: '$d\\mathbf{L} = \\boldsymbol{\\tau}\\,dt$', hint: 'Torque tells $\\mathbf{L}$ how to move: $\\mathrm{d}\\mathbf{L}=\\boldsymbol{\\tau}\\,\\mathrm{d}t$. Parallel $\\boldsymbol{\\tau}$ changes $|L|$; perpendicular $\\boldsymbol{\\tau}$ changes only direction.' },
+        { label: 'Mode', value: modeStr, hint: isSpinUp ? 'Parallel torque changes $|\\mathbf{L}|$. The axle is held fixed while $\\omega_s$ ramps; there is no precession cone.' : (isImpulse ? 'A knock seeds nutation on top of the slow gravitational precession. Nutation damps here so the fast-top cone remains visible.' : 'Perpendicular torque: $\\mathrm{d}\\mathbf{L}$ is horizontal, so $\\mathbf{L}$ walks around a cone at $\\Omega_p=Mgd/(I_s\\omega_s)$.') },
+        { label: '$\\omega_s$', value: '$' + omega_s.toFixed(1) + '\\,\\mathrm{rad/s}$', hint: 'Spin about the symmetry axis. $L_s=I_s\\omega_s$ with $I_s=\\frac12 M R^2$.' },
+        { label: '$L_s$', value: '$' + L_s.toFixed(3) + '\\,\\mathrm{kg\\,m}^2/\\mathrm{s}$', hint: 'Spin angular momentum. Slow precession needs large $L_s$; the GRE fast-top limit is $\\omega_s\\to\\infty\\Rightarrow\\Omega_p\\to 0$.' },
+        { label: '$\\tau_{\\mathrm{grav}}$', value: '$' + tau_mag.toFixed(3) + '\\,\\mathrm{N\\,m}$', hint: '$\\tau=M g d \\sin\\theta = ' + tau_mag.toFixed(3) + '\\,\\mathrm{N\\,m}$. Horizontal and perpendicular to the axle, so it changes the direction of $\\mathbf{L}$, not $|L|$.' },
+        { label: '$\\Omega_p = Mgd/(I_s\\omega_s)$', value: '$' + Omega_p.toFixed(3) + '\\,\\mathrm{rad/s}$', hint: 'Steady precession. Independent of $\\theta$ in the fast-top approximation; inversely proportional to $\\omega_s$.' },
+        { label: '$T_{\\mathrm{prec}}$', value: '$' + Tprec + '$', hint: 'Period $2\\pi/\\Omega_p$. Diverges as $\\omega_s$ grows (the rigid, slowly precessing top).' }
       ]);
+      var rotorHitR = 16;
+      var diH;
+      for (diH = 0; diH < diskPts.length; diH++) {
+        var ddrH = Math.hypot(diskPts[diH].x - rotor2D.x, diskPts[diH].y - rotor2D.y);
+        if (ddrH > rotorHitR) rotorHitR = ddrH;
+      }
+      rotorHitR += 4;
+      var spots20 = [
+        { id: 'rotor', kind: 'circle', x: rotor2D.x, y: rotor2D.y, r: rotorHitR, title: 'Rotor', body: 'Symmetric disk $M = ' + M.toFixed(1) + '\\,\\mathrm{kg}$, $I_s=\\frac12 M R^2 = ' + I_s.toFixed(4) + '\\,\\mathrm{kg\\,m}^2$, spinning at $\\omega_s = ' + omega_s.toFixed(1) + '\\,\\mathrm{rad/s}$.' },
+        { id: 'axle', kind: 'segment', x1: pivotTop.x, y1: pivotTop.y, x2: tip2D.x, y2: tip2D.y, halfW: 8, title: 'Spin axis', body: 'Symmetry axis of the top. $\\mathbf{L}_s$ lies along this axle. Tilt from vertical is $\\theta = ' + (currentTheta * 180 / Math.PI).toFixed(1) + '^{\\circ}$.' },
+        { id: 'L', kind: 'segment', x1: tip2D.x, y1: tip2D.y, x2: lVecEnd2D.x, y2: lVecEnd2D.y, halfW: 8, title: 'Angular momentum $\\mathbf{L}$', body: '$L_s = I_s\\omega_s = ' + L_s.toFixed(3) + '\\,\\mathrm{kg\\,m}^2/\\mathrm{s}$. Torque changes this vector: parallel $\\boldsymbol{\\tau}$ stretches it, perpendicular $\\boldsymbol{\\tau}$ swings it.' },
+        { id: 'pivot', kind: 'circle', x: pivotTop.x, y: pivotTop.y, r: 12, title: 'Pivot', body: 'Fixed support. $\\boldsymbol{\\tau}=\\mathbf{r}_{\\mathrm{CM}}\\times M\\mathbf{g}$ is taken about this point, which is inertial, so $\\boldsymbol{\\tau}=\\mathrm{d}\\mathbf{L}/\\mathrm{d}t$ applies.' },
+        { id: 'stand', kind: 'segment', x1: pivotBase.x, y1: pivotBase.y, x2: pivotTop.x, y2: pivotTop.y, halfW: 8, title: 'Support stand', body: 'Holds the pivot fixed in the lab. Without this point there is no gravitational torque about a stationary origin.' }
+      ];
+      if (isSpinUp) {
+        spots20.push(
+          { id: 'tau', kind: 'segment', x1: lVecEnd2D.x, y1: lVecEnd2D.y, x2: tauPar2D.x, y2: tauPar2D.y, halfW: 8, title: 'Parallel torque', body: '$\\boldsymbol{\\tau}\\parallel\\mathbf{L}$, so $|L|$ grows and $\\omega_s$ ramps ($\\omega_s = ' + omega_s.toFixed(1) + '\\,\\mathrm{rad/s}$). The axle direction is held fixed.' },
+          { id: 'dL', kind: 'segment', x1: lVecEnd2D.x, y1: lVecEnd2D.y, x2: tauPar2D.x, y2: tauPar2D.y, halfW: 8, title: '$\\mathrm{d}\\mathbf{L}$', body: 'Increment of $\\mathbf{L}$ along the axle. Parallel torque changes magnitude, not orientation, so there is no precession cone.' }
+        );
+      } else {
+        spots20.push(
+          { id: 'Mg', kind: 'segment', x1: cm2D.x, y1: cm2D.y, x2: fgEnd2D.x, y2: fgEnd2D.y, halfW: 8, title: 'Weight $Mg$', body: 'Gravity $Mg = ' + (M * g).toFixed(2) + '\\,\\mathrm{N}$ at the CM, offset $d = ' + d.toFixed(3) + '\\,\\mathrm{m}$ from the pivot, producing $\\tau=Mgd\\sin\\theta$.' },
+          { id: 'tau', kind: 'segment', x1: cm2D.x, y1: cm2D.y, x2: tau2D.x, y2: tau2D.y, halfW: 8, title: 'Gravitational torque', body: '$\\boldsymbol{\\tau}=\\mathbf{r}\\times Mg$, horizontal and $\\perp\\mathbf{L}$. Magnitude $' + tau_mag.toFixed(3) + '\\,\\mathrm{N\\,m}$. This is what walks $\\mathbf{L}$ around the cone.' },
+          { id: 'dL', kind: 'segment', x1: lVecEnd2D.x, y1: lVecEnd2D.y, x2: dL2x, y2: dL2y, halfW: 8, title: '$\\mathrm{d}\\mathbf{L}$', body: '$\\mathrm{d}\\mathbf{L}=\\boldsymbol{\\tau}\\,\\mathrm{d}t$ is parallel to $\\boldsymbol{\\tau}$ and $\\perp\\mathbf{L}$, so $|L|$ is fixed while the tip of $\\mathbf{L}$ precesses.' }
+        );
+        var precC = project(0, 0, Math.cos(currentTheta) * axLen);
+        var precR = Math.max(12, Math.abs(Math.sin(currentTheta) * axLen * scale));
+        spots20.push({ id: 'prec', kind: 'ring', x: precC.x, y: precC.y, r: precR, halfW: 12, title: 'Precession circle', body: 'Tip of the axle sweeps this cone. $\\Omega_p = Mgd/(I_s\\omega_s) = ' + Omega_p.toFixed(3) + '\\,\\mathrm{rad/s}$, independent of $\\theta$ in the fast-top limit.' });
+        var omC = project(0, 0, 0.01);
+        var omR = 0.09 * scale;
+        spots20.push({ id: 'Omega', kind: 'ring', x: omC.x, y: omC.y, r: Math.max(10, omR), halfW: 10, title: 'Precession $\\Omega_p$', body: 'Slow rotation of the axle about the vertical. Period $T_{\\mathrm{prec}} = ' + Tprec + '$. Faster spin $\\Rightarrow$ slower $\\Omega_p$.' });
+      }
+      if (PGRE.setVizHotspots) PGRE.setVizHotspots(spots20);
     },
     challenge: {
       question: 'A symmetric gyroscope rotor has mass $M$, radius $R$, and is spinning with a rapid angular velocity $\\omega_s$ about a horizontal axle supported at a distance $d$ from the rotor ($I_s = \\frac{1}{2} M R^2$). If the rotor mass is doubled ($M \\to 2M$) and the spin speed is doubled ($\\omega_s \\to 2\\omega_s$), what happens to the steady precession angular frequency $\\Omega_p$?',

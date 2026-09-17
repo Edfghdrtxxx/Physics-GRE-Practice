@@ -7,20 +7,23 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
 
 (function() {
   var activeModal = null;
-  var modalAnimId = null;
+  var modalStage = null;
   var currentViz = null;
+  var currentCardId = null;
   var currentState = null;
+  var modalPaused = false;
   var paramsOverlayOpen = false;
   var paramsOverlayPos = null;
 
   // Active inline visualizer in the study/flip card view
-  var inlineAnimId = null;
+  var inlineStage = null;
   var activeInlineContainer = null;
   var activeInlineViz = null;
   var activeInlineState = null;
 
   // Off-canvas legend strip (shared by modal + inline). Draw bodies append
   // sections via PGRE.appendVizLegend; they must not paint overlay HUDs.
+  // Rows may carry `hint` (LaTeX allowed): shown when the row is hovered.
   window.PGRE._vizLegendSections = [];
   window.PGRE.resetVizLegend = function() {
     window.PGRE._vizLegendSections = [];
@@ -32,6 +35,387 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
   window.PGRE.setVizLegend = function(title, rows) {
     window.PGRE._vizLegendSections = [{ title: title || "", rows: rows || [] }];
   };
+
+  // ---- Hover explanations --------------------------------------------------
+  // One fixed popover (.viz-tip) serves every hover target in a visualizer:
+  //   chrome  — any element carrying data-viz-tip="text" (optional
+  //             data-viz-tip-title) inside the modal / inline container.
+  //             Sliders, toggles, selects, readout rows, tabs, header buttons
+  //             and the formula banner all get one. LaTeX allowed.
+  //   canvas  — hotspots that draw() publishes each frame (setVizHotspots /
+  //             addVizHotspot). After draw() the engine hit-tests the pointer,
+  //             paints a coral highlight around the hovered object and shows
+  //             its explanation next to the cursor.
+  // Hotspot kinds (canvas CSS px): circle|disk {x,y,r}, annulus {x,y,r0,r1},
+  // ring {x,y,r,halfW}, rect {x,y,w,h}, segment {x1,y1,x2,y2,halfW}.
+  // Fields: id?, title?, body (alias text / hint). When several shapes contain
+  // the pointer the smallest one wins (a dot beats the plot panel behind it),
+  // so authors need not order the list; ties keep list order.
+  window.PGRE._vizHotspots = [];
+  window.PGRE.setVizHotspots = function(list) {
+    window.PGRE._vizHotspots = Array.isArray(list) ? list : [];
+  };
+  window.PGRE.addVizHotspot = function(spot) {
+    if (!spot) return;
+    window.PGRE._vizHotspots = window.PGRE._vizHotspots || [];
+    window.PGRE._vizHotspots.push(spot);
+  };
+  window.PGRE.resetVizHotspots = function() {
+    window.PGRE._vizHotspots = [];
+  };
+
+  function hotspotArea(h, kind) {
+    var r;
+    if (kind === "rect") return Math.abs(h.w * h.h);
+    if (kind === "segment") {
+      var hw = h.halfW != null ? h.halfW : 8;
+      return Math.hypot(h.x2 - h.x1, h.y2 - h.y1) * 2 * hw + Math.PI * hw * hw;
+    }
+    if (kind === "annulus") {
+      var r0 = h.r0 != null ? h.r0 : h.rInner;
+      var r1 = h.r1 != null ? h.r1 : h.rOuter;
+      return Math.PI * Math.abs(r1 * r1 - r0 * r0);
+    }
+    if (kind === "ring") {
+      r = h.r || 0;
+      return 2 * Math.PI * r * 2 * (h.halfW != null ? h.halfW : 8);
+    }
+    r = h.r || 12;
+    return Math.PI * r * r;
+  }
+
+  function hotspotContains(h, kind, mx, my) {
+    var hw, vx, vy, len2, t, qx, qy, hx, hy, d;
+    if (kind === "rect") {
+      return mx >= h.x && my >= h.y && mx <= h.x + h.w && my <= h.y + h.h;
+    }
+    if (kind === "segment") {
+      hw = h.halfW != null ? h.halfW : 8;
+      vx = h.x2 - h.x1; vy = h.y2 - h.y1;
+      len2 = vx * vx + vy * vy;
+      t = len2 > 0 ? ((mx - h.x1) * vx + (my - h.y1) * vy) / len2 : 0;
+      if (t < 0) t = 0; else if (t > 1) t = 1;
+      qx = h.x1 + t * vx - mx; qy = h.y1 + t * vy - my;
+      return qx * qx + qy * qy <= hw * hw;
+    }
+    hx = h.x != null ? h.x : h.cx;
+    hy = h.y != null ? h.y : h.cy;
+    d = Math.hypot(mx - hx, my - hy);
+    if (kind === "circle" || kind === "disk") return d <= (h.r || 12);
+    if (kind === "annulus") {
+      return d >= (h.r0 != null ? h.r0 : h.rInner) && d <= (h.r1 != null ? h.r1 : h.rOuter);
+    }
+    if (kind === "ring") return Math.abs(d - (h.r || 0)) <= (h.halfW != null ? h.halfW : 8);
+    return false;
+  }
+
+  function hotspotKind(h) {
+    return h.kind || (h.x1 != null ? "segment" : (h.w != null ? "rect" : "circle"));
+  }
+
+  function hitVizHotspot(mx, my, spots) {
+    if (!spots || !spots.length) return null;
+    var best = null;
+    var bestArea = Infinity;
+    for (var i = 0; i < spots.length; i++) {
+      var h = spots[i];
+      if (!h) continue;
+      var kind = hotspotKind(h);
+      if (!hotspotContains(h, kind, mx, my)) continue;
+      var a = hotspotArea(h, kind);
+      if (a < bestArea) { best = h; bestArea = a; }
+    }
+    return best;
+  }
+
+  var HIGHLIGHT_STROKE = "#cc785c";
+  var HIGHLIGHT_FILL = "rgba(204, 120, 92, 0.14)";
+  var HIGHLIGHT_WIDE = "rgba(204, 120, 92, 0.22)";
+
+  // Painted after draw() so the ring sits on top of the drawing.
+  function drawHotspotHighlight(ctx, h) {
+    if (!ctx || !h || typeof ctx.beginPath !== "function") return;
+    var kind = hotspotKind(h);
+    var hx = h.x != null ? h.x : h.cx;
+    var hy = h.y != null ? h.y : h.cy;
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    if (kind === "rect") {
+      ctx.rect(h.x - 3, h.y - 3, h.w + 6, h.h + 6);
+      ctx.fillStyle = HIGHLIGHT_FILL;
+      ctx.fill();
+      ctx.strokeStyle = HIGHLIGHT_STROKE;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else if (kind === "segment") {
+      ctx.moveTo(h.x1, h.y1);
+      ctx.lineTo(h.x2, h.y2);
+      ctx.strokeStyle = HIGHLIGHT_WIDE;
+      ctx.lineWidth = 2 * (h.halfW != null ? h.halfW : 8);
+      ctx.stroke();
+    } else if (kind === "annulus") {
+      var r0 = h.r0 != null ? h.r0 : h.rInner;
+      var r1 = h.r1 != null ? h.r1 : h.rOuter;
+      ctx.arc(hx, hy, r1, 0, Math.PI * 2);
+      ctx.arc(hx, hy, Math.max(0, r0), 0, Math.PI * 2, true);
+      ctx.fillStyle = HIGHLIGHT_FILL;
+      ctx.fill();
+    } else if (kind === "ring") {
+      ctx.arc(hx, hy, h.r || 0, 0, Math.PI * 2);
+      ctx.strokeStyle = HIGHLIGHT_WIDE;
+      ctx.lineWidth = 2 * (h.halfW != null ? h.halfW : 8);
+      ctx.stroke();
+    } else {
+      ctx.arc(hx, hy, (h.r || 12) + 3, 0, Math.PI * 2);
+      ctx.fillStyle = HIGHLIGHT_FILL;
+      ctx.fill();
+      ctx.strokeStyle = HIGHLIGHT_STROKE;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Single popover. `owner` is "canvas" or the hovered chrome element so a
+  // canvas leave never hides a tab tip and vice versa.
+  var tipEl = null;
+  var tipOwner = null;
+  var tipKey = null;
+  var TIP_REFRESH_MIN_MS = 100;
+  var tipLastRender = 0;
+
+  function ensureTipEl() {
+    if (tipEl && tipEl.isConnected) return tipEl;
+    tipEl = document.createElement("div");
+    tipEl.className = "viz-tip";
+    tipEl.setAttribute("role", "tooltip");
+    tipEl.setAttribute("aria-hidden", "true");
+    document.body.appendChild(tipEl);
+    return tipEl;
+  }
+
+  function hideTip(owner) {
+    if (owner !== undefined && owner !== null && tipOwner !== owner) return;
+    tipOwner = null;
+    tipKey = null;
+    if (!tipEl) return;
+    tipEl.classList.remove("is-on");
+    tipEl.setAttribute("aria-hidden", "true");
+  }
+
+  // `ident` names the hover target (hotspot id/title or the chrome node's
+  // tip text). Switching target re-renders at once; only the live-value
+  // refresh of the same target is throttled to spare KaTeX.
+  var tipIdent = null;
+  function renderTipContent(ident, title, body) {
+    var el = ensureTipEl();
+    var key = String(title || "") + "\u0000" + String(body || "");
+    if (tipKey === key) return;
+    var now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+    if (tipIdent === ident && tipKey !== null && (now - tipLastRender) < TIP_REFRESH_MIN_MS) return;
+    tipLastRender = now;
+    tipIdent = ident;
+    tipKey = key;
+    var html = "";
+    if (title) html += "<div class=\"viz-tip-title\">" + esc(title) + "</div>";
+    if (body) html += "<div class=\"viz-tip-body\">" + esc(body) + "</div>";
+    el.innerHTML = html;
+    typeset(el);
+  }
+
+  function clampTip(x, y, w, h) {
+    var pad = 10;
+    var vw = window.innerWidth || 1280;
+    var vh = window.innerHeight || 800;
+    if (x + w > vw - pad) x = vw - w - pad;
+    if (y + h > vh - pad) y = vh - h - pad;
+    if (x < pad) x = pad;
+    if (y < pad) y = pad;
+    return { x: Math.round(x), y: Math.round(y) };
+  }
+
+  // Canvas tips trail the pointer (objects are small and moving).
+  function placeTipAtPointer(clientX, clientY) {
+    var el = ensureTipEl();
+    var w = el.offsetWidth || 240;
+    var h = el.offsetHeight || 72;
+    var x = clientX + 14;
+    var y = clientY + 18;
+    var vw = window.innerWidth || 1280;
+    var vh = window.innerHeight || 800;
+    if (x + w > vw - 10) x = clientX - w - 12;
+    if (y + h > vh - 10) y = clientY - h - 12;
+    var p = clampTip(x, y, w, h);
+    el.style.left = p.x + "px";
+    el.style.top = p.y + "px";
+  }
+
+  // Chrome tips anchor above the element (below when there is no room), so
+  // the slider thumb under the cursor stays visible.
+  function placeTipAtRect(rect) {
+    var el = ensureTipEl();
+    var w = el.offsetWidth || 240;
+    var h = el.offsetHeight || 72;
+    var x = rect.left + rect.width / 2 - w / 2;
+    var y = rect.top - h - 8;
+    if (y < 10) y = rect.bottom + 8;
+    var p = clampTip(x, y, w, h);
+    el.style.left = p.x + "px";
+    el.style.top = p.y + "px";
+  }
+
+  function showCanvasTip(hit, clientX, clientY) {
+    var body = hit.body != null ? hit.body : (hit.text != null ? hit.text : hit.hint);
+    if (!body && !hit.title) return;
+    var el = ensureTipEl();
+    tipOwner = "canvas";
+    renderTipContent("canvas:" + (hit.id != null ? hit.id : hit.title), hit.title || "", body || "");
+    el.classList.add("is-on");
+    el.setAttribute("aria-hidden", "false");
+    placeTipAtPointer(clientX, clientY);
+  }
+
+  function showChromeTip(node) {
+    if (!node || typeof node.getAttribute !== "function") return;
+    var body = node.getAttribute("data-viz-tip");
+    var title = node.getAttribute("data-viz-tip-title") || "";
+    if (!body && !title) return;
+    var el = ensureTipEl();
+    tipOwner = node;
+    renderTipContent("chrome:" + (node.getAttribute("data-viz-tip-key") || body), title, body || "");
+    el.classList.add("is-on");
+    el.setAttribute("aria-hidden", "false");
+    if (typeof node.getBoundingClientRect === "function") placeTipAtRect(node.getBoundingClientRect());
+  }
+
+  function closestTipNode(node) {
+    if (node && node.nodeType !== 1) node = node.parentElement;
+    if (!node || typeof node.closest !== "function") return null;
+    return node.closest("[data-viz-tip]");
+  }
+
+  // Delegated: survives innerHTML repaints of the legend strip and controls.
+  function bindChromeTips(root) {
+    if (!root || typeof root.addEventListener !== "function") return;
+    root.addEventListener("mouseover", function(e) {
+      var node = closestTipNode(e.target);
+      if (node) showChromeTip(node);
+    });
+    root.addEventListener("mouseout", function(e) {
+      var from = closestTipNode(e.target);
+      if (!from) return;
+      var to = closestTipNode(e.relatedTarget);
+      if (to !== from) hideTip(from);
+    });
+    root.addEventListener("focusin", function(e) {
+      var node = closestTipNode(e.target);
+      if (node) showChromeTip(node);
+    });
+    root.addEventListener("focusout", function(e) {
+      var from = closestTipNode(e.target);
+      if (from) hideTip(from);
+    });
+    root.addEventListener("pointerdown", function(e) {
+      // Dragging a slider or clicking a tab: get the card out of the way.
+      if (closestTipNode(e.target)) hideTip();
+    });
+  }
+
+  window.PGRE.hideVizTip = function() { hideTip(); };
+
+  // ---- Stage: one render loop shared by the modal and the inline card -----
+  // Owns HiDPI sizing, the cream first fill, legend + hotspot reset, draw(),
+  // the hover pass, and the legend repaint. `isPaused()` freezes dt at 0 so
+  // the picture keeps repainting (hover, theme, resize) without advancing.
+  function createStage(opts) {
+    var canvas = opts.canvas;
+    var ctx = canvas.getContext("2d");
+    var legend = opts.legend;
+    var viz = opts.viz;
+    var state = opts.state;
+    var fallbackW = opts.fallbackW || 640;
+    var fallbackH = opts.fallbackH || 420;
+    var isPaused = opts.isPaused || function() { return false; };
+    var animId = null;
+    var lastTime = performance.now();
+    var pointer = null;   // canvas CSS px + client coords while the pointer is over the canvas
+    var stopped = false;
+
+    function onMove(e) {
+      var r = canvas.getBoundingClientRect();
+      if (!r.width || !r.height) { pointer = null; return; }
+      pointer = { x: e.clientX - r.left, y: e.clientY - r.top, cx: e.clientX, cy: e.clientY };
+    }
+    function onLeave() {
+      pointer = null;
+      canvas.style.cursor = "";
+      hideTip("canvas");
+    }
+    canvas.addEventListener("pointermove", onMove);
+    canvas.addEventListener("pointerleave", onLeave);
+    canvas.addEventListener("pointercancel", onLeave);
+
+    function frame(now) {
+      if (stopped) return;
+      if (!canvas.isConnected) { stop(); return; }
+      var dt = Math.min((now - lastTime) / 1000, 0.05);
+      lastTime = now;
+      if (isPaused()) dt = 0;
+
+      var rect = canvas.getBoundingClientRect();
+      var dpr = window.devicePixelRatio || 1;
+      var targetW = rect.width > 0 ? rect.width : fallbackW;
+      var targetH = rect.height > 0 ? rect.height : fallbackH;
+      var bufW = Math.round(targetW * dpr);
+      var bufH = Math.round(targetH * dpr);
+      if (canvas.width !== bufW || canvas.height !== bufH) {
+        canvas.width = bufW;
+        canvas.height = bufH;
+      }
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.fillStyle = (window.PGRE.CV && window.PGRE.CV.colors.bg) || "#faf9f5";
+      ctx.fillRect(0, 0, targetW, targetH);
+      window.PGRE.resetVizLegend();
+      window.PGRE.resetVizHotspots();
+      if (typeof viz.draw === "function") {
+        viz.draw(ctx, targetW, targetH, state, dt);
+      }
+      // Hover pass runs every frame so a moving object under a still cursor
+      // keeps its highlight and live numbers in the tip.
+      var hit = pointer ? hitVizHotspot(pointer.x, pointer.y, window.PGRE._vizHotspots) : null;
+      if (hit) drawHotspotHighlight(ctx, hit);
+      ctx.restore();
+
+      if (hit) {
+        canvas.style.cursor = "help";
+        showCanvasTip(hit, pointer.cx, pointer.cy);
+      } else if (pointer) {
+        canvas.style.cursor = "";
+        hideTip("canvas");
+      }
+      paintLegendStrip(legend);
+      animId = requestAnimationFrame(frame);
+    }
+
+    function stop() {
+      stopped = true;
+      if (animId) { cancelAnimationFrame(animId); animId = null; }
+      canvas.removeEventListener("pointermove", onMove);
+      canvas.removeEventListener("pointerleave", onLeave);
+      canvas.removeEventListener("pointercancel", onLeave);
+      canvas.style.cursor = "";
+      hideTip("canvas");
+      window.PGRE.resetVizHotspots();
+    }
+
+    animId = requestAnimationFrame(frame);
+    return { stop: stop };
+  }
+
 
   var LEGEND_REPAINT_MIN_MS = 120;
 
@@ -49,14 +433,16 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     }
     strip.hidden = false;
     var html = "";
-    nonempty.forEach(function(sec) {
+    nonempty.forEach(function(sec, si) {
       html += "<div class=\"viz-legend-section\">";
       if (sec.title) html += "<div class=\"viz-legend-title\">" + esc(sec.title) + "</div>";
       html += "<div class=\"viz-legend-rows\">";
-      (sec.rows || []).forEach(function(row) {
+      (sec.rows || []).forEach(function(row, ri) {
         var label = row.label || "";
         var value = row.value != null ? row.value : (row.val != null ? row.val : "");
-        html += "<div class=\"viz-legend-row\">";
+        var hint = row.hint || row.tip || "";
+        html += "<div class=\"viz-legend-row" + (hint ? " has-tip" : "") + "\"" +
+          (hint ? (" data-viz-tip=\"" + esc(hint) + "\" data-viz-tip-title=\"" + esc(label) + "\" data-viz-tip-key=\"" + si + "-" + ri + "\" tabindex=\"0\"") : "") + ">";
         html += "<span class=\"viz-legend-label\">" + esc(label) + "</span>";
         html += "<span class=\"viz-legend-value\">" + esc(value) + "</span>";
         html += "</div>";
@@ -76,9 +462,17 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
       return;
     }
     strip._lastPaintAt = now;
+    // A hovered row is about to be replaced by its repaint; carry the tip over
+    // to the new node with the same key so live values keep flowing into it.
+    var hoveredKey = (tipOwner && tipOwner !== "canvas" && typeof tipOwner.getAttribute === "function" &&
+      tipOwner.parentNode && strip.contains && strip.contains(tipOwner)) ? tipOwner.getAttribute("data-viz-tip-key") : null;
     strip.innerHTML = html;
     strip._lastHtml = html;
     typeset(strip);
+    if (hoveredKey != null) {
+      var again = strip.querySelector("[data-viz-tip-key=\"" + hoveredKey + "\"]");
+      if (again) showChromeTip(again); else hideTip();
+    }
   }
 
   // --- Helpers ---
@@ -205,9 +599,105 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     }).join("");
   }
 
+  var BANNER_TIP = "The formula this picture animates. Every slider changes one symbol in it; the readouts below the drawing report the numbers that appear here.";
+
   function formatFormulaBanner(formulaLatex) {
     if (!formulaLatex) return "";
-    return "<div class=\"viz-formula-banner\">" + formatDisplayMath(formulaLatex) + "</div>";
+    return "<div class=\"viz-formula-banner\" data-viz-tip=\"" + esc(BANNER_TIP) + "\" data-viz-tip-title=\"Formula\">" +
+      formatDisplayMath(formulaLatex) + "</div>";
+  }
+
+  // physicalStory is authored as plain text with blank-line paragraph breaks;
+  // one <p> per paragraph instead of a single wall of text.
+  function formatStory(story) {
+    var s = String(story || "").trim();
+    if (!s) return "<p>No physical story documented.</p>";
+    return s.split(/\n\s*\n/).map(function(par) {
+      return "<p>" + par.trim().replace(/\n+/g, " ") + "</p>";
+    }).join("");
+  }
+
+  var TAB_TIPS = {
+    story: "What the picture is doing and why the formula follows. Read this first.",
+    derivation: "How the formula is obtained, step by step, plus the limits where it collapses to something you already know.",
+    traps: "The ways ETS makes this formula look like a different one. Each card names the trap and the one-line check that defuses it.",
+    challenge: "One multiple-choice question in GRE style. Answer before opening the explanation."
+  };
+
+  function formatChallenge(viz, idPrefix) {
+    if (!viz.challenge) return "<p>No active challenge for this formula.</p>";
+    var optHTML = viz.challenge.options.map(function(opt, idx) {
+      return "<button class=\"viz-opt-btn\" data-opt-idx=\"" + idx + "\">" + opt + "</button>";
+    }).join("");
+    return "" +
+      "<div class=\"viz-challenge-box\">" +
+        "<div class=\"viz-challenge-q\">" + viz.challenge.question + "</div>" +
+        "<div class=\"viz-options-grid\" id=\"" + idPrefix + "options-grid\">" + optHTML + "</div>" +
+        "<div class=\"viz-challenge-expl\" id=\"" + idPrefix + "challenge-expl\">" +
+          "<strong>Explanation:</strong> " + viz.challenge.explanation +
+        "</div>" +
+      "</div>";
+  }
+
+  // Tabs + panes shared by modal and inline. `idPrefix` is "viz-" or "viz-inline-".
+  function formatInfoSection(viz, idPrefix, activeTab) {
+    var tabs = [
+      ["story", "Physical Story"],
+      ["derivation", "Derivation & Limits"],
+      ["traps", "GRE Traps"],
+      ["challenge", "Retention Challenge"]
+    ];
+    if (!TAB_TIPS[activeTab]) activeTab = "story";
+    var nav = tabs.map(function(t) {
+      return "<button class=\"viz-info-tab-btn" + (t[0] === activeTab ? " viz-tab-active" : "") + "\" data-viz-tab=\"" + t[0] + "\"" +
+        " data-viz-tip=\"" + esc(TAB_TIPS[t[0]]) + "\">" + t[1] + "</button>";
+    }).join("");
+    function pane(key, inner) {
+      return "<div class=\"viz-tab-pane" + (key === activeTab ? " viz-pane-active" : "") + "\" id=\"" + idPrefix + "pane-" + key + "\">" + inner + "</div>";
+    }
+    return "" +
+      "<div class=\"viz-info-section\">" +
+        "<div class=\"viz-info-nav\">" + nav + "</div>" +
+        pane("story", formatStory(viz.physicalStory)) +
+        pane("derivation",
+          "<h4>Key Derivation Steps</h4>" +
+          "<ol class=\"viz-step-list\">" + formatDerivations(viz.derivationSteps) + "</ol>" +
+          "<h4>Limiting Cases & Scaling Laws</h4>" +
+          "<ul class=\"viz-step-list\">" + formatLimitingCases(viz.limitingCases) + "</ul>") +
+        pane("traps", formatTraps(viz.greTraps)) +
+        pane("challenge", formatChallenge(viz, idPrefix)) +
+      "</div>";
+  }
+
+  function bindInfoSection(root, idPrefix, viz, onTabChange) {
+    root.querySelectorAll("[data-viz-tab]").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        root.querySelectorAll("[data-viz-tab]").forEach(function(b) { b.classList.remove("viz-tab-active"); });
+        root.querySelectorAll(".viz-tab-pane").forEach(function(p) { p.classList.remove("viz-pane-active"); });
+        btn.classList.add("viz-tab-active");
+        var key = btn.getAttribute("data-viz-tab");
+        var targetPane = root.querySelector("#" + idPrefix + "pane-" + key);
+        if (targetPane) targetPane.classList.add("viz-pane-active");
+        if (onTabChange) onTabChange(key);
+      });
+    });
+    if (!viz.challenge) return;
+    var optBtns = root.querySelectorAll(".viz-opt-btn");
+    var explBox = root.querySelector("#" + idPrefix + "challenge-expl");
+    optBtns.forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        var pick = parseInt(btn.getAttribute("data-opt-idx"), 10);
+        optBtns.forEach(function(b, idx) {
+          b.disabled = true;
+          if (idx === viz.challenge.correct) b.classList.add("viz-correct");
+          else if (idx === pick) b.classList.add("viz-incorrect");
+        });
+        if (explBox) {
+          explBox.style.display = "block";
+          typeset(explBox);
+        }
+      });
+    });
   }
 
   window.PGRE.formatInlineMath = formatInlineMath;
@@ -279,6 +769,38 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     return null;
   }
 
+  var SIM_SPEED_HINT = "Playback rate of the animation only. 1x is real time for the picture; the physics is unchanged, so every readout stays the same at any speed.";
+
+  function paramDefault(p) {
+    if (p.default !== undefined) return p.default;
+    if (p.value !== undefined) return p.value;
+    if (p.options && p.options.length) {
+      var o = p.options[0];
+      return (typeof o === "object" && o && o.value !== undefined) ? o.value : o;
+    }
+    if (p.min !== undefined) return p.min;
+    return p.type === "toggle" || p.type === "boolean" ? false : 0;
+  }
+
+  // Explanation shown when a control is hovered. Authored `hint` wins; the
+  // fallback is built from the control's own label, range and type so that
+  // every control explains itself even before a card gets hand-written copy.
+  function paramHint(p, type) {
+    if (p.hint || p.tip || p.description) return p.hint || p.tip || p.description;
+    if (p.id === "simSpeed") return SIM_SPEED_HINT;
+    var label = p.label || p.name || p.id;
+    if (type === "select") {
+      return "Choose a scenario for " + label + ". The drawing rebuilds for the chosen case; compare the readouts across cases.";
+    }
+    if (type === "toggle" || type === "boolean") {
+      return "Show or hide " + label + " in the drawing. Turning it off does not change the physics, only what is overlaid.";
+    }
+    var min = p.min !== undefined ? p.min : 0;
+    var max = p.max !== undefined ? p.max : 100;
+    var unit = p.unit ? (" " + p.unit) : "";
+    return "Slide " + label + " between " + min + unit + " and " + max + unit + ". The drawing and the readouts below it update live; watch which readout moves and which stays fixed.";
+  }
+
   function buildControls(paramsContainer, viz, state, onParamChange) {
     paramsContainer.innerHTML = "";
     if (!viz.parameters || !viz.parameters.length) return;
@@ -288,12 +810,12 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
       var label = p.label || p.name || paramId;
       var type = p.type || (p.options ? "select" : "range");
 
-      if (state[paramId] === undefined) {
-        state[paramId] = p.default !== undefined ? p.default : (p.min !== undefined ? p.min : (p.options ? p.options[0] : 0));
-      }
+      if (state[paramId] === undefined) state[paramId] = paramDefault(p);
 
       var row = document.createElement("div");
       row.className = "viz-param-row";
+      row.setAttribute("data-viz-tip", paramHint(p, type));
+      row.setAttribute("data-viz-tip-title", label);
 
       if (type === "select" && p.options) {
         var optsHTML = p.options.map(function(opt) {
@@ -314,6 +836,7 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
           state[paramId] = val;
           if (onParamChange) onParamChange(paramId, val);
         });
+        row._vizSync = function() { selEl.value = String(state[paramId]); };
       } else if (type === "toggle" || type === "boolean") {
         var isChecked = Boolean(state[paramId]);
         row.innerHTML = "" +
@@ -324,13 +847,18 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
         paramsContainer.appendChild(row);
 
         var btn = row.querySelector("button");
+        function syncToggle() {
+          var on = Boolean(state[paramId]);
+          btn.classList.toggle("active", on);
+          btn.querySelectorAll("span")[1].textContent = on ? "ON" : "OFF";
+        }
         btn.addEventListener("click", function() {
           var newVal = !state[paramId];
           state[paramId] = newVal;
-          btn.classList.toggle("active", newVal);
-          btn.querySelectorAll("span")[1].textContent = newVal ? "ON" : "OFF";
+          syncToggle();
           if (onParamChange) onParamChange(paramId, newVal);
         });
+        row._vizSync = syncToggle;
       } else {
         // Slider / Range
         var min = p.min !== undefined ? p.min : 0;
@@ -348,17 +876,71 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
         paramsContainer.appendChild(row);
 
         var slider = row.querySelector("input");
+        var valBadge = row.querySelector("#viz-val-" + paramId);
         slider.addEventListener("input", function() {
           var numVal = parseFloat(slider.value);
           state[paramId] = numVal;
-          var valBadge = row.querySelector("#viz-val-" + paramId);
           if (valBadge) valBadge.textContent = numVal + unit;
           if (onParamChange) onParamChange(paramId, numVal);
         });
+        row._vizSync = function() {
+          slider.value = String(state[paramId]);
+          if (valBadge) valBadge.textContent = state[paramId] + unit;
+        };
       }
     });
     typeset(paramsContainer);
   }
+
+  // Reset every declared parameter to its default, re-run init so card-private
+  // state (trails, phases, seeded particles) restarts, and sync the controls.
+  function resetControls(paramsContainer, viz, state, initHost, onParamChange) {
+    (viz.parameters || []).forEach(function(p) {
+      if (p && p.id) state[p.id] = paramDefault(p);
+    });
+    if (typeof viz.init === "function") {
+      if (initHost) initHost.innerHTML = "";
+      viz.init(initHost || document.createElement("div"), state, function() {});
+    }
+    paramsContainer.querySelectorAll(".viz-param-row").forEach(function(row) {
+      if (typeof row._vizSync === "function") row._vizSync();
+    });
+    (viz.parameters || []).forEach(function(p) {
+      if (p && p.id && onParamChange) onParamChange(p.id, state[p.id]);
+    });
+  }
+
+  var RESET_TIP = "Put every slider, toggle and menu back to the values this card opened with, and restart the animation from its initial state.";
+  var PAUSE_TIP = "Freeze the animation on the current instant so you can study one frame; hover still works and the readouts stay live. Space toggles it too.";
+  var PREV_TIP = "Open the previous formula card in this same window. Left arrow key does the same.";
+  var NEXT_TIP = "Open the next formula card in this same window. Right arrow key does the same.";
+  var PARAMS_TIP = "Open the panel of sliders, toggles and menus that drive this picture. Drag its title bar to move it off the drawing.";
+  var CLOSE_TIP = "Close this window and return to the card list. Escape does the same.";
+
+  // Ordered list of visualizer ids for Previous / Next. Follows the deck order
+  // when the formula deck is loaded, otherwise the registration order.
+  function visualizerOrder() {
+    var keys = Object.keys(window.PGRE.visualizers || {}).filter(function(k) {
+      return k.indexOf("cpgf-") === 0 && typeof window.PGRE.visualizers[k].draw === "function";
+    });
+    var rank = {};
+    var deck = null;
+    if (window.PGRE.views && window.PGRE.views.formulas && typeof window.PGRE.views.formulas.getDeck === "function") {
+      deck = window.PGRE.views.formulas.getDeck();
+    }
+    if (Array.isArray(deck)) {
+      deck.forEach(function(c, i) { if (c && c.id) rank[c.id] = i; });
+      keys.sort(function(a, b) {
+        var ra = rank[a] !== undefined ? rank[a] : 1e9;
+        var rb = rank[b] !== undefined ? rank[b] : 1e9;
+        return ra - rb || (a < b ? -1 : a > b ? 1 : 0);
+      });
+    }
+    return keys;
+  }
+
+  // Tab the learner used last; the next card opens on it.
+  var lastInfoTab = "story";
 
   // --- INLINE VISUALIZER (Embeds directly inside flashcard back on "Show answer") ---
   window.PGRE.renderInlineVisualizer = function(cardId, containerEl) {
@@ -372,27 +954,6 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     wrap.className = "viz-inline-container";
     wrap.id = "viz-inline-container";
 
-    var derivationItems = formatDerivations(viz.derivationSteps);
-    var limitItems = formatLimitingCases(viz.limitingCases);
-    var trapItems = formatTraps(viz.greTraps);
-
-    var challengeHTML = "";
-    if (viz.challenge) {
-      var optHTML = viz.challenge.options.map(function(opt, idx) {
-        return "<button class=\"viz-opt-btn\" data-opt-idx=\"" + idx + "\">" + opt + "</button>";
-      }).join("");
-      challengeHTML = "" +
-        "<div class=\"viz-challenge-box\">" +
-          "<div class=\"viz-challenge-q\">" + viz.challenge.question + "</div>" +
-          "<div class=\"viz-options-grid\" id=\"viz-inline-options-grid\">" + optHTML + "</div>" +
-          "<div class=\"viz-challenge-expl\" id=\"viz-inline-challenge-expl\">" +
-            "<strong>Explanation:</strong> " + viz.challenge.explanation +
-          "</div>" +
-        "</div>";
-    } else {
-      challengeHTML = "<p>No active challenge for this formula.</p>";
-    }
-
     wrap.innerHTML = "" +
       "<div class=\"viz-inline-header\">" +
         "<h3 class=\"viz-inline-title\"><span>Interactive Physical Visualization</span></h3>" +
@@ -405,29 +966,14 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
         "</div>" +
         "<div class=\"viz-legend-strip\" id=\"viz-inline-legend-strip\" aria-live=\"polite\"></div>" +
         "<div class=\"viz-controls-panel\" id=\"viz-inline-controls-panel\">" +
-          "<div class=\"viz-controls-heading\">Parameters & Controls</div>" +
+          "<div class=\"viz-controls-heading\">" +
+            "<span>Parameters & Controls</span>" +
+            "<button type=\"button\" class=\"viz-params-close-btn\" id=\"viz-inline-reset-btn\" data-viz-tip=\"" + esc(RESET_TIP) + "\">Reset</button>" +
+          "</div>" +
           "<div id=\"viz-inline-params-container\"></div>" +
         "</div>" +
       "</div>" +
-      "<div class=\"viz-info-section\">" +
-        "<div class=\"viz-info-nav\">" +
-          "<button class=\"viz-info-tab-btn viz-tab-active\" data-viz-tab=\"story\">Physical Story</button>" +
-          "<button class=\"viz-info-tab-btn\" data-viz-tab=\"derivation\">Derivation & Limits</button>" +
-          "<button class=\"viz-info-tab-btn\" data-viz-tab=\"traps\">GRE Traps</button>" +
-          "<button class=\"viz-info-tab-btn\" data-viz-tab=\"challenge\">Retention Challenge</button>" +
-        "</div>" +
-        "<div class=\"viz-tab-pane viz-pane-active\" id=\"viz-inline-pane-story\">" +
-          "<p>" + (viz.physicalStory || "") + "</p>" +
-        "</div>" +
-        "<div class=\"viz-tab-pane\" id=\"viz-inline-pane-derivation\">" +
-          "<h4>Key Derivation Steps</h4>" +
-          "<ol class=\"viz-step-list\">" + derivationItems + "</ol>" +
-          "<h4>Limiting Cases & Scaling Laws</h4>" +
-          "<ul class=\"viz-step-list\">" + limitItems + "</ul>" +
-        "</div>" +
-        "<div class=\"viz-tab-pane\" id=\"viz-inline-pane-traps\">" + trapItems + "</div>" +
-        "<div class=\"viz-tab-pane\" id=\"viz-inline-pane-challenge\">" + challengeHTML + "</div>" +
-      "</div>";
+      formatInfoSection(viz, "viz-inline-", "story");
 
     containerEl.appendChild(wrap);
     typeset(wrap);
@@ -435,104 +981,45 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     activeInlineContainer = wrap;
     activeInlineViz = viz;
     activeInlineState = {};
+    var state = activeInlineState;
 
-    // Tab switcher
-    wrap.querySelectorAll("[data-viz-tab]").forEach(function(btn) {
-      btn.addEventListener("click", function() {
-        wrap.querySelectorAll("[data-viz-tab]").forEach(function(b) { b.classList.remove("viz-tab-active"); });
-        wrap.querySelectorAll(".viz-tab-pane").forEach(function(p) { p.classList.remove("viz-pane-active"); });
-        btn.classList.add("viz-tab-active");
-        var targetPane = wrap.querySelector("#viz-inline-pane-" + btn.getAttribute("data-viz-tab"));
-        if (targetPane) targetPane.classList.add("viz-pane-active");
-      });
-    });
+    bindInfoSection(wrap, "viz-inline-", viz, null);
+    bindChromeTips(wrap);
 
-    // Challenge options handler
-    if (viz.challenge) {
-      var optBtns = wrap.querySelectorAll(".viz-opt-btn");
-      var explBox = wrap.querySelector("#viz-inline-challenge-expl");
-      optBtns.forEach(function(btn) {
-        btn.addEventListener("click", function() {
-          var pick = parseInt(btn.getAttribute("data-opt-idx"), 10);
-          optBtns.forEach(function(b, idx) {
-            b.disabled = true;
-            if (idx === viz.challenge.correct) b.classList.add("viz-correct");
-            else if (idx === pick) b.classList.add("viz-incorrect");
-          });
-          if (explBox) {
-            explBox.style.display = "block";
-            typeset(explBox);
-          }
-        });
-      });
+    function onParam(paramId, val) {
+      if (viz.onParamChange) viz.onParamChange(paramId, val, state);
+      if (viz.onChange) viz.onChange(paramId, val, state);
+      if (viz.onUpdate) viz.onUpdate(state);
     }
-
-    // Controls setup
     var paramsContainer = wrap.querySelector("#viz-inline-params-container");
-    buildControls(paramsContainer, viz, activeInlineState, function(paramId, val) {
-      if (viz.onParamChange) viz.onParamChange(paramId, val, activeInlineState);
-      if (viz.onChange) viz.onChange(paramId, val, activeInlineState);
-      if (viz.onUpdate) viz.onUpdate(activeInlineState);
-    });
+    buildControls(paramsContainer, viz, state, onParam);
 
-    // Canvas setup
-    var canvas = wrap.querySelector("#viz-inline-canvas");
-    var ctx = canvas.getContext("2d");
-    var lastTime = performance.now();
-    var inlineLegend = wrap.querySelector("#viz-inline-legend-strip");
     // Call init with a live container so viz-defined controls (action buttons) render
+    var initControls = null;
     if (typeof viz.init === "function") {
-      var initControls = document.createElement("div");
+      initControls = document.createElement("div");
       initControls.className = "viz-init-controls";
       paramsContainer.parentNode.appendChild(initControls);
-      viz.init(initControls, activeInlineState, function() {});
+      viz.init(initControls, state, function() {});
     }
+    wrap.querySelector("#viz-inline-reset-btn").addEventListener("click", function() {
+      resetControls(paramsContainer, viz, state, initControls, onParam);
+    });
 
-    function inlineRenderLoop(now) {
-      if (!canvas || !canvas.isConnected) {
-        if (inlineAnimId) {
-          cancelAnimationFrame(inlineAnimId);
-          inlineAnimId = null;
-        }
-        return;
-      }
-      var dt = Math.min((now - lastTime) / 1000, 0.05);
-      lastTime = now;
-
-      // Handle HiDPI
-      var rect = canvas.getBoundingClientRect();
-      var dpr = window.devicePixelRatio || 1;
-      var targetW = rect.width > 0 ? rect.width : 640;
-      var targetH = rect.height > 0 ? rect.height : 380;
-      var bufW = Math.round(targetW * dpr);
-      var bufH = Math.round(targetH * dpr);
-
-      if (canvas.width !== bufW || canvas.height !== bufH) {
-        canvas.width = bufW;
-        canvas.height = bufH;
-      }
-
-      ctx.save();
-      ctx.scale(dpr, dpr);
-      ctx.fillStyle = (window.PGRE.CV && window.PGRE.CV.colors.bg) || "#faf9f5";
-      ctx.fillRect(0, 0, targetW, targetH);
-      if (window.PGRE.resetVizLegend) window.PGRE.resetVizLegend();
-      if (typeof viz.draw === "function") {
-        viz.draw(ctx, targetW, targetH, activeInlineState, dt);
-      }
-      ctx.restore();
-      paintLegendStrip(inlineLegend);
-
-      inlineAnimId = requestAnimationFrame(inlineRenderLoop);
-    }
-
-    inlineAnimId = requestAnimationFrame(inlineRenderLoop);
+    inlineStage = createStage({
+      canvas: wrap.querySelector("#viz-inline-canvas"),
+      legend: wrap.querySelector("#viz-inline-legend-strip"),
+      viz: viz,
+      state: state,
+      fallbackW: 640,
+      fallbackH: 380
+    });
   };
 
   window.PGRE.teardownInlineVisualizer = function() {
-    if (inlineAnimId) {
-      cancelAnimationFrame(inlineAnimId);
-      inlineAnimId = null;
+    if (inlineStage) {
+      inlineStage.stop();
+      inlineStage = null;
     }
     if (activeInlineContainer && activeInlineContainer.parentNode) {
       activeInlineContainer.parentNode.removeChild(activeInlineContainer);
@@ -550,7 +1037,7 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
   function isParamsCloseControl(node) {
     var n = node;
     while (n && n !== document) {
-      if (n.id === "viz-params-close-btn") return true;
+      if (n.id === "viz-params-close-btn" || n.id === "viz-reset-btn") return true;
       n = n.parentNode;
     }
     return false;
@@ -727,17 +1214,20 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
   // --- MODAL DIALOG / FULLSCREEN VISUALIZER ---
   window.PGRE.openVisualizerModal = function(cardId) {
     // Synchronous immediate cleanup of previous modal to avoid delayed timeout wipe
-    if (modalAnimId) {
-      cancelAnimationFrame(modalAnimId);
-      modalAnimId = null;
+    if (modalStage) {
+      modalStage.stop();
+      modalStage = null;
     }
     var oldModal = document.getElementById("viz-modal-backdrop");
     if (oldModal && oldModal.parentNode) {
       oldModal.parentNode.removeChild(oldModal);
     }
+    hideTip();
     activeModal = null;
     currentViz = null;
+    currentCardId = null;
     currentState = null;
+    modalPaused = false;
     resetParamsOverlayState();
 
     var viz = window.PGRE.visualizers && window.PGRE.visualizers[cardId];
@@ -746,27 +1236,13 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     backdrop.className = "viz-modal-backdrop";
     backdrop.id = "viz-modal-backdrop";
 
-    var topicBadge = viz.topic ? ("<span class=\"viz-inline-badge\">" + esc(viz.topic) + "</span>") : "";
-    var derivationItems = formatDerivations(viz.derivationSteps);
-    var limitItems = formatLimitingCases(viz.limitingCases);
-    var trapItems = formatTraps(viz.greTraps);
+    var order = visualizerOrder();
+    var pos = order.indexOf(cardId);
+    var prevId = pos > 0 ? order[pos - 1] : null;
+    var nextId = pos >= 0 && pos < order.length - 1 ? order[pos + 1] : null;
+    var counter = pos >= 0 ? ("<span class=\"viz-nav-counter\" data-viz-tip=\"Position of this card among the " + order.length + " formulas that have a simulation.\">" + (pos + 1) + " / " + order.length + "</span>") : "";
 
-    var challengeHTML = "";
-    if (viz.challenge) {
-      var optHTML = viz.challenge.options.map(function(opt, idx) {
-        return "<button class=\"viz-opt-btn\" data-opt-idx=\"" + idx + "\">" + opt + "</button>";
-      }).join("");
-      challengeHTML = "" +
-        "<div class=\"viz-challenge-box\">" +
-          "<div class=\"viz-challenge-q\">" + viz.challenge.question + "</div>" +
-          "<div class=\"viz-options-grid\" id=\"viz-options-grid\">" + optHTML + "</div>" +
-          "<div class=\"viz-challenge-expl\" id=\"viz-challenge-expl\">" +
-            "<strong>Explanation:</strong> " + viz.challenge.explanation +
-          "</div>" +
-        "</div>";
-    } else {
-      challengeHTML = "<p>No active challenge for this formula.</p>";
-    }
+    var topicBadge = viz.topic ? ("<span class=\"viz-inline-badge\">" + esc(viz.topic) + "</span>") : "";
 
     backdrop.innerHTML = "" +
       "<div class=\"viz-modal-window\" id=\"viz-modal-window\">" +
@@ -776,8 +1252,14 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
             topicBadge +
           "</div>" +
           "<div class=\"viz-header-actions\">" +
-            "<button type=\"button\" class=\"viz-params-btn\" id=\"viz-params-btn\" aria-expanded=\"false\" aria-controls=\"viz-controls-panel\">Parameters</button>" +
-            "<button type=\"button\" class=\"viz-close-btn\" id=\"viz-close-btn\" aria-label=\"Close modal\">&times;</button>" +
+            "<div class=\"viz-nav-group\">" +
+              "<button type=\"button\" class=\"viz-params-btn viz-nav-step\" id=\"viz-prev-btn\" data-viz-tip=\"" + esc(PREV_TIP) + "\"" + (prevId ? "" : " disabled") + ">Previous</button>" +
+              counter +
+              "<button type=\"button\" class=\"viz-params-btn viz-nav-step\" id=\"viz-next-btn\" data-viz-tip=\"" + esc(NEXT_TIP) + "\"" + (nextId ? "" : " disabled") + ">Next</button>" +
+            "</div>" +
+            "<button type=\"button\" class=\"viz-params-btn\" id=\"viz-pause-btn\" aria-pressed=\"false\" data-viz-tip=\"" + esc(PAUSE_TIP) + "\">Pause</button>" +
+            "<button type=\"button\" class=\"viz-params-btn\" id=\"viz-params-btn\" aria-expanded=\"false\" aria-controls=\"viz-controls-panel\" data-viz-tip=\"" + esc(PARAMS_TIP) + "\">Parameters</button>" +
+            "<button type=\"button\" class=\"viz-close-btn\" id=\"viz-close-btn\" aria-label=\"Close modal\" data-viz-tip=\"" + esc(CLOSE_TIP) + "\">&times;</button>" +
           "</div>" +
         "</div>" +
         "<div class=\"viz-modal-body\" id=\"viz-modal-body\">" +
@@ -788,30 +1270,15 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
             "</div>" +
             "<div class=\"viz-legend-strip\" id=\"viz-legend-strip\" aria-live=\"polite\"></div>" +
           "</div>" +
-          "<div class=\"viz-info-section\">" +
-            "<div class=\"viz-info-nav\">" +
-              "<button class=\"viz-info-tab-btn viz-tab-active\" data-viz-tab=\"story\">Physical Story</button>" +
-              "<button class=\"viz-info-tab-btn\" data-viz-tab=\"derivation\">Derivation & Limits</button>" +
-              "<button class=\"viz-info-tab-btn\" data-viz-tab=\"traps\">GRE Traps</button>" +
-              "<button class=\"viz-info-tab-btn\" data-viz-tab=\"challenge\">Retention Challenge</button>" +
-            "</div>" +
-            "<div class=\"viz-tab-pane viz-pane-active\" id=\"viz-pane-story\">" +
-              "<p>" + (viz.physicalStory || "") + "</p>" +
-            "</div>" +
-            "<div class=\"viz-tab-pane\" id=\"viz-pane-derivation\">" +
-              "<h4>Key Derivation Steps</h4>" +
-              "<ol class=\"viz-step-list\">" + derivationItems + "</ol>" +
-              "<h4>Limiting Cases & Scaling Laws</h4>" +
-              "<ul class=\"viz-step-list\">" + limitItems + "</ul>" +
-            "</div>" +
-            "<div class=\"viz-tab-pane\" id=\"viz-pane-traps\">" + trapItems + "</div>" +
-            "<div class=\"viz-tab-pane\" id=\"viz-pane-challenge\">" + challengeHTML + "</div>" +
-          "</div>" +
+          formatInfoSection(viz, "viz-", lastInfoTab) +
         "</div>" +
         "<div class=\"viz-controls-panel viz-params-overlay\" id=\"viz-controls-panel\" hidden>" +
           "<div class=\"viz-controls-heading\" id=\"viz-params-handle\">" +
             "<span>Parameters & Controls</span>" +
-            "<button type=\"button\" class=\"viz-params-close-btn\" id=\"viz-params-close-btn\">Close</button>" +
+            "<span class=\"viz-params-heading-actions\">" +
+              "<button type=\"button\" class=\"viz-params-close-btn\" id=\"viz-reset-btn\" data-viz-tip=\"" + esc(RESET_TIP) + "\">Reset</button>" +
+              "<button type=\"button\" class=\"viz-params-close-btn\" id=\"viz-params-close-btn\">Close</button>" +
+            "</span>" +
           "</div>" +
           "<div class=\"viz-params-overlay-body\">" +
             "<div id=\"viz-params-container\"></div>" +
@@ -828,7 +1295,9 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
 
     activeModal = backdrop;
     currentViz = viz;
+    currentCardId = cardId;
     currentState = {};
+    var state = currentState;
 
     // Close handlers
     document.getElementById("viz-close-btn").addEventListener("click", window.PGRE.closeVisualizerModal);
@@ -836,98 +1305,64 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
       if (e.target === backdrop) window.PGRE.closeVisualizerModal();
     });
     bindParamsOverlay();
+    bindChromeTips(backdrop);
+    bindInfoSection(backdrop, "viz-", viz, function(key) { lastInfoTab = key; });
 
-    // Tab switcher
-    backdrop.querySelectorAll("[data-viz-tab]").forEach(function(btn) {
-      btn.addEventListener("click", function() {
-        backdrop.querySelectorAll("[data-viz-tab]").forEach(function(b) { b.classList.remove("viz-tab-active"); });
-        backdrop.querySelectorAll(".viz-tab-pane").forEach(function(p) { p.classList.remove("viz-pane-active"); });
-        btn.classList.add("viz-tab-active");
-        var targetPane = document.getElementById("viz-pane-" + btn.getAttribute("data-viz-tab"));
-        if (targetPane) targetPane.classList.add("viz-pane-active");
-      });
-    });
+    // Previous / Next
+    var prevBtn = document.getElementById("viz-prev-btn");
+    var nextBtn = document.getElementById("viz-next-btn");
+    if (prevId) prevBtn.addEventListener("click", function() { window.PGRE.openVisualizerModal(prevId); });
+    if (nextId) nextBtn.addEventListener("click", function() { window.PGRE.openVisualizerModal(nextId); });
+    backdrop._vizPrevId = prevId;
+    backdrop._vizNextId = nextId;
 
-    // Challenge options handler
-    if (viz.challenge) {
-      var optBtns = backdrop.querySelectorAll(".viz-opt-btn");
-      var explBox = document.getElementById("viz-challenge-expl");
-      optBtns.forEach(function(btn) {
-        btn.addEventListener("click", function() {
-          var pick = parseInt(btn.getAttribute("data-opt-idx"), 10);
-          optBtns.forEach(function(b, idx) {
-            b.disabled = true;
-            if (idx === viz.challenge.correct) b.classList.add("viz-correct");
-            else if (idx === pick) b.classList.add("viz-incorrect");
-          });
-          if (explBox) {
-            explBox.style.display = "block";
-            typeset(explBox);
-          }
-        });
-      });
+    // Pause
+    var pauseBtn = document.getElementById("viz-pause-btn");
+    function syncPause() {
+      pauseBtn.textContent = modalPaused ? "Resume" : "Pause";
+      pauseBtn.setAttribute("aria-pressed", modalPaused ? "true" : "false");
+      pauseBtn.classList.toggle("active", modalPaused);
     }
+    pauseBtn.addEventListener("click", function() {
+      modalPaused = !modalPaused;
+      syncPause();
+    });
+    backdrop._vizTogglePause = function() {
+      modalPaused = !modalPaused;
+      syncPause();
+    };
 
     // Controls setup
+    function onParam(paramId, val) {
+      if (viz.onParamChange) viz.onParamChange(paramId, val, state);
+      if (viz.onChange) viz.onChange(paramId, val, state);
+      if (viz.onUpdate) viz.onUpdate(state);
+    }
     var paramsContainer = document.getElementById("viz-params-container");
-    buildControls(paramsContainer, viz, currentState, function(paramId, val) {
-      if (viz.onParamChange) viz.onParamChange(paramId, val, currentState);
-      if (viz.onChange) viz.onChange(paramId, val, currentState);
-      if (viz.onUpdate) viz.onUpdate(currentState);
-    });
+    buildControls(paramsContainer, viz, state, onParam);
 
-    // Canvas setup
-    var canvas = document.getElementById("viz-canvas");
-    var ctx = canvas.getContext("2d");
-    var lastTime = performance.now();
-    var modalLegend = document.getElementById("viz-legend-strip");
     // Call init with a live container so viz-defined controls (action buttons) render
+    var modalInitControls = null;
     if (typeof viz.init === "function") {
-      var modalInitControls = document.createElement("div");
+      modalInitControls = document.createElement("div");
       modalInitControls.className = "viz-init-controls";
       paramsContainer.parentNode.appendChild(modalInitControls);
-      viz.init(modalInitControls, currentState, function() {});
+      viz.init(modalInitControls, state, function() {});
     }
+    document.getElementById("viz-reset-btn").addEventListener("click", function(e) {
+      if (e && e.stopPropagation) e.stopPropagation();
+      resetControls(paramsContainer, viz, state, modalInitControls, onParam);
+    });
 
-    function renderLoop(now) {
-      if (!canvas || !canvas.isConnected) {
-        if (modalAnimId) {
-          cancelAnimationFrame(modalAnimId);
-          modalAnimId = null;
-        }
-        return;
-      }
-      var dt = Math.min((now - lastTime) / 1000, 0.05);
-      lastTime = now;
-
-      // Handle HiDPI
-      var rect = canvas.getBoundingClientRect();
-      var dpr = window.devicePixelRatio || 1;
-      var targetW = rect.width > 0 ? rect.width : 640;
-      var targetH = rect.height > 0 ? rect.height : 420;
-      var bufW = Math.round(targetW * dpr);
-      var bufH = Math.round(targetH * dpr);
-
-      if (canvas.width !== bufW || canvas.height !== bufH) {
-        canvas.width = bufW;
-        canvas.height = bufH;
-      }
-
-      ctx.save();
-      ctx.scale(dpr, dpr);
-      ctx.fillStyle = (window.PGRE.CV && window.PGRE.CV.colors.bg) || "#faf9f5";
-      ctx.fillRect(0, 0, targetW, targetH);
-      if (window.PGRE.resetVizLegend) window.PGRE.resetVizLegend();
-      if (typeof viz.draw === "function") {
-        viz.draw(ctx, targetW, targetH, currentState, dt);
-      }
-      ctx.restore();
-      paintLegendStrip(modalLegend);
-
-      modalAnimId = requestAnimationFrame(renderLoop);
-    }
-
-    modalAnimId = requestAnimationFrame(renderLoop);
+    modalStage = createStage({
+      canvas: document.getElementById("viz-canvas"),
+      legend: document.getElementById("viz-legend-strip"),
+      viz: viz,
+      state: state,
+      fallbackW: 640,
+      fallbackH: 420,
+      isPaused: function() { return modalPaused; }
+    });
     } else {
       // Non-visualizer card: Comprehensive Formula Detail Modal
       var c = lookupFormulaCard(cardId) || { id: cardId, name: cardId, front: "Recall the formula.", back: "", topic: "cm" };
@@ -1044,16 +1479,19 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
   };
 
   window.PGRE.closeVisualizerModal = function() {
-    if (modalAnimId) {
-      cancelAnimationFrame(modalAnimId);
-      modalAnimId = null;
+    if (modalStage) {
+      modalStage.stop();
+      modalStage = null;
     }
+    hideTip();
     if (activeModal && activeModal.parentNode) {
       activeModal.classList.remove("viz-open");
       var modalToRemove = activeModal;
       activeModal = null;
       currentViz = null;
+      currentCardId = null;
       currentState = null;
+      modalPaused = false;
       resetParamsOverlayState();
       setTimeout(function() {
         if (modalToRemove && modalToRemove.parentNode) {
@@ -1063,14 +1501,34 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
     }
   };
 
-  // Keyboard shortcut: Escape closes modal visualizer
+  function typingTarget(el) {
+    if (!el) return false;
+    var tag = el.tagName;
+    return tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "BUTTON" || el.isContentEditable;
+  }
+
+  // Keyboard: Escape closes (overlay first); Space pauses; arrows step cards.
   if (typeof window !== "undefined" && typeof window.addEventListener === "function") window.addEventListener("keydown", function(e) {
-    if (e.key === "Escape" && activeModal) {
+    if (!activeModal) return;
+    if (e.key === "Escape") {
       if (paramsOverlayOpen) {
         hideParamsOverlay();
         return;
       }
       window.PGRE.closeVisualizerModal();
+      return;
+    }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (typingTarget(document.activeElement)) return;
+    if (e.key === " " && activeModal._vizTogglePause) {
+      e.preventDefault();
+      activeModal._vizTogglePause();
+    } else if (e.key === "ArrowLeft" && activeModal._vizPrevId) {
+      e.preventDefault();
+      window.PGRE.openVisualizerModal(activeModal._vizPrevId);
+    } else if (e.key === "ArrowRight" && activeModal._vizNextId) {
+      e.preventDefault();
+      window.PGRE.openVisualizerModal(activeModal._vizNextId);
     }
   });
   // Close an open visualizer modal when the route/hash changes

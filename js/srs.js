@@ -102,6 +102,7 @@ PGRE.srs = {
     }
     mk.lucky = true;
     mk.lastLuckyAt = now;
+    mk.lastTouchedAt = now;
     if (mk.archivedAt) mk.archivedAt = null;
     if (!mk.srs) this.mistakeMissed(mk);
     PGRE.store.save();
@@ -120,6 +121,7 @@ PGRE.srs = {
     } else {
       delete mk.lucky;
       delete mk.lastLuckyAt;
+      mk.lastTouchedAt = new Date().toISOString();
     }
     PGRE.store.save();
   },
@@ -133,6 +135,7 @@ PGRE.srs = {
     if (mk && mk.lucky) {
       delete mk.lucky;
       delete mk.lastLuckyAt;
+      mk.lastTouchedAt = new Date().toISOString();
       PGRE.store.save();
     }
   },
@@ -365,6 +368,21 @@ PGRE.srs = {
   newInDeck: function (deck) {
     var self = this;
     return deck.filter(function (c) { return !self.cardState(c.id); });
+  },
+
+  /* Ever studied = graded at least once (`state.cards[id]` exists after the
+     first grade). Inverse of newInDeck. Existing card state is the backfill —
+     no extra "ever picked" store. */
+  everStudied: function (id) {
+    return !!this.cardState(id);
+  },
+
+  countEverStudied: function (deck) {
+    var self = this, n = 0;
+    (deck || []).forEach(function (c) {
+      if (self.everStudied(c.id)) n++;
+    });
+    return n;
   },
 
   /* ——— User-curated daily formula batch ———

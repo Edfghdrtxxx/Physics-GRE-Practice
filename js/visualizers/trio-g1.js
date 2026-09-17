@@ -307,8 +307,8 @@ The radius vector from the force center sweeps area $dA = \\frac{1}{2} r^2 d\\ph
   ],
 
   parameters: [
-    { id: 'eccentricity', label: 'Eccentricity ($e$)', min: 0.0, max: 0.85, step: 0.05, default: 0.50, unit: '' },
-    { id: 'sectorDuration', label: 'Equal-time slice ($\\Delta t$)', min: 0.3, max: 1.2, step: 0.1, default: 0.5, unit: 's' },
+    { id: 'eccentricity', label: 'Eccentricity ($e$)', min: 0.0, max: 0.85, step: 0.05, default: 0.50, unit: '', hint: 'Larger $e$ stretches the ellipse. The same $\\Delta t$ near apoapsis sweeps a long thin sliver, so $r^2\\dot{\\phi}$ is what stays fixed — the planet races at periapsis and crawls at apoapsis.' },
+    { id: 'sectorDuration', label: 'Equal-time slice ($\\Delta t$)', min: 0.3, max: 1.2, step: 0.1, default: 0.5, unit: 's', hint: 'Duration of both highlighted sectors. Equal times imply equal areas $A = (dA/dt)\\,\\Delta t$ because $dA/dt = l/(2m)$ is constant for every central force, not only gravity.' },
     { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
   ],
 
@@ -413,8 +413,10 @@ The radius vector from the force center sweeps area $dA = \\frac{1}{2} r^2 d\\ph
     });
 
     if (!state._trail) state._trail = [];
-    state._trail.push({ x: px, y: py });
-    if (state._trail.length > 48) state._trail.shift();
+    if (dt > 0) {
+      state._trail.push({ x: px, y: py });
+      if (state._trail.length > 48) state._trail.shift();
+    }
 
     ctx.save();
     var ti;
@@ -436,14 +438,37 @@ The radius vector from the force center sweeps area $dA = \\frac{1}{2} r^2 d\\ph
     }
 
     pushLegend('Kepler 2nd law', [
-      { label: '$dA/dt = l/(2m)$', value: '$' + arealVelocity.toFixed(3) + '$' },
-      { label: 'Sector area $A = (dA/dt)\\,\\Delta t$', value: '$' + sectorArea.toFixed(3) + '$' },
-      { label: '$\\Delta\\phi$ peri', value: '$' + dPhiPeri.toFixed(2) + '$' },
-      { label: '$\\Delta\\phi$ apo', value: '$' + dPhiApo.toFixed(2) + '$' },
-      { label: '$r$', value: '$' + r.toFixed(2) + '$' },
-      { label: '$\\dot{\\phi}$', value: '$' + phiDot.toFixed(2) + '$' },
-      { label: '$l = m r^2 \\dot{\\phi}$', value: '$' + l.toFixed(3) + '$' },
-      { label: '$|v|$', value: '$' + vTot.toFixed(2) + '$' }
+      { label: '$dA/dt = l/(2m)$', value: '$' + arealVelocity.toFixed(3) + '$', hint: 'Areal velocity. Zero torque in a central field keeps $l = mr^2\\dot{\\phi}$ fixed, so $dA/dt = l/(2m)$ is the same at every true anomaly.' },
+      { label: 'Sector area $A = (dA/dt)\\,\\Delta t$', value: '$' + sectorArea.toFixed(3) + '$', hint: 'Area of each equal-time wedge. Periapsis is short and wide, apoapsis long and thin; both have this same $A$.' },
+      { label: '$\\Delta\\phi$ peri', value: '$' + dPhiPeri.toFixed(2) + '$', hint: 'True-anomaly span near periapsis. Small $r$ needs a large $\\Delta\\phi$ so that $\\frac{1}{2} r^2\\Delta\\phi$ matches the apoapsis area.' },
+      { label: '$\\Delta\\phi$ apo', value: '$' + dPhiApo.toFixed(2) + '$', hint: 'True-anomaly span near apoapsis. Large $r$ needs only a small $\\Delta\\phi$ to sweep the same area in the same $\\Delta t$.' },
+      { label: '$r$', value: '$' + r.toFixed(2) + '$', hint: 'Radius from the occupied focus. With $l$ fixed, $\\dot{\\phi} = l/(mr^2)$ rises sharply as $r$ falls.' },
+      { label: '$\\dot{\\phi}$', value: '$' + phiDot.toFixed(2) + '$', hint: 'Azimuthal rate $h/r^2$. This is what adjusts along the ellipse so $r^2\\dot{\\phi}$ never changes.' },
+      { label: '$l = m r^2 \\dot{\\phi}$', value: '$' + l.toFixed(3) + '$', hint: 'Angular momentum about the focus. $\\boldsymbol{\\tau} = \\mathbf{r}\\times\\mathbf{F} = \\mathbf{0}$ makes $l$ an integral of motion for any $f(r)$.' },
+      { label: '$|v|$', value: '$' + vTot.toFixed(2) + '$', hint: 'Speed $\\sqrt{\\dot{r}^2 + v_\\phi^2}$. The shortcut $l = mvr$ holds only at the apsides, where $\\dot{r} = 0$ and $\\mathbf{v}\\perp\\mathbf{r}$.' }
+    ]);
+
+    var phiTrail = trueAnomaly - 0.45;
+    var rTrail = polarR(phiTrail, p, e);
+    if (!isFinite(rTrail)) rTrail = r;
+    var trailX = fx + rTrail * Math.cos(phiTrail) * s;
+    var trailY = fy + rTrail * Math.sin(phiTrail) * s;
+    if (state._trail && state._trail.length > 6) {
+      var trPt = state._trail[Math.floor(state._trail.length * 0.35)];
+      trailX = trPt.x;
+      trailY = trPt.y;
+    }
+    var orbitR0 = Math.max(4, b * s - 10);
+    PGRE.setVizHotspots([
+      { id: 'planet', kind: 'circle', x: px, y: py, r: 14, title: 'Planet', body: 'Test mass on the ellipse. Live $r = ' + r.toFixed(2) + '$, $\\dot{\\phi} = ' + phiDot.toFixed(2) + '$, $|v| = ' + vTot.toFixed(2) + '$. It races at periapsis and crawls at apoapsis so $r^2\\dot{\\phi}$ stays fixed.' },
+      { id: 'sun', kind: 'circle', x: fx, y: fy, r: 16, title: 'Force center', body: 'Occupied focus. Torque $\\mathbf{r}\\times f(r)\\hat{\\mathbf{r}} = \\mathbf{0}$ here, so $\\mathbf{l}$ is constant and the radius vector sweeps equal areas in equal times ($dA/dt = ' + arealVelocity.toFixed(3) + '$).' },
+      { id: 'rvec', kind: 'segment', x1: fx, y1: fy, x2: px, y2: py, halfW: 7, title: 'Position $\\mathbf{r}$', body: 'From the focus to the planet. Area element $dA = \\frac{1}{2} r^2 d\\phi$, so $dA/dt = \\frac{1}{2} r^2\\dot{\\phi} = ' + arealVelocity.toFixed(3) + '$.' },
+      { id: 'periSector', kind: 'circle', x: periC.x, y: periC.y, r: 26, title: 'Periapsis equal-time sector', body: 'Duration $\\Delta t = ' + sectorDt.toFixed(2) + '\\,\\mathrm{s}$ and area $A = ' + sectorArea.toFixed(3) + '$, but a wide angle $\\Delta\\phi = ' + dPhiPeri.toFixed(2) + '$ because $r$ is small.' },
+      { id: 'apoSector', kind: 'circle', x: apoC.x, y: apoC.y, r: 26, title: 'Apoapsis equal-time sector', body: 'Same $\\Delta t$ and same $A = ' + sectorArea.toFixed(3) + '$ as periapsis. Large $r$ makes this a thin sliver with $\\Delta\\phi = ' + dPhiApo.toFixed(2) + '$.' },
+      { id: 'peri', kind: 'circle', x: ecx + a * s, y: fy, r: 16, title: 'Periapsis', body: 'Nearest point $r_p = a(1-e) = ' + (a * (1 - e)).toFixed(2) + '$. Here $\\dot{r} = 0$, so $v_p r_p = h$ and the planet is fastest.' },
+      { id: 'apo', kind: 'circle', x: ecx - a * s, y: fy, r: 16, title: 'Apoapsis', body: 'Farthest point $r_a = a(1+e) = ' + (a * (1 + e)).toFixed(2) + '$. Same $h = v_a r_a$; the planet is slowest here.' },
+      { id: 'trail', kind: 'circle', x: trailX, y: trailY, r: 12, title: 'Recent trail', body: 'Path just behind the planet. Spacing along the trail is the visual of $|v|$: stretched near periapsis, bunched near apoapsis, while $r^2\\dot{\\phi} = ' + (2 * arealVelocity).toFixed(3) + '$ stays fixed.' },
+      { id: 'orbit', kind: 'annulus', x: ecx, y: ecy, r0: orbitR0, r1: Math.max(orbitR0 + 8, a * s + 10), title: 'Orbit ellipse', body: 'Keplerian ellipse $e = ' + e.toFixed(2) + '$, $a = 1$. The focus is offset from the geometric center by $ae$. Equal areas in equal times hold for any central force, not only $1/r^2$.' }
     ]);
   },
 
@@ -494,9 +519,9 @@ For Newtonian gravity $U = -k/r$ the barrier plus the attractive well form an as
   ],
 
   parameters: [
-    { id: 'relEnergy', label: 'Energy ($E / |E_{\\min}|$)', min: -1, max: 0.8, step: 0.05, default: -0.55, unit: '' },
-    { id: 'angMom', label: 'Angular momentum ($l$)', min: 0.8, max: 2.0, step: 0.1, default: 1.3, unit: '' },
-    { id: 'showParts', label: 'Decompose $V_{\\mathrm{eff}}$', type: 'toggle', default: true, unit: '' },
+    { id: 'relEnergy', label: 'Energy ($E / |E_{\\min}|$)', min: -1, max: 0.8, step: 0.05, default: -0.55, unit: '', hint: 'Sets the waterline $E$ in units of the circular-orbit depth $|E_{\\min}|$. $E = E_{\\min}$ is a circle, $E_{\\min} < E < 0$ an ellipse, $E = 0$ a parabola, and $E > 0$ a hyperbola.' },
+    { id: 'angMom', label: 'Angular momentum ($l$)', min: 0.8, max: 2.0, step: 0.1, default: 1.3, unit: '', hint: 'Builds the centrifugal barrier $l^2/(2mr^2)$. Larger $l$ pushes the circular radius $r_0 = l^2/(mk)$ outward and shallows the well depth $|E_{\\min}| = mk^2/(2l^2)$.' },
+    { id: 'showParts', label: 'Decompose $V_{\\mathrm{eff}}$', type: 'toggle', default: true, unit: '', hint: 'Split $V_{\\mathrm{eff}} = l^2/(2mr^2) + U(r)$ into the repulsive centrifugal wall and the attractive $-k/r$. The radial motion lives in their sum, not in $U$ alone.' },
     { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
   ],
 
@@ -845,15 +870,46 @@ For Newtonian gravity $U = -k/r$ the barrier plus the attractive well form an as
       : (eOrb < 1 ? 'bound ellipse' : (Math.abs(eOrb - 1) < 0.02 ? 'parabolic escape' : 'hyperbolic scatter'));
 
     pushLegend('Effective potential', [
-      { label: '$E / |E_{\\min}|$', value: '$' + (Math.abs(Emin) > 1e-9 ? (E / Math.abs(Emin)).toFixed(2) : '0') + '$' },
-      { label: 'Orbit', value: orbitKind },
-      { label: '$e$', value: '$' + eOrb.toFixed(2) + '$' },
-      { label: '$r$', value: '$' + rNow.toFixed(1) + '$' },
-      { label: '$r_0$', value: '$' + r0.toFixed(1) + '$' },
-      { label: '$T_r = E - V_{\\mathrm{eff}}$', value: '$' + Tr.toFixed(1) + '$' },
-      { label: '$E$', value: '$' + E.toFixed(1) + '$' },
-      { label: '$E_{\\min}$', value: '$' + Emin.toFixed(1) + '$' }
+      { label: '$E / |E_{\\min}|$', value: '$' + (Math.abs(Emin) > 1e-9 ? (E / Math.abs(Emin)).toFixed(2) : '0') + '$', hint: 'Energy in units of the circular-orbit well depth. Negative is bound, zero is parabolic escape, positive is hyperbolic scatter.' },
+      { label: 'Orbit', value: orbitKind, hint: 'Conic type from $e = \\sqrt{1 + E/|E_{\\min}|}$. Live classification: ' + orbitKind + '.' },
+      { label: '$e$', value: '$' + eOrb.toFixed(2) + '$', hint: 'Orbital eccentricity. $e = 0$ sits at the $V_{\\mathrm{eff}}$ minimum; $0 < e < 1$ oscillates between $r_{\\min}$ and $r_{\\max}$.' },
+      { label: '$r$', value: '$' + rNow.toFixed(1) + '$', hint: 'Current radial coordinate. Same $r$ as the orbit on the left; the bead on $V_{\\mathrm{eff}}$ is this $r(t)$.' },
+      { label: '$r_0$', value: '$' + r0.toFixed(1) + '$', hint: 'Circular radius $r_0 = l^2/(mk)$ where $V_{\\mathrm{eff}}\' = 0$. Energy $E_{\\min} = -mk^2/(2l^2)$ lives only here.' },
+      { label: '$T_r = E - V_{\\mathrm{eff}}$', value: '$' + Tr.toFixed(1) + '$', hint: 'Radial kinetic energy $\\frac{1}{2}m\\dot{r}^2 = E - V_{\\mathrm{eff}}$ (teal band). At an apsis $T_r = 0$ but $v_\\phi = l/(mr) \\ne 0$.' },
+      { label: '$E$', value: '$' + E.toFixed(1) + '$', hint: 'Total mechanical energy, the horizontal waterline. Turning points are the roots of $E = V_{\\mathrm{eff}}(r)$.' },
+      { label: '$E_{\\min}$', value: '$' + Emin.toFixed(1) + '$', hint: 'Bottom of the well. Only a circular orbit can sit here, with $\\dot{r} = 0$ forever.' }
     ]);
+
+    var spots138 = [
+      { id: 'planet', kind: 'circle', x: px, y: py, r: 14, title: 'Planet', body: 'Same $r(t)$ as the bead on $V_{\\mathrm{eff}}$. Live $r = ' + rNow.toFixed(1) + '$, $e = ' + eOrb.toFixed(2) + '$ (' + orbitKind + ').' },
+      { id: 'sun', kind: 'circle', x: ox, y: oy, r: 14, title: 'Force center', body: 'Origin of the central force $U = -k/r$. Angular momentum $l$ is conserved about this point, reducing the orbit to 1D motion in $V_{\\mathrm{eff}}$.' },
+      { id: 'bead', kind: 'circle', x: beadX, y: beadY, r: 14, title: 'Radial bead', body: 'The 1D analog of the planet: it slides on $V_{\\mathrm{eff}}$ at live $r = ' + rNow.toFixed(1) + '$. Height $V_{\\mathrm{eff}} = ' + veff(rNow).toFixed(1) + '$; leftover $T_r = E - V_{\\mathrm{eff}} = ' + Tr.toFixed(1) + '$.' },
+      { id: 'energy', kind: 'segment', x1: gx0, y1: plotEY, x2: gx1, y2: plotEY, halfW: 8, title: 'Energy $E$', body: 'Waterline $E = ' + E.toFixed(1) + '$ ($E/|E_{\\min}| = ' + (Math.abs(Emin) > 1e-9 ? (E / Math.abs(Emin)).toFixed(2) : '0') + '$). Turning points are where this line meets $V_{\\mathrm{eff}}$; the teal band is radial kinetic energy.' }
+    ];
+    if (almostCirc) {
+      spots138.push({ id: 'r0', kind: 'segment', x1: plotX(r0), y1: gy0, x2: plotX(r0), y2: gy1, halfW: 7, title: 'Circular radius $r_0$', body: 'Single turning point $r_0 = l^2/(mk) = ' + r0.toFixed(1) + '$. $V_{\\mathrm{eff}}\' = 0$ and $E = E_{\\min} = ' + Emin.toFixed(1) + '$, so $T_r = 0$ forever.' });
+    } else {
+      if (rMin < rPlotMax) {
+        spots138.push({ id: 'rmin', kind: 'segment', x1: plotX(rMin), y1: gy0, x2: plotX(rMin), y2: gy1, halfW: 7, title: 'Periapsis $r_{\\min}$', body: 'Inner root of $E = V_{\\mathrm{eff}}$. $r_{\\min} = ' + rMin.toFixed(1) + '$. Only $\\dot{r} = 0$ here — tangential speed $v_\\phi = l/(mr)$ is not zero.' });
+      }
+      if (isFinite(rMax) && rMax < rPlotMax) {
+        spots138.push({ id: 'rmax', kind: 'segment', x1: plotX(rMax), y1: gy0, x2: plotX(rMax), y2: gy1, halfW: 7, title: 'Apoapsis $r_{\\max}$', body: 'Outer root of $E = V_{\\mathrm{eff}}$. $r_{\\max} = ' + rMax.toFixed(1) + '$. Bound ellipses slosh between $r_{\\min}$ and $r_{\\max}$; $E \\ge 0$ has no outer turning point.' });
+      }
+    }
+    if (showParts) {
+      var rSamp = Math.max(rPlotMin * 1.25, Math.min(rPlotMax * 0.38, r0 * 0.62));
+      spots138.push({ id: 'vcent', kind: 'circle', x: plotX(rSamp), y: Math.max(gy0 + 6, Math.min(gy1 - 6, plotY(vCent(rSamp)))), r: 14, title: 'Centrifugal barrier', body: 'Centrifugal $l^2/(2mr^2)$ is repulsive and diverges as $r \\to 0$, so $l \\ne 0$ trajectories cannot reach the origin. At this $r$ it is $' + vCent(rSamp).toFixed(1) + '$.' });
+      spots138.push({ id: 'vgrav', kind: 'circle', x: plotX(rSamp), y: Math.max(gy0 + 6, Math.min(gy1 - 6, plotY(vGrav(rSamp)))), r: 14, title: 'Gravitational $U(r)$', body: 'Newtonian $U = -k/r = ' + vGrav(rSamp).toFixed(1) + '$ here. It $\\to 0^-$ as $r \\to \\infty$, so $E < 0$ is bound.' });
+    }
+    spots138.push({ id: 'veff', kind: 'rect', x: gx0, y: gy0, w: gx1 - gx0, h: gy1 - gy0, title: 'Effective potential $V_{\\mathrm{eff}}$', body: '$V_{\\mathrm{eff}}(r) = l^2/(2mr^2) - k/r$. Minimum at $r_0 = ' + r0.toFixed(1) + '$ with $E_{\\min} = ' + Emin.toFixed(1) + '$. Radial motion is 1D: $E = \\frac{1}{2}m\\dot{r}^2 + V_{\\mathrm{eff}}$.' });
+    var oR0 = Math.max(6, (almostCirc ? r0 : rMin) * orbitScale);
+    var oR1 = (eOrb < 1 && isFinite(rMax) ? Math.min(rMax, rView) : rView) * orbitScale;
+    if (almostCirc) {
+      spots138.push({ id: 'orbit', kind: 'ring', x: ox, y: oy, r: r0 * orbitScale, halfW: 10, title: 'Circular orbit', body: '$e = 0$ at $r = r_0 = ' + r0.toFixed(1) + '$. The planet sits at the bottom of $V_{\\mathrm{eff}}$ with $T_r = 0$.' });
+    } else {
+      spots138.push({ id: 'orbit', kind: 'annulus', x: ox, y: oy, r0: oR0, r1: Math.max(oR0 + 8, oR1), title: 'Orbit', body: orbitKind + ' with $e = ' + eOrb.toFixed(2) + '$. Polar $r = p/(1 + e\\cos\\phi)$ around the force center; the left picture is the same $r$ as the well on the right.' });
+    }
+    PGRE.setVizHotspots(spots138);
   },
 
   challenge: {
@@ -902,9 +958,9 @@ The hodograph of uniform circular motion is itself a circle of radius $v$. The t
   ],
 
   parameters: [
-    { id: 'radius', label: 'Radius ($r$)', min: 60, max: 180, step: 10, default: 120, unit: '' },
-    { id: 'omega', label: 'Angular velocity ($\\omega$)', min: 0.5, max: 4.0, step: 0.25, default: 1.8, unit: 'rad/s' },
-    { id: 'deltaTheta', label: 'Finite angle $(\\Delta\\theta)$', min: 15, max: 75, step: 5, default: 40, unit: 'deg' },
+    { id: 'radius', label: 'Radius ($r$)', min: 60, max: 180, step: 10, default: 120, unit: '', hint: 'Orbit radius. At fixed $\\omega$, $a_c = \\omega^2 r$ grows with $r$; at fixed $v$, $a_c = v^2/r$ falls. Always check which quantity the problem holds constant.' },
+    { id: 'omega', label: 'Angular velocity ($\\omega$)', min: 0.5, max: 4.0, step: 0.25, default: 1.8, unit: 'rad/s', hint: 'Angular speed. Then $v = \\omega r$ and $a_c = \\omega^2 r = v\\omega$. The hodograph is a circle of radius $v$ traversed at this same $\\omega$.' },
+    { id: 'deltaTheta', label: 'Finite angle $(\\Delta\\theta)$', min: 15, max: 75, step: 5, default: 40, unit: 'deg', hint: 'Vertex angle of the similar isosceles triangles. The chord estimate $|\\Delta\\mathbf{v}|/\\Delta t = v\\omega\\,\\mathrm{sinc}(\\Delta\\theta/2)$ becomes $v^2/r$ only as $\\Delta\\theta \\to 0$.' },
     { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
   ],
 
@@ -1077,14 +1133,35 @@ The hodograph of uniform circular motion is itself a circle of radius $v$. The t
     });
 
     pushLegend('Centripetal kinematics', [
-      { label: '$v = \\omega r$', value: '$' + vMag.toFixed(1) + '$' },
-      { label: '$a_c = v^2/r$', value: '$' + aFromV2r.toFixed(1) + '$' },
-      { label: '$\\omega^2 r$', value: '$' + aMag.toFixed(1) + '$' },
-      { label: '$v\\omega$', value: '$' + aFromVom.toFixed(1) + '$' },
-      { label: '$|\\Delta v|/\\Delta t$', value: '$' + aFin.toFixed(1) + '$' },
-      { label: '$\\Delta\\theta$', value: '$' + dDeg.toFixed(0) + '^\\circ$' },
-      { label: '$\\omega$', value: '$' + omega.toFixed(2) + '$' },
-      { label: '$T$', value: '$' + ((2 * Math.PI) / Math.max(omega, 1e-6)).toFixed(2) + '$' }
+      { label: '$v = \\omega r$', value: '$' + vMag.toFixed(1) + '$', hint: 'Speed. Uniform circular motion keeps $|v|$ fixed while $\\mathbf{v}$ rotates; the hodograph radius is this $v$.' },
+      { label: '$a_c = v^2/r$', value: '$' + aFromV2r.toFixed(1) + '$', hint: 'Centripetal acceleration from the speed form. Equals $\\omega^2 r$ and $v\\omega$ here because $v = \\omega r$.' },
+      { label: '$\\omega^2 r$', value: '$' + aMag.toFixed(1) + '$', hint: 'Same $a_c$ written at fixed $\\omega$. Rigid rotation: rim points have larger $a_c$ than interior points.' },
+      { label: '$v\\omega$', value: '$' + aFromVom.toFixed(1) + '$', hint: 'Third identity $a_c = v\\omega$. Follows at once from $v = \\omega r$.' },
+      { label: '$|\\Delta v|/\\Delta t$', value: '$' + aFin.toFixed(1) + '$', hint: 'Finite-difference estimate from the hodograph chord. It undershoots $v^2/r$ by $\\mathrm{sinc}(\\Delta\\theta/2)$; the gap closes as $\\Delta\\theta \\to 0$.' },
+      { label: '$\\Delta\\theta$', value: '$' + dDeg.toFixed(0) + '^\\circ$', hint: 'Vertex angle of both similar isosceles triangles. Side ratios give $|\\Delta v|/v = |\\Delta r|/r = 2\\sin(\\Delta\\theta/2)$.' },
+      { label: '$\\omega$', value: '$' + omega.toFixed(2) + '$', hint: 'Instantaneous $\\dot{\\theta}$. Period $T = 2\\pi/\\omega$. The $\\mathbf{v}$ tip runs around the hodograph at this same rate.' },
+      { label: '$T$', value: '$' + ((2 * Math.PI) / Math.max(omega, 1e-6)).toFixed(2) + '$', hint: 'Period of one revolution. $\\mathbf{v}$ and $\\mathbf{a}$ complete a full turn in this same $T$.' }
+    ]);
+
+    var aTipX = px - Math.cos(theta) * aPix;
+    var aTipY = py - Math.sin(theta) * aPix;
+    var vTipX = px + vx * vPix;
+    var vTipY = py + vy * vPix;
+    var hodoATipX = hvx + axN * aHodoScale;
+    var hodoATipY = hvy + ayN * aHodoScale;
+    var triCx = (hx + hvx0 + hvx) / 3;
+    var triCy = (hy + hvy0 + hvy) / 3;
+    PGRE.setVizHotspots([
+      { id: 'particle', kind: 'circle', x: px, y: py, r: 14, title: 'Particle', body: 'Uniform circular motion at $r = ' + r.toFixed(0) + '$, $\\omega = ' + omega.toFixed(2) + '\\,\\mathrm{rad/s}$. Speed $v = ' + vMag.toFixed(1) + '$ is constant; $\\mathbf{v}$ itself rotates, so $\\mathbf{a}$ points to the center.' },
+      { id: 'avec', kind: 'segment', x1: px, y1: py, x2: aTipX, y2: aTipY, halfW: 7, title: 'Acceleration $\\mathbf{a}$', body: 'Centripetal $\\mathbf{a} = -\\omega^2\\mathbf{r}$ with $|a| = ' + aMag.toFixed(1) + '$. Perpendicular to $\\mathbf{v}$, so it does no work and changes direction only.' },
+      { id: 'vvec', kind: 'segment', x1: px, y1: py, x2: vTipX, y2: vTipY, halfW: 7, title: 'Velocity $\\mathbf{v}$', body: 'Tangent to the circle, $|v| = \\omega r = ' + vMag.toFixed(1) + '$. The identities $a_c = v^2/r = \\omega^2 r = v\\omega$ all use this $v$.' },
+      { id: 'rvec', kind: 'segment', x1: cx, y1: cy, x2: px, y2: py, halfW: 7, title: 'Position $\\mathbf{r}$', body: 'Radius of the circle. In time $\\Delta t$ it turns through $\\Delta\\theta = ' + dDeg.toFixed(0) + '^\\circ$, forming an isosceles triangle similar to the hodograph triangle.' },
+      { id: 'circle', kind: 'ring', x: cx, y: cy, r: rDraw, halfW: 8, title: 'Circular path', body: 'Radius $r = ' + r.toFixed(0) + '$. Curvature $1/r$ produces $a_c = v^2/r = ' + aFromV2r.toFixed(1) + '$. Shrink $\\Delta\\theta$ to watch the chord $\\Delta\\mathbf{r}$ become tangent motion.' },
+      { id: 'hodoA', kind: 'segment', x1: hvx, y1: hvy, x2: hodoATipX, y2: hodoATipY, halfW: 7, title: 'Hodograph $\\mathbf{a}$', body: 'True $\\mathbf{a} = d\\mathbf{v}/dt$ at the $\\mathbf{v}$ tip, tangent to the dashed circle of radius $v$ and antiparallel to $\\mathbf{r}$. $|a| = ' + aMag.toFixed(1) + '$.' },
+      { id: 'hodoV', kind: 'segment', x1: hx, y1: hy, x2: hvx, y2: hvy, halfW: 7, title: 'Hodograph $\\mathbf{v}$', body: 'Velocity drawn from a common origin. Its tip runs around a circle of radius $v = ' + vMag.toFixed(1) + '$ at the same $\\omega$, which is why $|a| = v\\omega$.' },
+      { id: 'hodoDv', kind: 'segment', x1: hvx0, y1: hvy0, x2: hvx, y2: hvy, halfW: 8, title: 'Finite $\\Delta\\mathbf{v}$', body: 'Hodograph chord $|\\Delta v| = 2v\\sin(\\Delta\\theta/2) = ' + dVfin.toFixed(1) + '$. Then $|\\Delta v|/\\Delta t = ' + aFin.toFixed(1) + '$, which lags $v^2/r = ' + aMag.toFixed(1) + '$ by $\\mathrm{sinc}(\\Delta\\theta/2)$.' },
+      { id: 'hodoTri', kind: 'circle', x: triCx, y: triCy, r: 22, title: 'Hodograph triangle', body: 'Similar to the position triangle $(\\mathbf{r}, \\mathbf{r}+\\Delta\\mathbf{r}, \\Delta\\mathbf{r})$. Side ratios give $|\\Delta v|/v = |\\Delta r|/r = 2\\sin(\\Delta\\theta/2)$ with $\\Delta\\theta = ' + dDeg.toFixed(0) + '^\\circ$.' },
+      { id: 'hodoCircle', kind: 'ring', x: hx, y: hy, r: vMag * hodoScale, halfW: 8, title: 'Hodograph circle', body: 'Locus of $\\mathbf{v}$ tips: a circle of radius $v = ' + vMag.toFixed(1) + '$. $\\mathbf{a}$ is tangent to this circle because the tip itself moves at $\\omega$.' }
     ]);
   },
 

@@ -8,7 +8,7 @@ PGRE.views = PGRE.views || {};
 
 PGRE.views.dashboard = (function () {
   var LETTERS = ['A', 'B', 'C', 'D', 'E'];
-  var WEEK_TARGET_LO = 15, WEEK_TARGET_HI = 17;   // plan's 15–17 h/week budget
+  var WEEK_TARGET_LO = 15, WEEK_TARGET_HI = 17;   // syllabus 15–17 h/week
 
   /* F4: where each daily challenge is actually completed, so its card offers a
      one-click jump there (keyed by CHALLENGE_POOL id). Answering-based challenges
@@ -234,9 +234,11 @@ PGRE.views.dashboard = (function () {
         var h = d.sec > 0 ? Math.max(3, Math.round(BH * d.sec / maxSec)) : 2;
         var cls = d.sec > 0 ? (d.today ? 'dash-bar dash-bar-today' : 'dash-bar') : 'dash-bar dash-bar-zero';
         var mins = Math.round(d.sec / 60);
-        var lbl = ['S', 'M', 'T', 'W', 'T', 'F', 'S'][new Date(d.key + 'T12:00:00').getDay()];
+        var dt = new Date(d.key + 'T12:00:00');
+        var dayLbl = dt.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+        var lbl = ['S', 'M', 'T', 'W', 'T', 'F', 'S'][dt.getDay()];
         bars += '<rect x="' + x.toFixed(1) + '" y="' + (BH - h) + '" width="' + bw + '" height="' + h +
-                '" rx="2" class="' + cls + '"><title>' + d.key + ': ' + mins + ' min</title></rect>' +
+                '" rx="2" class="' + cls + '" data-tip="' + PGRE.ui.esc(dayLbl + '\\n' + mins + ' min active') + '"></rect>' +
                 '<text x="' + (x + bw / 2).toFixed(1) + '" y="47" text-anchor="middle" class="dash-spark-lbl' +
                 (d.today ? ' dash-spark-lbl-today' : '') + '">' + lbl + '</text>';
       });

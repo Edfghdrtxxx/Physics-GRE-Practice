@@ -605,6 +605,12 @@ function loadShipped(reduced, opts) {
       isLeech: function () { return false; },
       isSuspended: function () { return false; },
       cardState: function (id) { return cardStates[id] || null; },
+      everStudied: function (id) { return !!cardStates[id]; },
+      countEverStudied: function (deck) {
+        var n = 0;
+        (deck || []).forEach(function (c) { if (c && cardStates[c.id]) n++; });
+        return n;
+      },
       gradeCard: function (id, g) {
         cardStates[id] = cardStates[id] || { interval: 1, reps: 1, due: '2026-09-08', lastGrade: g, lapses: 0 };
         cardStates[id].lastGrade = g;
@@ -1487,7 +1493,9 @@ function runAsync() {
     // second chapter: cpgf-<ch>.<eq> ids drive the grouping
     pk.cards.push({ id: 'cpgf-2.1', topic: 'em', name: 'Gauss', front: 'Gauss law', back: '$$\\Phi = Q/\\epsilon_0$$', note: '', aliases: [] });
     pk.cards.push({ id: 'cpgf-2.2', topic: 'em', name: 'Ampere', front: 'Ampere law', back: '$$\\oint B = \\mu_0 I$$', note: '', aliases: [] });
+    pk.cards.push({ id: 'cpgf-2.3', topic: 'em', name: 'Faraday', front: 'Faraday law', back: '$$\\mathcal{E} = -d\\Phi/dt$$', note: '', aliases: [] });
     pk.cardStates['cpgf-2.1'] = { due: '2026-09-07', interval: 1, reps: 1 };
+    pk.cardStates['cpgf-2.3'] = { due: '2026-09-10', interval: 4, reps: 1 };
     P.srs.formulaDay = function () { return { reviewIds: [], newIds: [], softIds: [] }; };
     P.srs.formulaDayRemaining = function () { return []; };
     P.srs.buildMemHistory = function () { return null; };
@@ -1520,7 +1528,7 @@ function runAsync() {
 
       ch2.querySelector('.picker-ch-toggle').click();
       var boxes = ch2.querySelectorAll('.picker-box');
-      assert(boxes.length === 2, 'expanding paints that chapter’s two rows');
+      assert(boxes.length === 3, 'expanding paints that chapter’s three rows');
       var peek = ch2.querySelector('.picker-preview');
       assert(!!peek && peek.textContent.indexOf('Phi') !== -1,
         'row shows the rendered formula, not a bare id');
@@ -1528,23 +1536,63 @@ function runAsync() {
         'studied-today card is locked and stays picked');
       assert(!boxes[1].checked, 'unseen card starts unchecked');
 
+      var gaussRow = ch2.querySelector('.picker-row[data-cardid="cpgf-2.1"]');
+      var ampereRow = ch2.querySelector('.picker-row[data-cardid="cpgf-2.2"]');
+      var faradayRow = ch2.querySelector('.picker-row[data-cardid="cpgf-2.3"]');
+      assert(!!gaussRow && gaussRow.classList.contains('picker-today'),
+        'locked studied-today row is marked today');
+      assert(!!ampereRow && !ampereRow.classList.contains('picker-learned-only') &&
+        !ampereRow.classList.contains('picker-today'),
+        'never-studied Ampere has an empty box');
+      assert(!!faradayRow && faradayRow.classList.contains('picker-learned-only') &&
+        boxes[2].checked && faradayRow.getAttribute('data-today') == null,
+        'ever-studied Faraday is filled but not in today');
+
+      var chCount = ch2.querySelector('.picker-ch-count');
+      assert(chCount && chCount.textContent.indexOf('2/3') !== -1,
+        'chapter fraction is ever-studied / size, got: ' + (chCount && chCount.textContent));
+      var otherCount = other.querySelector('.picker-ch-count');
+      assert(otherCount && otherCount.textContent.indexOf('0/12') !== -1,
+        'unlearned chapter is 0/size, got: ' + (otherCount && otherCount.textContent));
+
+      var count = pk.document.getElementById('picker-count');
+      assert(count.textContent === 'today 1 · ever 2 · target 20',
+        'counter starts with locked today + deck ever, got: ' + count.textContent);
+
+      fireChange(boxes[2]);
+      assert(faradayRow.classList.contains('picker-today') &&
+        !faradayRow.classList.contains('picker-learned-only') &&
+        faradayRow.getAttribute('data-today') === '1',
+        'clicking a learned-only box adds it to today');
+      assert(count.textContent === 'today 2 · ever 2 · target 20',
+        'today count rises without changing ever, got: ' + count.textContent);
+      fireChange(boxes[2]);
+      assert(faradayRow.classList.contains('picker-learned-only') &&
+        boxes[2].checked && faradayRow.getAttribute('data-today') == null,
+        'second click removes Faraday from today but keeps the learned fill');
+      assert(count.textContent === 'today 1 · ever 2 · target 20',
+        'ever stays 2 after unpicking Faraday, got: ' + count.textContent);
+
       boxes[1].checked = true;
       fireChange(boxes[1]);
-      var count = pk.document.getElementById('picker-count');
-      assert(count.textContent.indexOf('2 picked') !== -1,
+      assert(count.textContent === 'today 2 · ever 2 · target 20',
         'count tracks locked + manual pick, got: ' + count.textContent);
+      assert(chCount.textContent.indexOf('2/3') !== -1,
+        'chapter fraction ignores today picks, got: ' + chCount.textContent);
 
       var fill = pk.document.getElementById('picker-fill');
       assert(!!fill, 'fill-batch control rendered');
       fill.click();
-      assert(count.textContent.indexOf('14 picked') !== -1,
+      assert(count.textContent === 'today 14 · ever 2 · target 20',
         'fill stages every unseen card up to target (12 f-cards + cpgf-2.2), got: ' + count.textContent);
       assert(savedIds === null, 'fill does not persist — Save still owns the write');
+      assert(boxes[2].checked && faradayRow.classList.contains('picker-learned-only'),
+        'fill does not unlearn Faraday or add it to today');
 
       var saOther = other.querySelector('.picker-selall-box');
       saOther.checked = true;
       fireChange(saOther);
-      assert(count.textContent.indexOf('14 picked') !== -1,
+      assert(count.textContent === 'today 14 · ever 2 · target 20',
         'chapter select-all picks its 12 cards without opening it, got: ' + count.textContent);
 
       var filter = pk.document.getElementById('picker-filter');
@@ -1565,6 +1613,7 @@ function runAsync() {
         'save persists picked minus locked (14 picked - 1 locked = 13), got ' +
           (savedIds && savedIds.length));
       assert(savedIds.indexOf('cpgf-2.1') === -1, 'locked card not written to the batch');
+      assert(savedIds.indexOf('cpgf-2.3') === -1, 'learned-only Faraday is not saved');
       assert(savedIds.indexOf('cpgf-2.2') !== -1 && savedIds.indexOf('f0') !== -1,
         'manual pick and filled ids both saved');
     });
