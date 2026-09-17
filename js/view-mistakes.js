@@ -7,7 +7,7 @@ PGRE.views = PGRE.views || {};
 
 PGRE.views.mistakes = (function () {
   var LETTERS = ['A', 'B', 'C', 'D', 'E'];
-  var drill = null; // { qs, st, i, skipped, done, sid, qStart, assess } — see startDrill
+  var drill = null; // { qs, st, i, skipped, done, reviewing, sid, qStart, assess } — see startDrill
   var lastRenderAt = 0; // stamps each drill render so a double-click can't click through
   var keyBound = false; // the document keydown listener is installed once
   var paceTimer = null; // live per-question chip; same contract as view-practice.js
@@ -442,7 +442,7 @@ PGRE.views.mistakes = (function () {
     if (PGRE.nav) PGRE.nav.setTrail(['Drill']);   // BUNDLE G: drill is live
     var order = shuffle(qs);
     drill = { qs: order, st: order.map(function () { return null; }), i: 0,
-              skipped: 0, done: false,
+              skipped: 0, done: false, reviewing: false,
               sid: PGRE.gamify.beginSession('mistakes', 'mistakes', qs.length) };
     renderDrillQuestion();
   }
@@ -470,17 +470,33 @@ PGRE.views.mistakes = (function () {
      correct-vs-missed tint would tell you, from across the card, whether the
      answer you are about to walk back to was the right one, which is exactly
      what revisiting is supposed to make you recall. The results palette (with
-     the tints) belongs to the summary, once nothing can be re-answered. */
-  function paletteHTML(results) {
+     the tints) belongs to the summary. Answered cells open a read-only review
+     of that question; unanswered stay inert. Nothing is re-recorded. */
+  function paletteHTML(results, current) {
+    if (!results && current == null) current = drill.i;
     var cells = '';
     drill.qs.forEach(function (q, n) {
       var st = drill.st[n];
       var cls = 'pal-cell';
       if (st) cls += results ? (st.correct ? ' is-correct' : ' is-wrong') : ' is-answered';
-      if (!results && n === drill.i) cls += ' is-current';
-      cells += '<button type="button" class="' + cls + '"' +
-        (results ? ' disabled' : ' data-goto="' + n + '"') +
-        ' aria-label="Question ' + (n + 1) + '">' + (n + 1) + '</button>';
+      if (current != null && n === current) cls += ' is-current';
+      var label = 'Question ' + (n + 1);
+      if (st) label += results ? (st.correct ? ', correct' : ', missed') : ', answered';
+      else label += results ? ', not answered' : ', unanswered';
+      if (current != null && n === current) label += ', current';
+      var attrs;
+      if (results) {
+        if (st) {
+          attrs = ' data-review="' + n + '" title="Review this question"';
+          label += ', review';
+        } else {
+          attrs = ' disabled';
+        }
+      } else {
+        attrs = ' data-goto="' + n + '"';
+      }
+      cells += '<button type="button" class="' + cls + '"' + attrs +
+        ' aria-label="' + label + '">' + (n + 1) + '</button>';
     });
     return '<div class="drill-palette">' +
       '<div class="exam-palette-title">' +
@@ -496,10 +512,26 @@ PGRE.views.mistakes = (function () {
       '</div></div>';
   }
 
+  function neighborAnswered(from, dir) {
+    if (!drill) return -1;
+    for (var i = from + dir; i >= 0 && i < drill.qs.length; i += dir) {
+      if (drill.st[i]) return i;
+    }
+    return -1;
+  }
+
+  function bindReviewJumps() {
+    root().querySelectorAll('[data-review]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        renderDrillReview(parseInt(b.getAttribute('data-review'), 10));
+      });
+    });
+  }
+
   /* The feedback panel under an answered question. `fresh` (just answered) gets
      the interactive self-assessment row; a re-revealed answer shows what was
      recorded instead, so re-reading a question never rewrites its assessment. */
-  function feedbackHTML(q, st, fresh) {
+  function feedbackHTML(q, st, fresh, locked) {
     var mk = PGRE.store.state.mistakes[q.id];
     var nextDue = mk && mk.srs ? PGRE.srs.ivlLabel(PGRE.srs.daysUntil(mk.srs.due)) : '';
     var html = '<div class="feedback reveal-in ' + (st.correct ? 'feedback-good' : 'feedback-bad') + '">' +
@@ -517,15 +549,17 @@ PGRE.views.mistakes = (function () {
       // PGRE.assess stamps in place) — lastAssess() would happily surface a
       // tag from some practice session weeks ago as if it belonged here
       var bits = [];
-      if (st.row.confidence) bits.push(st.row.confidence === 'guess' ? 'Guessed' : 'Knew it');
-      (st.row.tags || []).forEach(function (tg) { bits.push(PGRE.assess.LABELS[tg] || tg); });
+      if (st.row && st.row.confidence) bits.push(st.row.confidence === 'guess' ? 'Guessed' : 'Knew it');
+      ((st.row && st.row.tags) || []).forEach(function (tg) { bits.push(PGRE.assess.LABELS[tg] || tg); });
       if (bits.length) {
         html += '<div class="conf-note muted">Your self-assessment: <strong>' +
           bits.join(' · ') + '</strong></div>';
       }
-      html += '<div class="drill-reanswer-hint muted">Pick a different choice to answer again — ' +
-        'it replaces this answer. Leave and come back and the question is blank again; ' +
-        're-picking the same choice brings this result back.</div>';
+      if (!locked) {
+        html += '<div class="drill-reanswer-hint muted">Pick a different choice to answer again — ' +
+          'it replaces this answer. Leave and come back and the question is blank again; ' +
+          're-picking the same choice brings this result back.</div>';
+      }
     }
     html += '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
       distractorBlock(q);
@@ -706,18 +740,75 @@ PGRE.views.mistakes = (function () {
     renderDrillQuestion({ fresh: true });
   }
 
+  function renderDrillReview(idx) {
+    if (!drill || idx < 0 || idx >= drill.qs.length) return;
+    var st = drill.st[idx];
+    if (!st) return;
+    if (drill.reviewing && drill.i === idx) return;
+    clearPace();
+    drill.i = idx;
+    drill.reviewing = true;
+    lastRenderAt = Date.now();
+    if (PGRE.nav) PGRE.nav.setTrail(['Review']);
+    var q = drill.qs[idx];
+    var t = PGRE.topicById(q.topic) || { id: 'xx', short: '?', name: 'Unknown topic' };
+    var prev = neighborAnswered(idx, -1);
+    var next = neighborAnswered(idx, 1);
+    var html = '<div class="card practice-card">' +
+      '<div class="practice-meta">' +
+        '<span>Review — ' + (idx + 1) + ' of ' + drill.qs.length + '</span>' +
+        '<span class="chip">' + t.name + '</span>' +
+        '<span class="chip">' + (st.correct ? 'Correct' : 'Missed') + '</span>' +
+      '</div>' +
+      '<div class="q-text">' + q.q + '</div>' +
+      '<div class="choices">';
+    q.choices.forEach(function (c, cidx) {
+      var cls = 'choice';
+      if (cidx === q.answer) cls += ' is-answer';
+      if (cidx === st.picked && !st.correct) cls += ' is-wrong';
+      html += '<button class="' + cls + '" disabled aria-pressed="' +
+        (cidx === st.picked ? 'true' : 'false') + '">' +
+        '<span class="choice-letter">' + LETTERS[cidx] + '</span>' +
+        '<span class="choice-body">' + c + '</span></button>';
+    });
+    html += '</div>' +
+      '<div id="feedback">' + feedbackHTML(q, st, false, true) + '</div>' +
+      '<div class="btn-row drill-navrow">' +
+        '<button class="btn btn-ghost" id="review-prev"' + (prev < 0 ? ' disabled' : '') + '>← Back</button>' +
+        '<button class="btn btn-ghost" id="review-next"' + (next < 0 ? ' disabled' : '') + '>Next →</button>' +
+        '<button class="btn btn-primary drill-finish" id="review-summary">Back to results</button>' +
+      '</div>' +
+      paletteHTML(true, idx) +
+      '</div>';
+    root().innerHTML = html;
+    PGRE.typesetMath(root());
+    window.scrollTo(0, 0);
+    document.getElementById('review-prev').addEventListener('click', function () {
+      if (prev >= 0) renderDrillReview(prev);
+    });
+    document.getElementById('review-next').addEventListener('click', function () {
+      if (next >= 0) renderDrillReview(next);
+    });
+    document.getElementById('review-summary').addEventListener('click', renderDrillSummary);
+    bindReviewJumps();
+  }
+
   function renderDrillSummary() {
     clearPace();
     if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: drill over — back to base
     lastRenderAt = Date.now();
+    var firstClose = !drill.done;
     drill.done = true;                     // the keys stop answering from here on
+    drill.reviewing = false;
     var done = answeredCount(), correct = correctCount(), xp = earnedXP();
     var left = drill.qs.length - done;
-    PGRE.gamify.endSession(drill.sid);
-    PGRE.store.log('mistake', 'Mistake drill: ' + correct + '/' + done + ' correct' +
-      (drill.skipped ? ' · ' + drill.skipped + ' skipped' : ''), 0);
-    PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
-    PGRE.store.save();
+    if (firstClose) {
+      PGRE.gamify.endSession(drill.sid);
+      PGRE.store.log('mistake', 'Mistake drill: ' + correct + '/' + done + ' correct' +
+        (drill.skipped ? ' · ' + drill.skipped + ' skipped' : ''), 0);
+      PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
+      PGRE.store.save();
+    }
     var stillDue = PGRE.srs.dueMistakes().length;
     var untouched = [];
     if (drill.skipped) untouched.push(drill.skipped + ' skipped');
@@ -738,8 +829,7 @@ PGRE.views.mistakes = (function () {
               'further out. ' +
               (stillDue ? stillDue + ' still due now.' : 'Nothing else is due right now.') + '</p>'
             : '') +
-      // the tinted map the live palette deliberately withholds — safe here,
-      // because nothing can be re-answered from the summary
+      // tinted map: answered cells open read-only review; nothing is re-recorded
       (drill.qs.length ? paletteHTML(true) : '') +
       '<div class="btn-row">' +
         '<button class="btn btn-primary" id="back-book">Back to the book</button>' +
@@ -749,6 +839,7 @@ PGRE.views.mistakes = (function () {
       renderBook();
       window.scrollTo(0, 0); // direct re-render, not a route change
     });
+    bindReviewJumps();
   }
 
   /* ——— Keyboard (same opt-in setting as practice: settings.keyboard) ———

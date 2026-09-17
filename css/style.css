@@ -1037,6 +1037,10 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 .drill-palette .pal-cell.is-wrong {
   background: var(--bad-tint); border-color: var(--bad); color: var(--bad);
 }
+.drill-palette .pal-cell[data-review]:hover {
+  border-color: currentColor;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
 /* .exam-legend (stacked, sidebar-shaped) is defined further down the file, so
    these overrides need the extra .drill-palette specificity to win. */
 .drill-palette .drill-legend {
