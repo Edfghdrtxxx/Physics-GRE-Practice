@@ -4195,16 +4195,16 @@ a.today-learn:focus-visible { text-decoration: none; color: inherit; }
 
 .st-at-meter { position: relative; margin-top: 8px; }
 .st-at-meter .meter-thin { margin-top: 0; }
-.st-at-band {
+/* Single-target tick on the week meter (at 20 h). */
+.st-at-mark {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  pointer-events: none;
-  background: var(--accent-tint);
+  top: -2px;
+  bottom: -2px;
+  width: 0;
   border-left: 1px dashed var(--ink-3);
-  border-right: 1px dashed var(--ink-3);
-  opacity: 0.55;
+  pointer-events: none;
   z-index: 1;
+  transform: translateX(-0.5px);
 }
 .meter-week .meter-fill { background: var(--ink-2); }
 /* Exam runway — warm bronze (medal ramp). Third step after today's coral
@@ -4247,7 +4247,7 @@ a.today-learn:focus-visible { text-decoration: none; color: inherit; }
 .stbar-x { font-size: 9.5px; color: var(--ink-3); margin-top: 5px; height: 12px; white-space: nowrap; }
 .stbar-x-cur { color: var(--ink); font-weight: 700; }
 
-/* Weekly totals — 8 bars over a shaded 15–17 h target band. */
+/* Weekly totals — 8 bars with a 20 h target line. */
 .stweek { margin-top: 2px; }
 .stweek-plot {
   position: relative;
@@ -4259,14 +4259,14 @@ a.today-learn:focus-visible { text-decoration: none; color: inherit; }
   background: var(--ivory);
   border-radius: 10px;
 }
-.stweek-band {
+.stweek-mark {
   position: absolute;
   left: 0;
   right: 0;
-  background: var(--accent-tint);
+  height: 0;
   border-top: 1px dashed var(--ink-3);
-  border-bottom: 1px dashed var(--ink-3);
   z-index: 0;
+  pointer-events: none;
 }
 .stweek-col {
   position: relative;

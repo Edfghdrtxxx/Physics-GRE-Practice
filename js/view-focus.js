@@ -209,7 +209,7 @@ PGRE.views.focus = (function () {
     var ui = PGRE.ui;
     return '<div class="focus-stats" id="focus-stats">' +
       ui.statTile('Today', todayDisp + '<span class="stat-unit"> min</span>', 'active time') +
-      ui.statTile('This week', weekH + '<span class="stat-unit"> h</span>', 'toward 15–17 h') +
+      ui.statTile('This week', weekH + '<span class="stat-unit"> h</span>', 'toward 20 h') +
       ui.statTile('Focus sessions', ui.fmt(ts.sessions || 0), 'lifetime') +
       ui.statTile('Focus hours', lifeH + '<span class="stat-unit"> h</span>', 'on the timer') +
     '</div>';

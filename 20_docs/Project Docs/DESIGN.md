@@ -396,7 +396,7 @@ end-to-end via headless Chrome (per `.agents/skills/verify/SKILL.md`):
   **#7 Question of the day** (dashboard, date-seeded) · **#8 Notes & bookmarks**
   (`#/notes`) · **#9 Search** (`#/search`, all sources incl. book sections & notes) ·
   **#10 Readiness estimate** (dashboard, labeled estimate, blends sims) · **#11 Study-time
-  tracking** (dashboard card vs 15–17 h target; `#/study-time`) · **#12 Distractor explanations**
+  tracking** (dashboard card vs 20 h / 150 h runway; `#/study-time`) · **#12 Distractor explanations**
   (`choiceSols` mined from the book's worked solutions; shown in practice feedback, exam
   review, mistake book) · **#13 Print/PDF** (`css/print.css`: paper mistake book +
   per-topic formula sheets) · **#14 Keyboard-first practice** (A–E/1–5, Enter, G;

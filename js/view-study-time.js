@@ -11,7 +11,8 @@ window.PGRE = window.PGRE || {};
 PGRE.views = PGRE.views || {};
 
 PGRE.views.studytime = (function () {
-  var WEEK_LO = 15, WEEK_HI = 17;      // syllabus 15–17 h/wk (≈16 h scheduled)
+  var WEEK_H = 20;                 // weekly intensive target (hours)
+  var CAMPAIGN_TOTAL_H = 150;      // exam-horizon total commitment (hours)
 
   /* ——— Local date helpers (same Monday-based convention as js/study-time.js) ——— */
   function pad2(n) { return String(n).padStart(2, '0'); }
@@ -102,7 +103,7 @@ PGRE.views.studytime = (function () {
 
     return '<div class="stat-row st-stats">' +
       ui.statTile('Today', todayDisp + '<span class="stat-unit"> min</span>', 'active in this tab') +
-      ui.statTile('This week', hrs(st.weekSec()) + '<span class="stat-unit"> h</span>', 'of the 15–17 h plan') +
+      ui.statTile('This week', hrs(st.weekSec()) + '<span class="stat-unit"> h</span>', 'of the ' + WEEK_H + ' h target') +
       ui.statTile('Last 30 days', hrs(total30) + '<span class="stat-unit"> h</span>', 'total active time') +
       ui.statTile('Daily average', hrs(avg30Sec) + '<span class="stat-unit"> h</span>', 'per day, last 30 d') +
       ui.statTile('Best day', bestVal, bestSub) +
@@ -150,32 +151,41 @@ PGRE.views.studytime = (function () {
     return st.weekSec() + liveFocusElapsedSec();
   }
 
+  /* Shared progress line: "Label · done of total unit · remain unit to go"
+     (or · target met / · above target). Same shape for today, week, exam. */
+  function progressLine(label, doneStr, totalStr, unit, remainStr, state) {
+    var status = label + ' · ' + doneStr + ' of ' + totalStr + ' ' + unit;
+    if (state === 'met') status += ' · target met';
+    else if (state === 'above') status += ' · above target';
+    else status += ' · ' + remainStr + ' ' + unit + ' to go';
+    return status;
+  }
+
   function weeklyBandHTML() {
     var weekSec = weekActiveSec();
     var weekH = weekSec / 3600;
-    var scaleH = Math.max(WEEK_HI, weekH);
+    var scaleH = Math.max(WEEK_H, weekH);
     var fillPct = Math.min(100, 100 * weekH / scaleH);
-    var bandLeft = 100 * WEEK_LO / scaleH;
-    var bandW = 100 * (WEEK_HI - WEEK_LO) / scaleH;
+    var markPct = 100 * WEEK_H / scaleH;
     var weekLabel = hrs(weekSec);
-    var tip = 'This week\\n' + weekLabel + ' h of the 15–17 h plan';
-    var status = 'This week · ' + weekLabel + ' of 15–17 h';
-    if (weekH > WEEK_HI) status += ' · above target';
-    else if (weekH >= WEEK_LO) status += ' · on plan';
-    else status += ' · ' + (WEEK_LO - weekH).toFixed(1) + ' h to the 15 h floor';
+    var remainH = Math.max(0, WEEK_H - weekH);
+    var state = weekH > WEEK_H + 0.05 ? 'above'
+      : (remainH <= 0.05 ? 'met' : 'go');
+    var status = progressLine('This week', weekLabel, String(WEEK_H), 'h',
+      remainH.toFixed(1), state);
+    var tip = 'This week\\n' + weekLabel + ' of ' + WEEK_H + ' h' +
+      (state === 'go' ? ' · ' + remainH.toFixed(1) + ' h to go' : ' · ' +
+        (state === 'met' ? 'target met' : 'above target'));
     return '<div class="st-at-meter" data-tip="' + PGRE.ui.esc(tip) + '">' +
       PGRE.ui.meter(fillPct, 'meter-thin meter-week') +
-      '<div class="st-at-band" style="left:' + bandLeft + '%;width:' + bandW + '%"></div>' +
+      '<div class="st-at-mark" style="left:' + markPct + '%"></div>' +
     '</div>' +
     '<div class="challenge-prog">' + PGRE.ui.esc(status) + '</div>';
   }
 
   /* ——— Exam horizon (third bar) ———
-     Remaining = sum of non-historical PGRE.PLAN week `hours`, current week
-     pro-rated by days left in that week. Source of truth is the vault syllabus
-     (15–17 ≈ 16 h/wk, taper week lower) — NOT daysLeft × rate, and NOT lifetime
-     studyLog surplus (past minutes do not cancel future timed sets / mocks).
-     Fill = live-window logged hours / campaign total. Pace is advisory only. */
+     Fixed intensive commitment: CAMPAIGN_TOTAL_H (150 h). Same progress-line
+     shape as today/week. Fill = log / 150. Pace lives in the tooltip only. */
   function examDateKey() {
     var s = PGRE.store.state.settings || {};
     return s.examDate || PGRE.EXAM_DATE || '2026-11-01';
@@ -206,7 +216,6 @@ PGRE.views.studytime = (function () {
     return best || '2026-09-14';
   }
 
-  /* Active seconds on/after the live calendar start only. */
   function campaignActiveSec() {
     var start = campaignStartKey();
     var log = PGRE.store.state.studyLog || {};
@@ -225,30 +234,11 @@ PGRE.views.studytime = (function () {
     return total;
   }
 
-  /* Syllabus hour budget from PLAN week rows (excludes historical). */
-  function planHoursBudget() {
-    var today = dayKey(0);
-    var total = 0, done = 0, remain = 0;
-    (PGRE.PLAN || []).forEach(function (phase) {
-      (phase.weeks || []).forEach(function (w) {
-        if (!w || w.historical) return;
-        var h = +w.hours || 0;
-        if (h <= 0) return;
-        total += h;
-        if (!w.start || !w.end) { remain += h; return; }
-        if (w.end < today) { done += h; return; }
-        if (w.start > today) { remain += h; return; }
-        var span = daysBetweenKeys(w.start, w.end) + 1;
-        if (!isFinite(span) || span < 1) span = 7;
-        var left = daysBetweenKeys(today, w.end) + 1;
-        if (!isFinite(left)) left = span;
-        left = Math.max(0, Math.min(span, left));
-        var credit = h * (left / span);
-        remain += credit;
-        done += h - credit;
-      });
-    });
-    return { total: total, done: done, remain: remain };
+  function fmtH(n) {
+    if (!isFinite(n) || n < 0) n = 0;
+    // Match week hrs(): one decimal under 10, else whole hours.
+    if (n >= 10) return n.toFixed(0);
+    return (Math.round(n * 10) / 10).toFixed(1);
   }
 
   function examHorizonHTML() {
@@ -263,41 +253,54 @@ PGRE.views.studytime = (function () {
       ? examDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       : examKey;
 
-    var budget = planHoursBudget();
-    var remainH = budget.remain;
-    var totalH = budget.total;
-    var loggedH = campaignActiveSec() / 3600;
+    var startKey = campaignStartKey();
+    var spanDays = daysBetweenKeys(startKey, examKey);
+    if (!isFinite(spanDays) || spanDays < 1) spanDays = Math.max(daysLeft, 1);
+    var elapsedDays = daysBetweenKeys(startKey, dayKey(0));
+    if (!isFinite(elapsedDays) || elapsedDays < 0) elapsedDays = 0;
+    elapsedDays = Math.min(spanDays, elapsedDays + 1);
 
-    if (daysLeft <= 0 || remainH <= 0.05) {
-      var doneTip = 'Exam runway\\nSyllabus window complete · ' + examLabel;
+    var totalH = CAMPAIGN_TOTAL_H;
+    var loggedH = campaignActiveSec() / 3600;
+    var remainH = Math.max(0, totalH - loggedH);
+    var expectedSoFar = totalH * (elapsedDays / spanDays);
+    var doneStr = fmtH(Math.min(loggedH, totalH));
+    var remainStr = fmtH(remainH);
+    var totalStr = fmtH(totalH);
+
+    if (daysLeft <= 0) {
+      var doneTip = 'Exam runway\\n' + totalStr + ' h window · ' + examLabel;
       return '<div class="st-at-meter" data-tip="' + PGRE.ui.esc(doneTip) + '">' +
         PGRE.ui.meter(100, 'meter-thin meter-horizon') +
       '</div>' +
-      '<div class="challenge-prog">Until exam · runway complete · ' + PGRE.ui.esc(examLabel) + '</div>';
+      '<div class="challenge-prog">' +
+        PGRE.ui.esc(progressLine('Until exam', totalStr, totalStr, 'h', '0', 'met')) +
+      '</div>';
     }
 
-    var fillPct = totalH > 0.01 ? Math.min(100, 100 * loggedH / totalH) : 0;
-    var remainLabel = remainH >= 10 ? remainH.toFixed(0) : remainH.toFixed(1);
-    var totalLabel = totalH >= 10 ? totalH.toFixed(0) : totalH.toFixed(1);
+    var fillPct = Math.min(100, 100 * loggedH / totalH);
+    var state = remainH <= 0.05 ? 'met' : (loggedH > totalH + 0.05 ? 'above' : 'go');
+    var status = progressLine('Until exam', doneStr, totalStr, 'h', remainStr, state);
 
-    var status = 'Until exam · ' + remainLabel + ' h scheduled left · ' +
-      daysLeft + ' d to ' + examLabel;
+    var delta = loggedH - expectedSoFar;
+    var paceNote = '';
+    if (delta >= 0.5) paceNote = delta.toFixed(1) + ' h ahead of calendar pace';
+    else if (delta <= -0.5) paceNote = (-delta).toFixed(1) + ' h behind calendar pace';
 
-    // Advisory pace vs calendar-expected PLAN hours (never shrinks remainH).
-    var delta = loggedH - budget.done;
-    if (delta >= 0.5) status += ' · ' + delta.toFixed(1) + ' h ahead of schedule';
-    else if (delta <= -0.5) status += ' · ' + (-delta).toFixed(1) + ' h behind schedule';
-
-    var tip = 'Exam runway to ' + examLabel + '\\n' +
-      remainLabel + ' h still on the syllabus (of ' + totalLabel + ' h live window)\\n' +
-      loggedH.toFixed(1) + ' h logged since ' + campaignStartKey() +
-      ' · fill = campaign log / syllabus total';
+    var tip = 'Exam runway to ' + examLabel + ' (' + daysLeft + ' d left)\\n' +
+      doneStr + ' of ' + totalStr + ' h' +
+      (state === 'go' ? ' · ' + remainStr + ' h to go' : '') +
+      (paceNote ? '\\n' + paceNote : '') +
+      '\\nlogged since ' + startKey;
 
     return '<div class="st-at-meter" data-tip="' + PGRE.ui.esc(tip) + '">' +
       PGRE.ui.meter(fillPct, 'meter-thin meter-horizon') +
     '</div>' +
     '<div class="challenge-prog">' + PGRE.ui.esc(status) + '</div>';
   }
+
+
+
 
 
 
@@ -313,9 +316,10 @@ PGRE.views.studytime = (function () {
       var remainSec = Math.max(0, targetSec - doneSec);
       var remainMin = Math.ceil(remainSec / 60);
       var met = remainSec <= 0;
-      var status = 'Today · ' + doneMin + ' of ' + targetMin + ' min';
-      status += met ? ' · Target met — nice work.' : ' · ' + remainMin + ' min to go';
-      var tip = 'Active time today\\n' + doneMin + ' of ' + targetMin + ' min (' + pctR + '%)';
+      var status = progressLine('Today', String(doneMin), String(targetMin), 'min',
+        String(remainMin), met ? 'met' : 'go');
+      var tip = 'Active time today\\n' + doneMin + ' of ' + targetMin + ' min' +
+        (met ? ' · target met' : ' · ' + remainMin + ' min to go') + ' (' + pctR + '%)';
       html = '<div data-tip="' + PGRE.ui.esc(tip) + '">' +
         PGRE.ui.meter(pct, 'meter-thin') + '</div>' +
         '<div class="challenge-prog">' + PGRE.ui.esc(status) + '</div>';
@@ -363,7 +367,7 @@ PGRE.views.studytime = (function () {
       ? Math.ceil(Math.max(0, targetMin * 60 - doneSec) / 60) : 0;
     return '<div class="card" id="st-active-target">' +
       '<h2>Daily activity target</h2>' +
-      '<p class="muted st-lead">Active minutes today — tab activity plus the focus timer — against a goal you pick. Below: this week’s 15–17 h band, then remaining syllabus hours to the exam.</p>' +
+      '<p class="muted st-lead">Active minutes today — tab activity plus the focus timer — against a goal you pick. Below: this week’s 20 h target, then the 150 h runway to the exam.</p>' +
       '<div id="st-at-progress">' + activityTargetProgressHTML(targetMin, doneSec, timerOn) + '</div>' +
       '<div class="chip-row" id="st-at-chips">' + activityTargetChipsHTML(targetMin) + '</div>' +
       '<div class="st-at-action" id="st-at-action">' +
@@ -443,29 +447,28 @@ PGRE.views.studytime = (function () {
   }
 
 
-  /* ——— Weekly totals — last 8 Monday-based weeks, with the 15–17 h target band ——— */
+  /* ——— Weekly totals — last 8 Monday-based weeks, marker at the 20 h target ——— */
   function weeklyStripHTML() {
-    var weeks = [], scale = WEEK_HI * 3600, w;   // seed scale so the target band is always visible
+    var weeks = [], scale = WEEK_H * 3600, w;
     for (w = 7; w >= 0; w--) {
       var sec = weekTotalSec(w);
       if (sec > scale) scale = sec;
       weeks.push({ sec: sec, mon: weekMonday(w), current: w === 0 });
     }
-    var bandBottom = 100 * WEEK_LO * 3600 / scale;
-    var bandHeight = 100 * (WEEK_HI - WEEK_LO) * 3600 / scale;
+    var markBottom = 100 * WEEK_H * 3600 / scale;
 
     var bars = '', labs = '';
     weeks.forEach(function (wk) {
       var hh = hrs(wk.sec);
       var pctH = wk.sec > 0 ? Math.max(4, Math.round(100 * wk.sec / scale)) : 0;
-      var met = wk.sec >= WEEK_LO * 3600;
+      var met = wk.sec >= WEEK_H * 3600;
       var cls = 'stweek-bar' + (met ? ' stweek-met' : '') + (wk.current ? ' stweek-current' : '');
       var sun = new Date(wk.mon.getFullYear(), wk.mon.getMonth(), wk.mon.getDate() + 6);
       var range = PGRE.ui.dateRange(dayStr(wk.mon), dayStr(sun));
       var line2 = hh + ' h active';
       if (wk.current) line2 += ' · in progress';
-      else if (met) line2 += ' · on plan';
-      else line2 += ' · ' + (WEEK_LO - wk.sec / 3600).toFixed(1) + ' h under the 15 h floor';
+      else if (met) line2 += ' · on target';
+      else line2 += ' · ' + (WEEK_H - wk.sec / 3600).toFixed(1) + ' h under 20 h';
       bars += '<div class="stweek-col" data-tip="' + PGRE.ui.esc('Week of ' + range + '\\n' + line2) + '">' +
         '<div class="' + cls + '" style="height:' + pctH + '%"></div></div>';
       labs += '<div class="stweek-lab">' +
@@ -474,17 +477,16 @@ PGRE.views.studytime = (function () {
           (wk.current ? 'this wk' : monDayShort(wk.mon)) + '</span></div>';
     });
 
-
     return '<div class="card"><h2>Weekly totals</h2>' +
       '<div class="stweek">' +
         '<div class="stweek-plot">' +
-          '<div class="stweek-band" style="bottom:' + bandBottom.toFixed(1) + '%;height:' + bandHeight.toFixed(1) + '%"></div>' +
+          '<div class="stweek-mark" style="bottom:' + markBottom.toFixed(1) + '%"></div>' +
           bars +
         '</div>' +
         '<div class="stweek-labels">' + labs + '</div>' +
       '</div>' +
-      '<p class="muted st-note">Total active hours per week (Mon–Sun) for the last 8 weeks. The shaded ' +
-      'band is the 15–17 h weekly syllabus target; bars that reach it are tinted. This week is still in progress.</p>' +
+      '<p class="muted st-note">Total active hours per week (Mon–Sun) for the last 8 weeks. The line marks ' +
+      'the 20 h weekly target; bars that reach it are tinted. This week is still in progress.</p>' +
     '</div>';
   }
 
@@ -561,7 +563,7 @@ PGRE.views.studytime = (function () {
   function render() {
     var head = '<div class="card"><h1>Study time</h1>' +
       '<p class="muted">A deeper look at how much you show up — active minutes, weekly hours against ' +
-      'the 15–17 h plan, your longest streaks, and time logged on the focus timer. Everything here is ' +
+      'the 20 h target, your longest streaks, and time logged on the focus timer. Everything here is ' +
       'computed from your own local activity; there is no per-topic breakdown because this data is ' +
       'day-level only.</p></div>';
 

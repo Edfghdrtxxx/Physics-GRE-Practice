@@ -8,7 +8,7 @@ PGRE.views = PGRE.views || {};
 
 PGRE.views.dashboard = (function () {
   var LETTERS = ['A', 'B', 'C', 'D', 'E'];
-  var WEEK_TARGET_LO = 15, WEEK_TARGET_HI = 17;   // syllabus 15–17 h/week
+  var WEEK_TARGET_H = 20;   // intensive weekly target (hours)
 
   /* F4: where each daily challenge is actually completed, so its card offers a
      one-click jump there (keyed by CHALLENGE_POOL id). Answering-based challenges
@@ -200,8 +200,8 @@ PGRE.views.dashboard = (function () {
 
   /* ————————————————————————————————————————————————————————————
      #11 Study-time card
-     Today's active minutes and this week's hours against the 15–17 h plan
-     target, plus a last-7-days mini bar row. "Active minutes" are the passive
+     Today's active minutes and this week's hours against the 20 h target,
+     plus a last-7-days mini bar row. "Active minutes" are the passive
      heartbeat seconds (PGRE.studyTime) — honest about tab-only semantics.
      ———————————————————————————————————————————————————————————— */
   function studyCard() {
@@ -211,8 +211,8 @@ PGRE.views.dashboard = (function () {
     var todayMin = Math.round(todaySec / 60);
     var todayDisp = todaySec > 0 && todayMin === 0 ? '<1' : String(todayMin);
 
-    // meter fills toward the low end of the range: reaching 15 h reads as "on plan"
-    var pct = Math.min(100, 100 * weekH / WEEK_TARGET_LO);
+    // meter fills toward 20 h
+    var pct = Math.min(100, 100 * weekH / WEEK_TARGET_H);
 
     // last 7 days (oldest → today) as a tiny inline SVG bar row
     var days = [];
@@ -256,7 +256,7 @@ PGRE.views.dashboard = (function () {
           '<span class="stat-unit"> h</span></div><div class="muted">this week</div></div>' +
       '</div>' +
       PGRE.ui.meter(pct, 'meter-thin') +
-      '<div class="challenge-prog">' + weekH.toFixed(1) + ' of ' + WEEK_TARGET_LO + '–' + WEEK_TARGET_HI + ' h weekly target</div>' +
+      '<div class="challenge-prog">' + weekH.toFixed(1) + ' of ' + WEEK_TARGET_H + ' h weekly target</div>' +
       spark +
       '<p class="muted dash-study-note">Counts active time in this tab only — a heartbeat while you interact. ' +
       'Reading on paper or in another tab isn’t tracked.</p>' +
