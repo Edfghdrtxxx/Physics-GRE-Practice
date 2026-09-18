@@ -10,7 +10,10 @@ PGRE.store = {
   // session-only flags, never part of the saved state (read by boot/UI):
   _recoveredFromCorruption: false, // load() had to discard an unreadable blob
   _persistFailed: false,           // the last save() could not write
+  _corruptKey: null,               // KEY-corrupt-<ts> written by _stashCorrupt
   _adoptHookBound: false,          // storage listener installed (load() may run twice)
+
+  canWrite: function () { return !this._persistFailed; },
 
   /* Cross-tab persistence. Two documents of this origin share one localStorage
      key; a tab holding a stale heap used to overwrite a sibling's newer state
@@ -469,7 +472,11 @@ PGRE.store = {
   _stashCorrupt: function (raw) {
     this._recoveredFromCorruption = true;
     try {
-      if (raw) localStorage.setItem(this.KEY + '-corrupt-' + Date.now(), raw);
+      if (raw) {
+        var key = this.KEY + '-corrupt-' + Date.now();
+        localStorage.setItem(key, raw);
+        this._corruptKey = key;
+      }
     } catch (e) { /* storage full or blocked — nothing more we can do */ }
   },
 
@@ -506,8 +513,22 @@ PGRE.store = {
         try { disk = JSON.parse(raw); } catch (e) { disk = null; }
         this._adopt(disk);
       }
-      this.state._rev = (this.state._rev || 0) + 1;
-      localStorage.setItem(this.KEY, JSON.stringify(this.state));
+      // _rev counts successful writes only: roll it back if setItem throws so
+      // a recovering tab still sees a sibling's newer disk _rev and merges it.
+      var nextRev = (this.state._rev || 0) + 1;
+      this.state._rev = nextRev;
+      var blob = JSON.stringify(this.state);
+      try {
+        localStorage.setItem(this.KEY, blob);
+      } catch (we) {
+        this.state._rev = nextRev - 1;
+        throw we;
+      }
+      if (this.state._rev % 20 === 0) {
+        try {
+          localStorage.setItem(this.KEY + '-backup', blob);
+        } catch (be) { /* backup is best-effort — do not flip _persistFailed */ }
+      }
       if (this._persistFailed) {
         this._persistFailed = false;
         if (PGRE.persistWarning) PGRE.persistWarning(false);
@@ -673,6 +694,22 @@ PGRE.store = {
       if (PGRE.srs && PGRE.srs.migrateEasy10) PGRE.srs.migrateEasy10();
     } catch (e) { console.warn('Easy-interval migration skipped', e); }
     this.save();
+  },
+
+  restoreBackup: function () {
+    var raw;
+    try {
+      raw = localStorage.getItem(this.KEY + '-backup');
+    } catch (e) {
+      return false;
+    }
+    if (!raw) return false;
+    try {
+      this.importJSON(raw);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 };
 

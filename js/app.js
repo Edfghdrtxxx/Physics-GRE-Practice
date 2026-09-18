@@ -727,6 +727,17 @@ PGRE.setTheme = function (t) {
 /* ——— Boot ——— */
 PGRE.boot = function () {
   PGRE.store.load();
+  if (PGRE.store._recoveredFromCorruption) {
+    var corruptKey = PGRE.store._corruptKey;
+    PGRE.toast('Saved progress could not be read' +
+      (corruptKey ? '; a copy was kept as ' + PGRE.ui.esc(corruptKey) : ' and could not be copied aside') +
+      '. Restore from Library if this looks wrong.', 'error', true);
+  }
+  var originLine = document.getElementById('origin-line');
+  if (originLine) {
+    originLine.textContent = 'Progress stored for ' +
+      (location.protocol === 'file:' ? 'file://' : location.protocol + '//' + location.host);
+  }
   PGRE.applyTheme(PGRE.store.state.settings.theme);
   PGRE.ensureSidebarScrim();
   PGRE.applySidebar(PGRE.store.state.settings.sidebarFolded);

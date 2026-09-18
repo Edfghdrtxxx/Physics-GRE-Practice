@@ -1,8 +1,8 @@
-/* Dashboard — the home view. Mirrors the PrepEx dashboard structure:
-   level/XP hero, stat tiles, daily challenges, week-at-a-glance,
-   topic portals, achievements summary, recent activity.
-   Proposal widgets slotted in without disturbing the existing cards:
-   #7 Question of the day, #11 Study-time, #10 Readiness / score estimate. */
+/* Dashboard — the home view. Today is the first card (greeting + exam
+   countdown + four launchers). This week is card two. Level/XP, stat tiles,
+   challenges, QOTD, readiness and achievements sit behind a Progress
+   disclosure. Knowledge portals, mock teaser, study time and recent activity
+   stay as cards below. */
 window.PGRE = window.PGRE || {};
 PGRE.views = PGRE.views || {};
 
@@ -135,6 +135,7 @@ PGRE.views.dashboard = (function () {
     var isCorrect = idx === q.answer;
     var xp = PGRE.gamify.recordAnswer(q, isCorrect, Date.now() - qotdStart,
                                       { picked: idx, mode: 'qotd' });
+    if (xp === null) return;                        // refused: leave the slot open for a retry
     // recordAnswer's rollDay may have started a fresh day mid-interaction: the
     // attempt is already durably logged, but yesterday's question must not
     // claim the NEW day's QOTD slot — re-route so today's question appears.
@@ -183,6 +184,8 @@ PGRE.views.dashboard = (function () {
     if (!PGRE.store.state.settings.keyboard) return;
     if (PGRE.store.state.today.qotd) return;           // already solved today
     if (!document.getElementById('qotd-body')) return; // not on the dashboard
+    var prog = document.querySelector('details.dashboard-progress');
+    if (prog && !prog.open) return;
     var tg = (e.target && e.target.tagName) || '';
     if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' ||
         (e.target && e.target.isContentEditable)) return;
@@ -422,10 +425,28 @@ PGRE.views.dashboard = (function () {
      formulas), and the next intact mock. */
   function todayAgendaHTML() {
     var ui = PGRE.ui;
+    var s = PGRE.store.state;
     var mock = nextMockPointer();
     var dueM = PGRE.srs.dueMistakes().length;
+    var hour = new Date().getHours();
+    var greet = hour < 5 ? 'Burning the midnight oil' :
+                hour < 12 ? 'Good morning' :
+                hour < 18 ? 'Good afternoon' : 'Good evening';
+    var examDate = (s.settings && s.settings.examDate) || PGRE.EXAM_DATE;
+    var days = PGRE.srs.daysUntil(examDate);
     var html = '<div class="card review-queue" id="today-agenda">' +
-      '<h2>Today</h2><div class="rq-rows">' +
+      '<div class="hero">' +
+        '<div class="hero-left">' +
+          '<p class="muted today-greet">' + ui.esc(greet) + '.</p>' +
+          '<h2>Today</h2>' +
+        '</div>' +
+        '<div class="hero-right">' +
+          '<div class="countdown"><div class="countdown-num">' + days + '</div>' +
+          '<div class="countdown-label">day' + (days === 1 ? '' : 's') + ' until the exam<br>' +
+            examDateLabel() + '</div></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="rq-rows">' +
       '<div class="rq-row"><span class="rq-label">Mixed practice</span>' +
         '<span class="rq-count">Questions from the daily pool</span>' +
         '<a class="btn btn-primary btn-sm" href="#/practice/all">Practice →</a></div>' +
@@ -484,11 +505,6 @@ PGRE.views.dashboard = (function () {
   function render() {
     var ui = PGRE.ui, g = PGRE.gamify, s = PGRE.store.state;
     var lvl = g.levelInfo(s.xp);
-    var hour = new Date().getHours();
-    var greet = hour < 5 ? 'Burning the midnight oil' :
-                hour < 12 ? 'Good morning' :
-                hour < 18 ? 'Good afternoon' : 'Good evening';
-    var days = g.daysToExam();
 
     var m = g.metrics();
     var accuracy = '—';
@@ -496,21 +512,45 @@ PGRE.views.dashboard = (function () {
     for (var id in s.questions) { totalAttempts += s.questions[id].attempts; totalCorrect += s.questions[id].correct; }
     if (totalAttempts > 0) accuracy = Math.round(100 * totalCorrect / totalAttempts) + '%';
 
-    var html = '<div class="hero card">' +
+    var html = todayAgendaHTML();
+
+    var cw = PGRE.currentWeek();
+    var weekTasks = PGRE.weekTasks(cw.week);
+    var doneCount = weekTasks.filter(function (t) { return g.taskDone(t.id); }).length;
+    var nextTasks = weekTasks.filter(function (t) { return !g.taskDone(t.id); }).slice(0, 3);
+    var firstLaunch = weekTasks.filter(function (t) {
+      return (t.kind === 'timed' || t.kind === 'extra-set') && !g.taskDone(t.id);
+    })[0];
+    html += '<div class="card"><h2>This week — ' + ui.esc(cw.week.title) + '</h2>' +
+      '<div class="muted">' + ui.dateRange(cw.week.start, cw.week.end) + ' · ' + ui.esc(cw.phase.name) + ' · ~' + cw.week.hours + ' h</div>' +
+      ui.meter(100 * doneCount / Math.max(1, weekTasks.length), 'meter-thin') +
+      '<div class="challenge-prog">' + doneCount + ' / ' + weekTasks.length + ' tasks done</div>';
+    if (nextTasks.length) {
+      html += '<ul class="next-tasks">';
+      nextTasks.forEach(function (t) {
+        var launch = (firstLaunch && t.id === firstLaunch.id)
+          ? ' <button class="btn btn-primary btn-sm" data-launch-set="' +
+              ui.esc(String(t.id || '').replace(/^set-/, '')) + '">Start →</button>'
+          : '';
+        html += '<li>' + ui.esc(t.label) + launch + '</li>';
+      });
+      html += '</ul>';
+    } else {
+      html += '<p class="muted">Everything for this week is done. Get ahead or rest — both count.</p>';
+    }
+    html += '<a class="btn btn-ghost" href="#/plan">Open study plan →</a></div>';
+
+    var progressOpen = !!(s.settings && s.settings.dashboardProgressOpen);
+    html += '<details class="card dashboard-progress"' + (progressOpen ? ' open' : '') + '>' +
+      '<summary>Progress</summary>';
+
+    html += '<div class="hero">' +
       '<div class="hero-left">' +
-        '<h1>' + greet + '.</h1>' +
         '<div class="hero-level">Level <span class="hero-level-num">' + lvl.level + '</span> · <span class="level-title">' + lvl.title + '</span></div>' +
         ui.meter(lvl.pct, 'meter-xp') +
         '<div class="hero-xp-note">' + ui.fmt(lvl.into) + ' / ' + ui.fmt(lvl.span) + ' XP to Level ' + (lvl.level + 1) + '</div>' +
       '</div>' +
-      '<div class="hero-right">' +
-        '<div class="countdown"><div class="countdown-num">' + days + '</div>' +
-        '<div class="countdown-label">day' + (days === 1 ? '' : 's') + ' until the exam<br>' +
-          examDateLabel() + '</div></div>' +
-      '</div>' +
     '</div>';
-
-    html += todayAgendaHTML();
 
     html += '<div class="stat-row">' +
       ui.statTile('Total XP', ui.fmt(s.xp)) +
@@ -520,14 +560,8 @@ PGRE.views.dashboard = (function () {
       ui.statTile('Days active', s.daysActive.length) +
     '</div>';
 
-    // #7 Question of the day — a low-friction daily hook that feeds the streak
-    html += qotdCard();
-
-    // Today's challenges + this week
-    html += '<div class="two-col">';
     html += '<div class="card"><h2>Today’s challenges</h2><div class="challenge-list">';
     g.todaysChallenges().forEach(function (c) {
-      // F4: an un-finished challenge gets a button to where you complete it
       var nav = CHALLENGE_NAV[c.id];
       var jump = (!c.done && nav)
         ? '<a class="btn btn-ghost btn-sm" href="' + nav.href + '">' + nav.label + ' →</a>'
@@ -543,44 +577,9 @@ PGRE.views.dashboard = (function () {
     });
     html += '</div></div>';
 
-    var cw = PGRE.currentWeek();
-    var weekTasks = PGRE.weekTasks(cw.week);
-    var doneCount = weekTasks.filter(function (t) { return g.taskDone(t.id); }).length;
-    var nextTasks = weekTasks.filter(function (t) { return !g.taskDone(t.id); }).slice(0, 3);
-    html += '<div class="card"><h2>This week — ' + ui.esc(cw.week.title) + '</h2>' +
-      '<div class="muted">' + ui.dateRange(cw.week.start, cw.week.end) + ' · ' + ui.esc(cw.phase.name) + ' · ~' + cw.week.hours + ' h</div>' +
-      ui.meter(100 * doneCount / Math.max(1, weekTasks.length), 'meter-thin') +
-      '<div class="challenge-prog">' + doneCount + ' / ' + weekTasks.length + ' tasks done</div>';
-    if (nextTasks.length) {
-      html += '<ul class="next-tasks">';
-      nextTasks.forEach(function (t) { html += '<li>' + ui.esc(t.label) + '</li>'; });
-      html += '</ul>';
-    } else {
-      html += '<p class="muted">Everything for this week is done. Get ahead or rest — both count.</p>';
-    }
-    html += '<a class="btn btn-ghost" href="#/plan">Open study plan →</a></div>';
-    html += '</div>';
+    html += qotdCard();
+    html += readinessCard();
 
-    // #11 Study-time  +  #10 Readiness — the "am I on pace / am I ready" block
-    html += '<div class="two-col">' + studyCard() + readinessCard() + '</div>';
-
-    // Topic portals
-    html += '<h2 class="section-title">Knowledge portals</h2><div class="topic-grid">';
-    PGRE.TOPICS.forEach(function (t) {
-      var rec = s.topics[t.id] || { attempted: 0, correct: 0 };
-      var acc = rec.attempted ? Math.round(100 * rec.correct / rec.attempted) + '% acc.' : 'not started';
-      var mastery = g.mastery(t.id);
-      html += '<a class="topic-card card" href="#/topic/' + t.id + '">' +
-        '<div class="topic-card-head">' + ui.monogram(t) +
-          '<span class="weight-chip">' + t.weight + '%</span></div>' +
-        '<div class="topic-card-name">' + t.name + '</div>' +
-        ui.meter(mastery, 'meter-thin') +
-        '<div class="topic-card-sub">' + mastery + '% mastery · ' + acc + '</div>' +
-      '</a>';
-    });
-    html += '</div>';
-
-    // Achievements summary + mock exam teaser
     var tiers = ['bronze', 'silver', 'gold', 'platinum'];
     var tierCounts = {};
     tiers.forEach(function (tier) {
@@ -588,7 +587,6 @@ PGRE.views.dashboard = (function () {
       var got = PGRE.ACHIEVEMENTS.filter(function (a) { return a.tier === tier && s.achievements[a.id]; }).length;
       tierCounts[tier] = got + '/' + total;
     });
-    html += '<div class="two-col">';
     html += '<div class="card"><h2>Achievements</h2><div class="tier-chips">';
     tiers.forEach(function (tier) {
       html += '<span class="tier-chip tier-' + tier + '">' + tier.charAt(0).toUpperCase() + tier.slice(1) + ' ' + tierCounts[tier] + '</span>';
@@ -609,15 +607,31 @@ PGRE.views.dashboard = (function () {
       html += '<p class="muted">Nothing unlocked yet — answer your first question to get started.</p>';
     }
     html += '<a class="btn btn-ghost" href="#/achievements">All achievements →</a></div>';
+    html += '</details>';
+
+    html += studyCard();
+
+    html += '<h2 class="section-title">Knowledge portals</h2><div class="topic-grid">';
+    PGRE.TOPICS.forEach(function (t) {
+      var rec = s.topics[t.id] || { attempted: 0, correct: 0 };
+      var acc = rec.attempted ? Math.round(100 * rec.correct / rec.attempted) + '% acc.' : 'not started';
+      var mastery = g.mastery(t.id);
+      html += '<a class="topic-card card" href="#/topic/' + t.id + '">' +
+        '<div class="topic-card-head">' + ui.monogram(t) +
+          '<span class="weight-chip">' + t.weight + '%</span></div>' +
+        '<div class="topic-card-name">' + t.name + '</div>' +
+        ui.meter(mastery, 'meter-thin') +
+        '<div class="topic-card-sub">' + mastery + '% mastery · ' + acc + '</div>' +
+      '</a>';
+    });
+    html += '</div>';
 
     html += '<div class="card exam-teaser"><h2>Timed mock exam</h2>' +
       '<p class="muted">A full timed simulation of the test — 70 questions in 2 hours, or a ' +
       '100-question legacy sitting of a real sample exam, with a scaled-score estimate ' +
       'and per-topic breakdown.</p>' +
       '<a class="btn btn-primary" href="#/exam">Start a simulation →</a></div>';
-    html += '</div>';
 
-    // Recent activity
     html += '<div class="card"><h2>Recent activity</h2>';
     if (s.log.length === 0) {
       html += '<p class="muted">Your activity will appear here.</p>';
@@ -734,11 +748,26 @@ PGRE.views.dashboard = (function () {
           }
         });
       }
-      var countdownNum = document.querySelector('.countdown-num');
-      if (countdownNum) countdownNum.classList.add('countdown-breathe');
+    }
+    var prog = document.querySelector('#view details.dashboard-progress');
+    if (prog) {
+      prog.addEventListener('toggle', function () {
+        var settings = PGRE.store.state.settings;
+        if (!settings) return;
+        settings.dashboardProgressOpen = !!prog.open;
+        PGRE.store.save();
+      });
     }
 
+
     var tfBtn = document.getElementById('today-formulas-btn');
+    document.querySelectorAll('#view [data-launch-set]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (PGRE.launchPack(btn.getAttribute('data-launch-set')) == null) {
+          PGRE.toast('That set is not available.');
+        }
+      });
+    });
     if (tfBtn) tfBtn.addEventListener('click', startFormulaFromToday);
 
     // formula due count arrives async from the IndexedDB-backed deck

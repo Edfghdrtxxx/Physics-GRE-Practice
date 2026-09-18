@@ -717,6 +717,7 @@ PGRE.views.mistakes = (function () {
     var elapsed = Date.now() - drill.qStart;
     var xp = PGRE.gamify.recordAnswer(q, isCorrect, elapsed,
                                       { picked: idx, sid: drill.sid, mode: 'mistakes' });
+    if (xp === null) { drill.st[drill.i] = null; return; }   // refused: nothing to revert later
     if (isCorrect) PGRE.srs.clearLucky(q.id);   // a correct re-drill retires the lucky flag
     drill.st[drill.i] = {
       q: q, picked: idx, correct: isCorrect, xp: xp, ms: elapsed,

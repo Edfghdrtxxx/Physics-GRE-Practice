@@ -31,8 +31,7 @@ PGRE.views.plan = (function () {
 
     var html = '<div class="card hero">' +
       '<div class="hero-left"><h1>Review plan</h1>' +
-      '<p class="muted">Sep 14 → November 1, 2026 · 7 live weeks · 5+6+2 load (~16 h/wk) · checkpoint Oct 4 · intact mocks Oct 11 / 18 / 25 · exam-week taper</p>' +
-      '<p class="muted">Mirror of the vault syllabus (8-Week-Syllabus.md) — regenerate: node tools/build-plan.js</p>' +
+      '<p class="muted">Sep 14 → November 1, 2026 · 7 live weeks · ~16 h/wk: 5 timed sets, 6 formula sessions, 2 extras · checkpoint Oct 4 · intact mocks Oct 11 / 18 / 25 · exam-week taper</p>' +
       ui.meter(100 * allDone / Math.max(1, allTasks)) +
       '<div class="hero-xp-note">' + allDone + ' / ' + allTasks + ' tasks complete</div></div>' +
       '<div class="hero-right"><div class="countdown"><div class="countdown-num">' + days + '</div>' +
@@ -55,7 +54,8 @@ PGRE.views.plan = (function () {
         var isCurrent = today >= w.start && today <= w.end;
         var isPast = today > w.end;
         var state = isCurrent ? 'current' : isPast ? (p.pct === 100 ? 'done' : 'past') : 'future';
-        html += '<details class="week card week-' + state + '"' + (isCurrent ? ' open' : '') + ' data-week="' + w.id + '">' +
+        var openWeek = isCurrent && !(w.historical || w.id === 'w0');
+        html += '<details class="week card week-' + state + '"' + (openWeek ? ' open' : '') + ' data-week="' + w.id + '">' +
           '<summary><div class="week-sum">' +
             '<span class="week-badge">' + (isCurrent ? 'This week' : ui.dateRange(w.start, w.end)) + '</span>' +
             '<span class="week-title">' + ui.esc(w.title) + '</span>' +
@@ -70,7 +70,11 @@ PGRE.views.plan = (function () {
             '<label><input type="checkbox" data-task="' + t.id + '" data-xp="' + t.xp + '"' + (done ? ' checked' : '') + '>' +
             '<span class="task-label">' + ui.esc(t.label) + '</span></label>' +
             (t.kind === 'mock' ? ' <a class="btn btn-ghost btn-sm" href="#/exam">Open simulator →</a>' : '') +
-            '<span class="task-meta">' + t.hours + ' h · +' + t.xp + ' XP</span></li>';
+            ((t.kind === 'timed' || t.kind === 'extra-set')
+              ? ' <button class="btn btn-primary btn-sm" data-launch-set="' +
+                  ui.esc(String(t.id || '').replace(/^set-/, '')) + '">Start →</button>'
+              : '') +
+            '<span class="task-meta">' + t.hours + ' h</span></li>';
         });
         html += '</ul>';
         // F4: each week names the topics it covers — offer a one-click jump to
@@ -163,6 +167,13 @@ PGRE.views.plan = (function () {
               setTimeout(function () { row.classList.remove('task-just-done'); }, 300);
             }
           }
+        }
+      });
+    });
+    document.querySelectorAll('#plan-root [data-launch-set]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (PGRE.launchPack(btn.getAttribute('data-launch-set')) == null) {
+          PGRE.toast('That set is not available.');
         }
       });
     });

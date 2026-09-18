@@ -76,6 +76,10 @@ PGRE.srs = {
      row is fine — the chips stay editable until the next question.
      Store-safe: no-op if the row can't be found. */
   setLastAssess: function (qid, confidence, tags) {
+    if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
+      PGRE.persistWarning(true);
+      return null;   // refused: never re-stamp an older row for this qid
+    }
     var arr = PGRE.store.state.attempts;
     for (var i = arr.length - 1; i >= 0; i--) {
       if (arr[i].qid === qid) {
@@ -275,6 +279,10 @@ PGRE.srs = {
   },
 
   gradeCard: function (id, grade) {
+    if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
+      PGRE.persistWarning(true);
+      return PGRE.store.state.cards[id];
+    }
     var s = PGRE.store.state;
     // Review-log capture (bundle 2) — read BEFORE the default-object creation:
     // hadState (n) separates a real review from a card's first-ever grade;

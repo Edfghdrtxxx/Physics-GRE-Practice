@@ -89,6 +89,12 @@ assert(full.some(function (x) { return x.id === 'e1' && x.src === 'cpg-exam'; })
 assert(full.some(function (x) { return x.id === 'g2' && x.src === 'ets-exam'; }),
   'released ETS exam questions present under includeExam');
 
+console.log('\nallQuestions memoizes per includeExam');
+assert(PGRE.allQuestions() === def, 'allQuestions() returns the same array');
+assert(PGRE.allQuestions({ includeExam: true }) === full, 'includeExam returns the same array');
+assert(full !== def, 'includeExam cache is distinct from the default pool');
+assert(full.length > def.length, 'includeExam pool is longer than default');
+
 console.log('\nno duplicate ids across the pool');
 var ids = {};
 var dupes = 0;
@@ -122,16 +128,32 @@ assert(cm.some(function (x) { return x.id === 'p1'; }) && cm.some(function (x) {
 assert(PGRE.questionsForTopic('ow').length === 0,
   'topic that only exists in an exam is empty in the default pool');
 assert(PGRE.questionsForTopic('all').length === def.length, 'questionsForTopic("all") == default pool');
+assert(PGRE.questionsForTopic('all') === def, 'questionsForTopic("all") is the cached default pool');
+assert(PGRE.questionsForTopic('cm') === cm, 'questionsForTopic memoizes per topic id');
 
 console.log('\nguarded reads when bank files are absent');
-PGRE.BOOK_EXAMS = null;
-PGRE.ETS_EXAMS = null;
-PGRE.ETS_DRILLS = null;
-PGRE.BOOK_QUESTIONS = null;
-var bare = PGRE.allQuestions({ includeExam: true });
-assert(bare.length === 3 && bare.every(function (x) { return x.src === 'preview'; }),
-  'missing banks are skipped without throwing');
-assert(PGRE.questionById('p1') !== null, 'questionById still works with missing banks');
+(function () {
+  var window2 = { PGRE: {} };
+  var sandbox2 = {
+    window: window2,
+    PGRE: window2.PGRE,
+    console: console,
+    Array: Array,
+    Object: Object
+  };
+  vm.createContext(sandbox2);
+  vm.runInContext(bankSrc, sandbox2);
+  var P = sandbox2.PGRE;
+  P.QUESTIONS = [q('p1', 'cm'), q('p2', 'em'), q('dup', 'qm')];
+  P.BOOK_EXAMS = null;
+  P.ETS_EXAMS = null;
+  P.ETS_DRILLS = null;
+  P.BOOK_QUESTIONS = null;
+  var bare = P.allQuestions({ includeExam: true });
+  assert(bare.length === 3 && bare.every(function (x) { return x.src === 'preview'; }),
+    'missing banks are skipped without throwing');
+  assert(P.questionById('p1') !== null, 'questionById still works with missing banks');
+})();
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

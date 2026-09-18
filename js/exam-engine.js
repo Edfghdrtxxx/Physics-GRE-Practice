@@ -248,9 +248,29 @@ PGRE.examEngine = (function () {
     PGRE.store.save();
   }
 
+  /* Persist a choice on the in-progress sitting. Returns false when the
+     store cannot write so the room keeps the on-screen selection. */
+  function persistAnswer(exam, idx) {
+    if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
+      PGRE.persistWarning(true);
+      return false;
+    }
+    if (!exam || exam.submittedAt) return false;
+    var qid = exam.order[exam.cursor];
+    if (exam.answers[qid] === idx) delete exam.answers[qid];
+    else exam.answers[qid] = idx;
+    PGRE.store.save();
+    return true;
+  }
+
+
   /* Score, commit every question to the log + mistake book (no per-answer XP),
      award the flat completion bonus, and finalize the record. */
   function submit(exam) {
+    if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
+      PGRE.persistWarning(true);
+      return exam;
+    }
     if (!exam || exam.submittedAt) return exam;
     var perTopic = {}, raw = 0, missing = 0, answered = 0;
     exam.order.forEach(function (qid) {
@@ -310,6 +330,7 @@ PGRE.examEngine = (function () {
     byId: byId,
     history: history,
     submit: submit,
+    persistAnswer: persistAnswer,
     discard: discard
   };
 })();

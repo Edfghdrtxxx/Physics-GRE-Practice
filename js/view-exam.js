@@ -422,9 +422,13 @@ PGRE.views.exam = (function () {
 
   function selectAnswer(exam, idx) {
     var qid = exam.order[exam.cursor];
-    if (exam.answers[qid] === idx) delete exam.answers[qid]; // tap again to clear
-    else exam.answers[qid] = idx;
-    PGRE.store.save();
+    if (PGRE.examEngine && typeof PGRE.examEngine.persistAnswer === 'function') {
+      if (!PGRE.examEngine.persistAnswer(exam, idx)) return;
+    } else {
+      if (exam.answers[qid] === idx) delete exam.answers[qid];
+      else exam.answers[qid] = idx;
+      if (PGRE.store && PGRE.store.save) PGRE.store.save();
+    }
     var box = document.getElementById('exam-q');
     if (box) box.querySelectorAll('.choice').forEach(function (b) {
       var on = parseInt(b.getAttribute('data-idx'), 10) === exam.answers[qid];
@@ -614,9 +618,17 @@ PGRE.views.exam = (function () {
   }
 
   function doSubmit(exam, auto) {
-    stopTimer();
     hideModal();
     PGRE.examEngine.submit(exam);
+    if (!exam.submittedAt) {
+      // the store refused the write: stay in the room so the sitting is
+      // neither scored into a void nor torn down under the user. On the
+      // time-limit path tick() has already stopped the clock; the sticky
+      // persist toast is up from submit(). Manual Submit retries it.
+      if (auto) PGRE.toast('Time is up, but saving failed. Your answers stay on screen; press Submit once saving works again.', 'error', true);
+      return;
+    }
+    stopTimer();
     setFullscreen(false);
     if (auto) PGRE.toast('Time — your exam was submitted automatically.', 'info');
     location.hash = '#/exam/review/' + exam.id;

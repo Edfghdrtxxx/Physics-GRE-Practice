@@ -75,8 +75,14 @@ PGRE.gamify = {
   MAX_ATTEMPT_MS: 15 * 60 * 1000,
 
   /* ——— Recording an answered question ———
-     ctx (optional): { picked: choiceIdx, sid: sessionId, mode: 'practice'|'mistakes' } */
+     ctx (optional): { picked: choiceIdx, sid: sessionId, mode: 'practice'|'mistakes' }
+     Returns the XP earned, or null when the store refused the write
+     (nothing was pushed — callers must not assume a new attempts row). */
   recordAnswer: function (q, isCorrect, elapsedMs, ctx) {
+    if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
+      PGRE.persistWarning(true);
+      return null;
+    }
     var s = PGRE.store.state;
     var now = new Date().toISOString();
     ctx = ctx || {};

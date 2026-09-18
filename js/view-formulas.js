@@ -183,7 +183,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20260907a';
+      s.src = 'js/flashmodes.js?v=20260918b';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -199,7 +199,7 @@ PGRE.views.formulas = (function () {
     if (searchLoad) return searchLoad;
     searchLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/formula-search.js';
+      s.src = 'js/formula-search.js?v=20260918b';
       s.onload = function () { resolve(); };
       s.onerror = function () { searchLoad = null; searchFailed = true; resolve(); };
       document.head.appendChild(s);
@@ -212,8 +212,60 @@ PGRE.views.formulas = (function () {
     activeGame = null;
   }
 
-  /* ——— Shell: mode tabs + a persistent body the modes render into ——— */
-  function renderShell() {
+  function formulasOptionsOpen() {
+    return mode !== 'study' ||
+      !!(PGRE.store.state.settings && PGRE.store.state.settings.formulasOptionsOpen);
+  }
+
+  function checkinHTML() {
+    if (PGRE.formulaCheckIn && typeof PGRE.formulaCheckIn.stripHTML === 'function') {
+      return PGRE.formulaCheckIn.stripHTML();
+    }
+    return '';
+  }
+
+  function formulaSettingsHTML() {
+    var ui = PGRE.ui, srs = PGRE.srs;
+    var T = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
+    var html = '<div class="target-stepper"><span class="target-label">Formulas per day</span>' +
+      '<div class="target-controls">' +
+      '<button class="btn btn-ghost stepper-btn" id="target-dec"' + (T <= 1 ? ' disabled' : '') + '>−</button>' +
+      '<span class="target-value" id="target-value">' + T + '</span>' +
+      '<button class="btn btn-ghost stepper-btn" id="target-inc"' + (T >= 100 ? ' disabled' : '') + '>+</button>' +
+      '</div></div>';
+    html += '<div class="exam-day-row"><span class="exam-day-label">Exam day</span>' +
+      '<input type="date" id="exam-date" class="exam-date-input" value="' +
+      ui.esc(PGRE.store.state.settings.examDate || '') + '"></div>';
+    var capOn = PGRE.store.state.settings.formulaExamCap !== false;
+    html += '<div class="direction-row"><span class="exam-day-label">Intervals</span>' +
+      '<button class="btn btn-ghost btn-sm" id="exam-cap-toggle">' +
+      (capOn ? 'Capped to exam day' : 'Classic Anki (uncapped)') + '</button></div>';
+    return html;
+  }
+
+  function fillOptionsExtra(html) {
+    var extra = document.getElementById('formulas-options-extra');
+    if (extra) extra.innerHTML = html || '';
+  }
+
+  function wireOptionsExtra() {
+    wireStepper();
+    var ed = document.getElementById('exam-date');
+    if (ed) ed.addEventListener('change', function () {
+      PGRE.store.state.settings.examDate = ed.value;
+      PGRE.store.save();
+      renderHome();
+    });
+    var ect = document.getElementById('exam-cap-toggle');
+    if (ect) ect.addEventListener('click', function () {
+      var s = PGRE.store.state.settings;
+      s.formulaExamCap = s.formulaExamCap === false;
+      PGRE.store.save();
+      renderHome();
+    });
+  }
+
+  function tabsBarHTML() {
     var empty = !deck.length;
     var tabs = [['study', 'Study'], ['match', 'Match'], ['type', 'Type'],
                 ['quiz', 'Quiz'], ['cloze', 'Cloze'], ['visual', 'Lab'], ['search', 'Search']];
@@ -240,10 +292,12 @@ PGRE.views.formulas = (function () {
         '<button class="btn btn-ghost btn-sm" id="print-formulas">Print formula sheet</button></div>';
     }
     html += '</div>';
-    html += '<div id="flash-body"></div>';
-    root().innerHTML = html;
-    // The strip is a single scrollable row on narrow screens; keep the chosen
-    // tab visible by scrolling the strip itself, never the page.
+    return html;
+  }
+
+  function bindFlashTabs() {
+    var host = root();
+    if (!host) return;
     function revealTab(tab) {
       var strip = tab && tab.parentNode;
       if (!strip || !strip.clientWidth) return;
@@ -251,12 +305,12 @@ PGRE.views.formulas = (function () {
       if (left < strip.scrollLeft) strip.scrollLeft = left - 3;
       else if (right > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = right - strip.clientWidth + 3;
     }
-    revealTab(root().querySelector('.flash-tab.active'));
-    root().querySelectorAll('.flash-tab').forEach(function (b) {
+    revealTab(host.querySelector('.flash-tab.active'));
+    host.querySelectorAll('.flash-tab').forEach(function (b) {
       if (b.disabled) return;
       b.addEventListener('click', function () {
         var m = b.getAttribute('data-mode');
-        root().querySelectorAll('.flash-tab').forEach(function (tab) {
+        host.querySelectorAll('.flash-tab').forEach(function (tab) {
           var on = tab.getAttribute('data-mode') === m;
           tab.classList.toggle('active', on);
           tab.setAttribute('aria-selected', on ? 'true' : 'false');
@@ -268,6 +322,31 @@ PGRE.views.formulas = (function () {
     });
     var pf = document.getElementById('print-formulas');
     if (pf) pf.addEventListener('click', printSheet);
+    var details = host.querySelector('details.formulas-options');
+    if (details) {
+      details.addEventListener('toggle', function () {
+        var s = PGRE.store.state.settings || (PGRE.store.state.settings = {});
+        s.formulasOptionsOpen = !!details.open;
+        PGRE.store.save();
+        var bodyEl = document.getElementById('formulas-options-body');
+        if (bodyEl) bodyEl.hidden = !details.open;
+        if (details.open) revealTab(host.querySelector('.flash-tab.active'));
+      });
+    }
+  }
+
+  /* ——— Shell: Options disclosure (tabs + print) + a persistent body ——— */
+  function renderShell() {
+    var open = formulasOptionsOpen();
+    var html = '<details class="card formulas-options"' + (open ? ' open' : '') + '>' +
+      '<summary>Options</summary>' +
+      '<div id="formulas-options-body"' + (open ? '' : ' hidden') + '>' +
+      tabsBarHTML() +
+      '<div id="formulas-options-extra"></div>' +
+      '</div></details>';
+    html += '<div id="flash-body"></div>';
+    root().innerHTML = html;
+    bindFlashTabs();
     renderMode();
     if (window.PGRE && PGRE.motion && PGRE.motion.viewEnter) {
       PGRE.motion.viewEnter(document.getElementById('view'));
@@ -385,7 +464,12 @@ PGRE.views.formulas = (function () {
     sheet.classList.remove('measuring');
   }
 
-  window.addEventListener('beforeprint', flagWideCards);
+  window.addEventListener('beforeprint', function () {
+    if (/^#\/formulas/.test(location.hash) && !document.getElementById('formulas-print')) {
+      buildPrintSheet();
+    }
+    flagWideCards();
+  });
 
   function switchMode(m) {
     closeVisualizerIfOpen();
@@ -550,17 +634,7 @@ PGRE.views.formulas = (function () {
       if (srs.studiedToday(cardsState[id])) reviewedToday++;
     }
 
-    var html = '<div class="card"><h1>Formula recall</h1>' +
-      '<p class="muted">Flip cards the way vocabulary apps do it: see the prompt, recall the ' +
-      'formula, flip, then grade yourself — <strong>Again / Hard / Good / Easy</strong> sets ' +
-      'when the card returns. Each day a short batch is due — start with unseen cards, or pick them yourself. ' +
-      'The tabs above add <strong>Match</strong>, <strong>Type</strong> and <strong>Quiz</strong> ' +
-      'drills over the same deck.</p></div>';
-
-    // Game-style daily check-in strip (formula-specific streak; not the global study streak).
-    if (PGRE.formulaCheckIn && typeof PGRE.formulaCheckIn.stripHTML === 'function') {
-      html += PGRE.formulaCheckIn.stripHTML();
-    }
+    var html = '<div class="card"><h1>Formula recall</h1></div>';
 
     if (!deck.length) {
       html += '<div class="stat-row stat-row-4">' +
@@ -577,6 +651,7 @@ PGRE.views.formulas = (function () {
         'cards appear here and the daily batch starts filling. The card format is ' +
         'documented in <code>js/data-formulas.js</code>.</p></div>';
       body().innerHTML = html;
+      fillOptionsExtra(checkinHTML());
       PGRE.typesetMath(body());
       PGRE.refreshNavBadges();
       return;
@@ -589,23 +664,30 @@ PGRE.views.formulas = (function () {
     var postponed = srs.formulaDayPostponed(deck);
     var resumeCards = rehydrateSavedStudy();
 
-    // Empty-day landing: nothing picked, nothing mid-flight, unseen cards left.
-    // Offers the dashboard's fill-then-study path (fillFormulaDayIfEmpty +
-    // studyFromFill) right under the intro so a direct visit to #/formulas
-    // never lands on settings and a picker wall with no way to just start.
+    // Empty-day / remaining-batch landing: one primary Study control. Tabs,
+    // check-in, and SM-2 settings live in the Options disclosure.
     var fillable = 0;
     fresh.forEach(function (c) { if (!srs.isSuspended(c.id)) fillable++; });
     var fillN = Math.min(T, fillable);
     var landing = !resumeCards && M === 0 && !pickedN && fillN > 0;
-    if (landing) {
-      html += '<div class="card fm-landing">' +
-        '<h2>Nothing picked for today yet</h2>' +
-        '<p class="muted">Start with ' + fillN + ' formula' + (fillN === 1 ? '' : 's') +
-        ' you have not seen, or choose the cards yourself.</p>' +
-        '<div class="btn-row">' +
+    if (resumeCards) {
+      html += '<div class="card fm-landing"><div class="btn-row">' +
+        '<button class="btn btn-primary" id="resume-btn">' +
+        'Resume session — ' + resumeCards.length + ' left</button>' +
+        '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div></div>';
+    } else if (landing) {
+      html += '<div class="card fm-landing"><div class="btn-row">' +
           '<button class="btn btn-primary" id="fill-study-btn">Study ' + fillN + ' today</button>' +
           '<button class="btn btn-ghost" id="landing-pick-btn">Pick cards myself</button>' +
         '</div></div>';
+    } else if (M > 0) {
+      html += '<div class="card fm-landing"><div class="btn-row">' +
+        '<button class="btn btn-primary" id="study-btn">Study → ' + M + ' left</button>' +
+        '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div></div>';
+    } else if (postponed > 0) {
+      html += '<div class="card fm-landing"><div class="btn-row">' +
+        '<button class="btn btn-primary" id="study-btn">Study → ' + postponed + ' left</button>' +
+        '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div></div>';
     }
 
     html += '<div class="stat-row stat-row-4">' +
@@ -639,26 +721,8 @@ PGRE.views.formulas = (function () {
         leeches.length + ' struggling</button></div></div>';
     }
 
-    // ——— Today's formulas ———
+    // ——— Today's formulas (direction / reset / picker; SM-2 settings are in Options) ———
     html += '<div class="card"><h2>Today’s formulas</h2>';
-    html += '<div class="target-stepper"><span class="target-label">Formulas per day</span>' +
-      '<div class="target-controls">' +
-      '<button class="btn btn-ghost stepper-btn" id="target-dec"' + (T <= 1 ? ' disabled' : '') + '>−</button>' +
-      '<span class="target-value" id="target-value">' + T + '</span>' +
-      '<button class="btn btn-ghost stepper-btn" id="target-inc"' + (T >= 100 ? ' disabled' : '') + '>+</button>' +
-      '</div></div>';
-    // F3: exam-day date input — drives the interval cap + final pass. An invalid
-    // or past date silently disables capping (srs.examCap returns null).
-    html += '<div class="exam-day-row"><span class="exam-day-label">Exam day</span>' +
-      '<input type="date" id="exam-date" class="exam-date-input" value="' +
-      ui.esc(PGRE.store.state.settings.examDate || '') + '"></div>';
-    // Interval-cap switch: exam-capped Anki (default) vs uncapped classic Anki.
-    // Does not rewrite cards already scheduled — only the next grade and the
-    // numbers on the buttons. Missing key (pre-migrate) reads as ON.
-    var capOn = PGRE.store.state.settings.formulaExamCap !== false;
-    html += '<div class="direction-row"><span class="exam-day-label">Intervals</span>' +
-      '<button class="btn btn-ghost btn-sm" id="exam-cap-toggle">' +
-      (capOn ? 'Capped to exam day' : 'Classic Anki (uncapped)') + '</button></div>';
     // F5: Study direction toggle. false = Prompt → Formula (recall the equation);
     // true = Formula → Prompt (name it / say when it applies). Persists + re-renders.
     var reverse = !!PGRE.store.state.settings.formulaReverse;
@@ -674,7 +738,7 @@ PGRE.views.formulas = (function () {
       : (landing ? 'Nothing picked yet — start from the buttons above.'
                  : (postponed > 0
                     ? postponed + ' due review' + (postponed === 1 ? ' is' : 's are') +
-                      ' waiting — study them, or pick today’s cards below.'
+                      ' waiting — study them, or pick today’s cards above.'
                     : 'Nothing picked yet — choose today’s cards below.'));
     if (pickedN && postponed > 0) {
       comp += ' ' + postponed + ' more review' + (postponed === 1 ? ' is' : 's are') +
@@ -688,23 +752,7 @@ PGRE.views.formulas = (function () {
         ' added from Search before their due date (kept until studied).</p>';
     }
 
-    // Primary action: resume a mid-flight session, study what remains of the
-    // picked batch, study due reviews that were never picked, or — when the
-    // batch is empty or done — point at the picker. The landing card above
-    // already carries both actions for an empty day of unseen cards.
-    if (resumeCards) {
-      html += '<div class="btn-row"><button class="btn btn-primary" id="resume-btn">' +
-        'Resume session — ' + resumeCards.length + ' left</button>' +
-        '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div>';
-    } else if (M > 0) {
-      html += '<div class="btn-row"><button class="btn btn-primary" id="study-btn">Study ' +
-        M + ' remaining</button>' +
-        '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div>';
-    } else if (postponed > 0) {
-      html += '<div class="btn-row"><button class="btn btn-primary" id="study-btn">Study ' +
-        postponed + ' due</button>' +
-        '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div>';
-    } else if (!landing) {
+    if (!resumeCards && !landing && M === 0 && postponed === 0) {
       html += '<h3 class="caught-up">' + (pickedN ? 'You’re all caught up' : 'Nothing picked yet') + '</h3>' +
         '<p class="muted">' + (pickedN
           ? 'Today’s picks are done — the next cards return on their schedule.'
@@ -733,6 +781,7 @@ PGRE.views.formulas = (function () {
       '</div><div id="browse-body">' + browseBodyHTML() + '</div></div>';
 
     body().innerHTML = html;
+    fillOptionsExtra(checkinHTML() + formulaSettingsHTML());
     PGRE.typesetMath(body());
     PGRE.refreshNavBadges(); // remaining counts change without a route change
 
@@ -769,20 +818,7 @@ PGRE.views.formulas = (function () {
       if (cards) resumeStudy(cards);
       else renderHome();
     });
-    wireStepper();
-    var ed = document.getElementById('exam-date');
-    if (ed) ed.addEventListener('change', function () {
-      PGRE.store.state.settings.examDate = ed.value;   // '' when cleared → cap off
-      PGRE.store.save();
-      renderHome();
-    });
-    var ect = document.getElementById('exam-cap-toggle');
-    if (ect) ect.addEventListener('click', function () {
-      var s = PGRE.store.state.settings;
-      s.formulaExamCap = s.formulaExamCap === false;
-      PGRE.store.save();
-      renderHome();
-    });
+    wireOptionsExtra();
     var pb = document.getElementById('pick-btn') || document.getElementById('landing-pick-btn');
     if (pb) pb.addEventListener('click', renderPicker);
     // Landing CTA: same fill-then-study path the dashboard's Study button arms.
@@ -2936,7 +2972,13 @@ PGRE.views.formulas = (function () {
   /* Leaving the portal mid-game stops any timers/intervals promptly (and
      settles an abandoned Study round's earned XP). */
   window.addEventListener('hashchange', function () {
-    if (!/^#\/formulas/.test(location.hash)) { teardownGame(); settleStudy(); study = null; }
+    if (!/^#\/formulas/.test(location.hash)) {
+      teardownGame();
+      settleStudy();
+      study = null;
+      var sheet = document.getElementById('formulas-print');
+      if (sheet && sheet.parentNode) sheet.parentNode.removeChild(sheet);
+    }
   });
 
   /* A tab/window close fires neither hashchange nor mount, so a mid-session
@@ -2996,7 +3038,7 @@ PGRE.views.formulas = (function () {
         deck = d;
         PGRE.deck = d;
         PGRE.getFormulaCard = deckById;
-        if (root()) { renderShell(); buildPrintSheet(); }
+        if (root()) { renderShell(); }
         if (window.PGRE && PGRE.motion && PGRE.motion.loader) PGRE.motion.loader.done();
       });
     },

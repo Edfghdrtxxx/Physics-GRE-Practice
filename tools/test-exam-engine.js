@@ -193,12 +193,14 @@ PGRE.QUESTIONS = [];
 PGRE.ETS_DRILLS = [];
 PGRE.BOOK_QUESTIONS = [];
 PGRE.BOOK_EXAMS = [];
+if (typeof PGRE._resetBankCache === 'function') PGRE._resetBankCache();
 assert(engine.canStart('70x120').ok === false, 'canStart 70x120 fails when the drawable pool is too small');
 assert(engine.canStart('70x120').need === 70, 'canStart reports the 70-question requirement');
 PGRE.QUESTIONS = savedQ;
 PGRE.ETS_DRILLS = savedD;
 PGRE.BOOK_QUESTIONS = savedBq;
 PGRE.BOOK_EXAMS = savedBe;
+if (typeof PGRE._resetBankCache === 'function') PGRE._resetBankCache();
 
 console.log('\nscoring');
 resetState();

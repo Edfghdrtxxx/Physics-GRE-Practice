@@ -23,7 +23,7 @@ PGRE.views.search = (function () {
     if (ensureEngine._p) return ensureEngine._p;
     ensureEngine._p = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/search.js';
+      s.src = 'js/search.js?v=20260918b';
       s.onload = function () { resolve(); };
       s.onerror = function () { resolve(); };   // resolve anyway; mount() guards
       document.head.appendChild(s);

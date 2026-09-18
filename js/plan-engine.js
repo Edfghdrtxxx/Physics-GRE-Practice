@@ -10,6 +10,7 @@
    If PGRE.store / state.plan is unavailable, every task is treated as undone
    (so the carry applies). */
 window.PGRE = window.PGRE || {};
+PGRE.planSetXp = function (kind) { return kind === 'extra-set' ? 15 : 20; };
 
 PGRE.planWeeks = function () {
   var out = [];
@@ -86,9 +87,9 @@ PGRE.weekTasks = function (w) {
     var id = 'set-' + pad2(n);
     tasks.push({
       id: id,
-      label: 'Set ' + pad2(n) + ' · ' + setTitle(n) + ' — timed (' + mins + ')',
+      label: 'Set ' + pad2(n) + ' · ' + setTitle(n) + ' — ' + mins,
       hours: timedHours,
-      xp: 20,
+      xp: PGRE.planSetXp('timed'),
       kind: 'timed'
     });
   });
@@ -99,9 +100,9 @@ PGRE.weekTasks = function (w) {
       tasks.push({
         id: 'set-' + pad2(n),
         label: 'Set ' + pad2(n) + ' · ' + setTitle(n) +
-          ' — extra (~50 min, carried; only if misses are empty)',
+          ' — extra, ~50 min, carried; only if misses are empty',
         hours: 0.9,
-        xp: 15,
+        xp: PGRE.planSetXp('extra-set'),
         kind: 'extra-set'
       });
     });

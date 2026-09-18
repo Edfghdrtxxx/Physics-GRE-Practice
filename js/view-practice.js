@@ -517,6 +517,8 @@ PGRE.views.practice = (function () {
     clearPace();
     var xp = PGRE.gamify.recordAnswer(q, isCorrect, elapsed,
                                       { picked: idx, sid: session.sid, mode: 'practice' });
+    var refused = xp === null;
+    if (refused) xp = 0;
     session.xpEarned += xp;
     if (isCorrect) session.correct++;
     session.answers.push({ q: q, picked: idx, correct: isCorrect });
@@ -541,7 +543,9 @@ PGRE.views.practice = (function () {
     fb.innerHTML =
       '<div class="feedback reveal-in ' + (isCorrect ? 'feedback-good' : 'feedback-bad') + '">' +
         '<strong>' + (isCorrect ? 'Correct' : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
-        '<span class="fb-xp">+' + xp + ' XP</span>' +
+        (refused
+          ? '<span class="fb-xp">not recorded — saving failed</span>'
+          : '<span class="fb-xp">+' + xp + ' XP</span>') +
       '</div>' +
       paceMark(elapsed) +
       PGRE.assess.html(settings().keyboard) +
@@ -773,12 +777,35 @@ PGRE.views.practice = (function () {
                   'Rough set — the reworking is where the learning happens.';
     var receipt = buildAgentReceipt();
     persistAgentReceipt(receipt);
+    var pack = receipt.pack;
+    var isPack = pack != null && /^\d{2}$/.test(String(pack));
+    var planLine = '';
+    if (isPack) {
+      var taskId = 'set-' + pack;
+      var already = PGRE.gamify.taskDone(taskId);
+      if (!already) {
+        var xpKind = 'timed';
+        var cw = PGRE.currentWeek();
+        var weekTasks = PGRE.weekTasks(cw && cw.week);
+        for (var wi = 0; wi < weekTasks.length; wi++) {
+          if (weekTasks[wi].id === taskId && weekTasks[wi].kind === 'extra-set') {
+            xpKind = 'extra-set';
+            break;
+          }
+        }
+        PGRE.gamify.toggleTask(taskId, PGRE.planSetXp(xpKind));
+      }
+      planLine = already
+        ? 'Set ' + pack + ' was already done in your plan.'
+        : 'Set ' + pack + ' marked done in your plan.';
+    }
     var html = '<div class="card practice-card">' +
       '<h1>Session complete</h1>' +
       (session.label ? '<p class="muted session-label-line">' + PGRE.ui.esc(session.label) + '</p>' : '') +
       '<div class="summary-score">' + session.correct + ' / ' + session.qs.length +
         '<span class="summary-pct">' + pct + '%</span></div>' +
       '<p class="muted">' + verdict + ' You earned <strong>' + session.xpEarned + ' XP</strong> this session.</p>';
+    if (planLine) html += '<p class="muted">' + planLine + '</p>';
     html += paletteHTML(true);
 
     var misses = session.answers.filter(function (a) { return !a.correct; });
@@ -791,17 +818,23 @@ PGRE.views.practice = (function () {
     }
     var custom = session.custom;
     var backLink = custom ? '#/build' : (session.topicId === 'all' ? '#/' : '#/topic/' + session.topicId);
+    if (isPack) backLink = '#/plan';
     html += '<div class="btn-row">' +
       '<button class="btn btn-primary" id="again-btn">' +
-        (custom ? (session.criteria ? 'Draw a fresh set' : 'Run this set again') : 'Practice again') + '</button>' +
-      '<button class="btn btn-ghost" type="button" id="agent-receipt-btn" title="Copy JSON for OrbitOS agent log">' +
-        'Copy agent receipt</button>' +
-      '<button class="btn btn-ghost" type="button" id="agent-receipt-download-btn" title="Download JSON receipt">' +
-        'Download .json</button>' +
-      '<a class="btn btn-ghost" href="' + backLink + '">Done</a>' +
-    '</div>' +
-    '<p class="muted agent-receipt-hint">OrbitOS: copy or download the receipt, then in chat say you are done (or paste the JSON) so the agent can tick the daily row and log misses.</p>' +
+        (custom ? (session.criteria ? 'Draw a fresh set' : 'Run this set again') : 'Practice again') + '</button>';
+    if (isPack) {
+      html +=
+        '<button class="btn btn-ghost" type="button" id="agent-receipt-btn" title="Copy JSON for OrbitOS agent log">' +
+          'Copy agent receipt</button>' +
+        '<button class="btn btn-ghost" type="button" id="agent-receipt-download-btn" title="Download JSON receipt">' +
+          'Download .json</button>';
+    }
+    html += '<a class="btn btn-ghost" href="' + backLink + '">Done</a>' +
     '</div>';
+    if (isPack) {
+      html += '<p class="muted agent-receipt-hint">Your plan task here is already ticked. To log this set in the OrbitOS vault too (daily note and misses log), copy or download the receipt and say you are done in chat, or paste the JSON.</p>';
+    }
+    html += '</div>';
     var topicId = session.topicId, filter = session.filter;
     el().innerHTML = html;
     PGRE.typesetMath(el());

@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Physics GRE · Prep Studio</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#936;</text></svg>">
-  <!-- ?v= is a cache-buster shared by EVERY stylesheet and script below. Bump
-       the one value (search-and-replace it in this file) whenever any asset
-       changes, so a returning browser can never mix a fresh app.js with a stale
-       view or a stale style.css. -->
-  <link rel="stylesheet" href="css/fonts.css?v=20260916f">
-  <link rel="stylesheet" href="css/style.css?v=20260917j">
+  <!-- Every asset URL carries a ?v= cache-buster, including the three scripts
+       injected at runtime (js/view-formulas.js -> flashmodes.js,
+       formula-search.js; js/view-search.js -> search.js). Tokens are per file:
+       when you change a file, bump the token on ITS tag (or inject site) so a
+       returning browser never mixes a fresh view with a stale engine. -->
+  <link rel="stylesheet" href="css/fonts.css?v=20260918b">
+  <link rel="stylesheet" href="css/style.css?v=20260918c">
   <link rel="stylesheet" href="css/visualizer.css?v=20260916f">
   <link rel="stylesheet" href="css/print.css?v=20260916f">
   <link rel="stylesheet" href="css/motion.css?v=20260916f">
@@ -31,6 +32,7 @@
     </a>
     <nav id="sidebar-nav"></nav>
     <div id="sidebar-footer">
+      <div id="origin-line" class="muted"></div>
       <button id="theme-toggle" class="btn btn-ghost btn-sm" type="button" aria-pressed="false">Dark mode</button>
     </div>
   </aside>
@@ -99,7 +101,7 @@
   <script src="js/data-achievements.js?v=20260916f" defer></script>
   <script src="js/data-plan.js?v=20260916f" defer></script>
   <script src="js/data-packs.js?v=20260916f" defer></script>
-  <script src="js/plan-engine.js?v=20260916f" defer></script>
+  <script src="js/plan-engine.js?v=20260918a" defer></script>
 
   <!-- book-derived bank (gitignored; generated placeholders until the
        extraction pipeline fills them) -->
@@ -109,37 +111,37 @@
   <script src="content/bank/ets-exams.js?v=20260916f" defer></script>  <!-- released ETS exams (gitignored — ETS copyright) -->
 
   <!-- engine -->
-  <script src="js/store.js?v=20260916f" defer></script>
-  <script src="js/srs.js?v=20260916f" defer></script>
-  <script src="js/bank.js?v=20260916f" defer></script>
+  <script src="js/store.js?v=20260918c" defer></script>
+  <script src="js/srs.js?v=20260918c" defer></script>
+  <script src="js/bank.js?v=20260918b" defer></script>
   <script src="js/packs.js?v=20260916f" defer></script>
   <script src="js/study-time.js?v=20260916f" defer></script>
   <script src="js/timer.js?v=20260916f" defer></script>
   <script src="js/focus-sound.js?v=20260916f" defer></script>  <!-- focus-timer selectable SFX -->
   <script src="js/focus-fx.js?v=20260916f" defer></script>  <!-- detector field + beamline fx for the focus page -->
   <script src="js/notes.js?v=20260916f" defer></script>
-  <script src="js/gamify.js?v=20260916f" defer></script>
+  <script src="js/gamify.js?v=20260918c" defer></script>
   <script src="js/formula-checkin.js?v=20260916f" defer></script>  <!-- formula-recall daily check-in -->
   <script src="js/chart-tip.js?v=20260916f" defer></script>  <!-- delegated [data-tip] chart popover -->
 
   <!-- views -->
-  <script src="js/view-dashboard.js?v=20260917h" defer></script>
+  <script src="js/view-dashboard.js?v=20260918c" defer></script>
   <script src="js/view-topic.js?v=20260916f" defer></script>
-  <script src="js/view-practice.js?v=20260917b" defer></script>
+  <script src="js/view-practice.js?v=20260918b" defer></script>
   <script src="js/view-history.js?v=20260916f" defer></script>
   <script src="js/view-analytics.js?v=20260916f" defer></script>
   <script src="js/view-build.js?v=20260916f" defer></script>
-  <script src="js/view-search.js?v=20260916f" defer></script>
+  <script src="js/view-search.js?v=20260918b" defer></script>
   <script src="js/view-notes.js?v=20260916f" defer></script>
-  <script src="js/view-mistakes.js?v=20260917j" defer></script>
-  <script src="js/view-formulas.js?v=20260916f" defer></script>
+  <script src="js/view-mistakes.js?v=20260918c" defer></script>
+  <script src="js/view-formulas.js?v=20260918b" defer></script>
   <script src="js/view-focus.js?v=20260917h" defer></script>        <!-- F5 focus page -->
   <script src="js/view-study-time.js?v=20260917i" defer></script>   <!-- dedicated study-time page -->
   <script src="js/view-achievements.js?v=20260916f" defer></script>
-  <script src="js/view-plan.js?v=20260916f" defer></script>
-  <script src="js/view-content.js?v=20260916f" defer></script>
-  <script src="js/exam-engine.js?v=20260916f" defer></script>
-  <script src="js/view-exam.js?v=20260916f" defer></script>
+  <script src="js/view-plan.js?v=20260918a" defer></script>
+  <script src="js/view-content.js?v=20260918c" defer></script>
+  <script src="js/exam-engine.js?v=20260918b" defer></script>
+  <script src="js/view-exam.js?v=20260918c" defer></script>
   <script src="js/visualizer-engine.js?v=20260916f" defer></script>
   <script src="js/visualizers/trio-g1.js?v=20260916f" defer></script>
   <script src="js/visualizers/trio-g2.js?v=20260916f" defer></script>
@@ -157,7 +159,7 @@
   <script src="js/view-concepts.js?v=20260916f" defer></script>
 
   <!-- shell -->
-  <script src="js/app.js?v=20260916f" defer></script>
+  <script src="js/app.js?v=20260918c" defer></script>
   <!-- motion effects: runs after app.js and before DOMContentLoaded, so PGRE.motion exists before PGRE.boot runs -->
   <script src="js/motion.js?v=20260916f" defer></script>
 </body>

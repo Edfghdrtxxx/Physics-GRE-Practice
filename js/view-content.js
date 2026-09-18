@@ -221,10 +221,11 @@ PGRE.views.library = (function () {
       '</div>' +
       '<div id="files-box"></div>' +
       '<div class="card"><h2>Your data</h2>' +
-        '<p class="muted">Back up or restore all progress (XP, achievements, plan, streaks) as a JSON file.</p>' +
+        '<p class="muted">Export writes attempts, formula cards and intervals, the mistake book, mock sittings, and notes. Imported files (Library PDFs and chapters) are not included.</p>' +
         '<div class="btn-row">' +
           '<button class="btn btn-ghost" id="export-btn">Export progress</button>' +
           '<button class="btn btn-ghost" id="import-progress-btn">Restore from backup…</button>' +
+          '<button class="btn btn-ghost" id="restore-backup-btn">Restore last automatic backup</button>' +
           '<input type="file" id="progress-input" accept=".json" hidden>' +
           '<button class="btn btn-ghost" id="reset-formulas-btn">Reset formula cards</button>' +
         '</div>' +
@@ -291,6 +292,20 @@ PGRE.views.library = (function () {
         };
         r.readAsText(pInput.files[0]);
         pInput.value = '';
+      });
+
+      var rbBtn = document.getElementById('restore-backup-btn');
+      if (rbBtn) rbBtn.addEventListener('click', function () {
+        var ok = typeof PGRE.store.restoreBackup === 'function' && PGRE.store.restoreBackup();
+        if (ok && PGRE.store._persistFailed) {
+          PGRE.toast('Backup loaded into this tab, but saving still fails — it is not on disk yet.', 'error', true);
+        } else if (ok) {
+          PGRE.applyTheme(PGRE.store.state.settings.theme);
+          PGRE.toast('Backup restored.', 'info');
+          location.hash = '#/';
+        } else {
+          PGRE.toast('No automatic backup found.');
+        }
       });
 
       var rfBtn = document.getElementById('reset-formulas-btn');

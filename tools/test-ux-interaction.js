@@ -672,7 +672,13 @@ function loadShipped(reduced, opts) {
       active: function () { return examObj; },
       create: function () { return examObj; },
       history: function () { return []; },
-      submit: function () {}
+      submit: function () {},
+      persistAnswer: function (exam, idx) {
+        var qid = exam.order[exam.index || 0];
+        if (exam.answers[qid] === idx) delete exam.answers[qid];
+        else exam.answers[qid] = idx;
+        return true;
+      }
     },
     timer: { boot: function () {} }
   };
