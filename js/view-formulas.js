@@ -24,6 +24,7 @@ PGRE.views.formulas = (function () {
   //   overlay: null|'peek'|'scaffold'|'checkpoint', steps: {id->learningStep},
   //   undo: [snapshots], pressCount, pendingOverlays: [], settled }
   var study = null;
+  var lastCompletedStudy = null;
   var activeGame = null; // Match/Type/Quiz controller { onKey, stop } or null
   var browseTab = 'learned'; // Browse sub-tab: 'learned' | 'upcoming'
   var memStatsOpen = false;  // F10: Memory stats card starts collapsed each mount
@@ -145,7 +146,8 @@ PGRE.views.formulas = (function () {
   function cardName(c) { return (c && (c.name || c.tag)) || ''; }
 
   function deckById(id) {
-    for (var i = 0; i < deck.length; i++) if (deck[i].id === id) return deck[i];
+    var pool = (deck && deck.length) ? deck : ((PGRE.deck && PGRE.deck.length) ? PGRE.deck : (PGRE.FORMULAS || []));
+    for (var i = 0; i < pool.length; i++) if (pool[i] && pool[i].id === id) return pool[i];
     return null;
   }
 
@@ -1846,6 +1848,7 @@ PGRE.views.formulas = (function () {
         undoBtn +
         (t ? '<span class="chip">' + t.name + '</span>' : '') +
         learnChip +
+        '<button class="btn btn-ghost btn-sm session-export-btn" id="session-export-btn" title="Export learning status for agent">Export status</button>' +
       '</div>' +
       PGRE.ui.meter(100 * study.done / (study.done + study.queue.length), 'meter-thin') +
       '<div class="fcard" id="fcard">' +
@@ -1883,6 +1886,8 @@ PGRE.views.formulas = (function () {
     if (sb) sb.addEventListener('click', function (e) { e.stopPropagation(); skipCard(); });
     var pa = document.getElementById('putaway-btn');
     if (pa) pa.addEventListener('click', function (e) { e.stopPropagation(); putAwayCard(); });
+    var eb = document.getElementById('session-export-btn');
+    if (eb) eb.addEventListener('click', function (e) { e.stopPropagation(); openFormulaExportModal(); });
     wireVizNav(body());
   }
 
@@ -2189,9 +2194,13 @@ PGRE.views.formulas = (function () {
         ' graded · ' + study.queue.length + ' left in queue · +' + totalXp + ' XP so far.</p>' +
       '<div class="btn-row">' +
       '<button class="btn btn-primary" id="cp-keep">Keep going <span class="key-hint">space</span></button>' +
+      '<button class="btn btn-ghost" id="cp-export" title="Export learning status for agent">Export status</button>' +
       '<button class="btn btn-ghost" id="cp-finish">Finish for now</button></div></div>';
     PGRE.typesetMath(body());
     document.getElementById('cp-keep').addEventListener('click', runNextOverlay);
+    document.getElementById('cp-export').addEventListener('click', function () {
+      openFormulaExportModal();
+    });
     document.getElementById('cp-finish').addEventListener('click', function () {
       study.overlay = null;
       renderStudySummary();
@@ -2225,6 +2234,14 @@ PGRE.views.formulas = (function () {
   function renderStudySummary() {
     if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: session over — back to base
     settleStudy();
+    if (study) {
+      lastCompletedStudy = {
+        done: study.done || 0,
+        again: study.again || 0,
+        pressCount: study.pressCount || 0,
+        history: Array.isArray(study.history) ? study.history.slice() : []
+      };
+    }
     // ITEM 2: the session is finished (queue drained or "Finish for now") — drop
     // the resume snapshot so the home screen offers a fresh batch, not a resume.
     PGRE.store.state.formulaStudy = null;
@@ -2235,10 +2252,12 @@ PGRE.views.formulas = (function () {
     // earned only the resumed segment's XP. Every press awards a flat +2 XP and
     // pressCount carries across resumes, so pressCount * 2 is the session-wide XP —
     // the honest figure to sit beside the cumulative card count.
-    var totalXp = study.pressCount * 2;
+    var totalXp = (study ? study.pressCount : (lastCompletedStudy ? lastCompletedStudy.pressCount : 0)) * 2;
+    var doneCount = study ? study.done : (lastCompletedStudy ? lastCompletedStudy.done : 0);
+    var againCount = study ? study.again : (lastCompletedStudy ? lastCompletedStudy.again : 0);
     var checkInHtml = '';
     if (PGRE.formulaCheckIn) {
-      if (study.checkInResult && study.checkInResult.claimed) {
+      if (study && study.checkInResult && study.checkInResult.claimed) {
         checkInHtml = PGRE.formulaCheckIn.celebrateHTML(study.checkInResult);
       } else {
         checkInHtml = PGRE.formulaCheckIn.alreadyHTML();
@@ -2246,19 +2265,514 @@ PGRE.views.formulas = (function () {
     }
     body().innerHTML = '<div class="card practice-card">' +
       '<h1>Review complete</h1>' +
-      '<div class="summary-score">' + study.done + ' card' + (study.done === 1 ? '' : 's') +
+      '<div class="summary-score">' + doneCount + ' card' + (doneCount === 1 ? '' : 's') +
         '<span class="summary-pct">+' + totalXp + ' XP</span></div>' +
-      '<p class="muted">' + (study.again ? study.again + ' came back for another pass this session. ' : '') +
+      '<p class="muted">' + (againCount ? againCount + ' came back for another pass this session. ' : '') +
       'Each card returns on the schedule your grade set.</p></div>' +
       checkInHtml +
       '<div class="card practice-card"><div class="btn-row">' +
       '<button class="btn btn-primary" id="back-deck">Back to the deck</button>' +
-      '<a class="btn btn-ghost" href="#/">Dashboard</a></div></div>';
+      '<button class="btn btn-ghost" id="summary-export-btn" title="Export learning status for agent">Export status</button>' +
+      '<a class="btn btn-ghost" href="#/">Dashboard</a></div>' +
+      '<p class="muted agent-receipt-hint" style="margin-top: 12px;">Export your learning status or copy the receipt for your OrbitOS agent to perceive today\'s formula recall.</p></div>';
     document.getElementById('back-deck').addEventListener('click', function () {
       study = null;
       renderHome();
     });
+    var sEb = document.getElementById('summary-export-btn');
+    if (sEb) sEb.addEventListener('click', function () {
+      openFormulaExportModal();
+    });
     study = null;
+  }
+
+  /* ——— Formula Learning Status Export (OrbitOS agent perception) ———
+     Builds a structured snapshot payload of formulas recalled today and overall
+     deck mastery for AI agent perception and daily logs.
+     Persists to sessionStorage, localStorage['pgre-formula-receipt'], and
+     state.lastFormulaReceipt. */
+
+  function buildFormulaReceipt() {
+    var s = (PGRE.store && PGRE.store.state) || {};
+    var today = (PGRE.srs && typeof PGRE.srs.today === 'function') ? PGRE.srs.today() : (new Date().toISOString().slice(0, 10));
+    var allCards = (deck && deck.length) ? deck : ((PGRE.deck && PGRE.deck.length) ? PGRE.deck : (PGRE.FORMULAS || []));
+
+    // 1. Collect formulas recalled today (combining in-progress/recent session and store state)
+    var recalledMap = {};
+    var recalledList = [];
+
+    // Source A: current live study session history
+    if (study && Array.isArray(study.history) && study.history.length) {
+      study.history.forEach(function (h) {
+        if (!h || !h.c || !h.c.id) return;
+        var cid = h.c.id;
+        if (!recalledMap[cid]) {
+          var item = {
+            id: cid,
+            name: cardName(h.c),
+            topic: h.c.topic || '',
+            topicName: ((PGRE.topicById && PGRE.topicById(h.c.topic)) || {}).name || h.c.topic || '',
+            chapter: h.c.chapter != null ? h.c.chapter : '',
+            eq: h.c.eq || '',
+            front: h.c.front || '',
+            back: h.c.back || '',
+            grades: h.grade ? [h.grade] : [],
+            lastGrade: h.grade || ''
+          };
+          recalledMap[cid] = item;
+          recalledList.push(item);
+        } else if (h.grade) {
+          recalledMap[cid].grades.push(h.grade);
+          recalledMap[cid].lastGrade = h.grade;
+        }
+      });
+    }
+
+    // Source B: last completed study session in this page lifecycle
+    if (lastCompletedStudy && Array.isArray(lastCompletedStudy.history) && lastCompletedStudy.history.length) {
+      lastCompletedStudy.history.forEach(function (h) {
+        if (!h || !h.c || !h.c.id) return;
+        var cid = h.c.id;
+        if (!recalledMap[cid]) {
+          var item = {
+            id: cid,
+            name: cardName(h.c),
+            topic: h.c.topic || '',
+            topicName: ((PGRE.topicById && PGRE.topicById(h.c.topic)) || {}).name || h.c.topic || '',
+            chapter: h.c.chapter != null ? h.c.chapter : '',
+            eq: h.c.eq || '',
+            front: h.c.front || '',
+            back: h.c.back || '',
+            grades: h.grade ? [h.grade] : [],
+            lastGrade: h.grade || ''
+          };
+          recalledMap[cid] = item;
+          recalledList.push(item);
+        } else if (h.grade && recalledMap[cid].grades.indexOf(h.grade) < 0) {
+          recalledMap[cid].grades.push(h.grade);
+        }
+      });
+    }
+
+    // Source C: cards studied today according to store.cards and srs.studiedToday
+    if (s.cards && typeof s.cards === 'object') {
+      Object.keys(s.cards).forEach(function (cid) {
+        var st = s.cards[cid];
+        if (!st) return;
+        var studied = (PGRE.srs && typeof PGRE.srs.studiedToday === 'function') ?
+          PGRE.srs.studiedToday(st) :
+          (st.lastReviewedDay === today);
+        if (!studied) return;
+
+        var c = deckById(cid) || ((PGRE.getFormulaCard && PGRE.getFormulaCard(cid)) || null);
+        if (!recalledMap[cid]) {
+          var item = {
+            id: cid,
+            name: c ? cardName(c) : cid,
+            topic: (c && c.topic) || '',
+            topicName: ((c && PGRE.topicById && PGRE.topicById(c.topic)) || {}).name || (c && c.topic) || '',
+            chapter: (c && c.chapter != null) ? c.chapter : '',
+            eq: (c && c.eq) || '',
+            front: (c && c.front) || '',
+            back: (c && c.back) || '',
+            grades: st.lastGrade ? [st.lastGrade] : [],
+            lastGrade: st.lastGrade || ''
+          };
+          recalledMap[cid] = item;
+          recalledList.push(item);
+        }
+      });
+    }
+
+    // Source D: cardReviews entries for today (e.g. from Match, Type, Quiz games)
+    if (Array.isArray(s.cardReviews)) {
+      for (var rIdx = s.cardReviews.length - 1; rIdx >= 0; rIdx--) {
+        var rev = s.cardReviews[rIdx];
+        if (!rev || rev.d !== today || !rev.id) continue;
+        var rCid = rev.id;
+        var rC = deckById(rCid) || ((PGRE.getFormulaCard && PGRE.getFormulaCard(rCid)) || null);
+        if (!recalledMap[rCid]) {
+          var rItem = {
+            id: rCid,
+            name: rC ? cardName(rC) : rCid,
+            topic: (rC && rC.topic) || '',
+            topicName: ((rC && PGRE.topicById && PGRE.topicById(rC.topic)) || {}).name || (rC && rC.topic) || '',
+            chapter: (rC && rC.chapter != null) ? rC.chapter : '',
+            eq: (rC && rC.eq) || '',
+            front: (rC && rC.front) || '',
+            back: (rC && rC.back) || '',
+            grades: rev.g ? [rev.g] : [],
+            lastGrade: rev.g || ''
+          };
+          recalledMap[rCid] = rItem;
+          recalledList.push(rItem);
+        } else if (rev.g && recalledMap[rCid].grades.indexOf(rev.g) < 0) {
+          recalledMap[rCid].grades.unshift(rev.g);
+        }
+      }
+    }
+
+    // Enrich every recalled item with latest SRS state
+    recalledList.forEach(function (item) {
+      var st = s.cards && s.cards[item.id];
+      if (st) {
+        item.interval = st.interval != null ? st.interval : 0;
+        item.due = st.due || '';
+        item.reps = st.reps || 0;
+        item.lapses = st.lapses || 0;
+        item.reviews = st.reviews || 0;
+        item.ease = st.ease != null ? Math.round(st.ease * 100) / 100 : 2.5;
+        item.status = (st.interval >= 21) ? 'mature' : ((st.interval > 0) ? 'learning' : 'new');
+        item.lastReviewedAt = st.lastReviewedAt || '';
+        if (!item.lastGrade && st.lastGrade) item.lastGrade = st.lastGrade;
+      } else {
+        item.interval = 0;
+        item.status = 'new';
+      }
+    });
+
+    // 2. Overall deck mastery and learning status
+    var totalDeck = allCards.length;
+    var learnedCount = 0;
+    var matureCount = 0;
+    var learningCount = 0;
+    var dueTodayCount = 0;
+    var byTopic = {};
+
+    if (Array.isArray(PGRE.TOPICS)) {
+      PGRE.TOPICS.forEach(function (t) {
+        byTopic[t.id] = { name: t.name, total: 0, learned: 0, mature: 0 };
+      });
+    }
+
+    allCards.forEach(function (c) {
+      if (!c || !c.id) return;
+      var top = byTopic[c.topic];
+      if (top) top.total++;
+      var st = s.cards && s.cards[c.id];
+      if (st && st.reviews > 0) {
+        learnedCount++;
+        if (top) top.learned++;
+        if (st.interval >= 21) {
+          matureCount++;
+          if (top) top.mature++;
+        } else {
+          learningCount++;
+        }
+        if (st.due && st.due <= today) dueTodayCount++;
+      } else {
+        dueTodayCount++;
+      }
+    });
+
+    var unseenCount = Math.max(0, totalDeck - learnedCount);
+    var pctLearned = totalDeck > 0 ? Math.round((learnedCount / totalDeck) * 1000) / 10 : 0;
+
+    // Daily streak & check-in
+    var checkIn = null;
+    if (s.formulaCheckIn && typeof s.formulaCheckIn === 'object') {
+      checkIn = {
+        currentStreak: s.formulaCheckIn.current || 0,
+        bestStreak: s.formulaCheckIn.best || 0,
+        checkedToday: s.formulaCheckIn.lastDay === today
+      };
+    }
+
+    // 3. Session info
+    var sessionInfo = null;
+    if (study) {
+      sessionInfo = {
+        state: 'in-progress',
+        done: study.done || 0,
+        again: study.again || 0,
+        queueRemaining: Array.isArray(study.queue) ? study.queue.length : 0,
+        pressCount: study.pressCount || 0,
+        xpEarned: (study.pressCount || 0) * 2
+      };
+    } else if (lastCompletedStudy) {
+      sessionInfo = {
+        state: 'completed',
+        done: lastCompletedStudy.done || 0,
+        again: lastCompletedStudy.again || 0,
+        queueRemaining: 0,
+        pressCount: lastCompletedStudy.pressCount || 0,
+        xpEarned: (lastCompletedStudy.pressCount || 0) * 2
+      };
+    } else {
+      sessionInfo = {
+        state: 'idle',
+        recalledTodayCount: recalledList.length
+      };
+    }
+
+    // 4. Human / agent readable summary text
+    var summaryLines = [
+      '# Formula Recall · ' + today,
+      'Recalled today: ' + recalledList.length + ' formula' + (recalledList.length === 1 ? '' : 's') + '.',
+      'Overall mastery: ' + learnedCount + '/' + totalDeck + ' learned (' + pctLearned + '%), ' + matureCount + ' mature, ' + unseenCount + ' unseen' + (checkIn ? ' (streak ' + checkIn.currentStreak + ' d)' : '') + '.'
+    ];
+    if (recalledList.length) {
+      summaryLines.push('\nToday\'s recalled formulas:');
+      recalledList.forEach(function (r, idx) {
+        var gradeTag = r.lastGrade ? ' [' + r.lastGrade.toUpperCase() + ']' : '';
+        var ivlTag = r.interval != null ? ' (ivl: ' + r.interval + 'd)' : '';
+        summaryLines.push((idx + 1) + '. ' + r.id + ': ' + (r.name || r.id) + ' — ' + (r.topicName || r.topic) + gradeTag + ivlTag);
+      });
+    }
+    // 2b. Collect full list of all learned formulas in the deck
+    var allLearned = [];
+    if (s.cards && typeof s.cards === 'object') {
+      Object.keys(s.cards).forEach(function (cid) {
+        var st = s.cards[cid];
+        if (!st || !st.reviews) return;
+        var c = deckById(cid) || ((PGRE.getFormulaCard && PGRE.getFormulaCard(cid)) || null);
+        allLearned.push({
+          id: cid,
+          name: c ? cardName(c) : cid,
+          topic: (c && c.topic) || '',
+          topicName: ((c && PGRE.topicById && PGRE.topicById(c.topic)) || {}).name || (c && c.topic) || '',
+          chapter: (c && c.chapter != null) ? c.chapter : '',
+          eq: (c && c.eq) || '',
+          front: (c && c.front) || '',
+          back: (c && c.back) || '',
+          interval: st.interval || 0,
+          due: st.due || '',
+          reps: st.reps || 0,
+          lapses: st.lapses || 0,
+          reviews: st.reviews || 0,
+          ease: st.ease != null ? Math.round(st.ease * 100) / 100 : 2.5,
+          status: (st.interval >= 21) ? 'mature' : ((st.interval > 0) ? 'learning' : 'new'),
+          lastGrade: st.lastGrade || '',
+          lastReviewedDay: st.lastReviewedDay || ''
+        });
+      });
+    }
+
+    return {
+      v: 1,
+      kind: 'pgre-formula-receipt',
+      exportedAt: new Date().toISOString(),
+      date: today,
+      origin: (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : ((typeof location !== 'undefined' && location.origin) ? location.origin : 'file://'),
+      session: sessionInfo,
+      recalledToday: recalledList,
+      overallStatus: {
+        deckSize: totalDeck,
+        learned: learnedCount,
+        pctLearned: pctLearned,
+        mature: matureCount,
+        learning: learningCount,
+        unseen: unseenCount,
+        dueToday: dueTodayCount,
+        streak: checkIn,
+        byTopic: byTopic
+      },
+      allLearnedCards: allLearned,
+      summaryText: summaryLines.join('\n')
+    };
+  }
+
+  function persistFormulaReceipt(receipt) {
+    if (!receipt) return;
+    var json = JSON.stringify(receipt);
+    try { sessionStorage.setItem('pgre-formula-receipt', json); } catch (e) {}
+    try { localStorage.setItem('pgre-formula-receipt', json); } catch (e2) {}
+    var st = PGRE.store && PGRE.store.state;
+    if (st) {
+      st.lastFormulaReceipt = receipt;
+      PGRE.store.save();
+    }
+  }
+
+  function copyFormulaReceipt(receipt, btn) {
+    if (!receipt) return;
+    var text = JSON.stringify(receipt, null, 2);
+    function ok() {
+      if (btn) {
+        btn.textContent = 'Copied — paste in chat';
+        btn.classList.add('btn-ok');
+        setTimeout(function () {
+          if (btn) {
+            btn.textContent = 'Copy status for agent';
+            btn.classList.remove('btn-ok');
+          }
+        }, 3000);
+      }
+      if (PGRE.toast) {
+        PGRE.toast('Learning status copied — paste in chat for agent', 'info');
+      }
+    }
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(ok, fallback);
+    } else {
+      fallback();
+    }
+    function fallback() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        ok();
+      } catch (err) {
+        var pre = document.getElementById('export-json-preview');
+        if (pre) {
+          var det = pre.closest('details');
+          if (det) det.open = true;
+          pre.scrollIntoView();
+        }
+        if (PGRE.toast) PGRE.toast('Could not write clipboard automatically. Select and copy from JSON view.', 'info');
+      }
+    }
+  }
+
+  function downloadFormulaReceipt(receipt) {
+    if (!receipt) return;
+    var day = (receipt.date || (PGRE.srs && PGRE.srs.today()) || '').replace(/-/g, '');
+    var filename = 'pgre-formula-status-' + (day || 'today') + '.json';
+    var blob = new Blob([JSON.stringify(receipt, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+    if (PGRE.toast) {
+      PGRE.toast('Downloaded ' + filename, 'info');
+    }
+  }
+
+  function openFormulaExportModal() {
+    var receipt = buildFormulaReceipt();
+    persistFormulaReceipt(receipt);
+
+    var old = document.getElementById('formula-export-overlay');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+
+    var overlay = document.createElement('div');
+    overlay.className = 'exam-overlay';
+    overlay.id = 'formula-export-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Formula learning status');
+
+    var recalledCount = receipt.recalledToday ? receipt.recalledToday.length : 0;
+    var overall = receipt.overallStatus || {};
+    var learned = overall.learned || 0;
+    var total = overall.deckSize || 0;
+    var pct = overall.pctLearned != null ? overall.pctLearned : 0;
+    var mature = overall.mature || 0;
+
+    var listHtml = '';
+    if (recalledCount > 0) {
+      listHtml = '<div class="export-recalled-wrap">' +
+        '<div class="export-recalled-head">' +
+          '<span>Today\'s recalled formulas (' + recalledCount + ')</span>' +
+          '<span class="muted" style="font-size: 11px;">topic · grade · interval</span>' +
+        '</div>' +
+        '<div class="export-recalled-list">';
+      receipt.recalledToday.forEach(function (item) {
+        var topChip = item.topic ? '<span class="chip" style="font-size: 11px; padding: 1px 6px;">' + PGRE.ui.esc(item.topic) + '</span>' : '';
+        var gradeClass = item.lastGrade ? 'grade-' + item.lastGrade : '';
+        var gradeBadge = item.lastGrade ? '<span class="grade-chip ' + gradeClass + '" style="font-size: 10px; padding: 1px 6px;">' + PGRE.ui.esc(item.lastGrade) + '</span>' : '';
+        var ivlStr = item.interval != null ? '<span style="font-size: 11px; font-family: var(--mono); color: var(--muted);">' + item.interval + 'd</span>' : '';
+        listHtml += '<div class="export-recalled-item">' +
+          '<div class="export-recalled-item-left">' +
+            '<span class="export-item-id">' + PGRE.ui.esc(item.id) + '</span>' +
+            '<span class="export-item-name">' + PGRE.ui.esc(item.name || item.id) + '</span>' +
+          '</div>' +
+          '<div class="export-recalled-item-right">' +
+            topChip + gradeBadge + ivlStr +
+          '</div>' +
+        '</div>';
+      });
+      listHtml += '</div></div>';
+    } else {
+      listHtml = '<div class="export-recalled-wrap" style="padding: 14px; text-align: center;">' +
+        '<p class="muted" style="margin: 0; font-size: 13px;">No formulas reviewed yet today. Complete recall cards to log today\'s practice.</p>' +
+      '</div>';
+    }
+
+    var jsonStr = JSON.stringify(receipt, null, 2);
+
+    overlay.innerHTML = '<div class="card exam-overlay-card formula-export-card">' +
+      '<div class="export-modal-header">' +
+        '<div>' +
+          '<h2 style="margin: 0 0 2px;">Formula learning status</h2>' +
+          '<div class="muted" style="font-size: 12px;">' + receipt.date + ' · for your OrbitOS agent</div>' +
+        '</div>' +
+        '<button type="button" class="btn btn-ghost btn-sm" id="export-modal-close" aria-label="Close">&times;</button>' +
+      '</div>' +
+      '<div class="export-stats-grid">' +
+        '<div class="export-stat-tile">' +
+          '<div class="stat-num">' + recalledCount + '</div>' +
+          '<div class="stat-label">Recalled today</div>' +
+        '</div>' +
+        '<div class="export-stat-tile">' +
+          '<div class="stat-num">' + learned + '<span style="font-size: 12px; color: var(--muted); font-weight: normal;"> / ' + total + '</span></div>' +
+          '<div class="stat-label">' + pct + '% learned</div>' +
+        '</div>' +
+        '<div class="export-stat-tile">' +
+          '<div class="stat-num">' + mature + '</div>' +
+          '<div class="stat-label">Mature (≥21d)</div>' +
+        '</div>' +
+      '</div>' +
+      listHtml +
+      '<details class="export-json-details" style="margin-top: 10px;">' +
+        '<summary class="muted" style="cursor: pointer; font-size: 11px;">View full JSON payload</summary>' +
+        '<pre class="agent-receipt-fallback" id="export-json-preview" style="max-height: 120px; margin-top: 6px;">' + PGRE.ui.esc(jsonStr) + '</pre>' +
+      '</details>' +
+      '<div class="btn-row" style="margin-top: 14px; justify-content: flex-end;">' +
+        '<button type="button" class="btn btn-primary" id="export-copy-btn">Copy status for agent</button>' +
+        '<button type="button" class="btn btn-ghost" id="export-download-btn">Download .json</button>' +
+        '<button type="button" class="btn btn-ghost" id="export-done-btn">Done</button>' +
+      '</div>' +
+    '</div>';
+
+    document.body.appendChild(overlay);
+
+    function closeModal() {
+      if (overlay && overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
+      document.removeEventListener('keydown', handleKey);
+    }
+
+    function handleKey(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeModal();
+      }
+    }
+    document.addEventListener('keydown', handleKey);
+
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) closeModal();
+    });
+
+    var closeBtn = document.getElementById('export-modal-close');
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+
+    var doneBtn = document.getElementById('export-done-btn');
+    if (doneBtn) doneBtn.addEventListener('click', closeModal);
+
+    var copyBtn = document.getElementById('export-copy-btn');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', function () {
+        copyFormulaReceipt(receipt, copyBtn);
+      });
+    }
+
+    var dlBtn = document.getElementById('export-download-btn');
+    if (dlBtn) {
+      dlBtn.addEventListener('click', function () {
+        downloadFormulaReceipt(receipt);
+      });
+    }
   }
 
   /* ——— Match / Type / Quiz intros ——— */
@@ -3044,6 +3558,11 @@ PGRE.views.formulas = (function () {
     },
     getCard: deckById,
     armStudyFromFill: function () { studyFromFill = true; },
-    getDeck: function () { return deck; }
+    getDeck: function () { return deck; },
+    buildFormulaReceipt: buildFormulaReceipt,
+    exportFormulaStatus: openFormulaExportModal
   };
 })();
+
+PGRE.buildFormulaReceipt = PGRE.views.formulas.buildFormulaReceipt;
+PGRE.exportFormulaStatus = PGRE.views.formulas.exportFormulaStatus;

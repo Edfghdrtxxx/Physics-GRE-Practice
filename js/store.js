@@ -167,7 +167,9 @@ PGRE.store = {
       // without losing pack NN.
       lastAgentReceipt: null,
       // pack id '01'..'35' -> receipt object (kind: pgre-agent-receipt)
-      packReceipts: {}
+      packReceipts: {},
+      // last formula learning status receipt (kind: pgre-formula-receipt)
+      lastFormulaReceipt: null
     };
   },
 
@@ -368,6 +370,12 @@ PGRE.store = {
         if (!lPk || ((dPk && dPk.completedAt) || '') > ((lPk && lPk.completedAt) || '')) {
           st.packReceipts[pk] = dPk;
         }
+      }
+    }
+    if (disk.lastFormulaReceipt) {
+      var dF = disk.lastFormulaReceipt, lF = st.lastFormulaReceipt;
+      if (!lF || ((dF.exportedAt || '') > (lF.exportedAt || ''))) {
+        st.lastFormulaReceipt = dF;
       }
     }
     // settings: prefer live — the storage listener keeps idle heaps current,
