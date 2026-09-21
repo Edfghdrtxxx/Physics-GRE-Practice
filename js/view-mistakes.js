@@ -849,7 +849,7 @@ PGRE.views.mistakes = (function () {
       PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
       PGRE.store.save();
     }
-    var stillDue = PGRE.srs.dueMistakes().length;
+    var stillDue = filterByTopic(PGRE.srs.dueMistakes()).length;
     var untouched = [];
     if (drill.skipped) untouched.push(drill.skipped + ' skipped');
     if (left) untouched.push(left + ' left unanswered');
