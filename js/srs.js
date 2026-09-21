@@ -170,6 +170,15 @@ PGRE.srs = {
     });
   },
 
+  /* Narrow a joined mistake list ({qid, q, mk}) to one topic. 'all' / absent
+     leaves the list unchanged. Used by the mistake-book topic filter; due
+     badges and other callers keep the unfiltered open/due partitions. */
+  filterByTopic: function (entries, topicId) {
+    if (!entries || !entries.length) return entries || [];
+    if (!topicId || topicId === 'all') return entries;
+    return entries.filter(function (e) { return e.q && e.q.topic === topicId; });
+  },
+
   /* ——— Formula cards (SM-2 style) ——— */
   EASE_START: 2.5,
   EASE_MIN: 1.3,

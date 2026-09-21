@@ -11,6 +11,7 @@ PGRE.views.mistakes = (function () {
   var lastRenderAt = 0; // stamps each drill render so a double-click can't click through
   var keyBound = false; // the document keydown listener is installed once
   var paceTimer = null; // live per-question chip; same contract as view-practice.js
+  var topicFilter = 'all'; // additional book filter; 'all' or a PGRE.TOPICS id
 
   function settings() { return PGRE.store.state.settings || {}; }
 
@@ -93,6 +94,24 @@ PGRE.views.mistakes = (function () {
     return (n && n < pool) ? (base + ' (' + n + ' of ' + pool + ')')
                            : (base + ' (' + pool + ')');
   }
+  function filterByTopic(list) {
+    return PGRE.srs.filterByTopic(list, topicFilter);
+  }
+
+  /* Topic dropdown — same hist-select control as History / Notes. Lives next
+     to the existing drill-size chips; does not replace them. */
+  function topicFilterHTML() {
+    var opts = '<option value="all"' + (topicFilter === 'all' ? ' selected' : '') +
+      '>All topics</option>';
+    PGRE.TOPICS.forEach(function (t) {
+      opts += '<option value="' + t.id + '"' + (topicFilter === t.id ? ' selected' : '') +
+        '>' + PGRE.ui.esc(t.name) + '</option>';
+    });
+    return '<div class="filter-row" id="miss-topic-row">' +
+      '<select id="miss-topic" class="hist-select" aria-label="Filter by topic">' +
+        opts + '</select></div>';
+  }
+
   /* Preset chips (All / 5 / 10 / 15) + a custom number input, reusing the focus
      page's .focus-chip / .focus-custom-in look. Active preset reflects the saved
      size; a non-preset size prefills the custom box. */
@@ -231,9 +250,13 @@ PGRE.views.mistakes = (function () {
     clearPace();
     drill = null;
     if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: book list is the base screen
-    var open = PGRE.srs.openMistakes();
-    var due = PGRE.srs.dueMistakes();
-    var archived = PGRE.srs.archivedMistakes();
+    var openAll = PGRE.srs.openMistakes();
+    var dueAll = PGRE.srs.dueMistakes();
+    var archivedAll = PGRE.srs.archivedMistakes();
+    var hasBook = openAll.length || archivedAll.length;
+    var open = filterByTopic(openAll);
+    var due = filterByTopic(dueAll);
+    var archived = filterByTopic(archivedAll);
 
     // due first (oldest due date first), then upcoming by due date
     open.sort(function (a, b) {
@@ -244,6 +267,7 @@ PGRE.views.mistakes = (function () {
       '<p class="muted">Every question you have missed, kept until <em>you</em> archive it. ' +
       'Re-solving a mistake never removes it — it schedules the next review further out ' +
       '(' + PGRE.srs.MISTAKE_LADDER.join(' → ') + ' days). Missing it again resets the ladder.</p>' +
+      (hasBook ? topicFilterHTML() : '') +
       '<div class="btn-row">' +
         '<button class="btn btn-primary" id="drill-due"' + (due.length ? '' : ' disabled') + '>' +
           drillLabel('Drill due', due.length, 'Nothing due today') + '</button>' +
@@ -256,10 +280,15 @@ PGRE.views.mistakes = (function () {
       '</div>';
 
     if (!open.length && !archived.length) {
-      html += '<div class="card placeholder">' +
-        '<p><strong>Nothing in the book yet.</strong></p>' +
-        '<p class="muted">Miss a question in <a href="#/practice/all">practice</a> and it lands here — ' +
-        'with your wrong pick, the solution, and a review schedule.</p></div>';
+      if (!hasBook) {
+        html += '<div class="card placeholder">' +
+          '<p><strong>Nothing in the book yet.</strong></p>' +
+          '<p class="muted">Miss a question in <a href="#/practice/all">practice</a> and it lands here — ' +
+          'with your wrong pick, the solution, and a review schedule.</p></div>';
+      } else {
+        html += '<div class="card placeholder" id="miss-empty-topic">' +
+          '<p class="muted">No mistakes in this topic.</p></div>';
+      }
     }
 
     open.forEach(function (e) { html += missCard(e); });
@@ -278,10 +307,15 @@ PGRE.views.mistakes = (function () {
     var dd = document.getElementById('drill-due');
     var da = document.getElementById('drill-all');
     if (dd) dd.addEventListener('click', function () {
-      startDrill(sampleForDrill(PGRE.srs.dueMistakes().map(function (e) { return e.q; })));
+      startDrill(sampleForDrill(filterByTopic(PGRE.srs.dueMistakes()).map(function (e) { return e.q; })));
     });
     if (da) da.addEventListener('click', function () {
-      startDrill(sampleForDrill(PGRE.srs.openMistakes().map(function (e) { return e.q; })));
+      startDrill(sampleForDrill(filterByTopic(PGRE.srs.openMistakes()).map(function (e) { return e.q; })));
+    });
+    var topicSel = document.getElementById('miss-topic');
+    if (topicSel) topicSel.addEventListener('change', function () {
+      topicFilter = topicSel.value || 'all';
+      renderBook();
     });
 
     // ITEM 8 — drill-size control: preset chips + custom input, saved on change.
@@ -398,13 +432,17 @@ PGRE.views.mistakes = (function () {
     if (!view) return;
     var old = document.getElementById('mistakes-print');
     if (old) old.parentNode.removeChild(old);
-    var open = PGRE.srs.openMistakes();
+    var open = filterByTopic(PGRE.srs.openMistakes());
     if (!open.length) return;
     open.sort(function (a, b) {
       return (a.mk.srs ? a.mk.srs.due : '9999') < (b.mk.srs ? b.mk.srs.due : '9999') ? -1 : 1;
     });
+    var topicName = topicFilter !== 'all'
+      ? ((PGRE.topicById(topicFilter) || {}).name || topicFilter)
+      : '';
     var html = '<header class="ps-head"><h1>Physics GRE — Mistake Book</h1>' +
       '<p class="ps-sub">' + open.length + ' entr' + (open.length === 1 ? 'y' : 'ies') +
+      (topicName ? ' · ' + PGRE.ui.esc(topicName) : '') +
       ' · printed ' + printDate() + '</p></header>';
     open.forEach(function (e) { html += missPrintEntry(e); });
     var sheet = document.createElement('section');
@@ -901,6 +939,7 @@ PGRE.views.mistakes = (function () {
     render: function () { return '<div id="mistakes-root"></div>'; },
     mount: function () {
       clearPace();
+      topicFilter = 'all';
       if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
       renderBook();
     }

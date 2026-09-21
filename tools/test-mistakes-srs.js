@@ -197,6 +197,45 @@ assert(!cleared.lucky && !cleared.lastLuckyAt, 'clearLucky retires the stale fla
 assert(cleared.misses === 1 && cleared.srs.step === 1 && cleared.srs.due === dueBefore,
   'clearLucky leaves misses, ladder and due date intact');
 
+console.log('\ntopic filter (additional factor on joined mistake lists)');
+resetState();
+var prevById = PGRE.questionById;
+PGRE.questionById = function (id) {
+  var topics = { qcm: 'cm', qem: 'em', qqm: 'qm', qarch: 'cm' };
+  return { id: id, topic: topics[id] || 'cm' };
+};
+mkEntry('qcm'); srs.mistakeMissed(store.state.mistakes.qcm);
+store.state.mistakes.qcm.srs.due = daysFromNow(-1);
+mkEntry('qem'); srs.mistakeMissed(store.state.mistakes.qem);
+store.state.mistakes.qem.srs.due = daysFromNow(4);
+mkEntry('qqm'); srs.mistakeMissed(store.state.mistakes.qqm);
+mkEntry('qarch', { archivedAt: new Date().toISOString() });
+srs.mistakeMissed(store.state.mistakes.qarch);
+assert(typeof srs.filterByTopic === 'function', 'srs.filterByTopic is exported');
+assert(openIds(srs.filterByTopic(srs.openMistakes(), 'all')).join(',') === 'qcm,qem,qqm',
+  'filterByTopic("all") leaves the open book unchanged');
+assert(openIds(srs.filterByTopic(srs.openMistakes(), null)).join(',') === 'qcm,qem,qqm',
+  'filterByTopic with no topic id leaves the list unchanged');
+assert(openIds(srs.filterByTopic(srs.openMistakes(), 'cm')).join(',') === 'qcm',
+  'filterByTopic("cm") keeps only Classical Mechanics open entries');
+assert(openIds(srs.filterByTopic(srs.openMistakes(), 'em')).join(',') === 'qem',
+  'filterByTopic("em") keeps only Electromagnetism open entries');
+assert(srs.filterByTopic(srs.openMistakes(), 'sr').length === 0,
+  'filterByTopic on a topic with no mistakes is empty');
+assert(openIds(srs.filterByTopic(srs.dueMistakes(), 'cm')).join(',') === 'qcm',
+  'topic filter stacks on dueMistakes — overdue CM only');
+assert(srs.filterByTopic(srs.dueMistakes(), 'em').length === 0,
+  'an upcoming EM entry is not due even when the topic matches');
+assert(openIds(srs.filterByTopic(srs.archivedMistakes(), 'cm')).join(',') === 'qarch',
+  'archived entries of the selected topic still match');
+assert(srs.filterByTopic(srs.archivedMistakes(), 'em').length === 0,
+  'archived CM is hidden when filtering to EM');
+assert(srs.filterByTopic([], 'cm').length === 0,
+  'filterByTopic on an empty list stays empty');
+assert(srs.openMistakes().length === 3 && srs.dueMistakes().length === 1,
+  'openMistakes / dueMistakes stay unfiltered for badges and other callers');
+PGRE.questionById = prevById;
+
 console.log('\ndate helpers');
 assert(srs.daysUntil(daysFromNow(0)) === 0, 'daysUntil today is 0');
 assert(srs.daysUntil(daysFromNow(9)) === 9, 'daysUntil counts forward whole days');
