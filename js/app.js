@@ -9,14 +9,75 @@ PGRE.ui = {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   },
-
   fmt: function (n) { return Number(n).toLocaleString('en-US'); },
 
-  meter: function (pct, extraClass) {
-    pct = Math.max(0, Math.min(100, pct || 0));
-    return '<div class="meter ' + (extraClass || '') + '">' +
-             '<div class="meter-fill" style="width:' + pct + '%"></div>' +
-           '</div>';
+  segmentedMeter: function (segments, extraClass, opts) {
+    opts = opts || {};
+    segments = Array.isArray(segments) ? segments : [];
+    var normalized = [];
+    var total = 0;
+    segments.forEach(function (seg, i) {
+      if (typeof seg === 'number') seg = { value: seg };
+      seg = seg || {};
+      var value = Math.max(0, Number(seg.value) || 0);
+      total += value;
+      normalized.push({
+        value: value,
+        className: seg.className || (i === 0 ? 'meter-fill' : 'meter-segment'),
+        label: seg.label || '',
+        tip: seg.tip || '',
+        dotClass: seg.dotClass || ''
+      });
+    });
+    if (!total) total = 1;
+    var layout = opts.layout === 'grow' ? 'grow' : 'width';
+    var meterClass = 'meter meter--' + layout + (extraClass ? ' ' + extraClass : '');
+    var now = opts.value == null ? (normalized[0] ? normalized[0].value : 0) : Number(opts.value) || 0;
+    var html = '';
+    if (opts.chrome || opts.word || opts.meta || opts.legend) {
+      var pct = opts.percent == null ? Math.round(100 * now / (Number(opts.total) || total)) : opts.percent;
+      html += '<div class="meter-chrome">' +
+        '<div class="meter-chrome-head">' +
+          '<div class="meter-chrome-stat"><span class="meter-chrome-pct">' + Math.max(0, Math.min(100, pct)) + '%</span>' +
+            (opts.word ? ' <span class="meter-chrome-word">' + PGRE.ui.esc(opts.word) + '</span>' : '') +
+          '</div>' +
+          (opts.meta ? '<div class="meter-chrome-meta">' + PGRE.ui.esc(opts.meta) + '</div>' : '') +
+        '</div>';
+    }
+    html += '<div class="' + meterClass + '" role="progressbar" aria-valuemin="0" aria-valuemax="' +
+      (Number(opts.total) || total) + '" aria-valuenow="' + Math.max(0, now) + '">';
+    normalized.forEach(function (seg) {
+      if (seg.value <= 0 && seg.className.indexOf('meter-fill') < 0) return;
+      var size = (100 * seg.value / total).toFixed(4) + '%';
+      var cls = 'meter-segment ' + seg.className;
+      var attrs = ' style="' + (layout === 'grow' ? 'flex-grow:' + seg.value : 'width:' + size) + '"';
+      if (seg.label) attrs += ' tabindex="0" data-tip="' + PGRE.ui.esc(seg.tip || seg.label) + '"';
+      html += '<div class="' + cls + '"' + attrs + '></div>';
+    });
+    html += '</div>';
+    var legend = opts.legend || normalized.filter(function (seg) { return seg.label; });
+    if (legend.length) {
+      html += '<div class="meter-legend' + (opts.legendClass ? ' ' + opts.legendClass : '') + '">';
+      legend.forEach(function (seg) {
+        var label = seg.label || '';
+        var segTotal = Number(opts.total) || total;
+        var segPct = seg.percent == null ? Math.round(100 * (Number(seg.value) || 0) / segTotal) : seg.percent;
+        html += '<span class="meter-legend-item"><span class="meter-legend-dot ' +
+          (seg.dotClass || '') + '" aria-hidden="true"></span>' + PGRE.ui.esc(label) +
+          ' <strong>' + Math.max(0, Math.min(100, segPct)) + '%</strong></span>';
+      });
+      html += '</div>';
+    }
+    if (opts.chrome || opts.word || opts.meta || opts.legend) html += '</div>';
+    return html;
+  },
+
+  meter: function (pct, extraClass, opts) {
+    pct = Math.max(0, Math.min(100, Number(pct) || 0));
+    return PGRE.ui.segmentedMeter([
+      { value: pct, className: 'meter-fill' },
+      { value: 100 - pct, className: 'meter-rest' }
+    ], extraClass, Object.assign({ total: 100, value: pct }, opts || {}));
   },
 
   statTile: function (label, value, sub) {

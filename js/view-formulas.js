@@ -642,8 +642,8 @@ PGRE.views.formulas = (function () {
     var pSolid = pct(solid);
     var pYoung = pct(young);
     var aria = selected + ' of ' + total + ' selected, ' + solid + ' solid enough';
-    var solidTip = ui.esc('Solid enough\\n' + solid + ' of ' + total + ' · interval ≥ 21 d');
-    var youngTip = ui.esc('Learning\\n' + young + ' of ' + total + ' · introduced, not yet mature');
+    var solidTip = 'Solid enough\\n' + solid + ' of ' + total + ' · interval ≥ 21 d';
+    var youngTip = 'Learning\\n' + young + ' of ' + total + ' · introduced, not yet mature';
 
     var html = '<div class="card formula-recall-band" role="region" aria-label="' + ui.esc(aria) + '">';
     html += '<div class="fr-usage-head">' +
@@ -654,30 +654,12 @@ PGRE.views.formulas = (function () {
         : 'No cards in the deck') + '</div>' +
     '</div>';
 
-    html += '<div class="fr-usage-bar">';
-    if (solid > 0) {
-      html += '<div class="fr-seg fr-seg-solid" style="flex-grow:' + solid + '" tabindex="0" data-tip="' +
-        solidTip + '"></div>';
-    }
-    if (young > 0) {
-      html += '<div class="fr-seg fr-seg-young" style="flex-grow:' + young + '" tabindex="0" data-tip="' +
-        youngTip + '"></div>';
-    }
-    if (unseen > 0 || (!solid && !young)) {
-      html += '<div class="fr-seg fr-seg-rest" style="flex-grow:' + (unseen > 0 ? unseen : 1) + '"></div>';
-    }
+    html += ui.segmentedMeter([
+      { value: solid, className: 'fr-seg fr-seg-solid', label: solid ? 'Solid enough' : '', tip: solidTip, dotClass: 'fr-dot-solid', percent: pSolid },
+      { value: young, className: 'fr-seg fr-seg-young', label: young ? 'Learning' : '', tip: youngTip, dotClass: 'fr-dot-young', percent: pYoung },
+      { value: unseen || (!solid && !young ? 1 : 0), className: 'fr-seg fr-seg-rest', label: '', dotClass: 'fr-dot-rest' }
+    ], 'fr-usage-bar', { layout: 'grow', total: total || 1, value: selected, legendClass: 'fr-usage-legend' });
     html += '</div>';
-
-    html += '<div class="fr-usage-legend">';
-    if (solid > 0) {
-      html += '<span class="fr-leg"><span class="fr-dot fr-dot-solid" aria-hidden="true"></span>' +
-        'Solid enough <strong>' + pSolid + '%</strong></span>';
-    }
-    if (young > 0) {
-      html += '<span class="fr-leg"><span class="fr-dot fr-dot-young" aria-hidden="true"></span>' +
-        'Learning <strong>' + pYoung + '%</strong></span>';
-    }
-    html += '</div></div>';
     return html;
   }
 

@@ -78,7 +78,9 @@ PGRE.views.topic = {
     html += '<div class="card"><h2>Practice</h2>' +
       '<p class="muted">' + practiceCopy + ' You have done <strong>' + doneQs.length +
         ' of ' + bank.length + '</strong> at least once.</p>' +
-      ui.meter(covPct, 'meter-thin') +
+      ui.meter(covPct, 'meter-thin', {
+        word: 'done', meta: doneQs.length + ' of ' + bank.length + ' questions'
+      }) +
       '<div class="portal-split">' +
         '<div class="portal-group">' +
           '<div class="portal-group-num">' + newQs.length + '</div>' +

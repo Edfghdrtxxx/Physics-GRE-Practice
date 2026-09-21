@@ -349,7 +349,7 @@ PGRE.views.exam = (function () {
           '</div>' +
           '<div class="exam-timer" id="exam-timer" role="timer" aria-live="off">–:––</div>' +
           '<div class="exam-bar-right">' +
-            '<div class="meter meter-thin exam-progress-meter" id="exam-progress-meter"><div class="meter-fill" style="width:0%"></div></div>' +
+            PGRE.ui.meter(0, 'meter-thin exam-progress-meter') +
             '<span class="exam-progress" id="exam-progress"></span>' +
             '<button class="btn btn-ghost btn-sm" id="exam-pause">Pause</button>' +
             '<button class="btn btn-primary btn-sm" id="exam-submit">Submit</button>' +

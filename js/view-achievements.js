@@ -44,7 +44,9 @@ PGRE.views.achievements = (function () {
     var html = '<div class="card"><div class="ach-header">' +
       '<div><h1>Achievements</h1>' +
       '<p class="muted">' + got + ' of ' + total + ' unlocked · tier bonuses: Bronze +25 · Silver +50 · Gold +100 · Platinum +200 XP</p></div>' +
-      '</div>' + PGRE.ui.meter(100 * got / total) + '</div>';
+      '</div>' + PGRE.ui.meter(100 * got / total, '', {
+        word: 'unlocked', meta: got + ' of ' + total
+      }) + '</div>';
 
     html += '<div class="filter-row" id="ach-filters">' +
       '<button class="filter-btn' + (filter === 'all' ? ' active' : '') + '" data-f="all">All</button>';

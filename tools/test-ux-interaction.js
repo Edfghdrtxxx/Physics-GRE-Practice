@@ -999,6 +999,25 @@ assert(sure.getAttribute('aria-pressed') === 'false', 'bind().toggle still share
 console.log('\nPGRE.ui.bindChoiceCommit');
 var ui = env.window.PGRE.ui;
 assert(ui && typeof ui.bindChoiceCommit === 'function', 'bindChoiceCommit is on PGRE.ui');
+assert(typeof ui.segmentedMeter === 'function', 'segmentedMeter is on PGRE.ui');
+var zeroMeter = ui.meter(0, 'meter-test');
+assert(zeroMeter.indexOf('meter-fill') >= 0 && zeroMeter.indexOf('meter-rest') >= 0,
+  'meter zero total keeps an empty fill and remainder track');
+var zeroTotalMeter = ui.segmentedMeter([], 'meter-test', { total: 0 });
+assert((zeroTotalMeter.match(/meter-segment/g) || []).length === 0, 'segmentedMeter zero total renders an empty pill track');
+var fullMeter = ui.segmentedMeter([{ value: 100, className: 'meter-fill' }], 'meter-test', { total: 100 });
+assert(fullMeter.indexOf('meter-fill') >= 0 && fullMeter.indexOf('meter-rest') < 0, 'segmentedMeter 100% omits the remainder');
+var oneMeter = ui.segmentedMeter([{ value: 4, className: 'meter-segment-solid', label: 'Solid enough', percent: 100 }], 'meter-test', { total: 4, value: 4 });
+assert((oneMeter.match(/class="meter-segment/g) || []).length === 1 && oneMeter.indexOf('Solid enough') >= 0,
+  'segmentedMeter supports a single named segment and legend');
+var splitMeter = ui.segmentedMeter([
+  { value: 3, className: 'meter-segment-solid', label: 'Solid enough', percent: 3 },
+  { value: 30, className: 'meter-segment-young', label: 'Learning', percent: 30 },
+  { value: 67, className: 'meter-segment-rest' }
+], 'meter-test', { layout: 'grow', total: 100, value: 33 });
+assert((splitMeter.match(/class="meter-segment/g) || []).length === 3 &&
+  splitMeter.indexOf('Solid enough') >= 0 && splitMeter.indexOf('Learning') >= 0,
+  'segmentedMeter renders two named segments plus remainder');
 var commitBox = env.document.createElement('div');
 commitBox.innerHTML =
   '<div class="choices">' +

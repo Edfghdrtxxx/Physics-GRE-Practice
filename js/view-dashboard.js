@@ -273,7 +273,9 @@ PGRE.views.dashboard = (function () {
         '<div class="dash-study-fig"><div class="dash-study-big">' + weekH.toFixed(1) +
           '<span class="stat-unit"> h</span></div><div class="muted">this week</div></div>' +
       '</div>' +
-      PGRE.ui.meter(pct, 'meter-thin') +
+      PGRE.ui.meter(pct, 'meter-thin', {
+        word: 'this week', meta: weekH.toFixed(1) + ' of ' + WEEK_TARGET_H + ' h'
+      }) +
       '<div class="challenge-prog">' + weekH.toFixed(1) + ' of ' + WEEK_TARGET_H + ' h weekly target</div>' +
       spark +
       '<p class="muted dash-study-note">Counts active time in this tab only — a heartbeat while you interact. ' +
@@ -382,7 +384,9 @@ PGRE.views.dashboard = (function () {
       }).join(' ') + '</div>';
 
     return '<div class="card dash-readiness-card">' + head + tiles +
-      PGRE.ui.meter(pct, 'meter-thin') +
+      PGRE.ui.meter(pct, 'meter-thin', {
+        word: 'ready', meta: d.touched + ' of ' + d.poolLen + ' touched'
+      }) +
       '<p class="muted dash-caption">Rough gauge — 70% last-30-day weight-adjusted accuracy, ' +
       '30% bank coverage (' + d.touched + ' of ' + d.poolLen + ' touched). Trust a full timed sim more.</p>' +
       blind +
@@ -561,7 +565,9 @@ PGRE.views.dashboard = (function () {
     })[0];
     html += '<div class="card"><h2>This week — ' + ui.esc(cw.week.title) + '</h2>' +
       '<div class="muted">' + ui.dateRange(cw.week.start, cw.week.end) + ' · ' + ui.esc(cw.phase.name) + ' · ~' + cw.week.hours + ' h</div>' +
-      ui.meter(100 * doneCount / Math.max(1, weekTasks.length), 'meter-thin') +
+      ui.meter(100 * doneCount / Math.max(1, weekTasks.length), 'meter-thin', {
+        word: 'complete', meta: doneCount + ' of ' + weekTasks.length + ' tasks'
+      }) +
       '<div class="challenge-prog">' + doneCount + ' / ' + weekTasks.length + ' tasks done</div>';
     if (nextTasks.length) {
       html += '<ul class="next-tasks">';
@@ -585,7 +591,9 @@ PGRE.views.dashboard = (function () {
     html += '<div class="hero">' +
       '<div class="hero-left">' +
         '<div class="hero-level">Level <span class="hero-level-num">' + lvl.level + '</span> · <span class="level-title">' + lvl.title + '</span></div>' +
-        ui.meter(lvl.pct, 'meter-xp') +
+        ui.meter(lvl.pct, 'meter-xp', {
+          word: 'to next level', meta: ui.fmt(lvl.into) + ' / ' + ui.fmt(lvl.span) + ' XP'
+        }) +
         '<div class="hero-xp-note">' + ui.fmt(lvl.into) + ' / ' + ui.fmt(lvl.span) + ' XP to Level ' + (lvl.level + 1) + '</div>' +
       '</div>' +
     '</div>';

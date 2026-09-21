@@ -32,7 +32,9 @@ PGRE.views.plan = (function () {
     var html = '<div class="card hero">' +
       '<div class="hero-left"><h1>Review plan</h1>' +
       '<p class="muted">Sep 14 → November 1, 2026 · 7 live weeks · ~16 h/wk: 5 timed sets, 6 formula sessions, 2 extras · checkpoint Oct 4 · intact mocks Oct 11 / 18 / 25 · exam-week taper</p>' +
-      ui.meter(100 * allDone / Math.max(1, allTasks)) +
+      ui.meter(100 * allDone / Math.max(1, allTasks), '', {
+        word: 'complete', meta: allDone + ' of ' + allTasks + ' tasks'
+      }) +
       '<div class="hero-xp-note">' + allDone + ' / ' + allTasks + ' tasks complete</div></div>' +
       '<div class="hero-right"><div class="countdown"><div class="countdown-num">' + days + '</div>' +
       '<div class="countdown-label">day' + (days === 1 ? '' : 's') + ' to go</div></div></div></div>';

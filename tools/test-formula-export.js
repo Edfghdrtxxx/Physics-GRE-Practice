@@ -121,6 +121,12 @@ var windowMock = {
     views: {},
     ui: {
       esc: function (s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); },
+      segmentedMeter: function (segments, cls) {
+        return '<div class="meter ' + (cls || '') + '">' +
+          (segments || []).filter(function (s) { return (s.value || 0) > 0; }).map(function (s) {
+            return '<div class="meter-segment ' + (s.className || '') + '"></div>';
+          }).join('') + '</div>';
+      },
       meter: function (pct, cls) { return '<div class="meter ' + (cls || '') + '"><div class="meter-fill" style="width:' + pct + '%"></div></div>'; }
     },
     typesetMath: function () {},

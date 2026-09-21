@@ -321,7 +321,9 @@ PGRE.views.studytime = (function () {
       var tip = 'Active time today\\n' + doneMin + ' of ' + targetMin + ' min' +
         (met ? ' · target met' : ' · ' + remainMin + ' min to go') + ' (' + pctR + '%)';
       html = '<div data-tip="' + PGRE.ui.esc(tip) + '">' +
-        PGRE.ui.meter(pct, 'meter-thin') + '</div>' +
+        PGRE.ui.meter(pct, 'meter-thin', {
+          word: 'today', meta: doneMin + ' of ' + targetMin + ' min'
+        }) + '</div>' +
         '<div class="challenge-prog">' + PGRE.ui.esc(status) + '</div>';
     }
     html += weeklyBandHTML();
