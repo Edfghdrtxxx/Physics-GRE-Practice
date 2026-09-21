@@ -28,6 +28,7 @@ I have little background in computer science. When a decision is required of me,
 - `.no-mistakes.yaml`: Gate agent fallback (Grok Build, then Anti-Gravity). Not Claude-first `auto`. Not practice UI.
 - `vendor/`: Vendored offline third-party libraries (KaTeX, Marked).
 - `fonts/`: Locally hosted web fonts.
+- `package.json` / `package-lock.json`: npm metadata for Hugeicons packages used to author `js/sidebar-icons.js`. Runtime still loads the inlined SVGs; `node_modules/` is gitignored.
 
 ## Placement Rules
 - **UI Views:** Add `js/view-<name>.js` and register routes/navigation in `js/app.js` (`PGRE.buildNav` groups destinations into the branched `#sidebar-nav` tree).
