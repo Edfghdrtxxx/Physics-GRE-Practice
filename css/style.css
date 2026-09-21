@@ -21,8 +21,7 @@
       and text selection. We additionally keep alpha in --scrim (modal
       backdrop; overlay *panels* themselves stay opaque, which is the
       rule as written), --heat-edge (a 1px inset cell hairline on a
-      data grid — diagram furniture) and the focus page's --fp-hair*
-      instrument hairlines.
+      data grid — diagram furniture).
    2. The focus page keeps its gradients and its scale/bounce keyframes
       ("nothing scales, nothing bounces" is waived there by explicit
       user instruction). That page is recoloured, never restructured.
@@ -3419,49 +3418,28 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 #theme-toggle:hover { background: var(--ivory); border-color: transparent; color: var(--ink); }
 
 /* ==================================================================
-   FOCUS PAGE (F5) — full-page focus app at #/focus, restyled as a
-   RUNNING PHYSICS INSTRUMENT PRINTED ON WARM PAPER (the personal
-   site's event-display language): millimetre graph paper, 1px
-   hairline structure, square corners, uppercase mono instrument
-   labels with HUD corner brackets, light serif display type. All
-   colours are tokens, so the dark layer recolours it.
+   FOCUS PAGE (F5) — full-page focus app at #/focus. Matches the
+   sidebar's quiet cream aesthetic: Inter type, rounded corners, pill
+   chips, clean cream cards. The collider detector ring and particle
+   canvas remain as the visual centrepiece. All colours are tokens,
+   so the dark layer recolours it.
    ================================================================== */
 .focus-page {
   position: relative;
-  min-height: calc(100vh - 116px);        /* fill the view area for a full-page feel */
-  border-radius: 0;                       /* the instrument sheet is square-cornered */
-  border: 1px solid var(--fp-hair);
+  min-height: calc(100vh - 116px);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
   overflow: hidden;
   display: flex; align-items: center; justify-content: center;
-  /* instrument-sheet primitives, scoped so the dark layer re-derives below:
-     hairlines keyed to the theme ink (rgb = --ink-900 light / --cream-50 dark),
-     graph grid + ionization electrons in the system's teal. The alphas are
-     deliberate: translucent hairlines are this page's preserved motif, a
-     knowing deviation from the "almost no transparency" rule. */
-  --fp-hair: rgba(20, 20, 19, 0.14);
-  --fp-hair-soft: rgba(20, 20, 19, 0.07);
-  --fp-grid-major: rgba(93, 184, 166, 0.09);
-  --fp-grid-minor: rgba(93, 184, 166, 0.05);
   --fp-ion: #5db8a6;                      /* --accent-teal; js/focus-fx.js reads this for electrons */
 }
 [data-theme="dark"] .focus-page {
-  --fp-hair: rgba(250, 249, 245, 0.15);
-  --fp-hair-soft: rgba(250, 249, 245, 0.07);
-  --fp-grid-major: rgba(93, 184, 166, 0.11);
-  --fp-grid-minor: rgba(93, 184, 166, 0.06);
   --fp-ion: #5db8a6;
 }
-/* millimetre graph paper — two-scale teal grid on the warm ground, faint
-   enough to live under text (the site's signature backdrop) */
+/* clean ground — no graph paper; soft radial glow only while running */
 .focus-ambient {
   position: absolute; inset: 0; z-index: 0;
   background-color: var(--bg);
-  background-image:
-    linear-gradient(var(--fp-grid-major) 1px, transparent 1px),
-    linear-gradient(90deg, var(--fp-grid-major) 1px, transparent 1px),
-    linear-gradient(var(--fp-grid-minor) 1px, transparent 1px),
-    linear-gradient(90deg, var(--fp-grid-minor) 1px, transparent 1px);
-  background-size: 80px 80px, 80px 80px, 16px 16px, 16px 16px;
   transition: opacity .9s ease;
 }
 /* a warm radial glow behind the stage fades in while a session is live.
@@ -3477,60 +3455,17 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 }
 .focus-page.is-running .focus-ambient::after { opacity: 0.85; }
 
-/* ——— HUD corner brackets: live telemetry in the instrument voice ———
-   Four mono readouts pinned to the sheet's corners, each framed by an
-   L-shaped 14px bracket (two stripped borders). Painted by view-focus.js
-   every second; pointer-events none, above the vignette (z 2 vs 1) so zen
-   never dims them into the shading. */
-.focus-hud {
-  position: absolute; inset: 0; z-index: 2; pointer-events: none;
-  font-family: var(--mono-instr); font-size: 10px; font-weight: 400;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.7;
-}
-.fhud { position: absolute; padding: 9px 12px; }
-.fhud::before {
-  content: '';
-  position: absolute; width: 14px; height: 14px;
-  border: 1px solid var(--fp-hair);
-}
-.fhud-tl { top: 12px; left: 12px; }
-.fhud-tr { top: 12px; right: 12px; text-align: right; }
-.fhud-bl { bottom: 12px; left: 12px; }
-.fhud-br { bottom: 12px; right: 12px; text-align: right; }
-.fhud-tl::before { left: 0; top: 0; border-right: 0; border-bottom: 0; }
-.fhud-tr::before { right: 0; top: 0; border-left: 0; border-bottom: 0; }
-.fhud-bl::before { left: 0; bottom: 0; border-right: 0; border-top: 0; }
-.fhud-br::before { right: 0; bottom: 0; border-left: 0; border-top: 0; }
-/* the run state picks up the live accents (deep accent for AA contrast) */
-.focus-page.is-running #fhud-state { color: var(--accent-deep); }
-.focus-page.is-paused #fhud-state { color: var(--amber); }
+/* ——— stage: centred column holding the clock, ring and controls ——— */
 .focus-stage {
   position: relative; z-index: 1;
-  width: 100%; max-width: 560px;
-  padding: 40px 28px;
+  width: 100%; max-width: 520px;
+  padding: 48px 28px 36px;
   text-align: center;
-  display: flex; flex-direction: column; align-items: center; gap: 18px;
-}
-/* numbered section tag, boxed in a faint instrument hairline (site motif).
-   De-coraled: the page's one coral is the reward atom + detector core. */
-.focus-sec-tag {
-  font-family: var(--mono-instr); font-size: 11px; font-weight: 400;
-  letter-spacing: 0.16em; text-transform: uppercase;
-  color: var(--ink-2);
-  padding: 5px 10px;
-  border: 1px solid var(--fp-hair);
-  transition: opacity .55s ease, filter .55s ease;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
 }
 .focus-reward {
-  width: 416px; height: 416px;
-  /* on narrow screens the mark yields to the viewport; the SVG keeps its own
-     aspect ratio (viewBox), so a clamped box never distorts the drawing */
-  max-width: 88vw; max-height: 88vw;
-  /* zen focalize: the mark grows with the clock (see the zen section);
-     transform carries the running parallax tilt (fx section below) */
+  width: 340px; height: 340px;
+  max-width: 78vw; max-height: 78vw;
   transition: width .7s cubic-bezier(.22, 1, .36, 1), height .7s cubic-bezier(.22, 1, .36, 1),
               transform .25s ease-out;
 }
@@ -3546,10 +3481,10 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
   transition: color .25s ease, opacity .25s ease, font-size .7s cubic-bezier(.22, 1, .36, 1);
   transform-origin: center;
 }
-/* the human voice under the instrument: italic serif caption */
+/* subtitle: quiet sans caption */
 .focus-sub {
-  font-family: var(--serif-display); font-style: italic;
-  font-size: 16px; font-weight: 400; color: var(--ink-2); min-height: 22px;
+  font-family: var(--sans); font-style: normal;
+  font-size: 13px; font-weight: 400; color: var(--ink-3); min-height: 18px;
 }
 
 /* BUNDLE D — paused (held) session on the full page: the clock dims to read as
@@ -3566,31 +3501,18 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .focus-clock.is-live { cursor: pointer; user-select: none; }
 .focus-clock.is-live:hover { color: var(--accent-deep); }
 
-/* keyboard hint line under the controls — instrument metadata */
-.focus-page .focus-keys {
-  font-family: var(--mono-instr); font-size: 9.5px;
-  letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--ink-2);
-}
-.focus-page .key-hint {
-  background: transparent; border: 1px solid var(--fp-hair);
-  border-radius: 0; font-family: var(--mono-instr);
-}
 
-/* goal picker — square hairline chips, mono uppercase, lift on hover
-   (scoped to the page: .focus-chip is shared with the exam self-assessment
-   and mistake-drill chips, which keep the classic pill look) */
+/* goal picker — pill chips matching sidebar's rounded cream style */
 .focus-goals { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 
-/* focus-timer SFX picker — same chip language as the goal row; stays visible
-   while running so the end voice can be changed mid-session */
+/* SFX picker — pill chips matching the goal row */
 .focus-sounds {
   display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
-  align-items: center; margin-top: 10px;
+  align-items: center;
 }
 .focus-page .focus-sound-label {
-  font-family: var(--mono-instr); font-size: 10px; font-weight: 400;
-  letter-spacing: 0.12em; text-transform: uppercase;
+  font-family: var(--sans); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--ink-3); margin-right: 2px;
 }
 .focus-page .focus-sound-chip { min-width: 4.5em; }
@@ -3608,62 +3530,56 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
   padding: 7px 10px; border-radius: 999px;
   border: 1px solid var(--line); background: var(--surface); color: var(--ink);
 }
+/* focus-page scoped chip overrides — sidebar-matching pill, not instrument square */
 .focus-page .focus-chip {
-  font-family: var(--mono-instr); font-size: 10.5px; font-weight: 400;
-  letter-spacing: 0.1em; text-transform: uppercase;
-  padding: 8px 13px; border-radius: 0;
-  border: 1px solid var(--fp-hair); background: transparent; color: var(--ink-2);
-  transition: border-color .2s ease, background .2s ease, color .2s ease, transform .15s ease;
+  font-family: var(--sans); font-size: 12px; font-weight: 500;
+  letter-spacing: 0.02em; text-transform: none;
+  padding: 7px 14px; border-radius: var(--ctl-r-pill);
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
+  transition: border-color .15s, background .15s, color .15s;
 }
-/* de-coraled per the coral-scarcity rule: hover and active read as a firmer
-   hairline + a faint ink wash, not a second coral competing with the atom */
 .focus-page .focus-chip:hover {
   border-color: var(--ink-3);
-  background: color-mix(in srgb, var(--ink-3) 10%, transparent);
+  background: var(--ivory);
   color: var(--ink);
-  transform: translateY(-2px);
 }
 .focus-page .focus-chip.active {
-  border-color: var(--ink-3);
-  background: color-mix(in srgb, var(--ink-3) 16%, transparent);
-  color: var(--ink);
+  border-color: var(--ink-2);
+  background: var(--accent-tint);
+  color: var(--accent-deep); font-weight: 600;
 }
 .focus-page .focus-chip-custom,
-.focus-page .focus-chip-custom:hover { padding: 0; border: none; background: none; transform: none; }
+.focus-page .focus-chip-custom:hover { padding: 0; border: none; background: none; }
 .focus-page .focus-custom-in {
-  width: 84px; font-family: var(--mono-instr); font-size: 10.5px;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  padding: 8px 10px; border-radius: 0;
-  border: 1px solid var(--fp-hair); background: transparent; color: var(--ink);
-  transition: border-color .2s ease;
+  width: 72px; font-family: var(--sans); font-size: 12px;
+  padding: 7px 10px; border-radius: var(--ctl-r-pill);
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  transition: border-color .15s;
 }
-.focus-page .focus-custom-in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(204, 120, 92, .15); }
+.focus-page .focus-custom-in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(204, 120, 92, .12); }
 
-/* controls — the site's two button archetypes: outlined ink that inverts
-   on hover (primary), dashed hairline ghost (secondary). De-coraled so the
-   atom keeps the page's one coral. Scoped overrides of
-   the shared .btn kit; label text stays as-is, CSS carries the voice. */
+/* controls — solid primary, outlined ghost; sidebar-matching sans voice */
 .focus-controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .focus-page .focus-controls .btn {
-  font-family: var(--mono-instr); font-size: 11px; font-weight: 400;
-  letter-spacing: 0.12em; text-transform: uppercase;
-  border-radius: 0;
-  transition: background .25s ease, color .25s ease, border-color .25s ease, transform .12s ease;
+  font-family: var(--sans); font-size: 13px; font-weight: 600;
+  letter-spacing: 0.02em; text-transform: none;
+  border-radius: var(--ctl-r);
+  transition: background .2s ease, color .2s ease, border-color .2s ease, transform .12s ease;
 }
 .focus-page .focus-controls .btn-primary {
-  background: none; color: var(--ink);
-  border: 1px solid color-mix(in srgb, var(--ink-3) 70%, transparent);
+  background: var(--ink); color: var(--bg);
+  border: 1px solid var(--ink);
 }
-.focus-page .focus-controls .btn-primary:hover { background: var(--ink); color: var(--bg); }
+.focus-page .focus-controls .btn-primary:hover { background: var(--btn-primary-hover); border-color: var(--btn-primary-hover); }
 .focus-page .focus-controls .btn-ghost {
   background: none; color: var(--ink-2);
-  border: 1px dashed var(--fp-hair);
+  border: 1px solid var(--line);
 }
 .focus-page .focus-controls .btn-ghost:hover {
-  background: none; color: var(--ink);
+  background: var(--ivory); color: var(--ink);
   border-color: var(--ink-3);
 }
-.focus-hero { min-width: 150px; padding: 13px 26px; }
+.focus-hero { min-width: 140px; padding: 12px 24px; }
 .focus-page .focus-controls .btn:active { transform: scale(0.97); }
 
 /* the hidden attribute must always win inside the sheet — the display rules
@@ -3691,29 +3607,22 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
   .focus-quiet { opacity: 0; transform: translateY(14px); }
 }
 
-/* quiet stats + recent sessions — hairline instrument panels on the paper.
-   The band opens with a ruled top edge; every override is scoped to the page
-   because view-study-time.js reuses the session-row classes with the classic
-   card look. */
-.focus-page .focus-quiet { border-top: 1px solid var(--fp-hair); padding-top: 20px; }
-.focus-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
+/* quiet stats + recent — clean cards on cream */
+.focus-page .focus-quiet { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 8px; }
+.focus-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; }
 .focus-page .stat-tile {
-  background: transparent; border: 1px solid var(--fp-hair);
-  border-radius: 0; padding: 12px 14px; text-align: left;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--ctl-r); padding: 14px 16px; text-align: left;
 }
 .focus-page .stat-label {
-  font-family: var(--mono-instr); font-size: 9px; font-weight: 400;
-  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2);
+  font-family: var(--sans); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3);
 }
 .focus-page .stat-value {
-  font-family: var(--serif-display); font-size: 27px; font-weight: 300;
-  font-variant-numeric: tabular-nums; margin-top: 3px;
+  font-family: var(--serif-display); font-size: 26px; font-weight: 400;
+  font-variant-numeric: tabular-nums; margin-top: 2px;
 }
-.focus-page .stat-sub {
-  font-family: var(--mono-instr); font-size: 8.5px;
-  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2);
-}
-.focus-page .stat-unit { font-size: 13px; font-weight: 300; color: var(--ink-3); }
+.focus-page .stat-unit { font-size: 13px; font-weight: 400; color: var(--ink-3); }
 .focus-recent {
   width: 100%; text-align: left;
   background: var(--surface); border: 1px solid var(--line);
@@ -3728,32 +3637,31 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .focus-tag-met { color: var(--ink); background: var(--ivory); font-weight: 500; }
 .focus-sess-when { margin-left: auto; font-size: 12px; }
 .focus-page .focus-recent {
-  background: transparent; border: 1px solid var(--fp-hair);
-  border-radius: 0; padding: 14px 16px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--ctl-r); padding: 14px 16px;
 }
 .focus-page .focus-recent h2 {
-  font-family: var(--mono-instr); font-size: 10px; font-weight: 400;
-  letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-2);
+  font-family: var(--sans); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3);
   margin-bottom: 6px;
 }
-.focus-page .focus-sess { border-bottom: 1px solid var(--fp-hair-soft); }
+.focus-page .focus-sess { border-bottom: 1px solid var(--line); }
 .focus-page .focus-sess:last-child { border-bottom: none; }
 .focus-page .focus-sess-dur {
-  font-family: var(--serif-display); font-weight: 400; font-size: 15px;
+  font-family: var(--sans); font-weight: 600; font-size: 14px;
 }
 .focus-page .focus-tag {
-  font-family: var(--mono-instr); font-size: 9px; letter-spacing: 0.08em;
-  text-transform: uppercase; background: transparent; color: var(--ink-2);
-  border: 1px solid var(--fp-hair); border-radius: 0; padding: 2px 8px;
+  font-family: var(--sans); font-size: 11px;
+  background: var(--ivory); color: var(--ink-3);
+  border: none; border-radius: var(--ctl-r-pill); padding: 2px 8px;
 }
 .focus-page .focus-tag-met {
   color: var(--ink);
-  border-color: color-mix(in srgb, var(--ink-3) 55%, transparent);
-  background: color-mix(in srgb, var(--ink-3) 12%, transparent);
+  background: var(--accent-tint);
 }
 .focus-page .focus-sess-when {
-  font-family: var(--mono-instr); font-size: 9.5px;
-  letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2);
+  font-family: var(--sans); font-size: 12px;
+  color: var(--ink-3);
 }
 
 /* ——— reward atom ——— */
@@ -3914,12 +3822,6 @@ body.focus-zen #sidebar, body.focus-zen #topbar { display: none; opacity: 0; }
 body.focus-zen #view { max-width: none; padding: 0; }
 body.focus-zen .focus-page { border: none; border-radius: 0; min-height: 100vh; }
 body.focus-zen .focus-page .focus-ambient { opacity: 1; }
-/* zen: the corner telemetry stays up (above the vignette) but recedes a
-   notch; pointer activity brings it back with the controls. The top-right
-   readout drops below the fixed exit button so they never overlap. */
-body.focus-zen .focus-hud { opacity: 0.45; transition: opacity .55s ease; }
-body.focus-zen .focus-page.zen-peek .focus-hud { opacity: 1; }
-body.focus-zen .fhud-tr { top: 60px; }
 
 /* vignette: darkened edges draw the eye to the centre; transparent middle,
    pointer-events none, so the clock stays crisp and tappable. Sits above the
@@ -3961,12 +3863,10 @@ body.focus-zen .focus-quiet {
    set by view-focus.js on mouse/touch activity and drops after ~2.6 s). */
 .focus-sub, .focus-goals, .focus-sounds, .focus-controls { transition: opacity .55s ease, filter .55s ease; }
 body.focus-zen .focus-sub,
-body.focus-zen .focus-sec-tag,
 body.focus-zen .focus-goals,
 body.focus-zen .focus-sounds,
 body.focus-zen .focus-controls { opacity: 0; filter: blur(5px); pointer-events: none; }
 body.focus-zen .zen-peek .focus-sub,
-body.focus-zen .zen-peek .focus-sec-tag,
 body.focus-zen .zen-peek .focus-goals,
 body.focus-zen .zen-peek .focus-sounds,
 body.focus-zen .zen-peek .focus-controls { opacity: 1; filter: none; pointer-events: auto; }
@@ -3979,10 +3879,9 @@ body.focus-zen .focus-page:not(.zen-peek) * { cursor: none; }
 
 .focus-zen-exit {
   position: fixed; top: 16px; right: 16px; z-index: 5;
-  font-family: var(--mono-instr); font-size: 10.5px; font-weight: 400;
-  letter-spacing: 0.12em; text-transform: uppercase;
-  padding: 8px 13px; border-radius: 0;
-  border: 1px solid var(--fp-hair, var(--line)); background: var(--bg); color: var(--ink-2); cursor: pointer;
+  font-family: var(--sans); font-size: 12px; font-weight: 500;
+  padding: 8px 14px; border-radius: var(--ctl-r);
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink-2); cursor: pointer;
   transition: opacity .45s ease, border-color .15s, color .15s;
 }
 .focus-zen-exit:hover { border-color: var(--accent); color: var(--accent); }
@@ -4011,8 +3910,6 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
   .focus-reward.ignite::before, .focus-reward.ignite .focus-atom,
   .focus-goals:not([hidden]), .focus-pause:not([hidden]) { animation: none; }
   .focus-ambient, .focus-ambient::after { transition: none; }
-  /* instrument chips stay put; no lift on hover */
-  .focus-page .focus-chip:hover { transform: none; }
   /* zen still shades away, but with opacity only — no zoom, blur or slide */
   body.focus-zen .focus-stage { animation: none; }
   .focus-clock { transition: color .25s ease, opacity .25s ease; }
@@ -4022,12 +3919,9 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
     transition: opacity .55s ease, display .55s ease allow-discrete;
   }
   body.focus-zen .focus-quiet { transform: none; filter: none; }
-  .focus-sub, .focus-goals, .focus-controls, .focus-sec-tag { transition: opacity .55s ease; }
+  .focus-sub, .focus-goals, .focus-controls { transition: opacity .55s ease; }
   body.focus-zen .focus-sub, body.focus-zen .focus-goals,
-  body.focus-zen .focus-controls, body.focus-zen .focus-sec-tag { filter: none; }
-  /* the fx module no-ops here, so its EVT counter would sit dead at 000000 —
-     hide that corner rather than show a stalled instrument */
-  .fhud-bl { display: none; }
+  body.focus-zen .focus-controls { filter: none; }
 }
 
 /* ——— responsive ——— */
@@ -4035,10 +3929,9 @@ body.focus-zen .focus-zen-exit:focus-visible { opacity: 1; }
   .focus-page { min-height: calc(100vh - 200px); }
   .focus-clock { font-size: 60px; }
   .focus-stats { grid-template-columns: repeat(2, 1fr); }
-  .focus-hud { display: none; }          /* corner telemetry needs room to breathe */
   body.focus-zen .focus-page { min-height: 100vh; }
   body.focus-zen .focus-clock { font-size: 84px; }
-  body.focus-zen .focus-reward { width: 448px; height: 448px; }
+  body.focus-zen .focus-reward { width: 400px; height: 400px; }
 }
 
 /* ==================================================================

@@ -199,27 +199,24 @@ PGRE.views.focus = (function () {
     });
   }
 
-  /* ——— quiet stats (studyLog day buckets + timerStats), Recent sessions ——— */
+  /* ——— quiet stats (studyLog day buckets) ——— */
   function statsHTML() {
-    var stt = PGRE.studyTime, ts = PGRE.store.state.timerStats || { sessions: 0, seconds: 0 };
+    var stt = PGRE.studyTime;
     var todayMin = Math.round(stt.todaySec() / 60);
     var todayDisp = (stt.todaySec() > 0 && todayMin === 0) ? '<1' : String(todayMin);
     var weekH = (stt.weekSec() / 3600).toFixed(1);
-    var lifeH = ((ts.seconds || 0) / 3600).toFixed(1);
     var ui = PGRE.ui;
     return '<div class="focus-stats" id="focus-stats">' +
-      ui.statTile('Today', todayDisp + '<span class="stat-unit"> min</span>', 'active time') +
-      ui.statTile('This week', weekH + '<span class="stat-unit"> h</span>', 'toward 20 h') +
-      ui.statTile('Focus sessions', ui.fmt(ts.sessions || 0), 'lifetime') +
-      ui.statTile('Focus hours', lifeH + '<span class="stat-unit"> h</span>', 'on the timer') +
+      ui.statTile('Today', todayDisp + '<span class="stat-unit"> min</span>', '') +
+      ui.statTile('This week', weekH + '<span class="stat-unit"> h</span>', '') +
     '</div>';
   }
 
   function recentHTML() {
     var list = (PGRE.store.state.focusSessions || []).slice(-6).reverse();
     if (!list.length) {
-      return '<div class="focus-recent" id="focus-recent"><h2>Recent sessions</h2>' +
-        '<p class="muted">No focus sessions yet — start one above. Reading or deriving on paper counts.</p></div>';
+      return '<div class="focus-recent" id="focus-recent"><h2>Recent</h2>' +
+        '<p class="muted">No sessions yet.</p></div>';
     }
     var rows = list.map(function (r) {
       var dur = fmtClock(r.seconds);
@@ -230,79 +227,33 @@ PGRE.views.focus = (function () {
       return '<li class="focus-sess"><span class="focus-sess-dur">' + dur + '</span>' + tag +
         '<span class="focus-sess-when muted">' + PGRE.ui.timeAgo(r.endedAt) + '</span></li>';
     }).join('');
-    return '<div class="focus-recent" id="focus-recent"><h2>Recent sessions</h2>' +
+    return '<div class="focus-recent" id="focus-recent"><h2>Recent</h2>' +
       '<ul class="focus-sess-list">' + rows + '</ul></div>';
   }
 
-  /* ——— HUD corner telemetry (instrument voice; painted by paintHud) ——— */
-  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
-  function dayStamp() {
-    var d = new Date();
-    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
-  }
-  function hudHTML() {
-    return '<div class="focus-hud" aria-hidden="true">' +
-      '<div class="fhud fhud-tl"><span id="fhud-run">Run ' + dayStamp() + '</span><br>' +
-        '<span id="fhud-state">Standby</span></div>' +
-      '<div class="fhud fhud-tr"><span id="fhud-clock">--:--:--</span></div>' +
-      '<div class="fhud fhud-bl"><span id="fhud-evt">Evt 000000</span></div>' +
-      '<div class="fhud fhud-br"><span id="fhud-today">Today 0:00</span></div>' +
-    '</div>';
-  }
-  // Every second (and on transitions): run state, wall clock, fx event
-  // counter, today's credited time. All four corners are aria-hidden
-  // flavour — the real readouts live in the stage and stat tiles.
-  function paintHud(on, paused) {
-    var run = document.getElementById('fhud-run');
-    if (run) run.textContent = 'Run ' + dayStamp();   // stays honest across midnight
-    var stEl = document.getElementById('fhud-state');
-    if (stEl) stEl.textContent = paused ? 'Held' : (on ? 'Beam on' : 'Standby');
-    var ck = document.getElementById('fhud-clock');
-    if (ck) {
-      var d = new Date();
-      ck.textContent = pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
-    }
-    var ev = document.getElementById('fhud-evt');
-    if (ev && PGRE.focusFx && PGRE.focusFx.events) {
-      var n = String(PGRE.focusFx.events());
-      while (n.length < 6) n = '0' + n;
-      ev.textContent = 'Evt ' + n;
-    }
-    var td = document.getElementById('fhud-today');
-    if (td) td.textContent = 'Today ' + fmtClock(PGRE.studyTime.todaySec());
-  }
 
   /* ——— render: static skeleton the mount() drives ——— */
   function render() {
     return '' +
     '<div class="focus-page" id="focus-page">' +
       '<div class="focus-ambient" aria-hidden="true"></div>' +
-      hudHTML() +
       '<div class="focus-stage">' +
-        '<div class="focus-sec-tag">&sect; F5 / Focus run</div>' +
         '<div class="focus-reward">' + detectorSVG() + '</div>' +
         '<div class="focus-clock" id="focus-clock">0:00</div>' +
-        '<div class="focus-sub"  id="focus-sub">Choose a length, then start.</div>' +
+        '<div class="focus-sub"  id="focus-sub"></div>' +
         goalChipsHTML() +
         soundChipsHTML() +
         '<div class="focus-controls">' +
           '<button class="btn btn-primary focus-hero" id="focus-hero">Start focus</button>' +
-          // BUNDLE D: secondary action — Pause while running, Stop while paused.
-          // Hidden when idle. paintLive() drives its label + visibility.
           '<button class="btn btn-ghost focus-pause" id="focus-pause" hidden>Pause</button>' +
           '<button class="btn btn-ghost focus-zen-btn" id="focus-zen-btn">Zen mode</button>' +
         '</div>' +
-        // .focus-quiet: the "everything else" band. One stable wrapper (never
-        // rebuilt by the per-second paints inside it) so zen mode can fade and
-        // collapse it as a unit with a CSS display transition.
         '<div class="focus-quiet" id="focus-quiet">' +
-          '<div class="focus-keys muted"><span class="key-hint">Space</span> start / pause · ' +
-            'tap the clock to pause · <span class="key-hint">Esc</span> exit zen</div>' +
           statsHTML() +
           recentHTML() +
         '</div>' +
       '</div>' +
-      '<button class="focus-zen-exit" id="focus-zen-exit" type="button" hidden>Exit zen ✕</button>' +
+      '<button class="focus-zen-exit" id="focus-zen-exit" type="button" hidden>Exit zen</button>' +
     '</div>';
   }
 
@@ -351,15 +302,15 @@ PGRE.views.focus = (function () {
         var remain = Math.max(0, goalSec - e);
         if (clock) clock.textContent = fmtClock(remain);          // countdown shows remaining (frozen if paused)
         if (sub) sub.textContent = paused
-          ? ('Paused · ' + t.goalMin + ' min goal  (' + fmtClock(e) + ' in)')
-          : ('Goal · ' + t.goalMin + ' min  (' + fmtClock(e) + ' elapsed)');
+          ? ('Paused \u00b7 ' + fmtClock(e) + ' in')
+          : (fmtClock(e) + ' elapsed');
         progress = Math.min(1, e / goalSec);
         orbits = e >= goalSec ? 3 : (progress >= 0.66 ? 3 : progress >= 0.33 ? 2 : 1);
       } else {
         if (clock) clock.textContent = fmtClock(e);               // open-ended counts up (frozen if paused)
         if (sub) sub.textContent = paused
-          ? ('Paused · ' + fmtClock(e) + ' focused')
-          : 'Open-ended · focusing';
+          ? 'Paused'
+          : 'Focusing';
         // orbits accrue over time; ring gently reflects progress toward the next rung
         orbits = e >= 1500 ? 3 : e >= 600 ? 2 : 1;                // 10 min, 25 min rungs
         progress = (e % 600) / 600;
@@ -376,7 +327,7 @@ PGRE.views.focus = (function () {
       if (pauseBtn) pauseBtn.hidden = true;
       if (goals) goals.hidden = false;
       if (sub && !sub.dataset.flash) sub.textContent = selectedGoal
-        ? ('Ready · ' + selectedGoal + ' min goal') : 'Ready · open-ended. Press start.';
+        ? (selectedGoal + ' min goal') : '';
     }
     // While a post-stop completion flash owns the caption for 6 s (sub.dataset.flash),
     // preserve the celebratory atom flashComplete() bloomed (paintAtom(1,3,true)): the
@@ -390,11 +341,9 @@ PGRE.views.focus = (function () {
     // refresh at the stop transition when on has just flipped false.
     if (on) paintStats();
 
-    // corner telemetry ticks every paint (its wall clock moves even when idle)
-    paintHud(on, paused);
   }
 
-  // Rebuild the four stat tiles in place (outerHTML keeps the #id).
+  // Rebuild the stat tiles in place (outerHTML keeps the #id).
   function paintStats() {
     var statsBox = document.getElementById('focus-stats');
     if (statsBox) statsBox.outerHTML = statsHTML();
