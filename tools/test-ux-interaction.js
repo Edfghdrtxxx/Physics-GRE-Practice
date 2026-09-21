@@ -1259,6 +1259,25 @@ function runAsync() {
   return wait(350).then(function () {
     var pChoice1 = ix.document.querySelector('#practice-root .choice[data-idx="1"]');
     assert(!!pChoice1, 'practice question rendered choices');
+    var promptOn1 = (ix.document.querySelector('#practice-root .q-text') || {}).textContent || '';
+    var liveCells = ix.document.querySelectorAll('.practice-live .practice-palette .pal-cell');
+    assert(liveCells.length === 2, 'live palette has a box per question');
+    assert(!liveCells[0].disabled && !liveCells[1].disabled,
+      'live palette cells are clickable during the drill');
+    liveCells[1].click();
+    var metaAfterJump = ix.document.querySelector('#practice-root .practice-meta');
+    assert(metaAfterJump && metaAfterJump.textContent.indexOf('Question 2 of 2') !== -1,
+      'clicking box 2 during the drill opens question 2');
+    var promptOn2 = (ix.document.querySelector('#practice-root .q-text') || {}).textContent || '';
+    assert(promptOn2 !== promptOn1, 'live palette jump changes the current question');
+    var curLive = ix.document.querySelector('.practice-live .practice-palette .pal-cell.is-current');
+    assert(curLive && curLive.textContent === '2', 'box 2 is marked is-current after live jump');
+    liveCells = ix.document.querySelectorAll('.practice-live .practice-palette .pal-cell');
+    liveCells[0].click();
+    assert(ix.document.querySelector('#practice-root .practice-meta').textContent.indexOf('Question 1 of 2') !== -1,
+      'clicking box 1 during the drill returns to question 1');
+    assert(((ix.document.querySelector('#practice-root .q-text') || {}).textContent || '') === promptOn1,
+      'returning via the palette restores question 1');
     dispatchKeydown(ix, { key: 'B' });
     pChoice1 = ix.document.querySelector('#practice-root .choice[data-idx="1"]');
     assert(pChoice1 && pChoice1.getAttribute('aria-pressed') === 'true',
