@@ -1,8 +1,4 @@
-# Review path: do not stall when Claude is inaccessible.
-# In-session review uses same-harness sub-agents (see AGENTS.md).
-# Pipeline Review and fixer are pinned to Grok Build, not Claude.
-review_agents:
-  reviewer:
-    agent: grok
-  fixer:
-    agent: grok
+# Gate agents: skip Claude-first auto so OAuth failure cannot stall Review.
+# review_agents is global-only; a repo copy is ignored (Merge drops it).
+# This agent list is honored from the trusted default branch after merge.
+agent: [grok, antigravity]

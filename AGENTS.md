@@ -12,7 +12,7 @@ I have little background in computer science. When a decision is required of me,
 # Review path
 - Default review is a **same-harness sub-agent** in the session that did the work: OMP `reviewer` / `swe-2`, Grok Build, or Anti-Gravity. Do not spawn a separate Claude session to review.
 - Claude OAuth failure must not block shipping. Open the PR; do not wait on Claude review.
-- Pipeline Review and fixer harnesses are pinned in `.no-mistakes.yaml` (`review_agents`) to Grok Build.
+- Pipeline gate agent is `.no-mistakes.yaml` `agent: [grok, antigravity]`. Do not put `review_agents` here; no-mistakes honors that key only from machine global config.
 
 # Repository Structure & Placement
 
@@ -25,7 +25,7 @@ I have little background in computer science. When a decision is required of me,
 - `20_docs/`: Project documentation (`Project Docs/` for specs/proposals/design) and gitignored exam/book PDFs (`ETS Released Exams/`, `Conquering the Physics GRE.../`).
 - `99_System/`: Meta project files and structured cross-agent handoffs (`Handoff documents/`).
 - `.agents/`: Custom agent capabilities, configurations, and skills (`skills/`).
-- `.no-mistakes.yaml`: Pipeline Review/fixer harness pin (`review_agents`). Not practice UI.
+- `.no-mistakes.yaml`: Gate agent fallback (Grok Build, then Anti-Gravity). Not Claude-first `auto`. Not practice UI.
 - `vendor/`: Vendored offline third-party libraries (KaTeX, Marked).
 - `fonts/`: Locally hosted web fonts.
 
@@ -36,7 +36,7 @@ I have little background in computer science. When a decision is required of me,
 - **Tests & Scripts:** Place offline node/python runners, verification tools, and test suites in `tools/`.
 - **Handoffs:** Place cross-agent handoff briefs in `99_System/Handoff documents/<topic>/`.
 - **Agent Skills:** Place reusable agent workflows and instructions under `.agents/skills/<skill-name>/`.
-- **Review / gate config:** Keep pipeline Review/fixer pins in `.no-mistakes.yaml`. Keep in-session review policy in `# Review path` above. Do not wait on Claude.
+- **Review / gate config:** Keep the gate agent list in `.no-mistakes.yaml` `agent`. Keep in-session review policy in `# Review path` above. Do not wait on Claude.
 - **Specs & Proposals:** Place design documents, RFCs, and proposals in `20_docs/Project Docs/`.
 - **Copyrighted Materials:** Store all original and derived exam/book content exclusively in gitignored paths under `20_docs/` and `content/`.
 - **Maintenance:** Update `AGENTS.md` immediately whenever repo structure or file placement patterns change.
