@@ -9,6 +9,11 @@ I have little background in computer science. When a decision is required of me,
 - Timed pack launch for the user is owned by OrbitOS `/practice-physics-gre-set` (reuse richest live tab; same-origin reload if packs scripts missing).
 - Automated verify/tests: isolated profile + non-user port only (see `.agents/skills/verify/SKILL.md`).
 
+# Review path
+- Default review is a **same-harness sub-agent** in the session that did the work: OMP `reviewer` / `swe-2`, Grok Build, or Anti-Gravity. Do not spawn a separate Claude session to review.
+- Claude OAuth failure must not block shipping. Open the PR; do not wait on Claude review.
+- Pipeline gate agent is `.no-mistakes.yaml` `agent: [grok, antigravity]`. Do not put `review_agents` here; no-mistakes honors that key only from machine global config.
+
 # Repository Structure & Placement
 
 - `index.html`: SPA entry shell (hash-routed, offline KaTeX/marked).
@@ -20,6 +25,7 @@ I have little background in computer science. When a decision is required of me,
 - `20_docs/`: Project documentation (`Project Docs/` for specs/proposals/design) and gitignored exam/book PDFs (`ETS Released Exams/`, `Conquering the Physics GRE.../`).
 - `99_System/`: Meta project files and structured cross-agent handoffs (`Handoff documents/`).
 - `.agents/`: Custom agent capabilities, configurations, and skills (`skills/`).
+- `.no-mistakes.yaml`: Gate agent fallback (Grok Build, then Anti-Gravity). Not Claude-first `auto`. Not practice UI.
 - `vendor/`: Vendored offline third-party libraries (KaTeX, Marked).
 - `fonts/`: Locally hosted web fonts.
 
@@ -30,6 +36,7 @@ I have little background in computer science. When a decision is required of me,
 - **Tests & Scripts:** Place offline node/python runners, verification tools, and test suites in `tools/`.
 - **Handoffs:** Place cross-agent handoff briefs in `99_System/Handoff documents/<topic>/`.
 - **Agent Skills:** Place reusable agent workflows and instructions under `.agents/skills/<skill-name>/`.
+- **Review / gate config:** Keep the gate agent list in `.no-mistakes.yaml` `agent`. Keep in-session review policy in `# Review path` above. Do not wait on Claude.
 - **Specs & Proposals:** Place design documents, RFCs, and proposals in `20_docs/Project Docs/`.
 - **Copyrighted Materials:** Store all original and derived exam/book content exclusively in gitignored paths under `20_docs/` and `content/`.
 - **Maintenance:** Update `AGENTS.md` immediately whenever repo structure or file placement patterns change.
@@ -56,3 +63,10 @@ I have little background in computer science. When a decision is required of me,
 # Style Rules
 
 - **No Emojis or Icons:** Never use emojis or decorative icons anywhere (chat, UI, canvas, code, docs, commit messages).
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.

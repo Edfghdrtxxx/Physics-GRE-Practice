@@ -1,0 +1,4 @@
+# Gate agents: skip Claude-first auto so OAuth failure cannot stall Review.
+# review_agents is global-only; a repo copy is ignored (Merge drops it).
+# This agent list is honored from the trusted default branch after merge.
+agent: [grok, antigravity]

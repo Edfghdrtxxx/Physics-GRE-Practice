@@ -5,6 +5,7 @@ Folded from archived `/orchestrate`, `/dispatch`, and `/orchestrate-lite-DWorkfl
 ## Binding (terse)
 
 - **Reviewers flag uncertainty** — never assert absence without a thorough check; confidence-flag factual claims.
+- **Same-harness review** — dispatch reviewer in the implementer's harness (OMP `reviewer`/`swe-2`, Grok Build, Anti-Gravity). Claude OAuth failure must not stall; do not wait on Claude to ship.
 - **Structural refactors need impact analysis** — when renaming/moving structure, search producers/consumers of paths (skills, templates, scripts, system files), not only "what is this file?"
 - **No worktree isolation in this vault** — backup cron can leak worktree edits; serialize same-file writes instead. Worktree is not free isolation here.
 - **Long jobs:** run via orchestrator/main `Bash` with background/run_in_background — never agent sleep-polling loops (zombie shells on silent death).

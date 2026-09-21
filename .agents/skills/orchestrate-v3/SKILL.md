@@ -51,7 +51,7 @@ For each unit, spawn a sub-agent when fan-out helps; otherwise handle it in the 
 
 **Review-and-iterate is on by default** — do not wait for "with review."
 
-1. After implementers finish, dispatch reviewer agent(s) as skeptical auditors (find gaps; do not rubber-stamp).
+1. After implementers finish, dispatch reviewer agent(s) **in the same harness** as the implementer (OMP `reviewer` / `swe-2`, Grok Build, or Anti-Gravity). Do not spawn Claude for review. Claude OAuth failure must not stall the loop; ship without waiting on Claude.
 2. Reviewers should **flag uncertainty**, not assert absence of something they did not thoroughly check.
 3. On substantive issues: re-dispatch implementers with the review findings, then re-review.
 4. Iterate until clean enough to ship, or escalate to the user with a short unresolved summary. Do not silently accept known broken work.
