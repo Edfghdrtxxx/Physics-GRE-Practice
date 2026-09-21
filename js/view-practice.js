@@ -195,15 +195,36 @@ PGRE.views.practice = (function () {
   }
 
   /* ——— Question palette (same overview as mistake drill) ———
-     Practice stays one-way (answer → next); the grid is a progress map, not
-     free navigation. Live cells stay disabled so a click cannot skip ahead.
-     Summary uses correct/miss tints once the set is closed. answers[n] lines
-     up with qs[n] because practice never skips. */
+     Live cells jump to that question (answered or not). Summary / review
+     keep data-review jumps. answers[n] is qs[n] or empty so skips leave holes;
+     resume restores the cursor, or the next unanswered if that cell is done. */
+  function answerAt(n, sess) {
+    sess = sess || session;
+    if (!sess || !sess.answers) return null;
+    return sess.answers[n] || null;
+  }
+
+  function answeredCount(sess) {
+    sess = sess || session;
+    if (!sess || !sess.qs || !sess.answers) return 0;
+    var n = 0;
+    for (var i = 0; i < sess.qs.length; i++) if (sess.answers[i]) n++;
+    return n;
+  }
+
+  function snapAnsweredCount(snap) {
+    var n = 0;
+    ((snap && snap.answers) || []).forEach(function (a) {
+      if (a && a.qid) n++;
+    });
+    return n;
+  }
+
   function paletteHTML(results, current) {
     if (!session || !session.qs || !session.qs.length) return '';
     var cells = '';
     session.qs.forEach(function (q, n) {
-      var ans = (n < session.answers.length) ? session.answers[n] : null;
+      var ans = answerAt(n);
       var cls = 'pal-cell';
       if (ans) cls += results ? (ans.correct ? ' is-correct' : ' is-wrong') : ' is-answered';
       if (current != null ? n === current : (!results && n === session.i)) cls += ' is-current';
@@ -220,7 +241,7 @@ PGRE.views.practice = (function () {
           attrs = ' disabled';
         }
       } else {
-        attrs = ' disabled';
+        attrs = ' data-goto="' + n + '" title="Go to this question"';
       }
       cells += '<button type="button" class="' + cls + '"' + attrs +
         ' aria-label="' + label + '">' + (n + 1) + '</button>';
@@ -245,7 +266,7 @@ PGRE.views.practice = (function () {
     var buttons = root.querySelectorAll('.pal-cell');
     for (var n = 0; n < buttons.length; n++) {
       var btn = buttons[n];
-      var ans = (n < session.answers.length) ? session.answers[n] : null;
+      var ans = answerAt(n);
       btn.classList.toggle('is-answered', !!ans);
       btn.classList.toggle('is-current', n === session.i);
       btn.setAttribute('aria-label', 'Question ' + (n + 1) +
@@ -257,7 +278,7 @@ PGRE.views.practice = (function () {
   function neighborAnswered(from, dir) {
     if (!session || !session.answers) return -1;
     for (var i = from + dir; i >= 0 && i < session.qs.length; i += dir) {
-      if (i < session.answers.length && session.answers[i]) return i;
+      if (answerAt(i)) return i;
     }
     return -1;
   }
@@ -268,6 +289,38 @@ PGRE.views.practice = (function () {
         renderReview(parseInt(b.getAttribute('data-review'), 10));
       });
     });
+  }
+
+  function bindLiveJumps() {
+    var root = el();
+    if (!root || root._pgreGotoBound) return;
+    root._pgreGotoBound = true;
+    root.addEventListener('click', function (e) {
+      var t = e.target && e.target.closest ? e.target.closest('[data-goto]') : null;
+      if (!t || t.disabled || !root.contains(t)) return;
+      var n = parseInt(t.getAttribute('data-goto'), 10);
+      if (n !== n) return;
+      openLive(n);
+    });
+  }
+
+  function nextLabel() {
+    if (!session) return 'Next question';
+    if (session.i + 1 < session.qs.length) return 'Next question';
+    if (answeredCount() < session.qs.length) return 'Next question';
+    return 'Finish session';
+  }
+
+  function openLive(n) {
+    if (!session || n < 0 || n >= session.qs.length) return;
+    if (session.stage === 'summary' || session.reviewing) return;
+    if (n === session.i) {
+      if (session.stage === 'question' && !answerAt(n)) return;
+      if (session.stage === 'feedback' && answerAt(n)) return;
+    }
+    session.i = n;
+    if (answerAt(n)) renderAnsweredLive();
+    else renderQuestion();
   }
 
   function reviewAssessNote(ans) {
@@ -281,6 +334,44 @@ PGRE.views.practice = (function () {
         bits.join(' · ') + '</strong></div>';
     }
     return '';
+  }
+
+  function assessFlags(ans) {
+    if (ans.assess) return ans.assess;
+    var flags = { sure: false, guess: false, slow: false, forgot: false };
+    if (ans.row) {
+      if (ans.row.confidence === 'sure') flags.sure = true;
+      if (ans.row.confidence === 'guess') flags.guess = true;
+      (ans.row.tags || []).forEach(function (tg) { flags[tg] = true; });
+    }
+    return flags;
+  }
+
+  function snapshotAssess(fb, ans) {
+    if (!fb || !ans) return;
+    var flags = { sure: false, guess: false, slow: false, forgot: false };
+    fb.querySelectorAll('[data-assess]').forEach(function (b) {
+      var k = b.getAttribute('data-assess');
+      if (k in flags) flags[k] = b.getAttribute('aria-pressed') === 'true';
+    });
+    ans.assess = flags;
+  }
+
+  function bindSessionAssess(fb, q, ans) {
+    var ctrl = PGRE.assess.bind(fb, q, ans.correct);
+    var flags = assessFlags(ans);
+    Object.keys(flags).forEach(function (k) { if (flags[k]) ctrl.toggle(k); });
+    var inner = ctrl.toggle;
+    ctrl.toggle = function (key) {
+      inner(key);
+      snapshotAssess(fb, ans);
+    };
+    fb.addEventListener('click', function (e) {
+      var t = e.target && e.target.closest ? e.target.closest('[data-assess]') : null;
+      if (t && fb.contains(t)) snapshotAssess(fb, ans);
+    });
+    snapshotAssess(fb, ans);
+    session.assess = ctrl;
   }
 
 
@@ -308,9 +399,13 @@ PGRE.views.practice = (function () {
       criteria: session.criteria,
       sid: session.sid,
       ids: session.qs.map(function (q) { return q.id; }),
-      // answers only cover finished questions; the resume point is the next one
-      i: session.answers.length, correct: session.correct, xpEarned: session.xpEarned,
-      answers: session.answers.map(function (a) { return { qid: a.q.id, picked: a.picked, correct: a.correct, xp: a.xp, ms: a.ms }; }),
+      // cursor is session.i; answers[n] matches qs[n] (null holes if skipped)
+      i: session.i, correct: session.correct, xpEarned: session.xpEarned,
+      answers: session.qs.map(function (q, n) {
+        var a = session.answers[n];
+        if (!a) return null;
+        return { qid: a.q.id, picked: a.picked, correct: a.correct, xp: a.xp, ms: a.ms };
+      }),
       savedAt: Date.now()
     };
     try { sessionStorage.setItem(SAVE_KEY, JSON.stringify(snap)); } catch (e) { /* storage blocked */ }
@@ -328,7 +423,7 @@ PGRE.views.practice = (function () {
     try { snap = JSON.parse(raw); } catch (e2) { return null; }
     if (!snap || !snap.ids || !snap.ids.length) return null;
     if (snap.topicId !== topicId || (snap.filter || null) !== (filter || null)) return null;
-    if (snap.i >= snap.ids.length) { clearSaved(); return null; }   // nothing left to do
+    if (snapAnsweredCount(snap) >= snap.ids.length) { clearSaved(); return null; }
     return snap;
   }
 
@@ -336,12 +431,21 @@ PGRE.views.practice = (function () {
     var qs = [];
     snap.ids.forEach(function (id) { var q = PGRE.questionById(id); if (q) qs.push(q); });
     var answers = [];
-    snap.answers.forEach(function (a) {
+    (snap.answers || []).forEach(function (a, n) {
+      if (!a || a.qid == null) return;
       var q = PGRE.questionById(a.qid);
-      if (q) answers.push({ q: q, picked: a.picked, correct: a.correct, xp: a.xp, ms: a.ms });
+      if (q) answers[n] = { q: q, picked: a.picked, correct: a.correct, xp: a.xp, ms: a.ms };
     });
-    var i = Math.min(snap.i, qs.length);
-    if (!qs.length || i >= qs.length) { clearSaved(); return false; }  // bank changed under us
+    if (!qs.length) { clearSaved(); return false; }  // bank changed under us
+    var i = Math.max(0, Math.min(snap.i, qs.length - 1));
+    if (answers[i]) {
+      var nextU = -1;
+      for (var k = 0; k < qs.length; k++) {
+        if (!answers[k]) { nextU = k; break; }
+      }
+      if (nextU < 0) { clearSaved(); return false; }
+      i = nextU;
+    }
     session = { topicId: snap.topicId, qs: qs, i: i, correct: snap.correct || 0,
                 xpEarned: snap.xpEarned || 0, answers: answers, qStart: Date.now(),
                 custom: !!snap.custom, learnDrill: !!snap.learnDrill,
@@ -359,7 +463,7 @@ PGRE.views.practice = (function () {
   }
 
   function resumeCard(snap, name, onStartOver) {
-    var left = snap.ids.length - snap.i;
+    var left = snap.ids.length - snapAnsweredCount(snap);
     var html = '<div class="card practice-card practice-resume">' +
       '<h1>Practice — ' + name + '</h1>' +
       '<p class="muted">You left a set part-way through: ' + left + ' of ' + snap.ids.length +
@@ -598,11 +702,75 @@ PGRE.views.practice = (function () {
     saveSession();
 
     session.choiceCommit = PGRE.ui.bindChoiceCommit(el(), { onCommit: answer });
+    bindLiveJumps();
+  }
+
+  function renderAnsweredLive() {
+    var q = session.qs[session.i];
+    var ans = answerAt(session.i);
+    if (!q || !ans) { renderQuestion(); return; }
+    var t = PGRE.topicById(q.topic) || { id: 'xx', short: '?', name: 'Unknown topic' };
+    session.stage = 'feedback';
+    session.assess = null;
+    session.choiceCommit = null;
+    lastRenderAt = Date.now();
+    clearPace();
+    var html = '<div class="card practice-card practice-live">' +
+      '<div class="practice-scroll">' +
+      '<div class="practice-meta">' +
+        '<span>Question ' + (session.i + 1) + ' of ' + session.qs.length + '</span>' +
+        (session.label ? '<span class="chip chip-session">' + PGRE.ui.esc(session.label) + '</span>' : '') +
+        '<span class="chip">' + t.name + '</span>' +
+        '<span class="chip chip-diff">' + PGRE.ui.diffDots(q.difficulty) + '</span>' +
+      '</div>' +
+      PGRE.ui.meter(100 * session.i / session.qs.length, 'meter-thin') +
+      '<div class="q-text">' + q.q + '</div>' +
+      '<div class="choices">';
+    q.choices.forEach(function (c, cidx) {
+      var cls = 'choice';
+      if (cidx === q.answer) cls += ' is-answer';
+      if (cidx === ans.picked && !ans.correct) cls += ' is-wrong';
+      html += '<button class="' + cls + '" disabled aria-pressed="' +
+        (cidx === ans.picked ? 'true' : 'false') + '">' +
+        '<span class="choice-letter">' + LETTERS[cidx] + '</span>' +
+        '<span class="choice-body">' + c + '</span></button>';
+    });
+    html += '</div>';
+    html += '<div id="feedback">' +
+      '<div class="feedback reveal-in ' + (ans.correct ? 'feedback-good' : 'feedback-bad') + '">' +
+        '<strong>' + (ans.correct ? 'Correct' : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
+        (ans.xp != null ? '<span class="fb-xp">+' + ans.xp + ' XP</span>' : '') +
+      '</div>' +
+      (ans.ms != null ? paceMark(ans.ms) : '') +
+      PGRE.assess.html(settings().keyboard) +
+      '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
+      distractorBlock(q) +
+      notesBlock(q) +
+      '</div>' + paletteHTML(false) + '</div>' +
+      '<div class="btn-row practice-actions"><button class="btn btn-primary" id="next-btn">' +
+        nextLabel() + '</button>' +
+        (settings().keyboard ? '<span class="practice-keys muted"><span class="key-hint">Enter</span> next</span>' : '') +
+      '</div></div>';
+    el().innerHTML = html;
+    PGRE.typesetMath(el());
+    window.scrollTo(0, 0);
+    var fb = document.getElementById('feedback');
+    if (fb) {
+      bindSessionAssess(fb, q, ans);
+      bindNotes(fb, q);
+    }
+    saveSession();
+    bindLiveJumps();
+    var nb = document.getElementById('next-btn');
+    if (nb) {
+      nb.addEventListener('click', next);
+      try { nb.focus({ preventScroll: true }); } catch (e) { nb.focus(); }
+    }
   }
 
   /* ——— Answer + feedback stage ——— */
   function answer(idx) {
-    if (!session || session.stage !== 'question') return;
+    if (!session || session.stage !== 'question' || answerAt(session.i)) return;
     var q = session.qs[session.i];
     var isCorrect = idx === q.answer;
     var elapsed = Date.now() - session.qStart;
@@ -615,14 +783,14 @@ PGRE.views.practice = (function () {
     if (isCorrect) session.correct++;
     var attempts = (PGRE.store && PGRE.store.state && PGRE.store.state.attempts) || [];
     var row = attempts.length ? attempts[attempts.length - 1] : null;
-    session.answers.push({
+    session.answers[session.i] = {
       q: q,
       picked: idx,
       correct: isCorrect,
       xp: xp,
       ms: elapsed,
       row: row
-    });
+    };
     session.stage = 'feedback';
     paintPalette();
 
@@ -661,15 +829,15 @@ PGRE.views.practice = (function () {
     if (card) {
       card.insertAdjacentHTML('beforeend',
         '<div class="btn-row practice-actions"><button class="btn btn-primary" id="next-btn">' +
-          (session.i + 1 < session.qs.length ? 'Next question' : 'Finish session') + '</button>' +
+          nextLabel() + '</button>' +
           (settings().keyboard ? '<span class="practice-keys muted"><span class="key-hint">Enter</span> next</span>' : '') +
         '</div>');
     }
     PGRE.typesetMath(fb);
-    session.assess = PGRE.assess.bind(fb, q, isCorrect);
+    bindSessionAssess(fb, q, session.answers[session.i]);
     bindNotes(fb, q);
     saveSession();
-    if (session.answers.length === session.qs.length) persistAgentReceipt(buildAgentReceipt());
+    if (sittingComplete()) persistAgentReceipt(buildAgentReceipt());
     if (window.PGRE && PGRE.motion && PGRE.motion.countUp) {
       var xpEl = fb.querySelector('.fb-xp');
       if (xpEl) PGRE.motion.countUp(xpEl, xp, { duration: 600, format: function (n) { return '+' + Math.round(n) + ' XP'; } });
@@ -691,8 +859,15 @@ PGRE.views.practice = (function () {
 
   function next() {
     if (!session) return;
-    session.i++;
-    if (session.i < session.qs.length) renderQuestion();
+    if (session.i + 1 < session.qs.length) {
+      openLive(session.i + 1);
+      return;
+    }
+    var wrap = -1;
+    for (var k = 0; k < session.qs.length; k++) {
+      if (!answerAt(k)) { wrap = k; break; }
+    }
+    if (wrap >= 0) openLive(wrap);
     else renderSummary();
   }
 
@@ -701,8 +876,9 @@ PGRE.views.practice = (function () {
      Durable write: sessionStorage + localStorage['pgre-agent-receipt'] +
      state.lastAgentReceipt (+ state.packReceipts[NN] for two-digit packs). */
   function sittingComplete(sess) {
+    sess = sess || session;
     return !!(sess && sess.qs && sess.qs.length &&
-              sess.answers && sess.answers.length === sess.qs.length);
+              answeredCount(sess) === sess.qs.length);
   }
 
   function inferPackId(ids, label) {
@@ -897,7 +1073,7 @@ PGRE.views.practice = (function () {
      palette grid for free jumping. Reuses .drill-navrow geometry from mistakes. */
   function renderReview(idx) {
     if (!session || idx < 0 || idx >= session.qs.length) return;
-    var ans = (idx < session.answers.length) ? session.answers[idx] : null;
+    var ans = answerAt(idx);
     if (!ans) return;
     if (session.reviewing && session.i === idx) return;
     clearPace();
