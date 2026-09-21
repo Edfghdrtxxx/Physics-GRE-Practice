@@ -237,6 +237,8 @@
   }
 
   function firstLabelTextNode(el) {
+    var target = el.querySelector && el.querySelector('.nav-label');
+    if (target) el = target;
     var kids = el.childNodes || [];
     var i, child, text;
     for (i = 0; i < kids.length; i++) {
