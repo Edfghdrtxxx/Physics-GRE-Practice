@@ -9,3 +9,6 @@ content/book-assets/
 20_docs/ETS Released Exams/
 content/ets-assets/
 content/ets-src/
+
+# Local npm install output; package.json + package-lock.json are the contract.
+node_modules/
