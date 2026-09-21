@@ -1,4 +1,4 @@
-/* Formula visualizers — G8 Delta U / E=-grad V / Poisson / E-perp / toroid B / Bn / mutual M12 */
+/* Formula visualizers — G8 Delta U / E=-grad V / Poisson / E-par / E-perp / toroid B / Bn / mutual M12 */
 (function (global) {
   'use strict';
   global.PGRE = global.PGRE || {};
@@ -1491,6 +1491,163 @@ For a uniformly charged sphere the integral is Newton's shell theorem. Outside, 
         "2. Inside ($r < R$): Gauss's law gives $E(r) = kQ r / R^3$.\n" +
         "3. Center potential: $V(0) = V(R) - \\int_R^0 E_{\\mathrm{in}}(r)\\, dr = kQ/R + \\int_0^R (kQ r / R^3)\\, dr = kQ/R + kQ/(2R) = (3/2) kQ/R = 1.5\\, V(R)$.\n" +
         "Thus the central potential is exactly $3/2$ times the surface potential."
+    }
+  };
+
+  /* -------------------------------------------------------------------------- */
+  /* cpgf-2.14: Electric Boundary Condition E_out^∥ − E_in^∥ = 0              */
+  /* -------------------------------------------------------------------------- */
+  PGRE.visualizers['cpgf-2.14'] = {
+    id: 'cpgf-2.14',
+    topic: 'em',
+    title: 'Electric Boundary Condition: Tangential Component $E_{\\mathrm{out}}^\\parallel - E_{\\mathrm{in}}^\\parallel = 0$',
+    formulaLatex: 'E_{\\mathrm{out}}^\\parallel - E_{\\mathrm{in}}^\\parallel = 0 \\iff \\oint_C \\mathbf{E}\\cdot d\\boldsymbol{\\ell}=0',
+    physicalStory: `
+Electrostatics has no circulation: $\\nabla\\times\\mathbf{E}=0$. Take a thin rectangular loop $C$ straddling the surface, with its long sides parallel to the interface. The two long sides contribute the tangential fields; the short sides vanish as the loop height $h\\to 0$.
+
+Therefore the line integral forces $E_{\\mathrm{out}}^\\parallel-E_{\\mathrm{in}}^\\parallel=0$. A surface charge may change the normal component, but it cannot make the tangential electric field jump. The picture keeps the teal tangential arrows equal while the coral normal pieces may change.
+    `.trim(),
+    derivationSteps: [
+      { step: 1, title: "Electrostatic Curl", latex: "\\nabla\\times\\mathbf{E}=0", description: "The electrostatic field is conservative, so its circulation around every closed loop vanishes." },
+      { step: 2, title: "Thin Amperian-Style Loop", latex: "\\oint_C \\mathbf{E}\\cdot d\\boldsymbol{\\ell}=0", description: "Choose a rectangle crossing the interface with long sides parallel to the surface." },
+      { step: 3, title: "Four-Side Decomposition", latex: "(E_{\\mathrm{out}}^\\parallel-E_{\\mathrm{in}}^\\parallel)\\,\\Delta \\ell + \\Phi_{\\mathrm{short}}=0", description: "The two long sides have opposite orientations; the short sides carry the normal field." },
+      { step: 4, title: "Vanishing Short Sides", latex: "\\Phi_{\\mathrm{short}}\\to 0\\qquad(h\\to 0)", description: "The short-side lengths shrink with the loop height, so their contributions disappear." },
+      { step: 5, title: "Tangential Continuity", latex: "E_{\\mathrm{out}}^\\parallel-E_{\\mathrm{in}}^\\parallel=0", description: "The tangential electric field is continuous across any electrostatic interface." }
+    ],
+    limitingCases: [
+      { name: "No Surface Charge", condition: "\\sigma=0", formula: "\\mathbf{E}_{\\mathrm{out}}=\\mathbf{E}_{\\mathrm{in}}", description: "Both normal and tangential components match, so the field crosses without a kink." },
+      { name: "Charged Sheet", condition: "\\sigma\\ne 0", formula: "E_{\\mathrm{out}}^\\perp-E_{\\mathrm{in}}^\\perp=\\sigma/\\epsilon_0", description: "The sheet changes only the normal component; $E^\\parallel$ remains continuous." },
+      { name: "Conductor Surface", condition: "\\mathbf{E}_{\\mathrm{in}}=0", formula: "E_{\\mathrm{out}}^\\parallel=0", description: "Since the field inside an ideal conductor is zero, continuity makes the field just outside purely normal." },
+      { name: "Vanishing Loop", condition: "h\\to 0", formula: "\\oint_C\\mathbf{E}\\cdot d\\boldsymbol{\\ell}=0", description: "Shrinking the short sides isolates the equality of the two tangential components." }
+    ],
+    greTraps: [
+      { trap: "Applying the Surface-Charge Jump to the Wrong Component", warning: "$\\sigma/\\epsilon_0$ changes $E^\\perp$, not $E^\\parallel$. The tangential difference is always zero." },
+      { trap: "Using the Isolated-Sheet Field as the Jump", warning: "Each side of an isolated sheet has magnitude $\\sigma/(2\\epsilon_0)$, but the normal discontinuity is $\\sigma/\\epsilon_0$." },
+      { trap: "Confusing Electrostatics with Magnetostatics", warning: "For electrostatic $\\mathbf{E}$, $E^\\parallel$ is continuous. A free surface current instead changes the tangential magnetic-field rule." },
+      { trap: "Forgetting the Loop Orientation", warning: "The two long sides of $C$ have opposite directions, producing $E_{\\mathrm{out}}^\\parallel-E_{\\mathrm{in}}^\\parallel$ rather than a sum." }
+    ],
+    parameters: [
+      { id: 'eField', label: 'Incident $|\\mathbf{E}_{\\mathrm{in}}|$', min: 1.0, max: 5.0, step: 0.5, default: 3.0, unit: 'V/m', hint: 'Magnitude just below the interface. Its tangential piece is $E^\\parallel=|E|\\sin\\theta$ and is copied unchanged above the surface.' },
+      { id: 'thetaIn', label: 'Incident angle $\\theta_{\\mathrm{in}}$', min: 0, max: 70, step: 5, default: 35, unit: 'deg', hint: 'Angle from the surface normal. Larger $\\theta$ gives a larger continuous tangential component $E^\\parallel$.' },
+      { id: 'sigmaJump', label: 'Normal jump $\\sigma/\\epsilon_0$', min: -4.0, max: 4.0, step: 0.5, default: 2.0, unit: 'V/m', hint: 'Changes only $E^\\perp$: $E_{\\mathrm{out}}^\\perp-E_{\\mathrm{in}}^\\perp=\\sigma/\\epsilon_0$. It cannot change $E^\\parallel$.' },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.2, default: 1.0, unit: 'x' }
+    ],
+    init: function (container, state) {
+      if (state.eField == null || isNaN(state.eField)) state.eField = 3.0;
+      if (state.thetaIn == null || isNaN(state.thetaIn)) state.thetaIn = 35;
+      if (state.sigmaJump == null || isNaN(state.sigmaJump)) state.sigmaJump = 2.0;
+      if (state.simSpeed == null || isNaN(state.simSpeed)) state.simSpeed = 1.0;
+      state.animTime = state.animTime || 0;
+    },
+    draw: function (ctx, width, height, state, dt) {
+      state = state || {};
+      state.animTime = (state.animTime || 0) + scaledDt(dt, state);
+      var t = state.animTime;
+      var eField = Number(state.eField); if (!isFinite(eField)) eField = 3.0;
+      var thetaDeg = Number(state.thetaIn); if (!isFinite(thetaDeg)) thetaDeg = 35;
+      var sigmaJump = Number(state.sigmaJump); if (!isFinite(sigmaJump)) sigmaJump = 2.0;
+      var theta = thetaDeg * Math.PI / 180;
+      var ePar = eField * Math.sin(theta);
+      var eNormIn = eField * Math.cos(theta);
+      var eNormOut = eNormIn + sigmaJump;
+      var eOutMag = Math.hypot(ePar, eNormOut);
+
+      fillCream(ctx, width, height);
+      var ifaceY = Math.round(height * 0.53);
+      ctx.fillStyle = PANEL;
+      ctx.fillRect(0, 0, width, ifaceY);
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, ifaceY);
+      ctx.lineTo(width, ifaceY);
+      ctx.stroke();
+      inkLabel(ctx, 'out', 18, ifaceY - 18, { color: MUTED, width: width, height: height, font: FONT_SM });
+      inkLabel(ctx, 'in', 18, ifaceY + 18, { color: MUTED, width: width, height: height, font: FONT_SM });
+      inkLabel(ctx, 'surface', width - 18, ifaceY - 14, { color: CORAL, align: 'right', width: width, height: height, font: FONT_SM });
+
+      /* Field traces share the same tangential component on both sides. */
+      var lineCount = 5;
+      var lineGap = Math.max(34, (width - 90) / lineCount);
+      var lineX, lineY, lineLen = Math.min(150, width * 0.28);
+      var uxIn = ePar / Math.max(eField, 1e-6);
+      var uyIn = -eNormIn / Math.max(eField, 1e-6);
+      var outDen = Math.max(eOutMag, 1e-6);
+      var uxOut = ePar / outDen;
+      var uyOut = -eNormOut / outDen;
+      for (var li = 0; li < lineCount; li++) {
+        lineX = 70 + li * lineGap;
+        lineY = ifaceY + 66;
+        drawSiteArrow(ctx, lineX - uxIn * lineLen * 0.5, lineY - uyIn * lineLen * 0.5,
+          lineX + uxIn * lineLen * 0.5, lineY + uyIn * lineLen * 0.5, GOLD, 1.5);
+        lineY = ifaceY - 66;
+        drawSiteArrow(ctx, lineX - uxOut * lineLen * 0.5, lineY - uyOut * lineLen * 0.5,
+          lineX + uxOut * lineLen * 0.5, lineY + uyOut * lineLen * 0.5, GOLD, 1.5);
+      }
+
+      /* Decomposed vectors: teal tangential pieces match; coral normal pieces may jump. */
+      var vScale = Math.min(18, width / 34);
+      var vx = Math.max(100, width * 0.24);
+      var yIn = ifaceY + 88;
+      var yOut = ifaceY - 88;
+      var tanLen = Math.max(18, ePar * vScale);
+      var normInLen = Math.max(18, Math.abs(eNormIn) * vScale);
+      var normOutLen = Math.max(18, Math.abs(eNormOut) * vScale);
+      drawSiteArrow(ctx, vx - tanLen, yIn, vx, yIn, TEAL, 2.8);
+      drawSiteArrow(ctx, vx, yOut, vx + tanLen, yOut, TEAL, 2.8);
+      drawSiteArrow(ctx, vx, yIn, vx, yIn - Math.sign(eNormIn || 1) * normInLen, CORAL, 2.0);
+      drawSiteArrow(ctx, vx, yOut, vx, yOut - Math.sign(eNormOut || 1) * normOutLen, CORAL, 2.0);
+      inkLabel(ctx, 'in', vx - tanLen - 6, yIn + 14, { color: TEAL, align: 'right', width: width, height: height, font: FONT_SM });
+      inkLabel(ctx, 'out', vx + tanLen + 6, yOut - 14, { color: TEAL, align: 'left', width: width, height: height, font: FONT_SM });
+
+      /* Thin rectangular loop C, animated toward h -> 0. */
+      var loopCx = width * 0.68;
+      var loopW = Math.min(180, width * 0.30);
+      var hPulse = 16 + 14 * (0.5 + 0.5 * Math.cos(t * 1.2));
+      var xL = loopCx - loopW * 0.5, xR = loopCx + loopW * 0.5;
+      var yT = ifaceY - hPulse, yB = ifaceY + hPulse;
+      ctx.save();
+      ctx.strokeStyle = TEAL;
+      ctx.lineWidth = 2.3;
+      ctx.setLineDash([5, 3]);
+      ctx.strokeRect(xL, yT, loopW, yB - yT);
+      ctx.setLineDash([]);
+      ctx.restore();
+      drawSiteArrow(ctx, xL + 18, yT, xR - 18, yT, TEAL, 2.3);
+      drawSiteArrow(ctx, xR - 18, yB, xL + 18, yB, TEAL, 2.3);
+      inkLabel(ctx, 'C', xR + 10, yT + 4, { color: TEAL, width: width, height: height, font: '600 12px Inter, sans-serif' });
+      inkLabel(ctx, 'h', xR + 10, ifaceY, { color: MUTED, width: width, height: height, font: FONT_SM });
+
+      appendLegend('$E^\\parallel$ is continuous', [
+        { label: '$E_{\\mathrm{in}}^\\parallel$', value: '$' + ePar.toFixed(2) + '\\,\\mathrm{V/m}$', hint: 'Tangential field just inside. It is the teal lower arrow: $E_{\\mathrm{in}}^\\parallel=|E|\\sin\\theta=' + ePar.toFixed(2) + '\\,\\mathrm{V/m}$.' },
+        { label: '$E_{\\mathrm{out}}^\\parallel$', value: '$' + ePar.toFixed(2) + '\\,\\mathrm{V/m}$', hint: 'Tangential field just outside. It has the same value as inside, regardless of $\\sigma$.' },
+        { label: '$\\Delta E^\\parallel$', value: '$0$ (always)', hint: 'The boundary condition: $E_{\\mathrm{out}}^\\parallel-E_{\\mathrm{in}}^\\parallel=0$.' },
+        { label: '$\\oint_C\\mathbf{E}\\cdot d\\boldsymbol{\\ell}$', value: '$0$', hint: 'Electrostatic circulation vanishes. The long sides cancel because their tangential fields match; the short sides vanish as $h\\to0$.' },
+        { label: '$\\Delta E^\\perp$', value: '$' + sigmaJump.toFixed(2) + '\\,\\mathrm{V/m}$', hint: 'Context only: the normal component may jump by $\\sigma/\\epsilon_0=' + sigmaJump.toFixed(2) + '\\,\\mathrm{V/m}$ while the tangential component stays fixed.' }
+      ]);
+
+      PGRE.setVizHotspots([
+        { id: 'tanIn', kind: 'segment', x1: vx - tanLen, y1: yIn, x2: vx, y2: yIn, halfW: 9, title: '$E_{\\mathrm{in}}^\\parallel$', body: 'Teal lower arrow: $E_{\\mathrm{in}}^\\parallel=' + ePar.toFixed(2) + '\\,\\mathrm{V/m}$.' },
+        { id: 'tanOut', kind: 'segment', x1: vx, y1: yOut, x2: vx + tanLen, y2: yOut, halfW: 9, title: '$E_{\\mathrm{out}}^\\parallel$', body: 'Teal upper arrow: $E_{\\mathrm{out}}^\\parallel=' + ePar.toFixed(2) + '\\,\\mathrm{V/m}=E_{\\mathrm{in}}^\\parallel$.' },
+        { id: 'loop', kind: 'rect', x: xL - 8, y: yT - 8, w: loopW + 16, h: yB - yT + 16, title: 'Thin loop $C$', body: 'The long sides run parallel to the interface. Their contributions cancel; the short sides vanish as $h=' + (yB - yT).toFixed(0) + '\\,\\mathrm{px}\\to0$.' },
+        { id: 'surface', kind: 'segment', x1: 0, y1: ifaceY, x2: width, y2: ifaceY, halfW: 10, title: 'Interface', body: 'A surface charge can change $E^\\perp$, but electrostatics requires $E_{\\mathrm{out}}^\\parallel-E_{\\mathrm{in}}^\\parallel=0$.' },
+        { id: 'normalIn', kind: 'segment', x1: vx, y1: yIn, x2: vx, y2: yIn - Math.sign(eNormIn || 1) * normInLen, halfW: 7, title: '$E_{\\mathrm{in}}^\\perp$', body: 'Coral lower arrow: $E_{\\mathrm{in}}^\\perp=' + eNormIn.toFixed(2) + '\\,\\mathrm{V/m}$. This is the component a surface charge can change.' },
+        { id: 'normalOut', kind: 'segment', x1: vx, y1: yOut, x2: vx, y2: yOut - Math.sign(eNormOut || 1) * normOutLen, halfW: 7, title: '$E_{\\mathrm{out}}^\\perp$', body: 'Coral upper arrow: $E_{\\mathrm{out}}^\\perp=' + eNormOut.toFixed(2) + '\\,\\mathrm{V/m}$.' },
+        { id: 'out', kind: 'rect', x: 0, y: 0, w: width, h: ifaceY, title: 'Outside region', body: 'Above the interface. Gold field traces bend when the normal component changes, but their tangential component is continuous.' },
+        { id: 'in', kind: 'rect', x: 0, y: ifaceY, w: width, h: height - ifaceY, title: 'Inside region', body: 'Below the interface. The lower teal arrow supplies the same tangential component as above.' }
+      ]);
+    },
+    challenge: {
+      question: "A rectangular loop straddles an electrostatic interface. The tangential field just inside is $E_{\\mathrm{in}}^\\parallel=4\\,\\mathrm{V/m}$, and the surface carries charge density $\\sigma$ with $\\sigma/\\epsilon_0=3\\,\\mathrm{V/m}$. What is $E_{\\mathrm{out}}^\\parallel$?",
+      options: [
+        "$E_{\\mathrm{out}}^\\parallel=4\\,\\mathrm{V/m}$",
+        "$E_{\\mathrm{out}}^\\parallel=7\\,\\mathrm{V/m}$",
+        "$E_{\\mathrm{out}}^\\parallel=1\\,\\mathrm{V/m}$",
+        "$E_{\\mathrm{out}}^\\parallel=3\\,\\mathrm{V/m}$",
+        "$E_{\\mathrm{out}}^\\parallel=0$"
+      ],
+      correct: 0,
+      explanation: "The thin-loop argument uses $\\oint_C\\mathbf{E}\\cdot d\\boldsymbol{\\ell}=0$, so $E_{\\mathrm{out}}^\\parallel-E_{\\mathrm{in}}^\\parallel=0$. Therefore $E_{\\mathrm{out}}^\\parallel=4\\,\\mathrm{V/m}$. The surface charge changes the normal component by $\\sigma/\\epsilon_0=3\\,\\mathrm{V/m}$, not the tangential component."
     }
   };
 

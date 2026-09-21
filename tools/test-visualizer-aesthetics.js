@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Gating tests for the 30 formula visualizers — loads the SHIPPED engine +
+/* Gating tests for the 39 formula visualizers — loads the SHIPPED engine +
    trio scripts (no re-implementation of chrome/draw). Run from repo root:
      node tools/test-visualizer-aesthetics.js
 */
@@ -19,7 +19,7 @@ var EXPECTED_IDS = [
   'cpgf-1.26', 'cpgf-1.27', 'cpgf-1.15',
   'cpgf-1.28', 'cpgf-1.29', 'cpgf-1.30',
   'cpgf-1.31', 'cpgf-1.32', 'cpgf-1.33',
-  'cpgf-1.9', 'cpgf-2.4', 'cpgf-2.6', 'cpgf-2.8', 'cpgf-2.15', 'cpgf-2.32', 'cpgf-2.33', 'cpgf-2.43',
+  'cpgf-1.9', 'cpgf-2.4', 'cpgf-2.6', 'cpgf-2.8', 'cpgf-2.14', 'cpgf-2.15', 'cpgf-2.32', 'cpgf-2.33', 'cpgf-2.43',
   'cpgf-2.70', 'cpgf-4.14', 'cpgf-4.32', 'cpgf-5.18',
   'cpgf-5.27', 'cpgf-6.18', 'cpgf-7.17'
 ];
