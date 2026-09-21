@@ -1,0 +1,8 @@
+# Review path: do not stall when Claude is inaccessible.
+# In-session review uses same-harness sub-agents (see AGENTS.md).
+# Pipeline Review and fixer are pinned to Grok Build, not Claude.
+review_agents:
+  reviewer:
+    agent: grok
+  fixer:
+    agent: grok
