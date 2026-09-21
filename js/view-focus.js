@@ -372,7 +372,7 @@ PGRE.views.focus = (function () {
     var nowOn = isOn();
     if (wasOn && !nowOn) {                                     // engine finalized (manual/goal/4h)
       wasOn = false;
-      paintAll();            // refresh Recent sessions + controls (repaints atom idle)
+      paintAll();            // refresh Recent + controls (repaints atom idle)
       flashComplete(lastRunLen); // then lay the completion state on top — but only if a session was actually logged
       return;
     }
