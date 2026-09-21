@@ -669,43 +669,100 @@ PGRE.setActiveNav = function (view, params) {
     var active = key === view || (view === 'topic' && key === 'topic-' + params.id) ||
                  (view === 'practice' && key === 'topic-' + params.id);
     a.classList.toggle('active', active);
-    if (active) a.setAttribute('aria-current', 'page');
-    else a.removeAttribute('aria-current');
+    if (active) {
+      a.setAttribute('aria-current', 'page');
+      var panel = a.closest('.nav-tree-items');
+      if (panel && panel.hidden) {
+        panel.hidden = false;
+        var toggle = panel.parentNode && panel.parentNode.querySelector('.nav-tree-toggle');
+        if (toggle) toggle.setAttribute('aria-expanded', 'true');
+      }
+    } else a.removeAttribute('aria-current');
   });
 };
 
 PGRE.buildNav = function () {
-  var g = PGRE.gamify;
   var el = document.getElementById('sidebar-nav');
-  var html =
-    '<a href="#/" data-nav="dashboard">Dashboard</a>' +
-    '<a href="#/plan" data-nav="plan">Study plan</a>' +
-    '<a href="#/history" data-nav="history">History</a>' +
-    '<a href="#/analytics" data-nav="analytics">Analytics</a>' +
-    '<a href="#/build" data-nav="build">Custom quiz</a>' +
-    '<a href="#/search" data-nav="search">Search</a>' +
-    '<a href="#/notes" data-nav="notes">Notes &amp; bookmarks</a>' +
-    '<a href="#/mistakes" data-nav="mistakes">Mistake book' +
-      '<span class="nav-badge nav-badge-due" id="nav-mist-due" hidden></span></a>' +
-    '<a href="#/formulas" data-nav="formulas">Formula recall' +
-      '<span class="nav-badge nav-badge-due" id="nav-form-due" hidden></span></a>' +
-    '<a href="#/concepts" data-nav="concepts">Concept visualization</a>' +
-    '<a href="#/focus" data-nav="focus">Focus timer</a>' +
-    '<a href="#/study-time" data-nav="studytime">Study time</a>' +
-    '<a href="#/achievements" data-nav="achievements">Achievements</a>' +
-    '<a href="#/library" data-nav="library">Library</a>' +
-    '<a href="#/exam" data-nav="exam">Mock exam</a>' +
-    '<div class="nav-heading">Knowledge portals</div>';
+  var icon = function (name) {
+    return PGRE.sidebarIcon ? PGRE.sidebarIcon(name) : '';
+  };
+  var items = {
+    workspace: [
+      { href: '#/', key: 'dashboard', label: 'Dashboard', icon: 'home' },
+      { href: '#/plan', key: 'plan', label: 'Study plan', icon: 'book' },
+      { href: '#/history', key: 'history', label: 'History', icon: 'clock' },
+      { href: '#/analytics', key: 'analytics', label: 'Analytics', icon: 'chart' }
+    ],
+    practice: [
+      { href: '#/build', key: 'build', label: 'Custom quiz', icon: 'task' },
+      { href: '#/search', key: 'search', label: 'Search', icon: 'search' },
+      { href: '#/notes', key: 'notes', label: 'Notes &amp; bookmarks', icon: 'note' },
+      { href: '#/mistakes', key: 'mistakes', label: 'Mistake book', icon: 'task',
+        badge: 'nav-mist-due' },
+      { href: '#/formulas', key: 'formulas', label: 'Formula recall', icon: 'book',
+        badge: 'nav-form-due' }
+    ],
+    explore: [
+      { href: '#/concepts', key: 'concepts', label: 'Concept visualization', icon: 'atom' },
+      { href: '#/focus', key: 'focus', label: 'Focus timer', icon: 'clock' },
+      { href: '#/study-time', key: 'studytime', label: 'Study time', icon: 'clock' },
+      { href: '#/achievements', key: 'achievements', label: 'Achievements', icon: 'award' },
+      { href: '#/library', key: 'library', label: 'Library', icon: 'folder' },
+      { href: '#/exam', key: 'exam', label: 'Mock exam', icon: 'task' }
+    ]
+  };
+  var groupLabels = {
+    workspace: 'Workspace',
+    practice: 'Practice',
+    explore: 'Explore',
+    topics: 'Knowledge portals'
+  };
+  var renderItem = function (item) {
+    var badge = item.badge
+      ? '<span class="nav-badge nav-badge-due" id="' + item.badge + '" hidden></span>'
+      : '';
+    return '<a href="' + item.href + '" data-nav="' + item.key + '">' +
+      icon(item.icon) + '<span class="nav-label">' + item.label + '</span>' +
+      badge + '</a>';
+  };
+  var renderGroup = function (id, children, groupIcon) {
+    return '<section class="nav-tree-group" data-nav-group="' + id + '">' +
+      '<button class="nav-tree-toggle" type="button" aria-expanded="true" ' +
+        'aria-controls="nav-group-' + id + '">' +
+        icon(groupIcon) + '<span>' + groupLabels[id] + '</span>' +
+        '<span class="nav-tree-chevron" aria-hidden="true"></span>' +
+      '</button>' +
+      '<div class="nav-tree-items" id="nav-group-' + id + '">' + children + '</div>' +
+    '</section>';
+  };
+  var topicItems = '';
   PGRE.TOPICS.forEach(function (t) {
-    html += '<a href="#/topic/' + t.id + '" data-nav="topic-' + t.id + '">' +
-      '<span class="nav-mono">' + t.short + '</span>' + t.name +
-      '<span class="nav-weight">' + t.weight + '%</span></a>';
+    topicItems += '<a href="#/topic/' + t.id + '" data-nav="topic-' + t.id + '">' +
+      icon('atom') + '<span class="nav-label"><span class="nav-mono">' + t.short +
+      '</span>' + t.name + '</span><span class="nav-weight">' + t.weight +
+      '%</span></a>';
   });
+  var html = '<div class="nav-tree">' +
+    renderGroup('workspace', items.workspace.map(renderItem).join(''), 'home') +
+    renderGroup('practice', items.practice.map(renderItem).join(''), 'book') +
+    renderGroup('explore', items.explore.map(renderItem).join(''), 'chart') +
+    renderGroup('topics', topicItems, 'atom') +
+    '</div>';
   el.innerHTML = html;
+  el.querySelectorAll('.nav-tree-toggle').forEach(function (toggle) {
+    toggle.addEventListener('click', function () {
+      var panel = document.getElementById(toggle.getAttribute('aria-controls'));
+      if (!panel) return;
+      var open = !panel.hidden;
+      panel.hidden = open;
+      toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+    });
+  });
   if (PGRE.motion && typeof PGRE.motion.letterSwapNav === 'function') {
     PGRE.motion.letterSwapNav(el);
   }
 };
+
 
 /* ——— Foldable sidebar ———
    Desktop: the ☰ button hides/shows #sidebar (body.sidebar-folded).

@@ -959,6 +959,20 @@ assert(!!aLive.querySelector('.letter-swap-sr'), 'letterSwapNav keeps a screen-r
 assert(aLive.querySelectorAll('.letter-swap-cell').length === 9,
   'letterSwapNav splits Dashboard into 9 cells');
 assert(aLive.getAttribute('data-letter-swap') === '1', 'letterSwapNav marks the enhanced link');
+
+var navNested = envOn.document.createElement('nav');
+var aNested = envOn.document.createElement('a');
+aNested.setAttribute('data-nav', 'dashboard');
+aNested.innerHTML = '<svg></svg><span class="nav-label">Dashboard</span>';
+navNested.appendChild(aNested);
+envOn.document.body.appendChild(navNested);
+motionOn.letterSwapNav(navNested);
+assert(!!aNested.querySelector('.nav-label .letter-swap'),
+  'letterSwapNav wraps the nested .nav-label');
+assert(aNested.querySelectorAll('.letter-swap-cell').length === 9,
+  'letterSwapNav splits nested Dashboard into 9 cells');
+assert(aNested.getAttribute('data-letter-swap') === '1',
+  'letterSwapNav marks the nested-label link');
 /* ——— assess html() markers + bind on a parsed row ——— */
 console.log('\nPGRE.assess.html + bind');
 var assess = env.window.PGRE.assess;

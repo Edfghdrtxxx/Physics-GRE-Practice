@@ -27,6 +27,9 @@ function checkRepoStructure() {
     'fonts',
     'index.html',
     'js',
+    'node_modules',
+    'package-lock.json',
+    'package.json',
     'simulations',
     'tools',
     'vendor'
