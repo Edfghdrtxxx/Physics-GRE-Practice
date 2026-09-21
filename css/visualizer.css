@@ -84,19 +84,19 @@
 }
 .card .viz-open-strip .btn-ghost:hover,
 .viz-open-strip .viz-nav-btn:hover {
-  color: #faf9f5;
-  background: #252523;
-  border-color: #252523;
+  color: var(--ink, #141413);
+  background: var(--ivory, #efe9de);
+  border-color: var(--ink-3, #8e8b82);
   box-shadow: none;
 }
 [data-theme="dark"] .card .viz-open-strip .btn-ghost,
 [data-theme="dark"] .viz-open-strip .viz-nav-btn {
-  border-color: #faf9f5;
+  border-color: var(--line, #33312d);
 }
 [data-theme="dark"] .card .viz-open-strip .btn-ghost:hover,
 [data-theme="dark"] .viz-open-strip .viz-nav-btn:hover {
-  background: #252523;
-  border-color: #faf9f5;
+  background: var(--ivory, #2c2a26);
+  border-color: var(--ink-3, #807d76);
 }
 
 /* Simulation Grid — stacked full-width drawing, then legend, then controls.
@@ -117,7 +117,7 @@
 .viz-canvas-wrapper {
   background: var(--bg, #faf9f5);
   border: 1px solid var(--line, #e6dfd8);
-  border-radius: 10px;
+  border-radius: var(--ctl-r, 8px);
   position: relative;
   overflow: hidden;
   box-shadow: none;
@@ -162,7 +162,7 @@
   font-weight: 600;
   font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.1em;
   color: var(--ink-2, #6c6a64);
   margin-bottom: 0.35rem;
 }
@@ -201,7 +201,7 @@
 .viz-controls-panel {
   background: var(--panel, #f5f0e8);
   border: 1px solid var(--line, #e6dfd8);
-  border-radius: 10px;
+  border-radius: var(--ctl-r, 8px);
   padding: 1.1rem;
   display: flex;
   flex-direction: column;
@@ -212,7 +212,7 @@
   font-size: 0.8rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: var(--ink-2, #6c6a64);
   border-bottom: 1px solid var(--line, #e6dfd8);
   padding-bottom: 0.35rem;
@@ -227,7 +227,7 @@
   font-size: 1.1rem;
   color: var(--ink, #141413);
   overflow-x: auto;
-  box-shadow: 0 1px 3px rgba(20, 20, 19, 0.04);
+  box-shadow: none;
 }
 .viz-modal-body .viz-formula-banner {
   overflow-y: visible;
@@ -275,7 +275,7 @@
 .viz-param-select {
   width: 100%;
   padding: 0.45rem 0.65rem;
-  border-radius: 6px;
+  border-radius: var(--ctl-r, 8px);
   border: 1px solid var(--line, #e6dfd8);
   background: var(--surface, #faf9f5);
   color: var(--ink, #141413);
@@ -297,7 +297,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 0.45rem 0.75rem;
-  border-radius: 6px;
+  border-radius: var(--ctl-r, 8px);
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
@@ -341,7 +341,7 @@
 
 .viz-btn {
   padding: 0.35rem 0.75rem;
-  border-radius: 6px;
+  border-radius: var(--ctl-r, 8px);
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
@@ -376,7 +376,7 @@
 .viz-info-section {
   background: var(--panel, #f5f0e8);
   border: 1px solid var(--line, #e6dfd8);
-  border-radius: 10px;
+  border-radius: var(--ctl-r, 8px);
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -440,7 +440,7 @@
 .viz-step-math {
   background: var(--surface, #faf9f5);
   border: 1px solid var(--line, #e6dfd8);
-  border-radius: 6px;
+  border-radius: var(--ctl-r, 8px);
   padding: 0.5rem 0.75rem;
   margin: 0.35rem 0;
   overflow-x: auto;
@@ -457,7 +457,7 @@
   margin-bottom: 0.75rem;
   background: var(--surface, #faf9f5);
   border: 1px solid var(--line, #e6dfd8);
-  border-radius: 6px;
+  border-radius: var(--ctl-r, 8px);
   padding: 0.65rem 0.85rem;
 }
 
@@ -486,7 +486,7 @@
 .viz-trap-card {
   background: color-mix(in srgb, var(--accent, #cc785c) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent, #cc785c) 25%, transparent);
-  border-radius: 6px;
+  border-radius: var(--ctl-r, 8px);
   padding: 0.75rem 0.95rem;
   margin-bottom: 0.75rem;
 }
@@ -536,7 +536,7 @@
 .viz-opt-btn {
   text-align: left;
   padding: 0.6rem 0.9rem;
-  border-radius: 6px;
+  border-radius: var(--ctl-r, 8px);
   background: var(--panel, #f5f0e8);
   border: 1px solid var(--line, #e6dfd8);
   color: var(--ink, #141413);
@@ -566,7 +566,7 @@
 .viz-challenge-expl {
   margin-top: 0.85rem;
   padding: 0.7rem 0.9rem;
-  border-radius: 6px;
+  border-radius: var(--ctl-r, 8px);
   background: var(--ivory, #efe9de);
   border: 1px solid var(--line, #e6dfd8);
   font-size: 0.83rem;
@@ -605,13 +605,13 @@
   background: var(--surface, #faf9f5);
   color: var(--ink, #141413);
   border: 1px solid var(--line, #e6dfd8);
-  border-radius: 14px;
+  border-radius: var(--ctl-r, 8px);
   width: 100%;
   max-width: 1100px;
   max-height: 92vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+  box-shadow: none;
   overflow: hidden;
   transform: scale(0.96) translateY(12px);
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
@@ -647,7 +647,7 @@
   font-size: 1.5rem;
   line-height: 1;
   padding: 0.3rem 0.5rem;
-  border-radius: 6px;
+  border-radius: var(--ctl-r, 8px);
   cursor: pointer;
 }
 
@@ -671,7 +671,7 @@
   font-size: 0.78rem;
   font-weight: 500;
   padding: 0.3rem 0.75rem;
-  border-radius: 6px;
+  border-radius: var(--ctl-r, 8px);
   cursor: pointer;
   line-height: 1.2;
 }
@@ -697,7 +697,7 @@
   display: none;
   flex-direction: column;
   gap: 0;
-  box-shadow: 0 12px 28px rgba(20, 20, 19, 0.16);
+  box-shadow: none;
 }
 
 .viz-params-overlay.viz-params-open {
@@ -735,7 +735,7 @@
   font-size: 0.72rem;
   font-weight: 500;
   padding: 0.18rem 0.5rem;
-  border-radius: 5px;
+  border-radius: var(--ctl-r, 8px);
   cursor: pointer;
   line-height: 1.2;
 }
@@ -784,7 +784,7 @@
 .viz-card-detail-section {
   background: var(--panel, #f5f0e8);
   border: 1px solid var(--line, #e6dfd8);
-  border-radius: 10px;
+  border-radius: var(--ctl-r, 8px);
   padding: 1.1rem 1.3rem;
   display: flex;
   flex-direction: column;
@@ -795,7 +795,7 @@
   font-size: 0.78rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: var(--ink-2, #6c6a64);
 }
 
@@ -819,7 +819,7 @@
   background: var(--surface, #faf9f5);
   border: 1px solid var(--line, #e6dfd8);
   padding: 0.65rem 0.95rem;
-  border-radius: 6px;
+  border-radius: var(--ctl-r, 8px);
   font-family: var(--sans, Inter, sans-serif);
   font-size: 0.92rem;
   color: var(--ink, #141413);
@@ -898,20 +898,21 @@
 .viz-thumb-card {
   background: var(--surface, #faf9f5);
   border: 1px solid var(--line, #e6dfd8);
-  border-radius: 10px;
+  border-radius: var(--ctl-r, 8px);
   padding: 1.15rem;
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
   min-width: 0;   /* a wide KaTeX line scrolls inside .viz-thumb-formula instead of widening the card */
   cursor: pointer;
-  transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
+  transition: transform 0.18s, border-color 0.18s, background 0.18s;
 }
 
 .viz-thumb-card:hover {
   transform: translateY(-2px);
   border-color: var(--accent, #cc785c);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  background: var(--ivory, #efe9de);
+  box-shadow: none;
 }
 
 .viz-thumb-head {
@@ -935,7 +936,7 @@
 .viz-thumb-formula {
   background: var(--panel, #f5f0e8);
   padding: 0.7rem;
-  border-radius: 6px;
+  border-radius: var(--ctl-r, 8px);
   text-align: center;
   font-size: 0.95rem;
   overflow-x: auto;
@@ -1003,8 +1004,8 @@
   background: var(--surface, #faf9f5);
   color: var(--ink, #141413);
   border: 1px solid var(--line, #e6dfd8);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(20, 20, 19, 0.14), 0 1px 3px rgba(20, 20, 19, 0.08);
+  border-radius: var(--ctl-r, 8px);
+  box-shadow: none;
   font-family: var(--sans, Inter, -apple-system, sans-serif);
   font-size: 12.5px;
   font-weight: 500;
