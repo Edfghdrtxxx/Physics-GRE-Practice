@@ -110,6 +110,10 @@ function lsReceipt() {
   var raw = localStorage.getItem('pgre-agent-receipt');
   return raw ? JSON.parse(raw) : null;
 }
+function learnLsReceipt() {
+  var raw = localStorage.getItem('pgre-learn-drill-receipt');
+  return raw ? JSON.parse(raw) : null;
+}
 
 console.log('defaults + migrate fill lastAgentReceipt / packReceipts');
 PGRE.store.load();
@@ -167,27 +171,33 @@ assert(JSON.parse(sessionStorage.getItem('pgre-agent-receipt')).pack === '03',
 assert(PGRE.store.state.packReceipts['03'] && PGRE.store.state.packReceipts['03'].pack === '03',
   'packReceipts[03] stored');
 
-console.log('\npackReceipts survives later non-pack overwrite of last');
-var customReceipt = makeReceipt({
+console.log('\nlearn receipt stays out of timed receipt storage');
+var learnReceipt = makeReceipt({
+  kind: 'pgre-learn-drill-receipt',
+  purpose: 'learn-drill',
   pack: null,
-  label: 'Custom quiz',
+  label: 'Learn transfer',
   score: { correct: 1, n: 1, pct: 100 },
   missQids: [],
   misses: [],
   ids: ['q-z'],
+  questions: [{ qid: 'q-z', topic: 'cm', subtopic: 'test', prompt: 'Test?', choices: ['A', 'B'] }],
   completedAt: '2026-09-16T11:00:00.000Z'
 });
-practice.persistAgentReceipt(customReceipt, completeSess(['q-z']));
-assert(PGRE.store.state.lastAgentReceipt.pack === null, 'last overwritten by non-pack sitting');
-assert(lsReceipt().pack === null, 'localStorage last overwritten by non-pack');
+practice.persistAgentReceipt(learnReceipt, completeSess(['q-z']));
+assert(PGRE.store.state.lastAgentReceipt.pack === '03',
+  'Learn receipt does not overwrite timed lastAgentReceipt');
+assert(lsReceipt().pack === '03',
+  'Learn receipt does not overwrite localStorage pgre-agent-receipt');
+assert(learnLsReceipt() && learnLsReceipt().kind === 'pgre-learn-drill-receipt' &&
+       learnLsReceipt().questions.length === 1,
+  'Learn receipt uses separate storage and carries question payload');
 assert(PGRE.store.state.packReceipts['03'] && PGRE.store.state.packReceipts['03'].pack === '03',
-  'packReceipts[03] survives last overwrite');
-assert(PGRE.store.state.packReceipts['03'].score.n === 3,
-  'surviving pack receipt keeps pack score.n');
+  'timed pack receipt remains available after Learn receipt');
 
 console.log('\nincomplete after a complete write must not clobber');
 practice.persistAgentReceipt(makeReceipt({ pack: '09', label: 'Pack 09' }), incomplete);
-assert(PGRE.store.state.lastAgentReceipt.pack === null, 'incomplete does not clobber last');
+assert(PGRE.store.state.lastAgentReceipt.pack === '03', 'incomplete does not clobber last');
 assert(PGRE.store.state.packReceipts['09'] === undefined, 'incomplete does not invent pack 09');
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

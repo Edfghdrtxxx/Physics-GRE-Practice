@@ -615,6 +615,72 @@ PGRE.views.formulas = (function () {
     renderLabContent();
   }
 
+
+  /* Deck-level title-band mix. Solid = interval ≥ 21; selected = reviews > 0.
+     Remainder of the selected segment is selected − solid. Not today’s picks. */
+  function recallMix(list) {
+    var solid = 0, selected = 0, i, st, n;
+    n = (list && list.length) || 0;
+    for (i = 0; i < n; i++) {
+      st = PGRE.srs.cardState(list[i].id);
+      if (st && (st.interval || 0) >= 21) solid++;
+      if (st && st.reviews > 0) selected++;
+    }
+    return { total: n, solid: solid, selected: selected };
+  }
+
+  function recallBandHTML(list) {
+    var ui = PGRE.ui;
+    var mix = recallMix(list);
+    var total = mix.total, solid = mix.solid, selected = mix.selected;
+    var young = selected - solid;
+    if (young < 0) young = 0;
+    var unseen = total - selected;
+    if (unseen < 0) unseen = 0;
+    function pct(n) { return total ? Math.round(100 * n / total) : 0; }
+    var pSel = pct(selected);
+    var pSolid = pct(solid);
+    var pYoung = pct(young);
+    var aria = selected + ' of ' + total + ' selected, ' + solid + ' solid enough';
+    var solidTip = ui.esc('Solid enough\\n' + solid + ' of ' + total + ' · interval ≥ 21 d');
+    var youngTip = ui.esc('Learning\\n' + young + ' of ' + total + ' · introduced, not yet mature');
+
+    var html = '<div class="card formula-recall-band" role="region" aria-label="' + ui.esc(aria) + '">';
+    html += '<div class="fr-usage-head">' +
+      '<h1 class="fr-usage-stat"><span class="fr-usage-pct">' + pSel + '%</span> ' +
+      '<span class="fr-usage-word">selected</span></h1>' +
+      '<div class="fr-usage-meta">' + (total
+        ? ui.fmt(unseen) + ' not yet introduced'
+        : 'No cards in the deck') + '</div>' +
+    '</div>';
+
+    html += '<div class="fr-usage-bar">';
+    if (solid > 0) {
+      html += '<div class="fr-seg fr-seg-solid" style="flex-grow:' + solid + '" tabindex="0" data-tip="' +
+        solidTip + '"></div>';
+    }
+    if (young > 0) {
+      html += '<div class="fr-seg fr-seg-young" style="flex-grow:' + young + '" tabindex="0" data-tip="' +
+        youngTip + '"></div>';
+    }
+    if (unseen > 0 || (!solid && !young)) {
+      html += '<div class="fr-seg fr-seg-rest" style="flex-grow:' + (unseen > 0 ? unseen : 1) + '"></div>';
+    }
+    html += '</div>';
+
+    html += '<div class="fr-usage-legend">';
+    if (solid > 0) {
+      html += '<span class="fr-leg"><span class="fr-dot fr-dot-solid" aria-hidden="true"></span>' +
+        'Solid enough <strong>' + pSolid + '%</strong></span>';
+    }
+    if (young > 0) {
+      html += '<span class="fr-leg"><span class="fr-dot fr-dot-young" aria-hidden="true"></span>' +
+        'Learning <strong>' + pYoung + '%</strong></span>';
+    }
+    html += '</div></div>';
+    return html;
+  }
+
   /* ——— Study mode home — progressive daily batch, rendered into body ——— */
   function renderHome() {
     study = null;
@@ -636,7 +702,7 @@ PGRE.views.formulas = (function () {
       if (srs.studiedToday(cardsState[id])) reviewedToday++;
     }
 
-    var html = '<div class="card"><h1>Formula recall</h1></div>';
+    var html = recallBandHTML(deck);
 
     if (!deck.length) {
       html += '<div class="stat-row stat-row-4">' +
@@ -759,7 +825,10 @@ PGRE.views.formulas = (function () {
         '<p class="muted">' + (pickedN
           ? 'Today’s picks are done — the next cards return on their schedule.'
           : 'Pick the formulas you want to recall today — nothing is chosen for you.') + '</p>' +
-        '<div class="btn-row"><button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div>';
+        '<div class="btn-row">' +
+          '<button class="btn btn-primary" id="pick-btn">Pick today’s cards</button>' +
+          '<button class="btn btn-accent" id="home-export-btn" title="Export learning status for agent">Export data</button>' +
+        '</div>';
     }
     html += '</div>';
 
@@ -823,6 +892,8 @@ PGRE.views.formulas = (function () {
     wireOptionsExtra();
     var pb = document.getElementById('pick-btn') || document.getElementById('landing-pick-btn');
     if (pb) pb.addEventListener('click', renderPicker);
+    var heb = document.getElementById('home-export-btn');
+    if (heb) heb.addEventListener('click', openFormulaExportModal);
     // Landing CTA: same fill-then-study path the dashboard's Study button arms.
     var fsb = document.getElementById('fill-study-btn');
     if (fsb) fsb.addEventListener('click', function () {
@@ -2292,17 +2363,73 @@ PGRE.views.formulas = (function () {
      Persists to sessionStorage, localStorage['pgre-formula-receipt'], and
      state.lastFormulaReceipt. */
 
-  function buildFormulaReceipt() {
-    var s = (PGRE.store && PGRE.store.state) || {};
-    var today = (PGRE.srs && typeof PGRE.srs.today === 'function') ? PGRE.srs.today() : (new Date().toISOString().slice(0, 10));
-    var allCards = (deck && deck.length) ? deck : ((PGRE.deck && PGRE.deck.length) ? PGRE.deck : (PGRE.FORMULAS || []));
+  function addDays(dayStr, n) {
+    if (PGRE.srs && typeof PGRE.srs.addDaysTo === 'function') {
+      return PGRE.srs.addDaysTo(dayStr, n);
+    }
+    var p = String(dayStr).split('-');
+    var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    d.setDate(d.getDate() + n);
+    var mm = String(d.getMonth() + 1);
+    if (mm.length < 2) mm = '0' + mm;
+    var dd = String(d.getDate());
+    if (dd.length < 2) dd = '0' + dd;
+    return d.getFullYear() + '-' + mm + '-' + dd;
+  }
 
-    // 1. Collect formulas recalled today (combining in-progress/recent session and store state)
+  function getScopeLabels(scope) {
+    if (scope === '7d') {
+      return {
+        tile: 'Recalled (7 days)',
+        head: 'Recalled in last 7 days',
+        empty: 'No formulas reviewed in the last 7 days.',
+        summary: 'Recalled in last 7 days',
+        subhead: 'Recalled formulas (last 7 days):'
+      };
+    }
+    if (scope === '30d') {
+      return {
+        tile: 'Recalled (30 days)',
+        head: 'Recalled in last 30 days',
+        empty: 'No formulas reviewed in the last 30 days.',
+        summary: 'Recalled in last 30 days',
+        subhead: 'Recalled formulas (last 30 days):'
+      };
+    }
+    if (scope === 'all') {
+      return {
+        tile: 'Recalled (all time)',
+        head: 'Recalled (all time)',
+        empty: 'No formulas reviewed yet.',
+        summary: 'Recalled (all time)',
+        subhead: 'Recalled formulas (all time):'
+      };
+    }
+    return {
+      tile: 'Recalled today',
+      head: 'Today\'s recalled formulas',
+      empty: 'No formulas reviewed yet today. Complete recall cards to log today\'s practice.',
+      summary: 'Recalled today',
+      subhead: 'Today\'s recalled formulas:'
+    };
+  }
+
+  function gatherRecalled(targetScope, fromDay, toDay) {
+    var s = (PGRE.store && PGRE.store.state) || {};
+    var today = toDay || ((PGRE.srs && typeof PGRE.srs.today === 'function') ? PGRE.srs.today() : (new Date().toISOString().slice(0, 10)));
+
+    function inWindow(d) {
+      if (typeof d !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+      if (fromDay && d < fromDay) return false;
+      if (d > today) return false;
+      return true;
+    }
+
     var recalledMap = {};
     var recalledList = [];
 
-    // Source A: current live study session history
-    if (study && Array.isArray(study.history) && study.history.length) {
+    // Source A: current live study session history (included if today is in window)
+    if (inWindow(today) && study && Array.isArray(study.history) && study.history.length) {
       study.history.forEach(function (h) {
         if (!h || !h.c || !h.c.id) return;
         var cid = h.c.id;
@@ -2328,8 +2455,8 @@ PGRE.views.formulas = (function () {
       });
     }
 
-    // Source B: last completed study session in this page lifecycle
-    if (lastCompletedStudy && Array.isArray(lastCompletedStudy.history) && lastCompletedStudy.history.length) {
+    // Source B: last completed study session in this page lifecycle (included if today is in window)
+    if (inWindow(today) && lastCompletedStudy && Array.isArray(lastCompletedStudy.history) && lastCompletedStudy.history.length) {
       lastCompletedStudy.history.forEach(function (h) {
         if (!h || !h.c || !h.c.id) return;
         var cid = h.c.id;
@@ -2354,14 +2481,17 @@ PGRE.views.formulas = (function () {
       });
     }
 
-    // Source C: cards studied today according to store.cards and srs.studiedToday
+    // Source C: cards studied in window according to store.cards and srs.studiedToday
     if (s.cards && typeof s.cards === 'object') {
       Object.keys(s.cards).forEach(function (cid) {
         var st = s.cards[cid];
         if (!st) return;
-        var studied = (PGRE.srs && typeof PGRE.srs.studiedToday === 'function') ?
-          PGRE.srs.studiedToday(st) :
-          (st.lastReviewedDay === today);
+        var studied = false;
+        if (st.lastReviewedDay) {
+          studied = inWindow(st.lastReviewedDay);
+        } else if (targetScope === 'today' && PGRE.srs && typeof PGRE.srs.studiedToday === 'function') {
+          studied = PGRE.srs.studiedToday(st);
+        }
         if (!studied) return;
 
         var c = deckById(cid) || ((PGRE.getFormulaCard && PGRE.getFormulaCard(cid)) || null);
@@ -2384,11 +2514,11 @@ PGRE.views.formulas = (function () {
       });
     }
 
-    // Source D: cardReviews entries for today (e.g. from Match, Type, Quiz games)
+    // Source D: cardReviews entries in window
     if (Array.isArray(s.cardReviews)) {
       for (var rIdx = s.cardReviews.length - 1; rIdx >= 0; rIdx--) {
         var rev = s.cardReviews[rIdx];
-        if (!rev || rev.d !== today || !rev.id) continue;
+        if (!rev || !rev.id || !inWindow(rev.d)) continue;
         var rCid = rev.id;
         var rC = deckById(rCid) || ((PGRE.getFormulaCard && PGRE.getFormulaCard(rCid)) || null);
         if (!recalledMap[rCid]) {
@@ -2431,6 +2561,22 @@ PGRE.views.formulas = (function () {
       }
     });
 
+    return recalledList;
+  }
+
+  function buildFormulaReceipt(scope) {
+    var s = (PGRE.store && PGRE.store.state) || {};
+    var today = (PGRE.srs && typeof PGRE.srs.today === 'function') ? PGRE.srs.today() : (new Date().toISOString().slice(0, 10));
+    var allCards = (deck && deck.length) ? deck : ((PGRE.deck && PGRE.deck.length) ? PGRE.deck : (PGRE.FORMULAS || []));
+
+    var validScope = (scope === '7d' || scope === '30d' || scope === 'all') ? scope : 'today';
+    var fromDay = null;
+    if (validScope === 'today') fromDay = today;
+    else if (validScope === '7d') fromDay = addDays(today, -6);
+    else if (validScope === '30d') fromDay = addDays(today, -29);
+
+    var recalledList = gatherRecalled(validScope, fromDay, today);
+    var recalledTodayList = (validScope === 'today') ? recalledList : gatherRecalled('today', today, today);
     // 2. Overall deck mastery and learning status
     var totalDeck = allCards.length;
     var learnedCount = 0;
@@ -2501,18 +2647,19 @@ PGRE.views.formulas = (function () {
     } else {
       sessionInfo = {
         state: 'idle',
-        recalledTodayCount: recalledList.length
+        recalledTodayCount: recalledTodayList.length
       };
     }
 
     // 4. Human / agent readable summary text
+    var labels = getScopeLabels(validScope);
     var summaryLines = [
       '# Formula Recall · ' + today,
-      'Recalled today: ' + recalledList.length + ' formula' + (recalledList.length === 1 ? '' : 's') + '.',
+      labels.summary + ': ' + recalledList.length + ' formula' + (recalledList.length === 1 ? '' : 's') + '.',
       'Overall mastery: ' + learnedCount + '/' + totalDeck + ' learned (' + pctLearned + '%), ' + matureCount + ' mature, ' + unseenCount + ' unseen' + (checkIn ? ' (streak ' + checkIn.currentStreak + ' d)' : '') + '.'
     ];
     if (recalledList.length) {
-      summaryLines.push('\nToday\'s recalled formulas:');
+      summaryLines.push('\n' + labels.subhead);
       recalledList.forEach(function (r, idx) {
         var gradeTag = r.lastGrade ? ' [' + r.lastGrade.toUpperCase() + ']' : '';
         var ivlTag = r.interval != null ? ' (ivl: ' + r.interval + 'd)' : '';
@@ -2551,11 +2698,17 @@ PGRE.views.formulas = (function () {
     return {
       v: 1,
       kind: 'pgre-formula-receipt',
+      scope: validScope,
+      range: {
+        from: fromDay,
+        to: today
+      },
       exportedAt: new Date().toISOString(),
       date: today,
       origin: (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : ((typeof location !== 'undefined' && location.origin) ? location.origin : 'file://'),
       session: sessionInfo,
-      recalledToday: recalledList,
+      recalled: recalledList,
+      recalledToday: recalledTodayList,
       overallStatus: {
         deckSize: totalDeck,
         learned: learnedCount,
@@ -2633,7 +2786,8 @@ PGRE.views.formulas = (function () {
   function downloadFormulaReceipt(receipt) {
     if (!receipt) return;
     var day = (receipt.date || (PGRE.srs && PGRE.srs.today()) || '').replace(/-/g, '');
-    var filename = 'pgre-formula-status-' + (day || 'today') + '.json';
+    var suffix = (receipt.scope && receipt.scope !== 'today') ? ('-' + receipt.scope) : '';
+    var filename = 'pgre-formula-status-' + (day || 'today') + suffix + '.json';
     var blob = new Blob([JSON.stringify(receipt, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
@@ -2647,7 +2801,7 @@ PGRE.views.formulas = (function () {
   }
 
   function openFormulaExportModal() {
-    var receipt = buildFormulaReceipt();
+    var receipt = buildFormulaReceipt('today');
     persistFormulaReceipt(receipt);
 
     var old = document.getElementById('formula-export-overlay');
@@ -2660,44 +2814,68 @@ PGRE.views.formulas = (function () {
     overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-label', 'Formula learning status');
 
-    var recalledCount = receipt.recalledToday ? receipt.recalledToday.length : 0;
-    var overall = receipt.overallStatus || {};
-    var learned = overall.learned || 0;
-    var total = overall.deckSize || 0;
-    var pct = overall.pctLearned != null ? overall.pctLearned : 0;
-    var mature = overall.mature || 0;
+    function renderModalContent(rcpt) {
+      var recalled = (rcpt && (rcpt.recalled || rcpt.recalledToday)) || [];
+      var recalledCount = recalled.length;
+      var overall = (rcpt && rcpt.overallStatus) || {};
+      var learned = overall.learned || 0;
+      var total = overall.deckSize || 0;
+      var pct = overall.pctLearned != null ? overall.pctLearned : 0;
+      var mature = overall.mature || 0;
+      var labels = getScopeLabels((rcpt && rcpt.scope) || 'today');
 
-    var listHtml = '';
-    if (recalledCount > 0) {
-      listHtml = '<div class="export-recalled-wrap">' +
-        '<div class="export-recalled-head">' +
-          '<span>Today\'s recalled formulas (' + recalledCount + ')</span>' +
-          '<span class="muted" style="font-size: 11px;">topic · grade · interval</span>' +
-        '</div>' +
-        '<div class="export-recalled-list">';
-      receipt.recalledToday.forEach(function (item) {
-        var topChip = item.topic ? '<span class="chip" style="font-size: 11px; padding: 1px 6px;">' + PGRE.ui.esc(item.topic) + '</span>' : '';
-        var gradeClass = item.lastGrade ? 'grade-' + item.lastGrade : '';
-        var gradeBadge = item.lastGrade ? '<span class="grade-chip ' + gradeClass + '" style="font-size: 10px; padding: 1px 6px;">' + PGRE.ui.esc(item.lastGrade) + '</span>' : '';
-        var ivlStr = item.interval != null ? '<span style="font-size: 11px; font-family: var(--mono); color: var(--muted);">' + item.interval + 'd</span>' : '';
-        listHtml += '<div class="export-recalled-item">' +
-          '<div class="export-recalled-item-left">' +
-            '<span class="export-item-id">' + PGRE.ui.esc(item.id) + '</span>' +
-            '<span class="export-item-name">' + PGRE.ui.esc(item.name || item.id) + '</span>' +
+      var listHtml = '';
+      if (recalledCount > 0) {
+        listHtml = '<div class="export-recalled-wrap">' +
+          '<div class="export-recalled-head">' +
+            '<span>' + labels.head + ' (' + recalledCount + ')</span>' +
+            '<span class="muted" style="font-size: 11px;">topic · grade · interval</span>' +
           '</div>' +
-          '<div class="export-recalled-item-right">' +
-            topChip + gradeBadge + ivlStr +
-          '</div>' +
+          '<div class="export-recalled-list">';
+        recalled.forEach(function (item) {
+          var topChip = item.topic ? '<span class="chip" style="font-size: 11px; padding: 1px 6px;">' + PGRE.ui.esc(item.topic) + '</span>' : '';
+          var gradeClass = item.lastGrade ? 'grade-' + item.lastGrade : '';
+          var gradeBadge = item.lastGrade ? '<span class="grade-chip ' + gradeClass + '" style="font-size: 10px; padding: 1px 6px;">' + PGRE.ui.esc(item.lastGrade) + '</span>' : '';
+          var ivlStr = item.interval != null ? '<span style="font-size: 11px; font-family: var(--mono); color: var(--muted);">' + item.interval + 'd</span>' : '';
+          listHtml += '<div class="export-recalled-item">' +
+            '<div class="export-recalled-item-left">' +
+              '<span class="export-item-id">' + PGRE.ui.esc(item.id) + '</span>' +
+              '<span class="export-item-name">' + PGRE.ui.esc(item.name || item.id) + '</span>' +
+            '</div>' +
+            '<div class="export-recalled-item-right">' +
+              topChip + gradeBadge + ivlStr +
+            '</div>' +
+          '</div>';
+        });
+        listHtml += '</div></div>';
+      } else {
+        listHtml = '<div class="export-recalled-wrap" style="padding: 14px; text-align: center;">' +
+          '<p class="muted" style="margin: 0; font-size: 13px;">' + labels.empty + '</p>' +
         '</div>';
-      });
-      listHtml += '</div></div>';
-    } else {
-      listHtml = '<div class="export-recalled-wrap" style="padding: 14px; text-align: center;">' +
-        '<p class="muted" style="margin: 0; font-size: 13px;">No formulas reviewed yet today. Complete recall cards to log today\'s practice.</p>' +
-      '</div>';
-    }
+      }
 
-    var jsonStr = JSON.stringify(receipt, null, 2);
+      var jsonStr = JSON.stringify(rcpt, null, 2);
+
+      return '<div class="export-stats-grid">' +
+          '<div class="export-stat-tile">' +
+            '<div class="stat-num">' + recalledCount + '</div>' +
+            '<div class="stat-label">' + labels.tile + '</div>' +
+          '</div>' +
+          '<div class="export-stat-tile">' +
+            '<div class="stat-num">' + learned + '<span style="font-size: 12px; color: var(--muted); font-weight: normal;"> / ' + total + '</span></div>' +
+            '<div class="stat-label">' + pct + '% learned</div>' +
+          '</div>' +
+          '<div class="export-stat-tile">' +
+            '<div class="stat-num">' + mature + '</div>' +
+            '<div class="stat-label">Mature (≥21d)</div>' +
+          '</div>' +
+        '</div>' +
+        listHtml +
+        '<details class="export-json-details" style="margin-top: 10px;">' +
+          '<summary class="muted" style="cursor: pointer; font-size: 11px;">View full JSON payload</summary>' +
+          '<pre class="agent-receipt-fallback" id="export-json-preview" style="max-height: 120px; margin-top: 6px;">' + PGRE.ui.esc(jsonStr) + '</pre>' +
+        '</details>';
+    }
 
     overlay.innerHTML = '<div class="card exam-overlay-card formula-export-card">' +
       '<div class="export-modal-header">' +
@@ -2705,27 +2883,19 @@ PGRE.views.formulas = (function () {
           '<h2 style="margin: 0 0 2px;">Formula learning status</h2>' +
           '<div class="muted" style="font-size: 12px;">' + receipt.date + ' · for your OrbitOS agent</div>' +
         '</div>' +
-        '<button type="button" class="btn btn-ghost btn-sm" id="export-modal-close" aria-label="Close">&times;</button>' +
-      '</div>' +
-      '<div class="export-stats-grid">' +
-        '<div class="export-stat-tile">' +
-          '<div class="stat-num">' + recalledCount + '</div>' +
-          '<div class="stat-label">Recalled today</div>' +
-        '</div>' +
-        '<div class="export-stat-tile">' +
-          '<div class="stat-num">' + learned + '<span style="font-size: 12px; color: var(--muted); font-weight: normal;"> / ' + total + '</span></div>' +
-          '<div class="stat-label">' + pct + '% learned</div>' +
-        '</div>' +
-        '<div class="export-stat-tile">' +
-          '<div class="stat-num">' + mature + '</div>' +
-          '<div class="stat-label">Mature (≥21d)</div>' +
+        '<div class="export-modal-header-actions">' +
+          '<select id="export-scope-sel" class="export-scope-sel" aria-label="Export time scope">' +
+            '<option value="today" selected>Today</option>' +
+            '<option value="7d">Last 7 days</option>' +
+            '<option value="30d">Last 30 days</option>' +
+            '<option value="all">All time</option>' +
+          '</select>' +
+          '<button type="button" class="btn btn-ghost btn-sm" id="export-modal-close" aria-label="Close">&times;</button>' +
         '</div>' +
       '</div>' +
-      listHtml +
-      '<details class="export-json-details" style="margin-top: 10px;">' +
-        '<summary class="muted" style="cursor: pointer; font-size: 11px;">View full JSON payload</summary>' +
-        '<pre class="agent-receipt-fallback" id="export-json-preview" style="max-height: 120px; margin-top: 6px;">' + PGRE.ui.esc(jsonStr) + '</pre>' +
-      '</details>' +
+      '<div id="export-modal-body">' +
+        renderModalContent(receipt) +
+      '</div>' +
       '<div class="btn-row" style="margin-top: 14px; justify-content: flex-end;">' +
         '<button type="button" class="btn btn-primary" id="export-copy-btn">Copy status for agent</button>' +
         '<button type="button" class="btn btn-ghost" id="export-download-btn">Download .json</button>' +
@@ -2753,6 +2923,25 @@ PGRE.views.formulas = (function () {
     overlay.addEventListener('click', function (e) {
       if (e.target === overlay) closeModal();
     });
+
+    var scopeSel = document.getElementById('export-scope-sel');
+    if (scopeSel) {
+      scopeSel.addEventListener('change', function () {
+        var newScope = scopeSel.value || 'today';
+        receipt = buildFormulaReceipt(newScope);
+        persistFormulaReceipt(receipt);
+        var bodyEl = document.getElementById('export-modal-body');
+        if (bodyEl) {
+          var detailsEl = (typeof bodyEl.querySelector === 'function') ? bodyEl.querySelector('details') : null;
+          var wasOpen = detailsEl ? detailsEl.open : false;
+          bodyEl.innerHTML = renderModalContent(receipt);
+          if (wasOpen && typeof bodyEl.querySelector === 'function') {
+            var newDetails = bodyEl.querySelector('details');
+            if (newDetails) newDetails.open = true;
+          }
+        }
+      });
+    }
 
     var closeBtn = document.getElementById('export-modal-close');
     if (closeBtn) closeBtn.addEventListener('click', closeModal);

@@ -116,6 +116,24 @@ PGRE.views.exam = (function () {
     if (m < 60) return m + ' min';
     return Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
   }
+  function todayIso() {
+    var d = new Date();
+    function pad(n) { return String(n).padStart(2, '0'); }
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  function scheduleLabel(iso) {
+    if (!iso) return '';
+    var d = new Date(iso + 'T12:00:00');
+    return isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric'
+    });
+  }
+
+  function isScheduledLater(iso) {
+    return !!iso && todayIso() < iso;
+  }
+
   function answeredCount(exam) {
     return exam.order.filter(function (qid) { return exam.answers[qid] != null; }).length;
   }
@@ -166,17 +184,25 @@ PGRE.views.exam = (function () {
         '</div></div>';
     }
 
-    // Primary: the next real released exam you have not sat yet
+    // Protect the next intact form until its scheduled diagnostic date. The
+    // current-format draw remains the safe practice path in the meantime.
     if (nextExam) {
       var nfm = eng.FORMAT_META[nextExam.format];
+      var locked = isScheduledLater(next && next.scheduledFor);
+      var scheduleNote = locked
+        ? ' It is scheduled for ' + scheduleLabel(next.scheduledFor) + '; use the practice set below until then.'
+        : '';
       html += '<div class="card exam-format exam-next-mock">' +
-        '<div class="exam-format-head"><h2>Your next mock</h2>' +
+        '<div class="exam-format-head"><h2>' + (locked ? 'Next scheduled mock' : 'Your next mock') + '</h2>' +
         '<span class="chip">' + (nfm ? ui.esc(nfm.label) : 'official') + '</span></div>' +
         '<p class="muted">The next real exam you have not sat: <strong>' + ui.esc(next.title) +
         '</strong>. Replayed word for word and scored with the official answer key and ' +
-        'ETS’s own published raw-to-scaled table — the truest read on where you stand.</p>' +
-        '<div class="btn-row"><button class="btn btn-primary" data-replay="' + ui.esc(nextExam.id) + '"' +
-        (act ? ' disabled' : '') + '>Start ' + ui.esc(next.title) + '</button></div></div>';
+        'ETS’s own published raw-to-scaled table.' + scheduleNote + '</p>' +
+        '<div class="btn-row"><button class="btn ' + (locked ? 'btn-ghost' : 'btn-primary') +
+        '" data-replay="' + ui.esc(nextExam.id) + '"' +
+        (act || locked ? ' disabled' : '') + '>' +
+        (locked ? 'Unlocks ' + ui.esc(scheduleLabel(next.scheduledFor)) : 'Start ' + ui.esc(next.title)) +
+        '</button></div></div>';
     }
 
     // Other released ETS exams — verbatim replay, official key + published scaling
@@ -216,13 +242,14 @@ PGRE.views.exam = (function () {
       'weights (CM 20 · EM 18 · QM 13 · TS 10 · AP 10 · ST 9 · OW 8 · SR 6 · LM 6), preferring ' +
       'questions you have not seen. The drawable pool is ' + pool + ' question' +
       (pool === 1 ? '' : 's') + ': ' + dailyN + ' in the daily pool (' +
-      nPreview + ' preview + ' + nBook + ' book + ' + nDrill + ' drill) plus ' +
+      nPreview + ' preview + ' + nBook + ' book + ' + nDrill + ' drill). ' +
       nCpgExam + ' book sample-exam question' + (nCpgExam === 1 ? '' : 's') +
-      '. The ' + nEtsExam + ' question' + (nEtsExam === 1 ? '' : 's') + ' across ' +
-      etsExams.length + ' intact released ETS form' + (etsExams.length === 1 ? '' : 's') +
-      ' stay out so they remain unspoiled.</p>';
+      ' and ' + nEtsExam + ' released-ETS question' + (nEtsExam === 1 ? '' : 's') +
+      ' stay protected for verbatim replay.</p>';
     if (pool >= need70) {
-      html += '<div class="btn-row"><button class="btn btn-ghost" id="start-70"' +
+      html += '<div class="btn-row"><button class="btn ' +
+        (nextExam && isScheduledLater(next && next.scheduledFor) ? 'btn-primary' : 'btn-ghost') +
+        '" id="start-70"' +
         (act ? ' disabled' : '') + '>Start a 70-question set</button></div>';
     } else {
       html += bankNotReady(need70, pool, false);

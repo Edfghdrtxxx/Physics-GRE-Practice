@@ -24,6 +24,7 @@ PGRE.views.dashboard = (function () {
   var qotdStart = 0;                              // per-render answer timer
   var qotdBoundDate = null;                       // today.date when the card was wired
   var keyBound = false;                           // the document keydown listener is installed once
+  var qotdCommit = null;                          // select-then-confirm controller for today's Q
 
   /* Local YYYY-MM-DD for an offset from the 03:00 study-day (same window as
      todaySec / studyLog keys). Before 03:00, offset 0 is yesterday's date. */
@@ -99,9 +100,14 @@ PGRE.views.dashboard = (function () {
         '<span class="choice-body">' + c + '</span></button>';
     });
     html += '</div>';
-    if (!done && PGRE.store.state.settings.keyboard) {
-      html += '<div class="practice-keys muted">' +
-        '<span class="key-hint">A</span>–<span class="key-hint">E</span> answer</div>';
+    if (!done) {
+      html += '<div class="btn-row choice-commit-row">' +
+        '<button type="button" class="btn btn-primary" id="confirm-btn" disabled>Confirm</button>' +
+        '<span class="practice-keys muted">or double-click a choice' +
+          (PGRE.store.state.settings.keyboard
+            ? ' · <span class="key-hint">A</span>–<span class="key-hint">E</span> select · <span class="key-hint">Enter</span> confirm'
+            : '') +
+        '</span></div>';
     }
     html += done ? qotdSolvedFeedback(q, done.correct, null) : '<div id="qotd-feedback"></div>';
     return html;
@@ -154,12 +160,16 @@ PGRE.views.dashboard = (function () {
     body.querySelectorAll('.choice').forEach(function (b) {
       var i = parseInt(b.getAttribute('data-idx'), 10);
       b.disabled = true;
+      b.classList.remove('is-picked');
       if (i === q.answer) b.classList.add('is-answer');
       if (i === idx && !isCorrect) b.classList.add('is-wrong');
       b.setAttribute('aria-pressed', i === idx ? 'true' : 'false');
     });
+    var commitBar = body.querySelector('.choice-commit-row');
+    if (commitBar && commitBar.parentNode) commitBar.parentNode.removeChild(commitBar);
     var fb = document.getElementById('qotd-feedback');
     if (fb) { fb.innerHTML = qotdSolvedFeedback(q, isCorrect, xp); PGRE.typesetMath(fb); }
+    qotdCommit = null;
   }
 
   function bindQotd() {
@@ -167,19 +177,18 @@ PGRE.views.dashboard = (function () {
     var body = document.getElementById('qotd-body');
     if (!q || !body) return;
     PGRE.typesetMath(body);
+    qotdCommit = null;
     if (PGRE.store.state.today.qotd) return;         // already solved: nothing to bind
     qotdStart = Date.now();
     qotdBoundDate = PGRE.store.state.today.date;
-    body.querySelectorAll('.choice').forEach(function (b) {
-      b.addEventListener('click', function () {
-        answerQotd(q, parseInt(b.getAttribute('data-idx'), 10));
-      });
+    qotdCommit = PGRE.ui.bindChoiceCommit(body, {
+      onCommit: function (idx) { answerQotd(q, idx); }
     });
   }
 
   /* ——— Keyboard (same opt-in setting as practice: settings.keyboard) ———
-     A–E / 1–5 answer the Question of the day, matching the practice room's
-     convention. Live only while today's question is on screen unanswered. */
+     A–E / 1–5 select, Enter confirms. Live only while today's question is
+     on screen unanswered. */
   function onKey(e) {
     if (!PGRE.store.state.settings.keyboard) return;
     if (PGRE.store.state.today.qotd) return;           // already solved today
@@ -191,6 +200,12 @@ PGRE.views.dashboard = (function () {
         (e.target && e.target.isContentEditable)) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     var k = e.key;
+    if (k === 'Enter') {
+      if (!qotdCommit) return;
+      e.preventDefault();
+      qotdCommit.commit();
+      return;
+    }
     var idx = -1;
     if (/^[a-eA-E]$/.test(k)) idx = k.toUpperCase().charCodeAt(0) - 65;
     else if (/^[1-5]$/.test(k)) idx = parseInt(k, 10) - 1;
@@ -198,7 +213,7 @@ PGRE.views.dashboard = (function () {
     var q = qotdPick();
     if (!q || idx >= q.choices.length) return;
     e.preventDefault();
-    answerQotd(q, idx);
+    if (qotdCommit) qotdCommit.select(idx);
   }
 
   /* ————————————————————————————————————————————————————————————
@@ -392,9 +407,24 @@ PGRE.views.dashboard = (function () {
   }
 
   /* Next unused intact ETS form. Never GR8677/GR9277 as a fresh test.
-     If ets2024 has not been sat, it is the pointer even when the catalog
-     has not loaded. Shared with the exam setup screen as PGRE.nextMockPointer
-     so both surfaces point at the same sitting. */
+     Keep the scheduled date with the pointer so the lobby can protect a
+     future diagnostic from an accidental early click. */
+  function mockScheduleDate(id) {
+    var plan = PGRE.PLAN || [];
+    for (var pi = 0; pi < plan.length; pi++) {
+      var weeks = plan[pi] && plan[pi].weeks || [];
+      for (var wi = 0; wi < weeks.length; wi++) {
+        var mocks = weeks[wi] && weeks[wi].mocks || [];
+        for (var mi = 0; mi < mocks.length; mi++) {
+          if (mocks[mi] && String(mocks[mi].id).toLowerCase() === String(id).toLowerCase()) {
+            return mocks[mi].date || null;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
   function nextMockPointer() {
     var sat = {};
     (PGRE.store.state.exams || []).forEach(function (x) {
@@ -408,14 +438,17 @@ PGRE.views.dashboard = (function () {
       }
       return fallback;
     }
-    if (!sat.ets2024) return { id: 'ets2024', title: catalogTitle('ets2024', 'ETS 2024') };
+    if (!sat.ets2024) {
+      return { id: 'ets2024', title: catalogTitle('ets2024', 'ETS 2024'),
+        scheduledFor: mockScheduleDate('ets2024') };
+    }
     var list = PGRE.ETS_EXAMS || [];
     for (var i = 0; i < list.length; i++) {
       var ex = list[i];
       if (!ex || !ex.id) continue;
       var id = String(ex.id).toLowerCase();
       if (skip[id] || sat[id]) continue;
-      return { id: ex.id, title: ex.title || ex.id };
+      return { id: ex.id, title: ex.title || ex.id, scheduledFor: mockScheduleDate(ex.id) };
     }
     return null;
   }
@@ -458,8 +491,13 @@ PGRE.views.dashboard = (function () {
         '<span class="rq-count" id="today-formulas">…</span>' +
         '<button type="button" class="btn btn-primary btn-sm" id="today-formulas-btn">Study →</button></div>';
     if (mock) {
+      var mockSchedule = mock.scheduledFor
+        ? ' · scheduled ' + new Date(mock.scheduledFor + 'T12:00:00').toLocaleDateString('en-US', {
+          month: 'short', day: 'numeric'
+        })
+        : '';
       html += '<div class="rq-row"><span class="rq-label">Mock exam</span>' +
-        '<span class="rq-count">Next current-format mock: ' + ui.esc(mock.title) + '</span>' +
+        '<span class="rq-count">Next planned intact mock: ' + ui.esc(mock.title) + ui.esc(mockSchedule) + '</span>' +
         '<a class="btn btn-ghost btn-sm" href="#/exam">Open →</a></div>';
     }
     html += '</div></div>';

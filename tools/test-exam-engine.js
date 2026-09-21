@@ -139,6 +139,10 @@ exam.order.forEach(function (id) { if (seen[id]) dupes++; else seen[id] = true; 
 assert(dupes === 0, 'weighted draw has no duplicate questions');
 assert(exam.order.every(function (id) { return !examQids[id]; }),
   'weighted draw contains no released ETS exam questions (GR8677/GR9277 stay unspoiled)');
+assert(exam.order.every(function (id) {
+  var drawn = PGRE.questionById(id);
+  return drawn && drawn.src !== 'cpg-exam';
+}), 'weighted draw contains no book sample-exam questions (reserved for verbatim replay)');
 assert(exam.order.every(function (id) { return PGRE.questionById(id) !== null; }),
   'every drawn id resolves through questionById');
 var perTopicCount = {};

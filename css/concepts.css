@@ -39,6 +39,11 @@
   gap: 16px;
   margin-top: 56px;
 }
+@media (max-width: 760px) {
+  .cv-door-cards {
+    grid-template-columns: 1fr;
+  }
+}
 .cv-door-card {
   display: block;
   background: var(--surface);
@@ -89,6 +94,58 @@
   border-color: var(--line);
 }
 
+.cv-mode-bar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 4px;
+  margin: 12px 0 20px;
+}
+.cv-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: calc(var(--radius) - 2px);
+  font-size: 13.5px;
+  color: var(--ink-2);
+  text-decoration: none;
+  background: transparent;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.cv-mode-btn:hover {
+  color: var(--ink);
+  background: var(--panel, #f5f0e8);
+  text-decoration: none;
+}
+.cv-mode-btn.active {
+  color: var(--accent-deep);
+  background: var(--bg);
+  border-color: var(--line);
+  box-shadow: 0 1px 3px rgba(20, 20, 19, 0.04);
+  font-weight: 500;
+}
+.cv-mode-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--panel, #f5f0e8);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.cv-mode-btn.active .cv-mode-num {
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+}
 .cv-search-label {
   display: block;
   font-size: 12px;

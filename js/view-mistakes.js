@@ -556,9 +556,9 @@ PGRE.views.mistakes = (function () {
           bits.join(' · ') + '</strong></div>';
       }
       if (!locked) {
-        html += '<div class="drill-reanswer-hint muted">Pick a different choice to answer again — ' +
+        html += '<div class="drill-reanswer-hint muted">Select a different choice, then Confirm or double-click — ' +
           'it replaces this answer. Leave and come back and the question is blank again; ' +
-          're-picking the same choice brings this result back.</div>';
+          'confirming the same choice brings this result back.</div>';
       }
     }
     html += '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
@@ -611,9 +611,13 @@ PGRE.views.mistakes = (function () {
         '<span class="choice-body">' + c + '</span></button>';
     });
     html += '</div>';
+    html += '<div class="btn-row choice-commit-row">' +
+      '<button type="button" class="btn btn-primary" id="confirm-btn" disabled>Confirm</button>' +
+      '<span class="practice-keys muted">or double-click a choice</span></div>';
     if (keys) {
       html += '<div class="practice-keys muted">' +
-        '<span class="key-hint">A</span>–<span class="key-hint">E</span> answer · ' +
+        '<span class="key-hint">A</span>–<span class="key-hint">E</span> select · ' +
+        '<span class="key-hint">Enter</span> confirm · ' +
         '<span class="key-hint">←</span> back · <span class="key-hint">→</span> next · ' +
         '<span class="key-hint">S</span> skip</div>';
     }
@@ -650,12 +654,7 @@ PGRE.views.mistakes = (function () {
     if (show) clearPace();
     else startPaceTimer();
 
-
-    root().querySelectorAll('.choice').forEach(function (b) {
-      b.addEventListener('click', function () {
-        drillAnswer(parseInt(b.getAttribute('data-idx'), 10));
-      });
-    });
+    drill.choiceCommit = PGRE.ui.bindChoiceCommit(root(), { onCommit: drillAnswer });
     // the controller is per-render: any later re-render (browse, reveal)
     // orphans the old chip row, so only a fresh answer leaves live shortcuts
     drill.assess = opts.fresh
@@ -729,15 +728,16 @@ PGRE.views.mistakes = (function () {
 
   function drillAnswer(idx) {
     if (!drill) return;
-    // the second click of a double-click on "Next" lands on the freshly
-    // rendered choices — ignore clicks inside the render's settling window
-    if (Date.now() - lastRenderAt < 300) return;
     var prev = drill.st[drill.i];
     // Standing by the answer you already gave records nothing — it just puts
     // the verdict and solution back on screen, which is the only way to re-read
     // them without replacing the answer.
     if (prev && prev.picked === idx) { renderDrillQuestion({ reveal: true }); return; }
     commitAnswer(idx);
+    if (!drill.st[drill.i]) {
+      renderDrillQuestion();
+      return;
+    }
     renderDrillQuestion({ fresh: true });
   }
 
@@ -749,6 +749,7 @@ PGRE.views.mistakes = (function () {
     clearPace();
     drill.i = idx;
     drill.reviewing = true;
+    drill.choiceCommit = null;
     lastRenderAt = Date.now();
     if (PGRE.nav) PGRE.nav.setTrail(['Review']);
     var q = drill.qs[idx];
@@ -844,10 +845,12 @@ PGRE.views.mistakes = (function () {
   }
 
   /* ——— Keyboard (same opt-in setting as practice: settings.keyboard) ———
-     A–E / 1–5 answer or re-answer, ← / → browse, S skip, Enter advances,
-     K / G / T / F self-assess (only while a fresh result is on screen). */
+     A–E / 1–5 select, Enter confirms (or re-answers), ← / → browse, S skip,
+     Enter/Space/N advance when nothing is pending, K / G / T / F self-assess
+     (only while a fresh result is on screen). */
   function onKey(e) {
     if (!drill || drill.done) return;                       // no drill, or its summary is up
+    if (drill.reviewing) return;                            // read-only review: click nav only
     if (!document.getElementById('mistakes-root')) return;  // not on the mistake-book view
     if (!PGRE.store.state.settings.keyboard) return;
     var tg = (e.target && e.target.tagName) || '';
@@ -858,13 +861,23 @@ PGRE.views.mistakes = (function () {
 
     if (/^[a-eA-E]$/.test(k) || /^[1-5]$/.test(k)) {
       var idx = /^[1-5]$/.test(k) ? parseInt(k, 10) - 1 : k.toUpperCase().charCodeAt(0) - 65;
-      if (idx < drill.qs[drill.i].choices.length) { e.preventDefault(); drillAnswer(idx); }
+      if (idx < drill.qs[drill.i].choices.length) {
+        e.preventDefault();
+        if (drill.choiceCommit) drill.choiceCommit.select(idx);
+      }
     } else if (k === 'ArrowLeft') {
       e.preventDefault(); goTo(drill.i - 1);
     } else if (k === 'ArrowRight') {
       e.preventDefault(); goTo(drill.i + 1);
     } else if (k === 's' || k === 'S') {
       e.preventDefault(); skipCurrent();
+    } else if (k === 'Enter' && drill.choiceCommit && drill.choiceCommit.selected() != null) {
+      // Only Confirm's native activation is the commit path. After a fresh
+      // answer, Next/Finish is focused — A–E then Enter must still confirm
+      // the pending re-pick, not advance.
+      if (document.activeElement && document.activeElement.id === 'confirm-btn') return;
+      e.preventDefault();
+      drill.choiceCommit.commit();
     } else if (k === 'Enter' || k === ' ' || k === 'n' || k === 'N') {
       // Enter/Space on a focused button already activates it — don't double-fire
       if ((k === 'Enter' || k === ' ') && document.activeElement &&

@@ -129,7 +129,7 @@ PGRE.views.build = (function () {
 
     var cnt = document.getElementById('build-count');
     if (!cnt) return;
-    var counts = [5, 10, 20].filter(function (c) { return c < n; });
+    var counts = [3, 5, 10, 20].filter(function (c) { return c <= n; });
     var html = '';
     counts.forEach(function (c) {
       html += '<button class="btn btn-ghost" data-start="' + c + '">' + c + ' questions</button>';

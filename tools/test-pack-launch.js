@@ -114,6 +114,78 @@ console.log('relaunch while already on custom');
   delete PGRE.route;
 })();
 
+console.log('\nlearn transfer custom quiz');
+
+console.log('\nlearn selector ranks grounded concepts and excludes protected sources');
+(function () {
+  PGRE.allQuestions = function () {
+    return [
+      { id: 'match', src: 'cpg', topic: 'em', subtopic: 'capacitor energy', difficulty: 2, q: 'A capacitor stores energy.' },
+      { id: 'weak', src: 'cpg', topic: 'em', subtopic: 'dielectric insertion', difficulty: 2, q: 'A dielectric changes capacitor energy.' },
+      { id: 'same-topic', src: 'ets-drill', topic: 'em', subtopic: 'RC charging', difficulty: 1, q: 'A capacitor charges through a resistor.' },
+      { id: 'other-topic', src: 'cpg', topic: 'cm', subtopic: 'projectile motion', difficulty: 2, q: 'A projectile moves.' },
+      { id: 'protected', src: 'ets-exam', topic: 'em', subtopic: 'capacitor energy', difficulty: 2, q: 'Protected exam item.' }
+    ];
+  };
+  var picked = PGRE.selectLearnQuestions({
+    topicIds: ['em'],
+    subtopics: ['capacitor energy'],
+    concepts: ['stored capacitor energy'],
+    weakSpots: ['dielectric'],
+    difficulty: 2,
+    excludeIds: ['same-topic']
+  });
+  assert(picked && picked.length === 3, 'selector returns exactly three questions');
+  assert(picked[0] === 'match', 'selector ranks exact subtopic match first');
+  assert(picked.indexOf('protected') === -1, 'selector excludes intact exam questions');
+  assert(picked.indexOf('same-topic') === -1, 'selector honors current-session exclusions');
+  var storage = mockStorage();
+  var loc = { hash: '#/' };
+  var cfg = PGRE.launchLearnDrill({
+    topicIds: ['em'],
+    concepts: ['capacitor energy'],
+    weakSpots: ['dielectric'],
+    difficulty: 2,
+    label: 'Learn transfer · capacitor energy'
+  }, storage, loc);
+  assert(cfg && cfg.ids.length === 3 && cfg.learnDrill === true,
+    'launchLearnDrill launches the selector result as a Learn handoff');
+  var storedCfg = JSON.parse(storage.getItem('pgre-quiz-config'));
+  assert(storedCfg.concepts[0] === 'capacitor energy' &&
+         storedCfg.weakSpots[0] === 'dielectric' && storedCfg.difficulty === 2,
+    'Learn handoff preserves all matching metadata in config');
+})();
+
+(function () {
+  PGRE.allQuestions = function () {
+    return [
+      { id: 'cpg-1', src: 'cpg' },
+      { id: 'cpg-2', src: 'cpg' },
+      { id: 'cpg-3', src: 'ets-drill' },
+      { id: 'exam-1', src: 'ets-exam' }
+    ];
+  };
+  var storage = mockStorage();
+  var loc = { hash: '#/' };
+  var cfg = PGRE.launchCustomQuiz({
+    ids: ['cpg-1', 'cpg-2', 'cpg-3'],
+    label: 'Learn transfer · Circular orbit'
+  }, storage, loc);
+  assert(PGRE.launchCustomQuiz({ ids: ['exam-1', 'cpg-2', 'cpg-3'], label: 'exam leak' },
+    mockStorage(), { hash: '#/' }) === null,
+    'learn transfer rejects intact exam questions');
+  assert(!!cfg, 'learn transfer returns config');
+  assert(loc.hash === '#/practice/custom', 'learn transfer routes to custom practice');
+  var stored = JSON.parse(storage.getItem('pgre-quiz-config'));
+  assert(stored.ids.length === 3, 'learn transfer stores exactly three ids');
+  assert(stored.learnDrill === true && stored.purpose === 'learn-drill',
+    'learn transfer is marked as a Learn drill, not a timed pack');
+  assert(PGRE.launchCustomQuiz({ ids: ['a', 'b'], label: 'too short' }, mockStorage(), { hash: '#/' }) === null,
+    'learn transfer rejects non-three-question sets');
+  assert(PGRE.launchCustomQuiz({ ids: ['a', 'a', 'b'], label: 'duplicate' }, mockStorage(), { hash: '#/' }) === null,
+    'learn transfer rejects duplicate ids');
+})();
+
 console.log('\nunknown pack');
 var storage = mockStorage();
 var loc = { hash: '#/plan' };

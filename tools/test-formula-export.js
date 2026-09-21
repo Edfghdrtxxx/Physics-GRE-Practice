@@ -220,6 +220,7 @@ PGRE.store.state.cards['cpgf-2.4'] = {
 };
 
 /* Seed card 3 as reviewed yesterday (should NOT be in recalledToday) */
+var yesterdayStr = PGRE.srs.addDaysTo(todayStr, -1);
 PGRE.store.state.cards['cpgf-3.1'] = {
   reps: 1,
   lapses: 0,
@@ -228,8 +229,8 @@ PGRE.store.state.cards['cpgf-3.1'] = {
   due: todayStr,
   reviews: 1,
   lastGrade: 'good',
-  lastReviewedDay: '2026-01-01',
-  lastReviewedAt: '2026-01-01T12:00:00.000Z'
+  lastReviewedDay: yesterdayStr,
+  lastReviewedAt: new Date(Date.now() - 86400000).toISOString()
 };
 
 var receipt2 = PGRE.buildFormulaReceipt();
@@ -277,11 +278,45 @@ var alc1 = receipt2.allLearnedCards.filter(function (x) { return x.id === 'cpgf-
 assert(alc1 && alc1.name === 'Energy of SHO' && alc1.interval === 3, 'allLearnedCards has card details');
 
 console.log('\nUI export buttons presence in source');
+assert(viewSrc.indexOf('id="home-export-btn"') >= 0, 'formulas home caught-up row has #home-export-btn');
 assert(viewSrc.indexOf('id="session-export-btn"') >= 0, 'in-progress card view has #session-export-btn');
 assert(viewSrc.indexOf('id="cp-export"') >= 0, 'checkpoint view has #cp-export');
 assert(viewSrc.indexOf('id="summary-export-btn"') >= 0, 'review complete summary view has #summary-export-btn');
 assert(viewSrc.indexOf('openFormulaExportModal') >= 0, 'openFormulaExportModal is defined and referenced');
 assert(viewSrc.indexOf('formula-export-overlay') >= 0, 'formula-export-overlay markup generated');
 
+
+console.log('\ntime scope filtering in buildFormulaReceipt');
+assert(receipt2.scope === 'today', 'default receipt has scope today');
+assert(receipt2.range && receipt2.range.from === todayStr && receipt2.range.to === todayStr, 'default receipt range is today..today');
+assert(Array.isArray(receipt2.recalled), 'receipt carries recalled array');
+assert(receipt2.recalled.length === 2, 'default scope recalled length matches recalledToday');
+
+var receiptExplicitToday = PGRE.buildFormulaReceipt('today');
+assert(receiptExplicitToday.scope === 'today', 'buildFormulaReceipt("today") has scope today');
+assert(receiptExplicitToday.recalled.length === 2, 'buildFormulaReceipt("today") excludes yesterday card from recalled');
+assert(receiptExplicitToday.recalledToday.length === 2, 'buildFormulaReceipt("today") recalledToday has 2 cards');
+
+var receipt7d = PGRE.buildFormulaReceipt('7d');
+assert(receipt7d.scope === '7d', 'buildFormulaReceipt("7d") has scope 7d');
+assert(receipt7d.range && receipt7d.range.to === todayStr, '7d range.to is today');
+assert(receipt7d.range && receipt7d.range.from === PGRE.srs.addDaysTo(todayStr, -6), '7d range.from is today - 6 days');
+assert(receipt7d.recalled.length === 3, '7d includes cpgf-3.1 yesterday + 2 today cards');
+assert(receipt7d.recalledToday.length === 2, '7d still keeps recalledToday as today only');
+
+var receipt30d = PGRE.buildFormulaReceipt('30d');
+assert(receipt30d.scope === '30d', 'buildFormulaReceipt("30d") has scope 30d');
+assert(receipt30d.range && receipt30d.range.from === PGRE.srs.addDaysTo(todayStr, -29), '30d range.from is today - 29 days');
+assert(receipt30d.recalled.length === 3, '30d includes yesterday card + 2 today cards');
+
+var receiptAll = PGRE.buildFormulaReceipt('all');
+assert(receiptAll.scope === 'all', 'buildFormulaReceipt("all") has scope all');
+assert(receiptAll.range && receiptAll.range.from === null, 'all range.from is null');
+assert(receiptAll.range && receiptAll.range.to === todayStr, 'all range.to is today');
+assert(receiptAll.recalled.length === 3, 'all includes every card with reviews (3 cards)');
+assert(receiptAll.recalledToday.length === 2, 'all still keeps recalledToday as today only');
+
+assert(viewSrc.indexOf('id="export-scope-sel"') >= 0, 'viewSrc contains id="export-scope-sel"');
+assert(viewSrc.indexOf('id="export-scope-sel"') < viewSrc.indexOf('id="export-modal-close"'), 'id="export-scope-sel" appears before id="export-modal-close" in modal markup');
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

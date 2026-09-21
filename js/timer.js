@@ -55,6 +55,116 @@ PGRE.timer = (function () {
     return h > 0 ? h + ':' + p(m) + ':' + p(s) : m + ':' + p(s);
   }
 
+  var GOAL_MIN_DEFAULT = 25;
+  var GOAL_MIN_MAX = 240;
+
+  function clampGoalMin(n) {
+    n = parseInt(n, 10);
+    if (!(n > 0)) return GOAL_MIN_DEFAULT;
+    return Math.min(GOAL_MIN_MAX, n);
+  }
+
+  function settingsBag() {
+    if (!PGRE.store || !PGRE.store.state) return null;
+    var s = PGRE.store.state.settings;
+    if (!s || typeof s !== 'object' || Array.isArray(s)) {
+      try { PGRE.store.state.settings = s = {}; } catch (e) { return null; }
+    }
+    return s;
+  }
+
+  function idleMode() {
+    var s = settingsBag();
+    return (s && s.focusMode === 'countdown') ? 'countdown' : 'timing';
+  }
+
+  function idleGoalMin() {
+    var s = settingsBag();
+    return clampGoalMin(s && s.focusGoalMin);
+  }
+
+  /* Idle pick: the mounted #/focus custom input wins so the page hero and
+     the top-bar Start agree; everywhere else the persisted top-bar mode. */
+  function readPendingGoal() {
+    var page = document.getElementById('focus-page');
+    if (page && page.isConnected && window.PGRE && PGRE.views && PGRE.views.focus &&
+        typeof PGRE.views.focus.pendingGoal === 'function') {
+      try { return PGRE.views.focus.pendingGoal(); } catch (e) { /* settings below */ }
+    }
+    return idleMode() === 'countdown' ? idleGoalMin() : null;
+  }
+
+  function setPending(mode, goalMin, origin) {
+    var s = settingsBag();
+    if (!s) return;
+    var nextMode = mode === 'countdown' ? 'countdown' : 'timing';
+    var nextGoal = (goalMin == null || goalMin === '' || !(parseInt(goalMin, 10) > 0))
+      ? idleGoalMin()
+      : clampGoalMin(goalMin);
+    var changed = s.focusMode !== nextMode || s.focusGoalMin !== nextGoal;
+    s.focusMode = nextMode;
+    s.focusGoalMin = nextGoal;
+    if (changed) {
+      try { PGRE.store.save(); } catch (e) { /* persist failure must not throw */ }
+    }
+    if (origin !== 'page' && window.PGRE && PGRE.views && PGRE.views.focus &&
+        typeof PGRE.views.focus.syncFromSettings === 'function') {
+      try { PGRE.views.focus.syncFromSettings(); } catch (e2) { /* ignore */ }
+    }
+    render();
+  }
+
+  function setPanelOpen(open) {
+    var openBtn = document.getElementById('focus-open');
+    var panel = document.getElementById('focus-mode-panel');
+    var box = openBtn && openBtn.closest ? openBtn.closest('.focus-mode') : null;
+    if (!openBtn || !panel) return;
+    panel.hidden = !open;
+    openBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (box) box.classList.toggle('is-open', open);
+    if (open) paintPanel();
+  }
+
+  function paintPanel() {
+    var panel = document.getElementById('focus-mode-panel');
+    if (!panel) return;
+    var t = st();
+    var on = !!(t && t.on);
+    var mode, goal;
+    if (on) {
+      goal = (typeof t.goalMin === 'number' && t.goalMin > 0) ? t.goalMin : null;
+      mode = goal ? 'countdown' : 'timing';
+    } else {
+      mode = idleMode();
+      goal = mode === 'countdown' ? idleGoalMin() : null;
+    }
+    panel.classList.toggle('is-locked', on);
+    panel.querySelectorAll('[data-fmode]').forEach(function (b) {
+      var is = b.getAttribute('data-fmode') === mode;
+      b.classList.toggle('active', is);
+      b.setAttribute('aria-pressed', is ? 'true' : 'false');
+      b.disabled = on;
+    });
+    var goals = document.getElementById('focus-mode-goals');
+    if (goals) goals.hidden = mode !== 'countdown';
+    var matched = false;
+    panel.querySelectorAll('[data-fgoal]').forEach(function (b) {
+      var val = parseInt(b.getAttribute('data-fgoal'), 10);
+      var is = mode === 'countdown' && goal === val;
+      b.classList.toggle('active', is);
+      b.disabled = on;
+      if (is) matched = true;
+    });
+    var custom = document.getElementById('focus-mode-custom');
+    if (custom) {
+      custom.disabled = on;
+      if (document.activeElement !== custom) {
+        custom.value = (mode === 'countdown' && !matched && goal) ? String(goal) : '';
+      }
+    }
+  }
+
+
   /* Top-bar TODAY chip: floor minutes + remainder seconds from
      liveTodaySec (committed studyLog plus the open heartbeat / focus
      gap). Dashboard card still uses the committed figure. */
@@ -332,6 +442,7 @@ PGRE.timer = (function () {
     startTick();
     dirty = true;
     flush(true);                   // persist the start so a crash right after resumes correctly
+    setPanelOpen(false);
     render();
     // Focus SFX on session start (user gesture from Start / top-bar unlocks audio).
     // Isolated so a blocked autoplay policy never aborts the started session.
@@ -450,8 +561,10 @@ PGRE.timer = (function () {
         : (on ? 'Focus timer running — click to stop' : 'Start focus timer'));
     }
     if (time) {
+      time.hidden = false;
+      var openBtn = document.getElementById('focus-open');
+      var modeName, modeTitle;
       if (on && t.startedAt) {
-        time.hidden = false;
         var hint = paused ? ' · paused' : '';   // elapsed computed above
         if (typeof t.goalMin === 'number' && t.goalMin > 0) {
           // F5: a countdown-goal session. Show REMAINING (not elapsed) so this always-
@@ -461,34 +574,91 @@ PGRE.timer = (function () {
           var remain = Math.max(0, t.goalMin * 60 - elapsed);
           time.textContent = fmtDur(remain);
           time.title = fmtDur(remain) + ' left · ' + t.goalMin + '-min goal' + hint;
+          modeName = 'Countdown';
+          modeTitle = time.title;
         } else {
           time.textContent = fmtDur(elapsed);   // open-ended: elapsed, unchanged from F3
           time.title = fmtDur(elapsed) + ' focused' + hint;
+          modeName = 'Timing';
+          modeTitle = time.title;
         }
-      } else { time.hidden = true; time.textContent = '0:00'; time.removeAttribute('title'); }
+      } else if (idleMode() === 'countdown') {
+        var gMin = idleGoalMin();
+        time.textContent = fmtDur(gMin * 60);
+        time.title = gMin + '-min countdown';
+        modeName = 'Countdown';
+        modeTitle = time.title;
+      } else {
+        time.textContent = '0:00';
+        time.title = 'Timing';
+        modeName = 'Timing';
+        modeTitle = 'Timing';
+      }
+      if (openBtn) {
+        openBtn.setAttribute('aria-label', modeName + ' — choose countdown or timing');
+        openBtn.setAttribute('title', modeTitle + ' — choose countdown or timing');
+      }
     }
+    paintPanel();
     paintToday();
   }
 
   function bindControls() {
     var btn = document.getElementById('focus-toggle');
-    if (!btn || btn._pgreBound) return;
-    btn._pgreBound = true;
-    btn.addEventListener('click', function () {
-      var t = st();
-      if (t && t.on) {
-        if (t.paused) { resume(); return; }   // BUNDLE D: paused top-bar button = Resume
-        stop();
-        return;
-      }
-      // F5: when the full-page focus face is mounted with a goal picked, honor it so the
-      // top-bar quick-start and the page hero agree on what Start does. pendingGoal()
-      // returns null off that page, preserving the classic open-ended quick start.
-      var g = null;
-      if (window.PGRE && PGRE.views && PGRE.views.focus && typeof PGRE.views.focus.pendingGoal === 'function') {
-        try { g = PGRE.views.focus.pendingGoal(); } catch (e) { g = null; }
-      }
-      start(g);
+    if (btn && !btn._pgreBound) {
+      btn._pgreBound = true;
+      btn.addEventListener('click', function () {
+        var t = st();
+        if (t && t.on) {
+          if (t.paused) { resume(); return; }   // BUNDLE D: paused top-bar button = Resume
+          stop();
+          return;
+        }
+        // Honor the idle pick: mounted #/focus custom input, else persisted
+        // top-bar Timing / Countdown. Off the focus page this used to always
+        // start an open-ended stopwatch.
+        start(readPendingGoal());
+      });
+    }
+    var openBtn = document.getElementById('focus-open');
+    var panel = document.getElementById('focus-mode-panel');
+    if (!openBtn || !panel || openBtn._pgreBound) return;
+    openBtn._pgreBound = true;
+    openBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      setPanelOpen(!!panel.hidden);
+    });
+    panel.addEventListener('click', function (e) { e.stopPropagation(); });
+    panel.querySelectorAll('[data-fmode]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (st() && st().on) return;
+        setPending(b.getAttribute('data-fmode'), idleGoalMin());
+      });
+    });
+    panel.querySelectorAll('[data-fgoal]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (st() && st().on) return;
+        setPending('countdown', parseInt(b.getAttribute('data-fgoal'), 10));
+      });
+    });
+    var custom = document.getElementById('focus-mode-custom');
+    if (custom) {
+      custom.addEventListener('input', function () {
+        if (st() && st().on) return;
+        var n = parseInt(custom.value, 10);
+        if (n > 0) setPending('countdown', Math.min(GOAL_MIN_MAX, n));
+      });
+      custom.addEventListener('blur', function () {
+        var n = parseInt(custom.value, 10);
+        var norm = (n > 0) ? String(Math.min(GOAL_MIN_MAX, n)) : '';
+        if (custom.value !== norm) custom.value = norm;
+        if (n > 0) setPending('countdown', n);
+        else paintPanel();
+      });
+    }
+    document.addEventListener('click', function () { setPanelOpen(false); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') setPanelOpen(false);
     });
   }
 
@@ -516,7 +686,7 @@ PGRE.timer = (function () {
       credit(Date.now());
       if (document.hidden) flush(true); else render();
     });
-    window.addEventListener('hashchange', function () { render(); });
+    window.addEventListener('hashchange', function () { setPanelOpen(false); render(); });
     document.addEventListener('click', paintToday, { capture: false, passive: true });
     document.addEventListener('keydown', paintToday, { capture: false, passive: true });
     bindAdoptRepaint();
@@ -575,6 +745,9 @@ PGRE.timer = (function () {
     // to distinguish held from actively-crediting.
     isRunning: function () { var t = PGRE.store.state.timer; return !!(t && t.on); },
     isPaused:  function () { var t = PGRE.store.state.timer; return !!(t && t.on && t.paused); },
-    stats: function () { return PGRE.store.state.timerStats; }
+    stats: function () { return PGRE.store.state.timerStats; },
+    pendingGoal: readPendingGoal,
+    setPending: setPending,
+    refresh: render
   };
 })();

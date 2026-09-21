@@ -52,6 +52,87 @@ PGRE.ui = {
     var s = new Date(start + 'T12:00:00').toLocaleDateString('en-US', opts);
     var e = new Date(end + 'T12:00:00').toLocaleDateString('en-US', opts);
     return s + ' – ' + e;
+  },
+
+  /* Select-then-commit for practice MCQ (drills, mistake book, QOTD).
+     First click / A–E highlights; Confirm or double-click submits. A later
+     single click on another choice retargets the pending pick. */
+  bindChoiceCommit: function (root, opts) {
+    opts = opts || {};
+    var selected = null;
+    var confirmId = opts.confirmId || 'confirm-btn';
+    var confirmBtn = (root && root.querySelector) ? root.querySelector('#' + confirmId) : null;
+    if (!confirmBtn) confirmBtn = document.getElementById(confirmId);
+
+    function setConfirmEnabled(on) {
+      if (!confirmBtn) return;
+      confirmBtn.disabled = !on;
+      if (on) confirmBtn.removeAttribute('disabled');
+      else confirmBtn.setAttribute('disabled', 'disabled');
+    }
+
+    function paint() {
+      if (!root || !root.querySelectorAll) return;
+      root.querySelectorAll('.choice').forEach(function (b) {
+        if (b.disabled) return;
+        var i = parseInt(b.getAttribute('data-idx'), 10);
+        var on = selected != null && i === selected;
+        b.classList.toggle('is-picked', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      setConfirmEnabled(selected != null);
+    }
+
+    function select(idx) {
+      if (idx == null || idx !== idx || idx < 0) return;
+      selected = idx;
+      paint();
+    }
+
+    function commit(idx) {
+      if (idx == null) idx = selected;
+      if (idx == null || idx !== idx || idx < 0) return;
+      selected = idx;
+      paint();
+      if (typeof opts.onCommit === 'function') opts.onCommit(idx);
+    }
+
+    if (root && root.querySelectorAll) {
+      root.querySelectorAll('.choice').forEach(function (b) {
+        if (b.disabled) return;
+        var down = false;
+        function arm() { down = true; }
+        b.addEventListener('pointerdown', arm);
+        b.addEventListener('mousedown', arm);
+        b.addEventListener('touchstart', arm);
+        b.addEventListener('click', function (e) {
+          if (b.disabled) return;
+          var armed = down;
+          down = false;
+          // Trailing click of a double-click is not a pick — dblclick commits.
+          if (e && e.detail > 1) return;
+          // Next click-through: mousedown was on the old control, click lands
+          // on this choice (detail >= 1, never armed). Synthetic .click()
+          // (tests) has no detail and is allowed.
+          if (!armed && e && e.detail >= 1) return;
+          select(parseInt(b.getAttribute('data-idx'), 10));
+        });
+        b.addEventListener('dblclick', function (e) {
+          if (e && e.preventDefault) e.preventDefault();
+          if (b.disabled) return;
+          commit(parseInt(b.getAttribute('data-idx'), 10));
+        });
+      });
+    }
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', function () {
+        if (confirmBtn.disabled) return;
+        commit(selected);
+      });
+    }
+    setConfirmEnabled(false);
+
+    return { select: select, commit: commit, selected: function () { return selected; } };
   }
 };
 
@@ -475,7 +556,11 @@ PGRE.nav = (function () {
         else if (view === 'exam' && params.sub === 'review') trail.push({ label: 'Review' });
         else if (view === 'concepts' && params.sub === 'search') trail.push({ label: 'Search' });
         else if (view === 'concepts' && params.sub === 'visualizers') trail.push({ label: 'Visualizers' });
-        else if (view === 'concepts' && params.sub === 'spherical') trail.push({ label: 'Spherical coordinates' });
+        else if (view === 'concepts' && (params.sub === 'spherical' || params.sub === 'azimuth')) {
+          trail.push({ label: 'Concepts', href: '#/concepts/spherical' });
+          if (params.sub === 'azimuth') trail.push({ label: 'Direction of azimuth' });
+          else trail.push({ label: 'Spherical coordinates' });
+        }
       }
       base = trail;
       paint(base);
@@ -724,19 +809,29 @@ PGRE.setTheme = function (t) {
   PGRE.applyTheme(t);
 };
 
+/* The store is origin-scoped: file://, localhost, and 127.0.0.1 are separate
+   profiles. Keep the active profile visible so an empty store cannot look like
+   lost progress after switching launch methods. */
+PGRE.updateOriginLine = function () {
+  var el = document.getElementById('origin-line');
+  if (!el) return;
+  var origin = (window.location && window.location.origin !== 'null')
+    ? window.location.origin
+    : 'file://';
+  el.textContent = 'Profile: ' + origin;
+  el.title = 'Progress is stored separately for each browser origin. This profile is ' +
+    origin + '.';
+};
+
 /* ——— Boot ——— */
 PGRE.boot = function () {
   PGRE.store.load();
+  PGRE.updateOriginLine();
   if (PGRE.store._recoveredFromCorruption) {
     var corruptKey = PGRE.store._corruptKey;
     PGRE.toast('Saved progress could not be read' +
       (corruptKey ? '; a copy was kept as ' + PGRE.ui.esc(corruptKey) : ' and could not be copied aside') +
       '. Restore from Library if this looks wrong.', 'error', true);
-  }
-  var originLine = document.getElementById('origin-line');
-  if (originLine) {
-    originLine.textContent = 'Progress stored for ' +
-      (location.protocol === 'file:' ? 'file://' : location.protocol + '//' + location.host);
   }
   PGRE.applyTheme(PGRE.store.state.settings.theme);
   PGRE.ensureSidebarScrim();

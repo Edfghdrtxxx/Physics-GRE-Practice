@@ -94,6 +94,12 @@ PGRE.store = {
                   // 'off' so existing users are not surprised by sudden sound;
                   // migrate() backfills the key on older saves.
                   focusSound: 'off',
+                  // Top-bar focus chip: 'timing' counts up (open-ended
+                  // stopwatch); 'countdown' counts down from focusGoalMin
+                  // (1–240). Idle pick only — a live session keeps timer.goalMin.
+                  // migrate() nested settings pass backfills both keys.
+                  focusMode: 'timing',
+                  focusGoalMin: 25,
                   // daily activity target in minutes (js/view-study-time.js).
                   // Counts all active time (tab heartbeat + focus timer), not
                   // just focus. 0 = off (editor only, no meter). Default 120;

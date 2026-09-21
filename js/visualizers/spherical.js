@@ -6,7 +6,7 @@
   PGRE.conceptVisualizers = PGRE.conceptVisualizers || {};
 
   var TWO_PI = Math.PI * 2;
-  var HIGHLIGHT_IDS = ['r', 'theta', 'phi', 'x', 'y', 'z', 'origin', 'equator', 'sphere'];
+  var HIGHLIGHT_IDS = ['r', 'theta', 'phi', 'x', 'y', 'z', 'origin', 'equator', 'sphere', 'phiHat', 'basis'];
   var YAW = 0.62;
   var PITCH = 0.48;
   var COS_Y = Math.cos(YAW);
@@ -136,15 +136,20 @@
         className: 'viz-legend-value',
         css: 'font-family:var(--mono-instr),\'JetBrains Mono\',monospace;color:var(--accent-deep,#964b32);'
       });
+      function onEnter() { highlight(id); }
+      function onLeave() { highlight(null); }
+      row.addEventListener('mouseenter', onEnter);
+      row.addEventListener('mouseleave', onLeave);
       row.appendChild(lab);
       row.appendChild(val);
       readout.appendChild(row);
-      return { row: row, val: val };
+      return { row: row, val: val, onEnter: onEnter, onLeave: onLeave };
     }
 
     var itemX = readoutItem('x', '$x$');
     var itemY = readoutItem('y', '$y$');
     var itemZ = readoutItem('z', '$z$');
+    var itemPhiHat = readoutItem('phi', '$\\hat{\\boldsymbol{\\phi}}$ (azimuth)');
     root.appendChild(readout);
 
     var controls = el('div', { className: 'viz-controls-panel cv-spherical-controls' });
@@ -164,22 +169,50 @@
       input.setAttribute('aria-label', id);
       lab.setAttribute('for', '');
       head.appendChild(lab);
-      head.appendChild(val);
+      function onEnter() { highlight(id); }
+      function onLeave() { highlight(null); }
+      row.addEventListener('mouseenter', onEnter);
+      row.addEventListener('mouseleave', onLeave);
       row.appendChild(head);
       row.appendChild(input);
       controls.appendChild(row);
-      return { row: row, lab: lab, val: val, input: input };
+      return { row: row, lab: lab, val: val, input: input, onEnter: onEnter, onLeave: onLeave };
     }
 
     var sR = sliderRow('r', '$r$', 0.4, 1.6, 0.01, r);
     var sTh = sliderRow('theta', '$\\theta$', 0, Math.PI, 0.01, theta);
     var sPh = sliderRow('phi', '$\\varphi$', 0, TWO_PI - 1e-6, 0.01, phi);
+    var showBasis = true;
+    var toggleRow = el('div', {
+      className: 'cv-basis-toggle-row',
+      css: 'display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2,#6c6a64);margin-top:6px;padding:4px 0;'
+    });
+    var chkBasis = el('input');
+    chkBasis.type = 'checkbox';
+    chkBasis.id = 'cv-basis-toggle';
+    chkBasis.checked = true;
+    chkBasis.style.cursor = 'pointer';
+    var chkLab = el('label', {
+      text: 'Show unit vectors (r̂, θ̂, φ̂) · φ̂ is azimuth direction',
+      css: 'cursor:pointer;user-select:none;'
+    });
+    chkLab.setAttribute('for', 'cv-basis-toggle');
+    toggleRow.appendChild(chkBasis);
+    toggleRow.appendChild(chkLab);
+    controls.appendChild(toggleRow);
+
+    function onBasisChange() {
+      showBasis = chkBasis.checked;
+      scheduleDraw();
+    }
+    chkBasis.addEventListener('change', onBasisChange);
+
     root.appendChild(controls);
 
     var note = el('p', {
       className: 'cv-convention-note',
       css: 'margin:0 0 4px;font-size:13px;color:var(--ink-2,#6c6a64);line-height:1.45;',
-      text: 'Math texts often swap the names of $\\theta$ and $\\varphi$.'
+      text: 'Physics convention: $\\theta$ is polar angle down from $+z$; $\\varphi$ is azimuth from $+x$ in $xy$-plane. Azimuth unit vector $\\hat{\\boldsymbol{\\phi}} = -\\sin\\varphi\\,\\hat{\\mathbf{x}} + \\cos\\varphi\\,\\hat{\\mathbf{y}}$ (as in Ampère\'s law $\\mathbf{B} = \\frac{\\mu_0 I}{2\\pi \\rho}\\hat{\\boldsymbol{\\phi}}$ with cylindrical radius $\\rho = r\\sin\\theta$).'
     });
     root.insertBefore(note, wrap);
     if (host) host.appendChild(root);
@@ -196,11 +229,15 @@
       itemX.val.textContent = '= ' + fmt(c.x, 3);
       itemY.val.textContent = '= ' + fmt(c.y, 3);
       itemZ.val.textContent = '= ' + fmt(c.z, 3);
+      var sinPh = Math.sin(phi);
+      var cosPh = Math.cos(phi);
+      var xComp = -sinPh;
+      var yComp = cosPh;
+      itemPhiHat.val.textContent = '= ' + (xComp >= 0 ? '+' : '') + fmt(xComp, 2) + 'x̂ ' + (yComp >= 0 ? '+' : '') + fmt(yComp, 2) + 'ŷ + 0.00ẑ';
       sR.val.textContent = fmt(r, 2);
       sTh.val.textContent = fmt(theta, 2);
       sPh.val.textContent = fmt(phi, 2);
     }
-
     function syncInputs() {
       sR.input.value = String(r);
       sTh.input.value = String(theta);
@@ -216,11 +253,11 @@
       paint(itemX.row, hl === 'x');
       paint(itemY.row, hl === 'y');
       paint(itemZ.row, hl === 'z');
+      paint(itemPhiHat.row, hl === 'phi' || hl === 'phiHat' || hl === 'basis');
       paint(sR.lab, hl === 'r');
       paint(sTh.lab, hl === 'theta');
-      paint(sPh.lab, hl === 'phi');
+      paint(sPh.lab, hl === 'phi' || hl === 'phiHat');
     }
-
     function lw(base, id) {
       return hl === id ? base * 1.9 : base;
     }
@@ -304,6 +341,29 @@
       c.fillText(text, x, y);
       c.restore();
     }
+    function labelHat(c, glyph, x, y, color, align) {
+      if (!c) return;
+      c.save();
+      c.font = '12px "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace';
+      c.fillStyle = color;
+      c.textAlign = align || 'left';
+      c.textBaseline = 'middle';
+      c.fillText(glyph, x, y);
+      var m = c.measureText(glyph);
+      var w = m.width || 8;
+      var hx = (align === 'center') ? x : (align === 'right' ? x - w / 2 : x + w / 2);
+      c.beginPath();
+      c.strokeStyle = color;
+      c.lineWidth = 1.3;
+      c.lineCap = 'round';
+      c.lineJoin = 'round';
+      c.moveTo(hx - 3.5, y - 7);
+      c.lineTo(hx, y - 10.5);
+      c.lineTo(hx + 3.5, y - 7);
+      c.stroke();
+      c.restore();
+    }
+
 
     function meridian(R, ph, n, ox, oy, scale) {
       var out = [];
@@ -383,8 +443,11 @@
 
       strokeSegs(ctx, parallel(r, Math.PI / 2, 56, ox, oy, scale), always, col(t.ink2, 'equator', t), lw(1.45, 'equator'), null);
 
-      strokeSegs(ctx, meridian(r, phi, 28, ox, oy, scale), isFront, hl === 'phi' || hl === 'theta' ? t.accent : t.ink2, 1.25, null);
-      strokeSegs(ctx, parallel(r, theta, 48, ox, oy, scale), isFront, hl === 'phi' || hl === 'theta' ? t.accent : t.ink2, 1.25, null);
+      strokeSegs(ctx, meridian(r, phi, 28, ox, oy, scale), isFront, hl === 'theta' ? t.accent : t.ink2, 1.25, null);
+      strokeSegs(ctx, parallel(r, theta, 48, ox, oy, scale), isFront, hl === 'phi' || hl === 'theta' || hl === 'phiHat' ? t.accent : t.ink2, 1.25, null);
+      if (hl === 'phi' || hl === 'phiHat') {
+        strokeSegs(ctx, parallel(r, theta, 48, ox, oy, scale), isBack, t.accent, 1.2, [3, 4]);
+      }
 
       for (i = 0; i < 8; i++) {
         strokeSegs(ctx, meridian(r, i * Math.PI / 4, 28, ox, oy, scale), isFront, sphereFront, sphereW, null);
@@ -419,6 +482,28 @@
           pts.push(project(arcR * Math.cos(tt), arcR * Math.sin(tt), 0, ox, oy, scale));
         }
         strokeSegs(ctx, pts, always, col(t.ink3, 'phi', t), lw(1.35, 'phi'), null);
+        if (pts.length >= 2) {
+          var pLast = pts[pts.length - 1];
+          var pPrev = pts[pts.length - 2];
+          var adx = pLast.x - pPrev.x;
+          var ady = pLast.y - pPrev.y;
+          var alen = Math.sqrt(adx * adx + ady * ady) || 1;
+          var aux = adx / alen;
+          var auy = ady / alen;
+          var asize = (hl === 'phi' || hl === 'phiHat') ? 7.5 : 5.5;
+          ctx.save();
+          ctx.strokeStyle = col(t.ink3, 'phi', t);
+          ctx.lineWidth = lw(1.35, 'phi');
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          ctx.moveTo(pLast.x, pLast.y);
+          ctx.lineTo(pLast.x - aux * asize + auy * asize * 0.45, pLast.y - auy * asize - aux * asize * 0.45);
+          ctx.moveTo(pLast.x, pLast.y);
+          ctx.lineTo(pLast.x - aux * asize - auy * asize * 0.45, pLast.y - auy * asize + aux * asize * 0.45);
+          ctx.stroke();
+          ctx.restore();
+        }
         n = pts[Math.floor(pts.length / 2)];
         label(ctx, 'φ', n.x + 6, n.y + 10, col(t.ink2, 'phi', t), 'left');
       }
@@ -459,6 +544,60 @@
       ctx.stroke();
       ctx.restore();
       label(ctx, 'P', P.x + 9, P.y - 9, t.ink, 'left');
+
+      /* Unit vectors at point P */
+      var vecLen = 0.38;
+      var sinT = Math.sin(theta);
+      var cosT = Math.cos(theta);
+      var sinPhV = Math.sin(phi);
+      var cosPhV = Math.cos(phi);
+
+      var rHat3 = {
+        x: c.x + vecLen * sinT * cosPhV,
+        y: c.y + vecLen * sinT * sinPhV,
+        z: c.z + vecLen * cosT
+      };
+      var rHatScr = project(rHat3.x, rHat3.y, rHat3.z, ox, oy, scale);
+
+      var thHat3 = {
+        x: c.x + vecLen * cosT * cosPhV,
+        y: c.y + vecLen * cosT * sinPhV,
+        z: c.z - vecLen * sinT
+      };
+      var thHatScr = project(thHat3.x, thHat3.y, thHat3.z, ox, oy, scale);
+
+      var phiHat3 = {
+        x: c.x - vecLen * sinPhV,
+        y: c.y + vecLen * cosPhV,
+        z: c.z
+      };
+      var phiHatScr = project(phiHat3.x, phiHat3.y, phiHat3.z, ox, oy, scale);
+
+      if (showBasis || hl === 'theta' || hl === 'basis') {
+        arrow(ctx, P, thHatScr, col(t.ink2, 'theta', t), lw(1.6, 'theta'));
+        labelHat(ctx, 'θ', thHatScr.x + 5, thHatScr.y - 4, col(t.ink2, 'theta', t), 'left');
+      }
+
+      if (showBasis || hl === 'r' || hl === 'basis') {
+        arrow(ctx, P, rHatScr, col(t.accentDeep, 'r', t), lw(1.6, 'r'));
+        labelHat(ctx, 'r', rHatScr.x + 5, rHatScr.y - 4, col(t.accentDeep, 'r', t), 'left');
+      }
+
+      /* φ̂ — Azimuth direction */
+      var isPhiHl = hl === 'phi' || hl === 'phiHat' || hl === 'basis';
+      var phiCol = isPhiHl ? t.accentDeep : (showBasis ? t.accent : t.ink2);
+      var phiW = isPhiHl ? 2.8 : (showBasis ? 2.0 : 1.5);
+      if (showBasis || isPhiHl) {
+        arrow(ctx, P, phiHatScr, phiCol, phiW);
+        labelHat(ctx, 'φ', phiHatScr.x + 6, phiHatScr.y - 4, phiCol, 'left');
+        if (isPhiHl) {
+          label(ctx, 'azimuth', phiHatScr.x + 20, phiHatScr.y - 4, phiCol, 'left');
+        }
+      }
+
+      if (theta < 0.06 || theta > Math.PI - 0.06) {
+        label(ctx, 'φ̂ degenerate at pole', P.x + 10, P.y + 12, t.ink3, 'left');
+      }
     }
 
     function stopRaf() {
@@ -595,6 +734,13 @@
       sTh.input.removeEventListener('change', onTh);
       sPh.input.removeEventListener('input', onPh);
       sPh.input.removeEventListener('change', onPh);
+      chkBasis.removeEventListener('change', onBasisChange);
+      [itemX, itemY, itemZ, itemPhiHat, sR, sTh, sPh].forEach(function (it) {
+        if (it && it.row) {
+          it.row.removeEventListener('mouseenter', it.onEnter);
+          it.row.removeEventListener('mouseleave', it.onLeave);
+        }
+      });
     }
 
     function getState() {
@@ -616,8 +762,8 @@
     topic: 'cm',
     href: '#/concepts/spherical',
     formulaLatex: '$$x = r \\sin\\theta \\cos\\varphi,\\; y = r \\sin\\theta \\sin\\varphi,\\; z = r \\cos\\theta$$',
-    physicalStory: 'Physics convention: $\\theta$ is the polar angle down from $+z$; $\\varphi$ is the azimuth from $+x$ in the $xy$-plane.',
-    highlightIds: ['r', 'theta', 'phi', 'x', 'y', 'z', 'origin', 'equator', 'sphere'],
+    physicalStory: 'Physics convention: $\\theta$ is the polar angle down from $+z$; $\\varphi$ is the azimuth from $+x$ in the $xy$-plane. Azimuth unit vector: $\\hat{\\boldsymbol{\\phi}} = -\\sin\\varphi\\,\\hat{\\mathbf{x}} + \\cos\\varphi\\,\\hat{\\mathbf{y}}$ (Ampère\'s law: $\\mathbf{B} = \\frac{\\mu_0 I}{2\\pi \\rho}\\hat{\\boldsymbol{\\phi}}$ with cylindrical distance $\\rho = r\\sin\\theta$).',
+    highlightIds: ['r', 'theta', 'phi', 'x', 'y', 'z', 'origin', 'equator', 'sphere', 'phiHat', 'basis'],
     mount: mount
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -40,18 +40,33 @@ PGRE.views.concepts = (function () {
 
 
   function subnav(active) {
+    var isConceptActive = active === 'spherical' || active === 'azimuth' || active === 'concepts';
     var items = [
-      { id: 'search', href: '#/concepts/search', label: 'Search' },
-      { id: 'visualizers', href: '#/concepts/visualizers', label: 'Visualizers' },
-      { id: 'spherical', href: '#/concepts/spherical', label: 'Concepts' }
+      { id: 'search', href: '#/concepts/search', label: 'Search', active: active === 'search' },
+      { id: 'visualizers', href: '#/concepts/visualizers', label: 'Visualizers', active: active === 'visualizers' },
+      { id: 'concepts', href: '#/concepts/spherical', label: 'Concepts', active: isConceptActive }
     ];
     var h = '<nav class="cv-subnav" aria-label="Concept visualization">';
     items.forEach(function (it) {
-      h += '<a href="' + it.href + '" class="cv-subnav-link' + (active === it.id ? ' active' : '') + '"' +
-        (active === it.id ? ' aria-current="page"' : '') + '>' + esc(it.label) + '</a>';
+      h += '<a href="' + it.href + '" class="cv-subnav-link' + (it.active ? ' active' : '') + '"' +
+        (it.active ? ' aria-current="page"' : '') + '>' + esc(it.label) + '</a>';
     });
     h += '</nav>';
     return h;
+  }
+
+  function cvModeBar(activeMode) {
+    var isAz = activeMode === 'azimuth';
+    return '<div class="cv-mode-bar" role="tablist" aria-label="Concept view modes">' +
+      '<a href="#/concepts/spherical" class="cv-mode-btn' + (!isAz ? ' active' : '') + '" role="tab" aria-selected="' + (!isAz ? 'true' : 'false') + '">' +
+        '<span class="cv-mode-num">1</span>' +
+        '<span class="cv-mode-label">Spherical coordinates $(r, \\theta, \\varphi)$</span>' +
+      '</a>' +
+      '<a href="#/concepts/azimuth" class="cv-mode-btn' + (isAz ? ' active' : '') + '" role="tab" aria-selected="' + (isAz ? 'true' : 'false') + '">' +
+        '<span class="cv-mode-num">2</span>' +
+        '<span class="cv-mode-label">Direction of azimuth & Ampère ($B \\propto \\hat{\\phi}$)</span>' +
+      '</a>' +
+    '</div>';
   }
 
   function destroyTeach() {
@@ -81,10 +96,10 @@ PGRE.views.concepts = (function () {
           '</a>' +
           '<a class="cv-door-card" href="#/concepts/spherical">' +
             '<div class="cv-door-card-kicker">Concepts</div>' +
-            '<div class="cv-door-card-title">Spherical coordinates</div>' +
-            '<p class="muted">$(r,\\theta,\\varphi)$ against $(x,y,z)$.</p>' +
+            '<div class="cv-door-card-title">Spherical coordinates & azimuth</div>' +
+            '<p class="muted">$(r,\\theta,\\varphi)$ against $(x,y,z)$, basis triads, and Ampère\'s law $\\mathbf{B} = \\frac{\\mu_0 I}{2\\pi \\rho}\\hat{\\boldsymbol{\\phi}}$ compared.</p>' +
           '</a>' +
-        '</div>' +
+        '</div>'
       '</div>' +
     '</div>';
   }
@@ -249,16 +264,119 @@ PGRE.views.concepts = (function () {
     return '<div id="cv-root" class="cv-root">' +
       subnav('spherical') +
       '<div class="cv-teach-head">' +
-        '<h1>Spherical coordinates</h1>' +
-        '<p class="muted">Physics names: $\\theta$ is down from $+z$; $\\varphi$ is around from $+x$. Drag the sliders until $(x,y,z)$ makes sense.</p>' +
+        '<h1>Spherical coordinates & azimuth</h1>' +
+        '<p class="muted">Integrated concept portal: compare spatial geometry $(r, \\theta, \\varphi)$ against physical magnetic circulation $\\mathbf{B} = \\frac{\\mu_0 I}{2\\pi \\rho}\\hat{\\boldsymbol{\\phi}}$.</p>' +
       '</div>' +
+      cvModeBar('spherical') +
       '<div class="cv-teach-search-row">' +
         '<label class="cv-search-label" for="cv-teach-q">Highlight in the picture</label>' +
-        '<input id="cv-teach-q" class="cv-search-input" type="search" autocomplete="off" spellcheck="false" placeholder="phi, z axis, theta">' +
+        '<input id="cv-teach-q" class="cv-search-input" type="search" autocomplete="off" spellcheck="false" placeholder="azimuth, phi, hat phi, theta, z axis">' +
         '<p id="cv-teach-status" class="muted cv-search-status"></p>' +
       '</div>' +
       '<div id="cv-teach" class="cv-teach"></div>' +
+      '<div class="cv-teach-physics-panel" style="margin-top:24px;padding:18px 22px;background:var(--surface,#faf9f5);border:1px solid var(--line,#e6dfd8);border-radius:var(--radius,8px);">' +
+        '<div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent-deep,#964b32);margin-bottom:6px;font-weight:600;">Physics Connection · Direction of Azimuth</div>' +
+        '<h3 style="margin:0 0 8px;font-size:16px;font-weight:500;">Ampère\'s Law & The Azimuthal Unit Vector $\\hat{\\boldsymbol{\\phi}}$</h3>' +
+        '<p style="margin:0 0 8px;color:var(--ink-2,#6c6a64);font-size:14px;line-height:1.55;">' +
+          'In both spherical and cylindrical coordinates, the direction of increasing azimuth is the unit vector tangent to the horizontal circle of latitude (curling counter-clockwise looking down from $+z$):' +
+        '</p>' +
+        '<div style="margin:8px 0;font-size:15px;color:var(--ink,#141413);">' +
+          '$$\\hat{\\boldsymbol{\\phi}} = -\\sin\\varphi\\,\\hat{\\mathbf{x}} + \\cos\\varphi\\,\\hat{\\mathbf{y}}$$' +
+        '</div>' +
+        '<p style="margin:8px 0 8px;color:var(--ink-2,#6c6a64);font-size:13.5px;line-height:1.5;">' +
+          'For an infinite straight wire carrying current $I$ along $+z$, Ampère\'s law gives a purely <strong>azimuthal</strong> magnetic field directed along $\\hat{\\boldsymbol{\\phi}}$:' +
+        '</p>' +
+        '<div style="margin:8px 0;font-size:15px;color:var(--ink,#141413);">' +
+          '$$|\\mathbf{B}|(2\\pi\\rho) = \\mu_0 I \\implies \\mathbf{B} = \\frac{\\mu_0 I}{2\\pi\\rho}\\hat{\\boldsymbol{\\phi}} = \\frac{\\mu_0 I}{2\\pi r\\sin\\theta}\\hat{\\boldsymbol{\\phi}}$$' +
+        '</div>' +
+        '<p style="margin:8px 0 0;color:var(--ink-3,#8e8b82);font-size:13px;line-height:1.45;">' +
+          '<strong>GRE Caution:</strong> $\\hat{\\boldsymbol{\\phi}}$ is identical in cylindrical and spherical coordinates, but the Ampère radius is the perpendicular distance to the $z$-axis (cylindrical $\\rho = r\\sin\\theta$), not the spherical origin distance $r$. Notice also that $\\hat{\\boldsymbol{\\phi}}$ has zero $\\hat{\\mathbf{z}}$-component (strictly horizontal: $\\hat{\\boldsymbol{\\phi}}\\cdot\\hat{\\mathbf{z}} = 0$). Drag the $\\varphi$ slider or drag the canvas to move $P$ in $(\\theta, \\varphi)$ and watch $\\hat{\\boldsymbol{\\phi}}$ rotate.' +
+        '</p>'
+      '</div>' +
     '</div>';
+  }
+  function renderAzimuthTeach() {
+    return '<div id="cv-root" class="cv-root">' +
+      subnav('azimuth') +
+      '<div class="cv-teach-head">' +
+        '<h1>Spherical coordinates & azimuth</h1>' +
+        '<p class="muted">Integrated concept portal: compare spatial geometry $(r, \\theta, \\varphi)$ against physical magnetic circulation $\\mathbf{B} = \\frac{\\mu_0 I}{2\\pi \\rho}\\hat{\\boldsymbol{\\phi}}$.</p>' +
+      '</div>' +
+      cvModeBar('azimuth') +
+      '<div class="cv-teach-search-row">' +
+        '<label class="cv-search-label" for="cv-teach-q">Highlight in the picture</label>' +
+        '<input id="cv-teach-q" class="cv-search-input" type="search" autocomplete="off" spellcheck="false" placeholder="phi, B field, current, rho, spherical">' +
+        '<p id="cv-teach-status" class="muted cv-search-status"></p>' +
+      '</div>' +
+      '<div id="cv-teach" class="cv-teach"></div>' +
+      '<div class="cv-teach-physics-panel" style="margin-top:24px;padding:18px 22px;background:var(--surface,#faf9f5);border:1px solid var(--line,#e6dfd8);border-radius:var(--radius,8px);">' +
+        '<div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent-deep,#964b32);margin-bottom:6px;font-weight:600;">Coordinate Comparison · Spherical vs Cylindrical</div>' +
+        '<h3 style="margin:0 0 8px;font-size:16px;font-weight:500;">Why $\\hat{\\boldsymbol{\\phi}}$ is Identical in Both Coordinate Systems</h3>' +
+        '<p style="margin:0 0 8px;color:var(--ink-2,#6c6a64);font-size:14px;line-height:1.55;">' +
+          'In both cylindrical $(\\rho, \\varphi, z)$ and spherical $(r, \\theta, \\varphi)$ systems, the azimuth angle $\\varphi$ measures rotation around $+z$ from $+x$ toward $+y$. Because this rotation is purely horizontal, the azimuth unit vector is identical in both systems:' +
+        '</p>' +
+        '<div style="margin:8px 0;font-size:15px;color:var(--ink,#141413);">' +
+          '$$\\hat{\\boldsymbol{\\phi}} = -\\sin\\varphi\\,\\hat{\\mathbf{x}} + \\cos\\varphi\\,\\hat{\\mathbf{y}}$$' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;margin:12px 0;">' +
+          '<div style="padding:12px 14px;border:1px solid var(--line,#e6dfd8);border-radius:6px;background:var(--bg,#faf9f5);">' +
+            '<strong style="color:var(--ink,#141413);font-size:13.5px;">Spherical Coordinates $(r, \\theta, \\varphi)$</strong>' +
+            '<p style="margin:4px 0 0;font-size:13px;color:var(--ink-2,#6c6a64);line-height:1.45;">Origin-centered. Basis: $(\\hat{\\mathbf{r}}, \\hat{\\boldsymbol{\\theta}}, \\hat{\\boldsymbol{\\phi}})$. Radial distance $r = \\sqrt{x^2+y^2+z^2}$.</p>' +
+          '</div>' +
+          '<div style="padding:12px 14px;border:1px solid var(--line,#e6dfd8);border-radius:6px;background:var(--bg,#faf9f5);">' +
+            '<strong style="color:var(--ink,#141413);font-size:13.5px;">Cylindrical Coordinates $(\\rho, \\varphi, z)$</strong>' +
+            '<p style="margin:4px 0 0;font-size:13px;color:var(--ink-2,#6c6a64);line-height:1.45;">Axis-centered. Basis: $(\\hat{\\boldsymbol{\\rho}}, \\hat{\\boldsymbol{\\phi}}, \\hat{\\mathbf{z}})$. Perpendicular wire distance $\\rho = r\\sin\\theta = \\sqrt{x^2+y^2}$.</p>' +
+          '</div>' +
+        '</div>' +
+        '<p style="margin:8px 0 0;color:var(--ink-3,#8e8b82);font-size:13px;line-height:1.45;">' +
+          '<strong>GRE Reference (Kahn, <em>Conquering the Physics GRE</em>, eq. 2.30):</strong> Kahn writes $|\\mathbf{B}|(2\\pi r) = \\mu_0 I$, where $r$ denotes the perpendicular distance to the wire. In full 3D problems combining wires with spherical geometry, always substitute $\\rho = r\\sin\\theta$ into the denominator to avoid confusing wire distance with distance to the origin.' +
+        '</p>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function wireAzimuthTeach() {
+    var host = document.getElementById('cv-teach');
+    var rec = PGRE.conceptVisualizers && PGRE.conceptVisualizers.azimuth;
+    if (host && rec && typeof rec.mount === 'function') {
+      teachApi = rec.mount(host, {});
+    } else if (host) {
+      host.innerHTML = '<p class="muted">Azimuth teaching widget did not load.</p>';
+    }
+    var input = document.getElementById('cv-teach-q');
+    var st = document.getElementById('cv-teach-status');
+    if (!input) return;
+    var allowedIds = (rec && rec.highlightIds) || ['phi', 'theta', 'r', 'rho', 'bField', 'current', 'wire', 'basis', 'spherical', 'cylindrical'];
+    function run() {
+      var q = input.value;
+      var rawId = (PGRE.conceptSearch && PGRE.conceptSearch.matchTeach) ? PGRE.conceptSearch.matchTeach(q) : null;
+      var id = (rawId && allowedIds.indexOf(rawId) !== -1) ? rawId : null;
+      if (teachApi && typeof teachApi.highlight === 'function') teachApi.highlight(id, true);
+      if (st) {
+        if (!q) {
+          st.textContent = '';
+        } else if (id) {
+          var lbl = id === 'rho' ? '\\rho = r\\sin\\theta\\text{ (wire distance)}'
+            : id === 'bField' ? '\\mathbf{B}\\text{ (magnetic field)}'
+            : id === 'current' || id === 'wire' ? 'I\\text{ (wire current along }+z\\text{)}'
+            : (id === 'phi' || id === 'phiHat') ? '\\varphi\\text{ / }\\hat{\\boldsymbol{\\phi}}\\text{ (azimuth direction)}'
+            : id === 'theta' ? '\\theta\\text{ (polar angle)}'
+            : id === 'r' ? 'r\\text{ (spherical radius)}'
+            : id === 'basis' ? '\\text{basis comparison}'
+            : id === 'spherical' ? '\\text{spherical coordinates } (r,\\theta,\\varphi)'
+            : id === 'cylindrical' ? '\\text{cylindrical coordinates } (\\rho,\\varphi,z)'
+            : id;
+          st.textContent = 'Highlighting $' + lbl + '$.';
+        } else {
+          st.textContent = 'No matching part.';
+        }
+        if (PGRE.typesetMath) PGRE.typesetMath(st);
+      }
+    }
+    input.addEventListener('input', function () {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(run, 80);
+    });
   }
 
   function paintSearchResults(q) {
@@ -352,14 +470,24 @@ PGRE.views.concepts = (function () {
     var input = document.getElementById('cv-teach-q');
     var st = document.getElementById('cv-teach-status');
     if (!input) return;
+    var allowedIds = (rec && rec.highlightIds) || ['r', 'theta', 'phi', 'x', 'y', 'z', 'origin', 'equator', 'sphere', 'phiHat', 'basis'];
     function run() {
       var q = input.value;
-      var id = (PGRE.conceptSearch && PGRE.conceptSearch.matchTeach) ? PGRE.conceptSearch.matchTeach(q) : null;
-      if (teachApi && typeof teachApi.highlight === 'function') teachApi.highlight(id);
+      var rawId = (PGRE.conceptSearch && PGRE.conceptSearch.matchTeach) ? PGRE.conceptSearch.matchTeach(q) : null;
+      var id = (rawId && allowedIds.indexOf(rawId) !== -1) ? rawId : null;
+      if (teachApi && typeof teachApi.highlight === 'function') teachApi.highlight(id, true);
       if (st) {
-        st.textContent = !q ? '' : (id ? ('Highlighting $' + (
-          id === 'theta' ? '\\theta' : id === 'phi' ? '\\varphi' : id
-        ) + '$.') : 'No matching part.');
+        if (!q) {
+          st.textContent = '';
+        } else if (id) {
+          st.textContent = 'Highlighting $' + (
+            id === 'theta' ? '\\theta\\text{ (polar)}' : (id === 'phi' || id === 'phiHat') ? '\\varphi\\text{ / }\\hat{\\boldsymbol{\\phi}}\\text{ (azimuth direction)}' : id === 'basis' ? '\\text{basis triad } (\\hat{\\mathbf{r}},\\hat{\\boldsymbol{\\theta}},\\hat{\\boldsymbol{\\phi}})' : id
+          ) + '$.';
+        } else if (rawId === 'rho' || rawId === 'bField' || rawId === 'current') {
+          st.textContent = 'See Mode 2 ("Direction of azimuth") for $' + (rawId === 'rho' ? '\\rho' : rawId === 'bField' ? '\\mathbf{B}' : 'I') + '$.';
+        } else {
+          st.textContent = 'No matching part.';
+        }
         if (PGRE.typesetMath) PGRE.typesetMath(st);
       }
     }
@@ -383,6 +511,7 @@ PGRE.views.concepts = (function () {
       if (s === 'search') return renderSearch();
       if (s === 'visualizers') return renderGallery();
       if (s === 'spherical') return renderTeach();
+      if (s === 'azimuth') return renderAzimuthTeach();
       return renderDoor();
     },
     mount: function (params) {
@@ -399,6 +528,7 @@ PGRE.views.concepts = (function () {
       if (s === 'search') wireSearch();
       else if (s === 'visualizers') wireGallery();
       else if (s === 'spherical') wireTeach();
+      else if (s === 'azimuth') wireAzimuthTeach();
       if (root && PGRE.typesetMath) PGRE.typesetMath(root);
       var sub = root && root.querySelector ? root.querySelector('.cv-subnav') : document.querySelector('.cv-subnav');
       if (sub && PGRE.motion && typeof PGRE.motion.letterSwapNav === 'function') {

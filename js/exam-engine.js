@@ -87,15 +87,12 @@ PGRE.examEngine = (function () {
     return map;
   }
 
-  /* ——— Draw: current format (weighted, prefer-unseen) ——— */
-  /* Weighted mocks may draw the book's sample-exam questions (pre-existing
-     behavior) but never the intact released ETS exams — those stay fresh for
-     verbatim replay (AGENTS.md spoiler rule; whether sat exams should graduate
-     into this pool is still an open user decision). canStart and the setup
-     screen's pool copy read the same list so they can never disagree. */
+  /* Weighted mocks use only the daily pool. Intact book and ETS exams stay
+     reserved for their verbatim replay modes so a generated mock cannot spoil
+     a later scheduled sitting. */
   function drawPool() {
     return PGRE.allQuestions({ includeExam: true }).filter(function (q) {
-      return q.src !== 'ets-exam';
+      return q.src !== 'ets-exam' && q.src !== 'cpg-exam';
     });
   }
 

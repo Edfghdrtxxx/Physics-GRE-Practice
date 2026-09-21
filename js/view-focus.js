@@ -513,10 +513,37 @@ PGRE.views.focus = (function () {
   }
 
   /* ——— arm the picker from live state (return-to-page / reload mid-session) ——— */
+  function pendingFromSettings() {
+    var s = (PGRE.store && PGRE.store.state && PGRE.store.state.settings) || {};
+    if (s.focusMode !== 'countdown') return null;
+    var n = parseInt(s.focusGoalMin, 10);
+    if (!(n > 0)) return 25;
+    return Math.min(240, n);
+  }
+  function persistPending() {
+    if (!window.PGRE || !PGRE.timer || typeof PGRE.timer.setPending !== 'function') return;
+    try {
+      PGRE.timer.setPending(
+        (typeof selectedGoal === 'number' && selectedGoal > 0) ? 'countdown' : 'timing',
+        selectedGoal,
+        'page'
+      );
+    } catch (e) { /* ignore */ }
+  }
+  function syncFromSettings() {
+    if (isOn()) return;
+    var page = document.getElementById('focus-page');
+    if (!page || !page.isConnected) return;
+    var el = document.activeElement;
+    if (el && (el.id === 'focus-custom' || el.id === 'focus-mode-custom')) return;
+    selectedGoal = pendingFromSettings();
+    syncChips();
+    paintLive();
+  }
   function armFromState() {
     var t = st();
     if (t && t.on) { selectedGoal = (typeof t.goalMin === 'number' && t.goalMin > 0) ? t.goalMin : null; }
-    // when idle, keep whatever the user last picked this session (module var persists)
+    else { selectedGoal = pendingFromSettings(); }
   }
 
   /* Reconcile the goal-picker chips (+ custom input) with selectedGoal. render()
@@ -652,6 +679,7 @@ PGRE.views.focus = (function () {
         var input = document.getElementById('focus-custom'); if (input) input.value = '';
         page.querySelectorAll('.focus-chip[data-goal]').forEach(function (x) { x.classList.remove('active'); });
         b.classList.add('active');
+        persistPending();
         clearFlash();   // a fresh pick supersedes any lingering post-stop flash caption/atom
         paintLive();
       });
@@ -662,6 +690,7 @@ PGRE.views.focus = (function () {
         var n = parseInt(custom.value, 10);
         selectedGoal = (n > 0) ? Math.min(240, n) : null;
         page.querySelectorAll('.focus-chip[data-goal]').forEach(function (x) { x.classList.remove('active'); });
+        persistPending();
         clearFlash();   // editing the custom length supersedes any lingering post-stop flash
         paintLive();
       });
@@ -708,11 +737,9 @@ PGRE.views.focus = (function () {
     return (typeof selectedGoal === 'number' && selectedGoal > 0) ? selectedGoal : null;
   }
 
-  // F5 single-source-of-truth bridge. When the full-page focus face is mounted, its hero
-  // 'Start focus' AND the always-visible top-bar quick-start (#focus-toggle) are on screen
-  // together. The top-bar button calls PGRE.timer.start() blind; this lets it adopt the
-  // page's picked goal so both Start controls agree. Returns null when the page is gone
-  // (element absent) so the top-bar widget keeps its classic open-ended stopwatch elsewhere.
+  // F5 single-source-of-truth bridge. While this page is mounted, the top-bar
+  // Start reads the live custom input / chip so both Start controls agree.
+  // Off this page the top-bar reads persisted settings.focusMode instead.
   function pendingGoal() {
     var page = document.getElementById('focus-page');
     if (!page || !page.isConnected) return null;
@@ -726,5 +753,5 @@ PGRE.views.focus = (function () {
     if (!/^#\/focus\b/.test(location.hash)) document.body.classList.remove('focus-zen');
   });
 
-  return { render: render, mount: mount, pendingGoal: pendingGoal };
+  return { render: render, mount: mount, pendingGoal: pendingGoal, syncFromSettings: syncFromSettings };
 })();

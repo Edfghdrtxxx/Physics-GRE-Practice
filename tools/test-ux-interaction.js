@@ -788,6 +788,20 @@ function dispatchKeydown(env, opts) {
   return e;
 }
 
+function dispatchEl(el, type, extra) {
+  extra = extra || {};
+  var ev = {
+    type: type,
+    target: el,
+    currentTarget: el,
+    detail: extra.detail != null ? extra.detail : 0,
+    preventDefault: function () { ev.defaultPrevented = true; },
+    stopPropagation: function () {}
+  };
+  (el.listeners[type] || []).slice().forEach(function (fn) { fn(ev); });
+  return ev;
+}
+
 function fireChange(el) {
   var ev = {
     type: 'change', target: el, currentTarget: el,
@@ -952,6 +966,47 @@ assert(sure.getAttribute('aria-pressed') === 'true' && sure.classList.contains('
 assert(guess.getAttribute('aria-pressed') === 'false', 'click leaves Guessed unpressed');
 ctrl.toggle('sure');
 assert(sure.getAttribute('aria-pressed') === 'false', 'bind().toggle still shares the click path');
+
+console.log('\nPGRE.ui.bindChoiceCommit');
+var ui = env.window.PGRE.ui;
+assert(ui && typeof ui.bindChoiceCommit === 'function', 'bindChoiceCommit is on PGRE.ui');
+var commitBox = env.document.createElement('div');
+commitBox.innerHTML =
+  '<div class="choices">' +
+    '<button class="choice" data-idx="0" aria-pressed="false">A</button>' +
+    '<button class="choice" data-idx="1" aria-pressed="false">B</button>' +
+  '</div>' +
+  '<button type="button" class="btn btn-primary" id="confirm-btn" disabled>Confirm</button>';
+env.document.body.appendChild(commitBox);
+var commits = [];
+ui.bindChoiceCommit(commitBox, { onCommit: function (i) { commits.push(i); } });
+var c0 = commitBox.querySelector('.choice[data-idx="0"]');
+var c1 = commitBox.querySelector('.choice[data-idx="1"]');
+var cBtn = commitBox.querySelector('#confirm-btn');
+assert(!!c0 && !!c1 && !!cBtn, 'commit fixture rendered choices and Confirm');
+assert(cBtn.disabled === true, 'Confirm starts disabled');
+c1.click();
+assert(commits.length === 0, 'first click does not submit');
+assert(c1.classList.contains('is-picked') && c1.getAttribute('aria-pressed') === 'true',
+  'first click marks the choice picked');
+assert(c0.getAttribute('aria-pressed') === 'false', 'unpicked choice stays unpressed');
+assert(cBtn.disabled === false, 'Confirm enables after a pick');
+c0.click();
+assert(commits.length === 0, 'retargeting click still does not submit');
+assert(c0.classList.contains('is-picked') && !c1.classList.contains('is-picked'),
+  'a later click retargets the pending pick');
+cBtn.click();
+assert(commits.length === 1 && commits[0] === 0, 'Confirm submits the pending pick');
+c1.click();
+dispatchEl(c1, 'dblclick');
+  assert(commits.length === 2 && commits[1] === 1, 'double-click submits that choice');
+dispatchEl(c0, 'click', { detail: 2 });
+assert(!c0.classList.contains('is-picked') && c1.classList.contains('is-picked'),
+  'click detail>1 does not retarget the pending pick');
+dispatchEl(c0, 'click', { detail: 1 });
+assert(!c0.classList.contains('is-picked') && c1.classList.contains('is-picked'),
+  'click-through (detail>=1, no mousedown) does not pick');
+commitBox.remove();
 
 /* sidebar aria-current + theme aria-pressed (same shipped functions the UI calls) */
 console.log('\nshell aria');
@@ -1192,8 +1247,8 @@ function runAsync() {
   assert(examChoice2 && examChoice2.classList.contains('is-picked') && ix.exam.answers.eq1 === 2,
     'keyboard 3 (1–5) shares selectAnswer with A–E / click');
 
-  /* Practice: mount, then keyboard and click share answer() */
-  console.log('\npractice onKey vs click (shipped answer())');
+  /* Practice: first click / A–E select; Confirm or double-click commits */
+  console.log('\npractice onKey vs click (select then confirm)');
   ix.document.body.classList.remove('exam-fullscreen');
   ensureView(ix, PGRE.views.practice.render());
   PGRE.views.practice.mount({ id: 'all' });
@@ -1207,9 +1262,15 @@ function runAsync() {
     dispatchKeydown(ix, { key: 'B' });
     pChoice1 = ix.document.querySelector('#practice-root .choice[data-idx="1"]');
     assert(pChoice1 && pChoice1.getAttribute('aria-pressed') === 'true',
-      'keyboard B reaches shipped practice onKey → answer()');
+      'keyboard B reaches shipped practice onKey → select, not answer()');
+    assert(pChoice1.classList.contains('is-picked'), 'keyboard B paints is-picked');
+    assert(!ix.document.getElementById('assess-row'),
+      'keyboard B does not grade until Confirm');
+    var confirmBtn = ix.document.getElementById('confirm-btn');
+    assert(!!confirmBtn && confirmBtn.disabled === false, 'Confirm enables after B');
+    confirmBtn.click();
     var assessRow = ix.document.getElementById('assess-row');
-    assert(!!assessRow, 'practice feedback used PGRE.assess.html() (#assess-row present)');
+    assert(!!assessRow, 'Confirm commits through answer() (#assess-row present)');
     dispatchKeydown(ix, { key: 'k' });
     var sureChip = ix.document.querySelector('[data-assess="sure"]');
     assert(sureChip && sureChip.getAttribute('aria-pressed') === 'true',
@@ -1229,10 +1290,42 @@ function runAsync() {
     if (pChoice1b) {
       pChoice1b.click();
       assert(pChoice1b.getAttribute('aria-pressed') === 'true',
-        'click on a practice choice runs the same answer() as the B key');
+        'click on a practice choice selects without grading');
+      assert(!ix.document.getElementById('assess-row'),
+        'first click does not open feedback');
+      dispatchEl(pChoice1b, 'dblclick');
+      assert(!!ix.document.getElementById('assess-row'),
+        'double-click on a practice choice runs the same answer() as Confirm');
     } else {
       assert(false, 'second practice question rendered a choice to click');
     }
+
+    var finishBtn = ix.document.getElementById('next-btn');
+    assert(finishBtn && finishBtn.textContent === 'Finish session', 'second question shows Finish session button');
+    if (finishBtn) finishBtn.click();
+    var revButtons = ix.document.querySelectorAll('[data-review]');
+    assert(revButtons.length === 2, 'summary renders data-review buttons for completed questions');
+    revButtons[0].click();
+    var reviewMeta = ix.document.querySelector('#practice-root .practice-meta');
+    assert(reviewMeta && reviewMeta.textContent.indexOf('Review — 1 of 2') !== -1, 'clicking box 1 renders review card for question 1');
+    var curCell = ix.document.querySelector('.practice-palette .pal-cell.is-current');
+    assert(curCell && curCell.textContent === '1', 'box 1 is marked is-current in review');
+    var reviewNext = ix.document.getElementById('review-next');
+    assert(!!reviewNext, 'review renders review-next button');
+    if (reviewNext) reviewNext.click();
+    assert(ix.document.querySelector('#practice-root .practice-meta').textContent.indexOf('Review — 2 of 2') !== -1, 'review-next navigates to question 2');
+    var reviewBack = ix.document.getElementById('review-summary');
+    assert(!!reviewBack, 'review renders Back to results button');
+    if (reviewBack) reviewBack.click();
+    assert(ix.document.querySelector('#practice-root h1').textContent === 'Session complete', 'Back to results returns to summary');
+    var revBtn0 = ix.document.querySelector('[data-review="0"]');
+    if (revBtn0) revBtn0.click();
+    dispatchKeydown(ix, { key: 'ArrowRight' });
+    assert(ix.document.querySelector('#practice-root .practice-meta').textContent.indexOf('Review — 2 of 2') !== -1, 'ArrowRight advances to question 2 in review');
+    dispatchKeydown(ix, { key: 'ArrowLeft' });
+    assert(ix.document.querySelector('#practice-root .practice-meta').textContent.indexOf('Review — 1 of 2') !== -1, 'ArrowLeft returns to question 1 in review');
+    dispatchKeydown(ix, { key: 'Escape' });
+    assert(ix.document.querySelector('#practice-root h1').textContent === 'Session complete', 'Escape returns to summary');
 
     /* Formulas portal: Type undo (click + Ctrl+Z through the document handler)
        and checkpoint overlay (focused Finish must not Keep going). */
