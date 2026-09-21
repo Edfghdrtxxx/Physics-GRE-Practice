@@ -24,7 +24,8 @@
       data grid — diagram furniture).
    2. The focus page keeps its gradients and its scale/bounce keyframes
       ("nothing scales, nothing bounces" is waived there by explicit
-      user instruction). That page is recoloured, never restructured.
+      user instruction). Chrome matches the sidebar; the detector ring
+      and particle canvas stay the visual centrepiece.
    3. --accent-tint no longer means "a coral tint". It is now the
       neutral cream-strong step (#e8e0d2). The name is kept because
       renaming costs 42 call-site edits and buys nothing.
@@ -3789,7 +3790,7 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
    scenario (bunch pairs, collision tracks, glyphs, cursor ribbon) powers up
    with the session — the JS crossfades that layer in and out itself, so no
    is-running opacity gate is needed here any more. It sits under the stage
-   (z 0 vs 1) and above the graph paper. */
+   (z 0 vs 1), above the ambient ground. */
 .focus-fx {
   position: absolute; inset: 0; z-index: 0; pointer-events: none;
   /* explicit CSS size: the canvas ATTRIBUTE size is clientSize × devicePixelRatio

@@ -138,7 +138,7 @@ PGRE.store = {
       timerStats: { sessions: 0, seconds: 0 },
       // F5 focus session log — append-only, newest last, capped at 300 (oldest
       // dropped). Written by js/timer.js's finalize path so sidebar-stopped and
-      // auto-stopped sessions log too. Shown on #/focus "Recent sessions".
+      // auto-stopped sessions log too. Shown on #/focus under Recent.
       //   { startedAt: ISO, endedAt: ISO, seconds: int, goalMin: number|null, met: bool }
       focusSessions: [],
       // formula cards the user shelved mid-session ("put away"): cardId -> 1.

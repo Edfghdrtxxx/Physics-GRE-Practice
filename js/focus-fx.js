@@ -22,8 +22,7 @@
       more.
 
    view-focus.js drives it: paintLive() calls sync() with the live flag every
-   second, igniteStart() calls burst(), and the HUD reads events() for the
-   EVT corner counter.
+   second, and igniteStart() calls burst().
 
    Design constraints honoured here:
    - prefers-reduced-motion: the whole module no-ops (css also hides .focus-fx).
@@ -54,7 +53,7 @@ PGRE.focusFx = (function () {
   var nextBunch = 0;         // performance.now() timestamp of the next bunch-pair spawn
   var nextCosmic = 0;        // performance.now() timestamp of the next cosmic ray
   var cosmicT = 0;           // parked-loop wake-up timer for that cosmic ray
-  var evt = 0;               // event counter (collisions, avalanches, cosmics) — HUD reads it
+  var evt = 0;               // event counter (collisions, avalanches, cosmics)
   var mouse = { x: -1e4, y: -1e4 };
   var lastIx = -1, lastIy = -1;   // previous pointer point for ionization seeding
   var boundPage = null;      // page element the pointer listeners are on
@@ -564,7 +563,8 @@ PGRE.focusFx = (function () {
     canvas = document.createElement('canvas');
     canvas.className = 'focus-fx';
     canvas.setAttribute('aria-hidden', 'true');
-    // under the stage (z 0 vs 1), above the graph paper (insert after it)
+    // under the stage (z 0 vs 1); insert after .focus-ambient so the canvas
+    // paints on top of the ground
     var amb = page.querySelector('.focus-ambient');
     if (amb && amb.nextSibling) page.insertBefore(canvas, amb.nextSibling);
     else page.appendChild(canvas);
@@ -628,7 +628,7 @@ PGRE.focusFx = (function () {
   }
 
   // events(): running event counter (ring collisions, click avalanches,
-  // cosmic rays) — the page HUD's EVT readout.
+  // cosmic rays).
   function events() { return evt; }
 
   return { sync: sync, burst: burst, events: events };
