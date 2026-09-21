@@ -292,6 +292,15 @@ function makeEl(tag, owner) {
     if (name === 'disabled') el.disabled = false;
   };
   el.hasAttribute = function (name) { return el.getAttribute(name) != null; };
+  el.contains = function (node) {
+    if (node === el) return true;
+    var n = node;
+    while (n) {
+      if (n === el) return true;
+      n = n.parentNode;
+    }
+    return false;
+  };
   el.appendChild = function (child) {
     if (!child) return child;
     if (child.parentNode && child.parentNode.removeChild) {
@@ -374,10 +383,16 @@ function makeEl(tag, owner) {
       target: el,
       currentTarget: el,
       preventDefault: function () { ev.defaultPrevented = true; },
-      stopPropagation: function () {}
+      stopPropagation: function () { ev._stopped = true; }
     };
-    var list = (el.listeners.click || []).slice();
-    list.forEach(function (fn) { fn(ev); });
+    var n = el;
+    while (n) {
+      ev.currentTarget = n;
+      var list = ((n.listeners && n.listeners.click) || []).slice();
+      list.forEach(function (fn) { fn(ev); });
+      if (ev._stopped) break;
+      n = n.parentNode;
+    }
   };
   el.focus = function () {
     if (el.ownerDocument) el.ownerDocument.activeElement = el;
@@ -1300,6 +1315,24 @@ function runAsync() {
       'click on Guessed uses the same bind().toggle the K key just used');
     assert(sureChip.getAttribute('aria-pressed') === 'false',
       'Knew it / Guessed stay mutually exclusive on mixed keyboard+click');
+
+    liveCells = ix.document.querySelectorAll('.practice-live .practice-palette .pal-cell');
+    liveCells[1].click();
+    assert(ix.document.querySelector('#practice-root .practice-meta').textContent.indexOf('Question 2 of 2') !== -1,
+      'palette jump from feedback opens the unanswered question');
+    liveCells = ix.document.querySelectorAll('.practice-live .practice-palette .pal-cell');
+    liveCells[0].click();
+    assert(ix.document.querySelector('#practice-root .practice-meta').textContent.indexOf('Question 1 of 2') !== -1,
+      'palette jump returns to the answered question');
+    assessRow = ix.document.getElementById('assess-row');
+    assert(!!assessRow, 'returning to an answered live question still shows Knew it / Guessed');
+    guessChip = ix.document.querySelector('[data-assess="guess"]');
+    assert(guessChip && guessChip.getAttribute('aria-pressed') === 'true',
+      'Guessed tag survives the palette jump');
+    dispatchKeydown(ix, { key: 'k' });
+    sureChip = ix.document.querySelector('[data-assess="sure"]');
+    assert(sureChip && sureChip.getAttribute('aria-pressed') === 'true',
+      'keyboard K still toggles assess after returning via the palette');
 
     var nextBtn = ix.document.getElementById('next-btn');
     if (nextBtn) nextBtn.click();

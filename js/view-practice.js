@@ -293,13 +293,7 @@ PGRE.views.practice = (function () {
 
   function bindLiveJumps() {
     var root = el();
-    if (!root) return;
-    root.querySelectorAll('[data-goto]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        openLive(parseInt(b.getAttribute('data-goto'), 10));
-      });
-    });
-    if (root._pgreGotoBound) return;
+    if (!root || root._pgreGotoBound) return;
     root._pgreGotoBound = true;
     root.addEventListener('click', function (e) {
       var t = e.target && e.target.closest ? e.target.closest('[data-goto]') : null;
@@ -340,6 +334,44 @@ PGRE.views.practice = (function () {
         bits.join(' · ') + '</strong></div>';
     }
     return '';
+  }
+
+  function assessFlags(ans) {
+    if (ans.assess) return ans.assess;
+    var flags = { sure: false, guess: false, slow: false, forgot: false };
+    if (ans.row) {
+      if (ans.row.confidence === 'sure') flags.sure = true;
+      if (ans.row.confidence === 'guess') flags.guess = true;
+      (ans.row.tags || []).forEach(function (tg) { flags[tg] = true; });
+    }
+    return flags;
+  }
+
+  function snapshotAssess(fb, ans) {
+    if (!fb || !ans) return;
+    var flags = { sure: false, guess: false, slow: false, forgot: false };
+    fb.querySelectorAll('[data-assess]').forEach(function (b) {
+      var k = b.getAttribute('data-assess');
+      if (k in flags) flags[k] = b.getAttribute('aria-pressed') === 'true';
+    });
+    ans.assess = flags;
+  }
+
+  function bindSessionAssess(fb, q, ans) {
+    var ctrl = PGRE.assess.bind(fb, q, ans.correct);
+    var flags = assessFlags(ans);
+    Object.keys(flags).forEach(function (k) { if (flags[k]) ctrl.toggle(k); });
+    var inner = ctrl.toggle;
+    ctrl.toggle = function (key) {
+      inner(key);
+      snapshotAssess(fb, ans);
+    };
+    fb.addEventListener('click', function (e) {
+      var t = e.target && e.target.closest ? e.target.closest('[data-assess]') : null;
+      if (t && fb.contains(t)) snapshotAssess(fb, ans);
+    });
+    snapshotAssess(fb, ans);
+    session.assess = ctrl;
   }
 
 
@@ -710,7 +742,7 @@ PGRE.views.practice = (function () {
         (ans.xp != null ? '<span class="fb-xp">+' + ans.xp + ' XP</span>' : '') +
       '</div>' +
       (ans.ms != null ? paceMark(ans.ms) : '') +
-      reviewAssessNote(ans) +
+      PGRE.assess.html(settings().keyboard) +
       '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
       distractorBlock(q) +
       notesBlock(q) +
@@ -723,7 +755,10 @@ PGRE.views.practice = (function () {
     PGRE.typesetMath(el());
     window.scrollTo(0, 0);
     var fb = document.getElementById('feedback');
-    if (fb) bindNotes(fb, q);
+    if (fb) {
+      bindSessionAssess(fb, q, ans);
+      bindNotes(fb, q);
+    }
     saveSession();
     bindLiveJumps();
     var nb = document.getElementById('next-btn');
@@ -799,7 +834,7 @@ PGRE.views.practice = (function () {
         '</div>');
     }
     PGRE.typesetMath(fb);
-    session.assess = PGRE.assess.bind(fb, q, isCorrect);
+    bindSessionAssess(fb, q, session.answers[session.i]);
     bindNotes(fb, q);
     saveSession();
     if (sittingComplete()) persistAgentReceipt(buildAgentReceipt());
