@@ -3481,10 +3481,10 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
   transition: color .25s ease, opacity .25s ease, font-size .7s cubic-bezier(.22, 1, .36, 1);
   transform-origin: center;
 }
-/* subtitle: quiet sans caption */
+/* subtitle: quiet sans, live status text */
 .focus-sub {
   font-family: var(--sans); font-style: normal;
-  font-size: 13px; font-weight: 400; color: var(--ink-3); min-height: 18px;
+  font-size: 13px; font-weight: 400; color: var(--ink-2); min-height: 18px;
 }
 
 /* BUNDLE D — paused (held) session on the full page: the clock dims to read as

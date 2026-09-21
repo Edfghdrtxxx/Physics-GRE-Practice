@@ -302,7 +302,7 @@ PGRE.views.focus = (function () {
         var remain = Math.max(0, goalSec - e);
         if (clock) clock.textContent = fmtClock(remain);          // countdown shows remaining (frozen if paused)
         if (sub) sub.textContent = paused
-          ? ('Paused \u00b7 ' + fmtClock(e) + ' in')
+          ? ('Paused \u00b7 ' + fmtClock(e) + ' elapsed')
           : (fmtClock(e) + ' elapsed');
         progress = Math.min(1, e / goalSec);
         orbits = e >= goalSec ? 3 : (progress >= 0.66 ? 3 : progress >= 0.33 ? 2 : 1);
