@@ -292,10 +292,21 @@ PGRE.views.practice = (function () {
   }
 
   function bindLiveJumps() {
-    el().querySelectorAll('[data-goto]').forEach(function (b) {
+    var root = el();
+    if (!root) return;
+    root.querySelectorAll('[data-goto]').forEach(function (b) {
       b.addEventListener('click', function () {
         openLive(parseInt(b.getAttribute('data-goto'), 10));
       });
+    });
+    if (root._pgreGotoBound) return;
+    root._pgreGotoBound = true;
+    root.addEventListener('click', function (e) {
+      var t = e.target && e.target.closest ? e.target.closest('[data-goto]') : null;
+      if (!t || t.disabled || !root.contains(t)) return;
+      var n = parseInt(t.getAttribute('data-goto'), 10);
+      if (n !== n) return;
+      openLive(n);
     });
   }
 
