@@ -224,11 +224,16 @@ PGRE.formulaTextHTML = function (text) {
     nu: '\\nu', rho: '\\rho', sigma: '\\sigma', tau: '\\tau', phi: '\\phi',
     omega: '\\omega', Omega: '\\Omega'
   };
-  // Angle-bracket expectation/average notation: <P>_B, <P>_E, <S>, <x>, <v>, or <[A-Za-z]>.
-  // Convert to $\langle ... \rangle$ before splitting by <[^>]*> so they are not
-  // swallowed as unescaped HTML element tags (e.g. <P> parsed as an empty <p> element).
+  // Angle-bracket expectation/average and Dirac bra-ket notation: <P>_B, <S>,
+  // <a|b>, <a|A-hat b>, or a split pair <x| ... |f>. Convert to $\langle...\rangle$
+  // before splitting by <[^>]*> so they are not swallowed as unescaped HTML tags
+  // (e.g. <S> parsed as a strikethrough, <a|...> as an <a> element). A pipe makes
+  // the bracket unambiguous — no real HTML tag contains one — so inner products
+  // may carry spaces; a bare <a href=...> still must not.
   var mathOrCodeBlock = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$]*?\$|<code\b[^>]*>[\s\S]*?<\/code>|<pre\b[^>]*>[\s\S]*?<\/pre>)/gi;
-  var angleExp = /<([A-Za-z](?:[A-Za-z0-9_^*+()\\-]|\{[^}]*\})*(?:\|[A-Za-z0-9_^*+()\\-]+)?|\\[A-Za-z]+)>((?:_(?:[A-Za-z0-9]+|\{[^}]+\})|\^(?:[A-Za-z0-9]+|\{[^}]+\}))*)/g;
+  var angleExp = /<([A-Za-z](?:[A-Za-z0-9_^*+()\\-]|\{[^}]*\})*(?:\|[A-Za-z0-9_^*+()\\ -]*)?|\\[A-Za-z]+)>((?:_(?:[A-Za-z0-9]+|\{[^}]+\})|\^(?:[A-Za-z0-9]+|\{[^}]+\}))*)/g;
+  var splitBra = /<([A-Za-z](?:[A-Za-z0-9_^*+()\\-]|\{[^}]*\})*)\|/g;
+  var splitKet = /\|([A-Za-z](?:[A-Za-z0-9_^*+()\\-]|\{[^}]*\})*)>((?:_(?:[A-Za-z0-9]+|\{[^}]+\})|\^(?:[A-Za-z0-9]+|\{[^}]+\}))*)/g;
   var HTML_TAGS = {
     a: 1, b: 1, i: 1, p: 1, q: 1, s: 1, u: 1, em: 1, strong: 1, code: 1, pre: 1,
     div: 1, span: 1, blockquote: 1, table: 1, thead: 1, tbody: 1, tr: 1, td: 1,
@@ -237,7 +242,7 @@ PGRE.formulaTextHTML = function (text) {
 
   text = String(text).split(mathOrCodeBlock).map(function (part) {
     if (!part || /^(?:\$\$[\s\S]*\$\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\)|\$[^$]*\$|<(?:code|pre)\b)/i.test(part)) return part;
-    return part.replace(angleExp, function (match, inner, decor) {
+    var out = part.replace(angleExp, function (match, inner, decor) {
       if (!decor) {
         var lower = inner.toLowerCase();
         if (HTML_TAGS[lower]) {
@@ -249,6 +254,11 @@ PGRE.formulaTextHTML = function (text) {
       }
       return '$\\langle ' + inner + ' \\rangle' + (decor || '') + '$';
     });
+    // Split bra/ket pairs that carry prose between them: "<x| with a state |f>".
+    // angleExp cannot span the words, so close each half on its own.
+    out = out.replace(splitBra, '$\\langle $1|$');
+    out = out.replace(splitKet, '$|$1\\rangle$2$');
+    return out;
   }).join('');
 
   var protectedPart = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$]*?\$|<[^>]*>)/g;
