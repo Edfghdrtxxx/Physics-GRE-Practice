@@ -4822,8 +4822,7 @@ button.btn-ok {
     transform: none;
   }
   .topbar-inner { gap: 8px; }
-  .breadcrumbs { order: 3; flex-basis: 100%; }
-  .origin-line { margin-left: auto; }
+  .breadcrumbs { flex-basis: 100%; }
   .btn { min-height: 42px; }
   .btn-sm { min-height: var(--ctl-h-sm); }
 }
