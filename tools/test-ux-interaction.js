@@ -1110,6 +1110,36 @@ function runAsync() {
     'loaded shipped js/view-exam.js');
   assert(!!PGRE.views.practice && typeof PGRE.views.practice.mount === 'function',
     'loaded shipped js/view-practice.js');
+  /* Type-to-recall accepts notation-only differences without dropping
+     semantic operators: rho_b/rho, nabla·/div, and vector decorations. */
+  console.log('\ntype notation equivalence and sign safety');
+  function typeVerdict(typed) {
+    var host = ix.document.createElement('div');
+    ix.document.body.appendChild(host);
+    PGRE.flashmodes.startType({
+      el: host,
+      cards: [{
+        id: 'repro-2.57',
+        name: 'Dielectrics',
+        front: 'What is the bound volume charge density rho_b in terms of the polarization P?',
+        back: '$$\\rho_b = -\\nabla\\cdot\\mathbf{P}$$',
+        eq: '2.57'
+      }],
+      onReplay: function () {},
+      onExit: function () {}
+    });
+    host.querySelector('#flash-input').value = typed;
+    host.querySelector('#flash-submit').click();
+    var verdict = host.querySelector('.flash-auto');
+    var matched = !!verdict && verdict.classList.contains('is-hit');
+    host.remove();
+    return matched;
+  }
+  assert(typeVerdict('rho = - divP vector'), 'notation-equivalent dielectric recall matches');
+  assert(!typeVerdict('rho = divP vector'), 'wrong-sign dielectric recall misses');
+  assert(!typeVerdict('rho_b = divP vector'), 'missing-minus dielectric recall misses');
+  assert(!typeVerdict('sigma = - divE vector'), 'unrelated dielectric recall misses');
+
 
   /* PGRE.formulaTextHTML: angle-bracket expectation/average notation */
   console.log('\nformulaTextHTML: angle-bracket math notation');

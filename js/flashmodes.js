@@ -76,6 +76,28 @@ PGRE.flashmodes = (function () {
     return s.toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
+  /* Formula-equivalence normalization for Type mode. Unlike normText, this
+     preserves signs and equation operators: a missing or reversed minus must
+     remain a miss. It only relaxes notation that does not change the physical
+     relation (rho_b/rho, nabla·/div, and vector decorations). */
+  function recallNorm(s) {
+    s = String(s == null ? '' : s);
+    s = s.replace(/[−–—]/g, '-').replace(/[＋]/g, '+');
+    s = s.replace(/ρ/g, 'rho').replace(/ϱ/g, 'rho');
+    s = s.replace(/∇\s*[·⋅]/g, ' div ');
+    s = s.replace(/\\left|\\right/g, '');
+    s = s.replace(/\\nabla\s*\\(?:cdot|cdotp)/g, ' div ');
+    s = s.replace(/\\frac\s*\{([^}]*)\}\s*\{([^}]*)\}/g, '($1)/($2)');
+    s = s.replace(/\\(?:text|mathrm|mathbf|mathit|vec|hat|bar|tilde|dot|ddot|operatorname)\s*\{([^}]*)\}/g, '$1');
+    s = s.replace(/\\([a-zA-Z]+)/g, '$1');
+    s = s.replace(/\bnabla\s*(?:cdot|cdotp|dot)\b/g, 'div');
+    s = s.replace(/\bdivergence\b/g, 'div');
+    s = s.replace(/\brho\s*_\s*\{?\s*b\s*\}?/gi, 'rho');
+    s = s.replace(/\bvector\b/gi, '');
+    s = s.replace(/[{}]/g, '');
+    return s.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9+\-*/^=().]/g, '');
+  }
+
   /* ——— F6 legend strip + near-miss generation ———
      Book-import backs carry the formula in a leading $$…$$ (or $…$) block, then an
      optional symbol legend ("$x_0$: initial position; …" or "\n$\rho$ = charge
@@ -222,13 +244,13 @@ PGRE.flashmodes = (function () {
   }
 
   function acceptSet(c) {
-    var out = [normText(c.back), normText(stripLegend(c.back))];
-    if (c.answer) out.push(normText(c.answer));
+    var out = [recallNorm(c.back), recallNorm(stripLegend(c.back))];
+    if (c.answer) out.push(recallNorm(c.answer));
     if (c.aliases && c.aliases.length) {
-      c.aliases.forEach(function (a) { out.push(normText(a)); });
+      c.aliases.forEach(function (a) { out.push(recallNorm(a)); });
     }
     if (c.alts && c.alts.length) {           // F4: optional accepted alternatives
-      c.alts.forEach(function (a) { out.push(normText(a)); });
+      c.alts.forEach(function (a) { out.push(recallNorm(a)); });
     }
     return out.filter(function (x) { return x; });
   }
@@ -536,7 +558,7 @@ PGRE.flashmodes = (function () {
       var c = st.queue[st.i];
       var inp = document.getElementById('flash-input');
       var typed = inp ? inp.value : '';
-      var norm = normText(typed);
+      var norm = recallNorm(typed);
       var hit = norm !== '' && acceptSet(c).indexOf(norm) !== -1;
       if (inp) inp.disabled = true;
       var sub = document.getElementById('flash-submit');
