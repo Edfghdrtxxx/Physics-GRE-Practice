@@ -60,6 +60,7 @@ function mockStorage() {
   return {
     setItem: function (k, v) { data[k] = String(v); },
     getItem: function (k) { return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+    removeItem: function (k) { delete data[k]; },
     _data: data
   };
 }
@@ -208,6 +209,7 @@ console.log('\nsimilar problem handoff');
   assert(best && best.src !== 'ets-exam', 'similarProblemFor never returns an intact exam question');
 
   var storage = mockStorage();
+  storage.setItem('pgre-practice-session', JSON.stringify({ ids: ['stale'], i: 0 }));
   var loc = { hash: '#/formulas' };
   var cfg = PGRE.launchSimilarProblem(card, storage, loc);
   assert(!!cfg, 'launchSimilarProblem returns config');
@@ -215,8 +217,10 @@ console.log('\nsimilar problem handoff');
   var stored = JSON.parse(storage.getItem('pgre-quiz-config'));
   assert(stored.ids.length === 1 && stored.ids[0] === 'kepler',
     'launchSimilarProblem stores exactly the matched question id');
-  assert(stored.learnDrill !== true && stored.purpose == null,
-    'similar problem is a plain custom set, not a Learn drill or pack');
+  assert(stored.learnDrill !== true && stored.purpose === 'similar',
+    'similar problem is marked purpose:similar, not a Learn drill or pack');
+  assert(storage.getItem('pgre-practice-session') === null,
+    'launchSimilarProblem clears a stale saved practice session');
 
   var storage2 = mockStorage();
   var loc2 = { hash: '#/practice/custom' };

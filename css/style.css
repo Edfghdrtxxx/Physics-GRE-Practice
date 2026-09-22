@@ -1047,6 +1047,7 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 
 /* ——— Small buttons (inline actions) ——— */
 .btn-sm { font-size: 12.5px; padding: 5px 12px; border-radius: var(--ctl-r); min-height: var(--ctl-h-sm); }
+.similar-btn { white-space: nowrap; }
 
 /* ——— Sidebar due badges ——— */
 .nav-badge-due { background: var(--ivory); color: var(--ink); font-weight: 500; }
@@ -2239,6 +2240,8 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
   gap: 10px;
   margin: 8px 0 4px;
 }
+.flash-tile-wrap { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.flash-tile-action { display: flex; justify-content: center; }
 .flash-tile {
   min-height: 94px;
   display: flex;
@@ -4824,6 +4827,7 @@ button.btn-ok {
   .breadcrumbs { flex-basis: 100%; }
   .btn { min-height: 42px; }
   .btn-sm { min-height: var(--ctl-h-sm); }
+  .similar-btn { min-height: 42px; }
 }
 @media (max-width: 480px) {
   .card { padding: 16px; border-radius: 10px; }

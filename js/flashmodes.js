@@ -62,11 +62,37 @@ PGRE.flashmodes = (function () {
 
   /* "Similar problem" control — same contract as view-formulas: the button
      carries the card id; the click handler hands the card object to
-     PGRE.launchSimilarProblem (js/packs.js). */
-  function similarBtnHTML(c) {
+     PGRE.launchSimilarProblem (js/packs.js). A card with no qualifying
+     practice-pool match renders an honest disabled control instead of a
+     button that would jump to an unrelated question. When the matcher is
+     absent (test sandboxes) the button stays live — the click handler
+     guards launchSimilarProblem. */
+  function similarBtnHTML(c, extraClass) {
     if (!c || !c.id) return '';
-    return '<button type="button" class="btn btn-ghost similar-btn" data-similar="' +
+    var cls = 'btn btn-ghost similar-btn' + (extraClass ? ' ' + extraClass : '');
+    if (typeof PGRE.similarProblemFor === 'function' && !PGRE.similarProblemFor(c)) {
+      return '<button type="button" class="' + cls + '" disabled aria-disabled="true" ' +
+        'title="No similar practice problem meets the matching threshold">No similar problem</button>';
+    }
+    return '<button type="button" class="' + cls + '" data-similar="' +
       PGRE.ui.esc(c.id) + '">Similar problem</button>';
+  }
+
+  /* Delegated wiring: resolve the card by id from the given list, then hand
+     it to the launcher. Clicks are stopped so the control never flips a
+     card or picks a Match tile. */
+  function wireSimilarButtons(root, cards) {
+    if (!root || !root.querySelectorAll) return;
+    var byId = {};
+    (cards || []).forEach(function (c) { if (c && c.id) byId[c.id] = c; });
+    root.querySelectorAll('[data-similar]').forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var c = byId[b.getAttribute('data-similar')];
+        if (c && typeof PGRE.launchSimilarProblem === 'function') PGRE.launchSimilarProblem(c);
+      });
+    });
   }
 
 
@@ -364,9 +390,9 @@ PGRE.flashmodes = (function () {
                start: Date.now(), timer: null };
 
     cards.forEach(function (c) {
-      st.tiles.push({ id: c.id, kind: 'prompt',
+      st.tiles.push({ id: c.id, card: c, kind: 'prompt',
         html: c.front ? formulaHTML(c.front) : PGRE.ui.esc(cardName(c)) });
-      st.tiles.push({ id: c.id, kind: 'formula', html: formulaHTML(c.back) });
+      st.tiles.push({ id: c.id, card: c, kind: 'formula', html: formulaHTML(c.back) });
     });
     st.tiles = shuffle(st.tiles);
 
@@ -401,9 +427,11 @@ PGRE.flashmodes = (function () {
     function render() {
       var grid = '';
       st.tiles.forEach(function (t, idx) {
-        grid += '<button class="flash-tile" data-tile="' + idx + '" aria-pressed="false">' +
+        grid += '<div class="flash-tile-wrap">' +
+          '<button class="flash-tile" data-tile="' + idx + '" aria-pressed="false">' +
           '<span class="flash-tile-kind">' + (t.kind === 'prompt' ? 'Prompt' : 'Formula') + '</span>' +
-          '<span class="flash-tile-body">' + t.html + '</span></button>';
+          '<span class="flash-tile-body">' + t.html + '</span></button>' +
+          '<div class="flash-tile-action">' + similarBtnHTML(t.card, 'btn-sm') + '</div></div>';
       });
       el.innerHTML = '<div class="card">' +
         '<div class="flash-hud"><span class="flash-title">Match · ' + st.total + ' pairs</span>' +
@@ -413,6 +441,7 @@ PGRE.flashmodes = (function () {
         '<div class="btn-row"><button class="btn btn-ghost" id="flash-exit">Back to deck</button></div>' +
         '</div>';
       PGRE.typesetMath(el);
+      wireSimilarButtons(el, cards);
       el.querySelectorAll('.flash-tile').forEach(function (b) {
         b.addEventListener('click', function () {
           onPick(parseInt(b.getAttribute('data-tile'), 10));
@@ -546,10 +575,12 @@ PGRE.flashmodes = (function () {
         '<input class="flash-type-input" id="flash-input" type="text" autocomplete="off" ' +
           'spellcheck="false" placeholder="Type the formula, then press Enter">' +
         '<div class="btn-row">' +
+          similarBtnHTML(c, 'btn-sm') +
           '<button class="btn btn-primary" id="flash-submit">Check <span class="key-hint">enter</span></button>' +
           '<button class="btn btn-ghost" id="flash-reveal-btn">Reveal</button></div>' +
         '<div id="flash-reveal"></div></div>';
       PGRE.typesetMath(el);
+      wireSimilarButtons(el, st.queue);
       var inp = document.getElementById('flash-input');
       inp.focus();
       inp.addEventListener('keydown', function (e) {
@@ -606,13 +637,7 @@ PGRE.flashmodes = (function () {
       box.querySelectorAll('[data-grade]').forEach(function (b) {
         b.addEventListener('click', function () { grade(b.getAttribute('data-grade')); });
       });
-      box.querySelectorAll('[data-similar]').forEach(function (b) {
-        b.addEventListener('click', function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (typeof PGRE.launchSimilarProblem === 'function') PGRE.launchSimilarProblem(c);
-        });
-      });
+      wireSimilarButtons(box, st.queue);
       // Grade only on an explicit click or the 1/2 keys — never autofocus a grade
       // button, or an Enter still held from submitting would activate it and
       // self-grade "Close enough". Drop focus and start a short key-guard so a
@@ -765,9 +790,11 @@ PGRE.flashmodes = (function () {
           '<span class="choice-letter">' + (idx + 1) + '</span>' +
           '<span class="choice-body">' + o + '</span></button>';
       });
-      html += '</div><div id="flash-fb"></div></div>';
+      html += '</div><div class="btn-row">' + similarBtnHTML(c, 'btn-sm') +
+        '</div><div id="flash-fb"></div></div>';
       el.innerHTML = html;
       PGRE.typesetMath(el);
+      wireSimilarButtons(el, st.queue);
       el.querySelectorAll('.choice').forEach(function (b) {
         b.addEventListener('click', function () {
           pick(parseInt(b.getAttribute('data-idx'), 10));
@@ -820,13 +847,7 @@ PGRE.flashmodes = (function () {
       nx.focus();
       var ub = document.getElementById('flash-undo');
       if (ub) ub.addEventListener('click', undoLast);
-      fb.querySelectorAll('[data-similar]').forEach(function (b) {
-        b.addEventListener('click', function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (typeof PGRE.launchSimilarProblem === 'function') PGRE.launchSimilarProblem(c);
-        });
-      });
+      wireSimilarButtons(fb, st.queue);
     }
 
     /* F1b: revert the last committed grade — restore the card's SRS state, pop the
@@ -1145,9 +1166,11 @@ PGRE.flashmodes = (function () {
           '<span class="choice-letter">' + (idx + 1) + '</span>' +
           '<span class="choice-body">$' + o + '$</span></button>';
       });
-      html += '</div><div id="cloze-fb"></div></div>';
+      html += '</div><div class="btn-row">' + similarBtnHTML(c, 'btn-sm') +
+        '</div><div id="cloze-fb"></div></div>';
       el.innerHTML = html;
       PGRE.typesetMath(el);
+      wireSimilarButtons(el, st.queue);
       el.querySelectorAll('.cloze-option').forEach(function (b) {
         b.addEventListener('click', function () { pick(parseInt(b.getAttribute('data-idx'), 10)); });
       });

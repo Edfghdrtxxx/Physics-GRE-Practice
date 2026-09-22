@@ -88,11 +88,18 @@ PGRE.views.formulas = (function () {
 
   /* "Similar problem" — every flashcard surface carries a control that jumps
      to the practice-pool question closest to the card (PGRE.similarProblemFor
-     in js/packs.js). The button is emitted unconditionally: the launcher is
-     what decides whether a match exists, and the pool always does. */
+     in js/packs.js). A card with no qualifying match renders an honest
+     disabled control instead of a button that would jump to an unrelated
+     question. When the matcher is absent (test sandboxes) the button stays
+     live — the click handler guards launchSimilarProblem. */
   function similarBtnHTML(id, extraClass) {
     if (!id) return '';
     var cls = 'btn btn-ghost similar-btn' + (extraClass ? ' ' + extraClass : '');
+    var c = deckById(id);
+    if (c && typeof PGRE.similarProblemFor === 'function' && !PGRE.similarProblemFor(c)) {
+      return '<button type="button" class="' + cls + '" disabled aria-disabled="true" ' +
+        'title="No similar practice problem meets the matching threshold">No similar problem</button>';
+    }
     return '<button type="button" class="' + cls + '" data-similar="' +
       PGRE.ui.esc(id) + '">Similar problem</button>';
   }
@@ -212,7 +219,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20260922a';
+      s.src = 'js/flashmodes.js?v=20260922b';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -1525,7 +1532,7 @@ PGRE.views.formulas = (function () {
           '<span class="deck-name">' + label + '</span>' + chip +
         '</div>' +
         '<div class="browse-peek picker-peek picker-preview">' +
-          formulaHTML(c.back) +
+          formulaHTML(c.back) + similarBtnHTML(c.id, 'btn-sm') +
         '</div>' +
       '</div>';
     }
@@ -1667,6 +1674,7 @@ PGRE.views.formulas = (function () {
       wrap.innerHTML = htmlRows;
       wrap.hidden = false;
       if (PGRE.typesetMath) PGRE.typesetMath(wrap);
+      wireSimilarButtons(wrap);
       wireChapterBody(wrap);
     }
 
