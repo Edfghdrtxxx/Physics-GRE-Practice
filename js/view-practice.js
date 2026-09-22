@@ -618,7 +618,7 @@ PGRE.views.practice = (function () {
       return;
     }
     beginPractice(shuffle(qs), { topicId: 'custom', label: cfg.label || 'Custom quiz', custom: true,
-                                 criteria: cfg.criteria || null });
+                                 criteria: cfg.criteria || null, purpose: cfg.purpose || null });
   }
 
   function sameIds(a, b) {

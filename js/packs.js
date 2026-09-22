@@ -195,47 +195,36 @@ PGRE.launchCustomQuiz = function (opts, storage, loc) {
 };
 
 /* Most-similar-problem lookup for a formula card: the single practice-pool
-   question that best matches the card's topic and wording. Same scoring
-   shape as selectLearnQuestions — topic match dominates, then card terms
-   (name, tag, front, note) hit the question's subtopic hard and its stem
-   softly. The default pool already excludes intact exams, so a similar
-   problem can never spoil a mock. Deterministic: ties break on id. */
+   question that best matches the card's topic and wording. The matcher lives
+   in js/bank.js (PGRE.similarQuestionForCard) beside the pool it scores —
+   same-topic token overlap with a qualifying threshold, intact exams always
+   excluded, so a similar problem can never spoil a mock. */
 PGRE.similarProblemFor = function (card) {
-  if (!card || typeof PGRE.allQuestions !== 'function') return null;
-  var terms = learnTerms([card.name, card.tag, card.front, card.note]);
-  var topic = String(card.topic || '');
-  var best = null, bestScore = -1;
-  PGRE.allQuestions().forEach(function (q) {
-    if (!q || !q.id || q.src === 'ets-exam' || q.src === 'cpg-exam') return;
-    var sub = String(q.subtopic || '').toLowerCase();
-    var text = String(q.q || '').toLowerCase();
-    var score = String(q.topic || '') === topic ? 100 : 0;
-    terms.forEach(function (term) {
-      if (sub.indexOf(term) !== -1) score += 45;
-      else if (text.indexOf(term) !== -1) score += 10;
-    });
-    if (score > bestScore ||
-        (score === bestScore && best && String(q.id).localeCompare(String(best.id)) < 0)) {
-      bestScore = score;
-      best = q;
-    }
-  });
-  return best;
+  if (typeof PGRE.similarQuestionForCard !== 'function') return null;
+  return PGRE.similarQuestionForCard(card);
 };
 
 /* One-question handoff into #/practice/custom — the same sessionStorage
    contract launchPack uses, but for a single id, so it cannot go through
-   launchCustomQuiz (which requires exactly three). storage and loc are
-   injectable so Node tests can drive the shipped function. */
+   launchCustomQuiz (which requires exactly three). purpose:'similar' marks
+   the saved session so a resume never mistakes it for a Learn drill, and any
+   leftover pgre-practice-session is cleared so the new set cannot resume the
+   old one. storage and loc are injectable so Node tests can drive the
+   shipped function. */
 PGRE.launchSimilarProblem = function (card, storage, loc) {
   var q = PGRE.similarProblemFor(card);
   if (!q) return null;
   var store = storage;
   if (!store && typeof sessionStorage !== 'undefined') store = sessionStorage;
   if (!store || typeof store.setItem !== 'function') return null;
-  var cfg = { ids: [q.id], label: 'Similar problem' };
+  var cfg = {
+    ids: [q.id],
+    label: 'Similar problem · ' + (card.name || card.tag || card.id),
+    purpose: 'similar'
+  };
   try {
     store.setItem('pgre-quiz-config', JSON.stringify(cfg));
+    if (typeof store.removeItem === 'function') store.removeItem('pgre-practice-session');
   } catch (e) {
     return null;
   }

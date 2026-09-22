@@ -86,3 +86,161 @@ PGRE.questionById = function (id) {
   }
   return _questionByIdIndex[id] || null;
 };
+
+/* Formula-card → practice-problem handoff.
+   Similarity is deliberately deterministic and conservative:
+   - only the default practice pool (never intact exam questions — the
+     spoiler rule in AGENTS.md applies here too, and the src check below
+     keeps it true even if a caller widened the pool),
+   - same topic is required, except circuit cards allow the book's lb↔em split,
+   - score specific token overlap, weighting card identity and question subtopics,
+   - a positive score threshold is required; ties keep bank order.
+   A formula with no qualifying candidate gets an honest disabled control rather
+   than an unrelated question. */
+PGRE._similarStop = {
+  a: 1, an: 1, and: 1, are: 1, as: 1, at: 1, be: 1, by: 1, can: 1, do: 1,
+  does: 1, for: 1, from: 1, given: 1, how: 1, if: 1, in: 1, into: 1, is: 1,
+  it: 1, its: 1, of: 1, on: 1, or: 1, that: 1, the: 1, their: 1, then: 1,
+  there: 1, these: 1, this: 1, to: 1, was: 1, what: 1, when: 1, which: 1,
+  accurately: 1, expressed: 1, dependence: 1, angular: 1, frequency: 1,
+  circuit: 1, connected: 1, series: 1, parallel: 1, voltage: 1, current: 1,
+  supply: 1, element: 1, elements: 1, total: 1, closed: 1, loop: 1,
+  flowing: 1, node: 1, rule: 1, around: 1, across: 1, power: 1, dissipated: 1,
+  time: 1, constant: 1, magnitude: 1,
+  one: 1, two: 1, three: 1, four: 1, five: 1, first: 1, second: 1
+};
+
+function _similarPlain(value) {
+  return String(value == null ? '' : value)
+    .replace(/\\(omega|Delta|theta|lambda|mu|epsilon|hbar)\b/gi, ' $1 ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\\[a-zA-Z]+/g, ' ')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .toLowerCase();
+}
+
+function _similarTokens(parts) {
+  var out = Object.create(null);
+  var aliases = {
+    circuits: 'circuit', capacitors: 'capacitor', capacitance: 'capacitor',
+    inductors: 'inductor', inductance: 'inductor', resistors: 'resistor',
+    resistances: 'resistor', reactances: 'reactance', admittances: 'admittance',
+    phasors: 'phasor'
+  };
+  var shortWords = { ac: 1, dc: 1, lc: 1, rc: 1, rl: 1, emf: 1 };
+  (parts || []).forEach(function (part) {
+    _similarPlain(part).split(/\s+/).forEach(function (word) {
+      if (word.length < 3 && !shortWords[word]) return;
+      word = aliases[word] || word;
+      if (PGRE._similarStop[word]) return;
+      out[word] = 1;
+    });
+  });
+  return out;
+}
+
+PGRE.similarQuestionForCard = function (card) {
+  if (!card || typeof PGRE.allQuestions !== 'function') return null;
+  var identity = _similarTokens([card.name, card.tag]);
+  var body = _similarTokens([
+    card.front, card.back, card.note,
+    Array.isArray(card.aliases) ? card.aliases.join(' ') : card.aliases
+  ]);
+  var circuit = { circuit: 1, impedance: 1, capacitor: 1, capacitance: 1,
+    inductor: 1, inductance: 1, resistor: 1, resistance: 1, phasor: 1,
+    reactance: 1, admittance: 1 };
+  var best = null, bestScore = 2;
+  PGRE.allQuestions().forEach(function (q) {
+    if (!q || q.src === 'ets-exam' || q.src === 'cpg-exam') return;
+    var topicOK = q.topic === card.topic;
+    if (!topicOK && (
+      (card.topic === 'lb' && q.topic === 'em') ||
+      (card.topic === 'em' && q.topic === 'lb')
+    )) {
+      topicOK = Object.keys(circuit).some(function (word) { return identity[word] || body[word]; });
+    }
+    if (!topicOK) return;
+    var sub = _similarTokens([q.subtopic]);
+    var stem = _similarTokens([q.q]);
+    var score = 0, hits = 0, specificHit = false;
+    Object.keys(identity).forEach(function (word) {
+      if (sub[word]) { score += 5; hits++; specificHit = specificHit || !!circuit[word]; }
+      else if (stem[word]) { score += 4; hits++; specificHit = specificHit || !!circuit[word]; }
+    });
+    Object.keys(body).forEach(function (word) {
+      if (identity[word]) return;
+      if (sub[word]) { score += 3; hits++; specificHit = specificHit || !!circuit[word]; }
+      else if (stem[word]) { score += 2; hits++; specificHit = specificHit || !!circuit[word]; }
+    });
+    if (!hits || score <= bestScore || (hits < 2 && score < 5 && !specificHit)) return;
+    best = q;
+    bestScore = score;
+  });
+  return best;
+};
+
+/* The control every flashcard surface renders. When nothing qualifies the
+   control degrades to an inert label — never an unrelated question. */
+PGRE.similarProblemButtonHTML = function (card, extraClass) {
+  var ui = PGRE.ui || {};
+  var esc = ui.esc || function (s) {
+    return String(s).replace(/[&<>"']/g, function (ch) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+    });
+  };
+  var q = PGRE.similarQuestionForCard(card);
+  var cls = 'btn btn-ghost similar-problem-btn' + (extraClass ? ' ' + extraClass : '');
+  if (!q) {
+    return '<span class="' + cls + '" aria-disabled="true" role="status" ' +
+      'title="No similar practice problem meets the matching threshold">No similar problem</span>';
+  }
+  return '<button type="button" class="' + cls + '" data-similar-problem="' +
+    esc(card.id) + '" aria-label="Practice the most similar problem">Find similar problem</button>';
+};
+
+/* Delegated wiring: any [data-similar-problem] inside root opens the card's
+   most similar problem. Clicks are stopped so the control never flips the
+   card or picks a Match tile underneath it. */
+PGRE.wireSimilarProblemButtons = function (root) {
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll('[data-similar-problem]').forEach(function (button) {
+    button.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var id = button.getAttribute('data-similar-problem');
+      var card = PGRE._similarCardLookup && PGRE._similarCardLookup(id);
+      if (card) PGRE.openSimilarProblem(card);
+    });
+    button.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      e.stopPropagation();
+      button.click();
+    });
+  });
+};
+
+PGRE._similarCardLookup = function (id) {
+  if (typeof PGRE.getFormulaCard === 'function') return PGRE.getFormulaCard(id);
+  var deck = (PGRE.deck && PGRE.deck.length) ? PGRE.deck :
+    ((PGRE.BOOK_FORMULAS && PGRE.BOOK_FORMULAS.length) ? PGRE.BOOK_FORMULAS :
+      (PGRE.FORMULAS || []));
+  for (var i = 0; i < deck.length; i++) if (deck[i] && deck[i].id === id) return deck[i];
+  return null;
+};
+
+/* UI-facing entry point: resolve the match, hand it to the injectable
+   launcher in packs.js, and toast honestly when either step fails. */
+PGRE.openSimilarProblem = function (card) {
+  var q = PGRE.similarQuestionForCard(card);
+  if (!q) {
+    if (PGRE.toast) PGRE.toast('No similar practice problem meets the matching threshold.', 'info');
+    return false;
+  }
+  var cfg = PGRE.launchSimilarProblem(card);
+  if (!cfg) {
+    if (PGRE.toast) PGRE.toast('This browser could not prepare the practice problem.', 'warning');
+    return false;
+  }
+  return true;
+};
