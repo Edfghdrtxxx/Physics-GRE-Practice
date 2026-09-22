@@ -89,6 +89,16 @@
   .btn:active {
     transform: none;
   }
+  .ach-card:hover,
+  .fs-card:hover,
+  .nb-entry:hover,
+  .exam-format:hover,
+  .file-card:hover,
+  .dash-qotd-card:hover,
+  .filter-btn:active:not(:disabled),
+  .browse-tab:active:not(:disabled) {
+    transform: none;
+  }
   .motion-loader {
     transition: none;
   }

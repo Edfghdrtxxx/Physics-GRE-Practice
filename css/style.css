@@ -4731,7 +4731,6 @@ button.btn-ok {
   gap: 8px;
   transition: background .16s ease, border-color .16s ease, color .16s ease, transform .12s ease;
 }
-.btn:active:not(:disabled) { transform: translateY(1px); }
 .btn:focus-visible,
 .filter-btn:focus-visible,
 .browse-tab:focus-visible,
@@ -4742,9 +4741,11 @@ button.btn-ok {
 }
 
 /* Native controls inherit the same compact product chrome as buttons. */
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-select,
-textarea {
+:where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea
+) {
   font: 400 14px/1.45 var(--sans);
   color: var(--ink);
   background: var(--surface);
@@ -4752,17 +4753,21 @@ textarea {
   border-radius: var(--ctl-r);
   transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
 }
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):hover,
-select:hover,
-textarea:hover { border-color: var(--ink-3); }
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
-select:focus,
-textarea:focus {
+:where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):hover,
+  select:hover,
+  textarea:hover
+) { border-color: var(--ink-3); }
+:where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+  select:focus,
+  textarea:focus
+) {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(204, 120, 92, .15);
 }
-textarea { min-height: 76px; resize: vertical; }
+:where(textarea) { min-height: 76px; resize: vertical; }
 
 /* Badge language: one neutral capsule for metadata, one ink capsule for
    selected filters, coral remains reserved for the live marker. */
@@ -4824,8 +4829,6 @@ textarea { min-height: 76px; resize: vertical; }
 }
 @media (max-width: 480px) {
   .card { padding: 16px; border-radius: 10px; }
-  .btn-row { align-items: stretch; }
-  .btn-row .btn { flex: 1 1 auto; }
   .flash-tabs-bar { gap: 8px; }
   .browse-tabs { overflow-x: auto; flex-wrap: nowrap; }
 }
