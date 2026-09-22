@@ -186,6 +186,55 @@ console.log('\nlearn selector ranks grounded concepts and excludes protected sou
     'learn transfer rejects duplicate ids');
 })();
 
+console.log('\nsimilar problem handoff');
+(function () {
+  PGRE.allQuestions = function () {
+    return [
+      { id: 'kepler', src: 'cpg', topic: 'cm', subtopic: 'Circular orbit', difficulty: 1,
+        q: 'A satellite in a circular orbit of radius r has period T.' },
+      { id: 'other-cm', src: 'cpg', topic: 'cm', subtopic: 'Inclined plane', difficulty: 2,
+        q: 'A block slides on a ramp.' },
+      { id: 'other-topic', src: 'cpg', topic: 'em', subtopic: 'Circular orbit', difficulty: 1,
+        q: 'A charge orbits.' },
+      { id: 'protected', src: 'ets-exam', topic: 'cm', subtopic: 'Circular orbit', difficulty: 1,
+        q: 'Protected exam item about orbits.' }
+    ];
+  };
+  var card = { id: 'cpgf-1.1', topic: 'cm', name: 'Kepler’s third law',
+    front: 'Relate a circular orbit’s period to its radius.', back: '$$T^2 \\propto r^3$$' };
+  var best = PGRE.similarProblemFor(card);
+  assert(best && best.id === 'kepler',
+    'similarProblemFor picks the same-topic term match (got ' + (best && best.id) + ')');
+  assert(best && best.src !== 'ets-exam', 'similarProblemFor never returns an intact exam question');
+
+  var storage = mockStorage();
+  var loc = { hash: '#/formulas' };
+  var cfg = PGRE.launchSimilarProblem(card, storage, loc);
+  assert(!!cfg, 'launchSimilarProblem returns config');
+  assert(loc.hash === '#/practice/custom', 'launchSimilarProblem routes to custom practice');
+  var stored = JSON.parse(storage.getItem('pgre-quiz-config'));
+  assert(stored.ids.length === 1 && stored.ids[0] === 'kepler',
+    'launchSimilarProblem stores exactly the matched question id');
+  assert(stored.learnDrill !== true && stored.purpose == null,
+    'similar problem is a plain custom set, not a Learn drill or pack');
+
+  var storage2 = mockStorage();
+  var loc2 = { hash: '#/practice/custom' };
+  var routed = 0;
+  PGRE.route = function () { routed++; };
+  PGRE.launchSimilarProblem(card, storage2, loc2);
+  assert(routed === 1, 'launchSimilarProblem re-routes when already on custom');
+  delete PGRE.route;
+
+  PGRE.allQuestions = function () { return []; };
+  var storage3 = mockStorage();
+  var loc3 = { hash: '#/formulas' };
+  assert(PGRE.launchSimilarProblem(card, storage3, loc3) === null,
+    'launchSimilarProblem returns null with an empty pool');
+  assert(storage3.getItem('pgre-quiz-config') === null,
+    'empty pool does not write config');
+  assert(loc3.hash === '#/formulas', 'empty pool does not change hash');
+})();
 console.log('\nunknown pack');
 var storage = mockStorage();
 var loc = { hash: '#/plan' };

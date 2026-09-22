@@ -60,6 +60,16 @@ PGRE.flashmodes = (function () {
     return formulaHTML(PGRE.formulaBackTagged ? PGRE.formulaBackTagged(c.back, c.eq) : c.back);
   }
 
+  /* "Similar problem" control — same contract as view-formulas: the button
+     carries the card id; the click handler hands the card object to
+     PGRE.launchSimilarProblem (js/packs.js). */
+  function similarBtnHTML(c) {
+    if (!c || !c.id) return '';
+    return '<button type="button" class="btn btn-ghost similar-btn" data-similar="' +
+      PGRE.ui.esc(c.id) + '">Similar problem</button>';
+  }
+
+
   /* Plain-text normalization for the type-to-recall auto-check: peel the common
      LaTeX wrappers, then drop everything that isn't a letter or digit so
      spacing, case and punctuation stop mattering. It only lights an
@@ -591,10 +601,17 @@ PGRE.flashmodes = (function () {
             '<div class="flash-compare-body">' + backHTML(c) +
               (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') + '</div></div>' +
         '</div>' +
-        '<div class="btn-row">' + gradesHtml + '</div>';
+        '<div class="btn-row">' + gradesHtml + similarBtnHTML(c) + '</div>';
       PGRE.typesetMath(box);
       box.querySelectorAll('[data-grade]').forEach(function (b) {
         b.addEventListener('click', function () { grade(b.getAttribute('data-grade')); });
+      });
+      box.querySelectorAll('[data-similar]').forEach(function (b) {
+        b.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof PGRE.launchSimilarProblem === 'function') PGRE.launchSimilarProblem(c);
+        });
       });
       // Grade only on an explicit click or the 1/2 keys — never autofocus a grade
       // button, or an Enter still held from submitting would activate it and
@@ -795,13 +812,21 @@ PGRE.flashmodes = (function () {
         '</div>' +
         (c.note ? '<div class="solution"><div class="solution-label">Note</div>' + formulaHTML(c.note) + '</div>' : '') +
         '<div class="btn-row"><button class="btn btn-primary" id="flash-next">' +
-          (st.i + 1 < st.queue.length ? 'Next →' : 'Finish') + '</button></div>';
+          (st.i + 1 < st.queue.length ? 'Next →' : 'Finish') + '</button>' +
+          similarBtnHTML(c) + '</div>';
       PGRE.typesetMath(fb);
       var nx = document.getElementById('flash-next');
       nx.addEventListener('click', next);
       nx.focus();
       var ub = document.getElementById('flash-undo');
       if (ub) ub.addEventListener('click', undoLast);
+      fb.querySelectorAll('[data-similar]').forEach(function (b) {
+        b.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof PGRE.launchSimilarProblem === 'function') PGRE.launchSimilarProblem(c);
+        });
+      });
     }
 
     /* F1b: revert the last committed grade — restore the card's SRS state, pop the
