@@ -973,6 +973,30 @@ assert(aNested.querySelectorAll('.letter-swap-cell').length === 9,
   'letterSwapNav splits nested Dashboard into 9 cells');
 assert(aNested.getAttribute('data-letter-swap') === '1',
   'letterSwapNav marks the nested-label link');
+
+var brandHost = envOn.document.createElement('a');
+brandHost.className = 'brand';
+brandHost.innerHTML = '<div class="brand-name">Physics <span class="accent">GRE</span></div><div class="brand-sub">Prep Studio</div>';
+envOn.document.body.appendChild(brandHost);
+motionOn.letterSwapNav(brandHost);
+assert(!!brandHost.querySelector('.brand-name .letter-swap'),
+  'letterSwapNav wraps the sidebar Physics GRE mark');
+assert(brandHost.querySelector('.brand-sub').textContent.indexOf('Prep Studio') !== -1,
+  'letterSwapNav leaves the Prep Studio subtitle intact');
+assert(brandHost.querySelectorAll('.brand-name .letter-swap-cell').length === 11,
+  'letterSwapNav splits Physics GRE into 11 cells');
+
+var titleRoot = envOn.document.createElement('div');
+titleRoot.innerHTML = '<h1>Study plan</h1><h1 class="fr-usage-stat">33%</h1><h1>Session complete</h1>';
+envOn.document.body.appendChild(titleRoot);
+motionOn.letterSwapTitles(titleRoot);
+assert(!!titleRoot.querySelector('h1:not(.fr-usage-stat) .letter-swap') ||
+       titleRoot.querySelectorAll('h1')[0].getAttribute('data-letter-swap') === '1',
+  'letterSwapTitles wraps the page h1');
+assert(titleRoot.querySelector('.fr-usage-stat').getAttribute('data-letter-swap') !== '1',
+  'letterSwapTitles skips usage-stat h1s');
+assert(titleRoot.querySelectorAll('h1')[2].getAttribute('data-letter-swap') !== '1',
+  'letterSwapTitles skips Session complete');
 /* ——— assess html() markers + bind on a parsed row ——— */
 console.log('\nPGRE.assess.html + bind');
 var assess = env.window.PGRE.assess;

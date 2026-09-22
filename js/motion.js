@@ -1,6 +1,6 @@
 /* ——— Motion system ———
    Public API: PGRE.motion = { loader, countUp, animateMeter, stagger,
-     letterSwapNav, reduced }
+     letterSwapNav, letterSwapTitles, reduced }
    All animations respect prefers-reduced-motion and pause when tab hidden. */
 (function () {
   'use strict';
@@ -122,6 +122,7 @@
   motion.viewEnter = function (viewEl) {
     var el = viewEl || document.getElementById('view');
     if (!el) return;
+    motion.letterSwapTitles(el);
     el.classList.remove('view-enter');
     if (motion.reduced) return;   // reduced motion: no enter animation
     // Force a reflow so removing + re-adding restarts the animation.
@@ -239,6 +240,7 @@
   function firstLabelTextNode(el) {
     var target = el.querySelector && el.querySelector('.nav-label');
     if (target) el = target;
+    flattenSwapHost(el);
     var kids = el.childNodes || [];
     var i, child, text;
     for (i = 0; i < kids.length; i++) {
@@ -248,6 +250,27 @@
       if (text.replace(/\s+/g, '')) return child;
     }
     return null;
+  }
+
+  /* Brand and page titles may wrap glyphs in spans (e.g. .accent). Collapse
+     to one text node so the swap covers the whole label. Skip KaTeX hosts. */
+  function flattenSwapHost(el) {
+    if (!el || !el.childNodes || el.querySelector && el.querySelector('.katex')) return;
+    var hasEl = false;
+    var i, child;
+    for (i = 0; i < el.childNodes.length; i++) {
+      child = el.childNodes[i];
+      if (child.nodeType === 1 && !(child.classList && child.classList.contains('letter-swap')) &&
+          !(child.classList && child.classList.contains('letter-swap-sr'))) {
+        hasEl = true;
+        break;
+      }
+    }
+    if (!hasEl) return;
+    var label = String(el.textContent || '');
+    if (!label.replace(/\s+/g, '')) return;
+    while (el.firstChild) el.removeChild(el.firstChild);
+    el.appendChild(el.ownerDocument.createTextNode(label));
   }
 
   function buildSwap(label) {
@@ -368,9 +391,32 @@
     if (!root || motion.reduced) return;
     var i, set;
     set = root.querySelectorAll('a');
-    for (i = 0; i < set.length; i++) enhanceSwapEl(set[i]);
+    for (i = 0; i < set.length; i++) {
+      if (set[i].classList && (set[i].classList.contains('brand') ||
+          set[i].classList.contains('topbar-brand'))) continue;
+      enhanceSwapEl(set[i]);
+    }
     set = root.querySelectorAll('.crumb-here');
     for (i = 0; i < set.length; i++) enhanceSwapEl(set[i]);
+    set = root.querySelectorAll('.brand-name');
+    for (i = 0; i < set.length; i++) enhanceSwapEl(set[i]);
+  };
+
+  var SKIP_TITLE_CLASS = /(?:^|\s)(fr-usage-stat|viz-lab-title|cv-door-title)(?:\s|$)/;
+  var SKIP_TITLE_TEXT = /^(Session complete|Review complete|Drill complete)$/;
+
+  motion.letterSwapTitles = function (root) {
+    if (!root || motion.reduced) return;
+    var set = root.querySelectorAll ? root.querySelectorAll('h1') : [];
+    var i, el, text;
+    for (i = 0; i < set.length; i++) {
+      el = set[i];
+      if (SKIP_TITLE_CLASS.test(el.className || '')) continue;
+      if (el.querySelector && el.querySelector('.katex')) continue;
+      text = String(el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (SKIP_TITLE_TEXT.test(text)) continue;
+      enhanceSwapEl(el);
+    }
   };
 
 

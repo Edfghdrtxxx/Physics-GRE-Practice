@@ -11,7 +11,7 @@
        when you change a file, bump the token on ITS tag (or inject site) so a
        returning browser never mixes a fresh view with a stale engine. -->
   <link rel="stylesheet" href="css/fonts.css?v=20260918b">
-  <link rel="stylesheet" href="css/style.css?v=20260922a">
+  <link rel="stylesheet" href="css/style.css?v=20260922b">
   <link rel="stylesheet" href="css/visualizer.css?v=20260922a">
   <link rel="stylesheet" href="css/print.css?v=20260916f">
   <link rel="stylesheet" href="css/motion.css?v=20260916f">
@@ -42,6 +42,9 @@
         <button id="sidebar-toggle" class="topbar-arrow" type="button"
                 aria-expanded="true" aria-controls="sidebar"
                 aria-label="Hide sidebar" title="Hide sidebar">&#9776;</button>
+        <a class="topbar-brand" id="topbar-brand" href="#/" aria-label="Physics GRE home">
+          <span class="brand-name">Physics GRE</span>
+        </a>
         <div class="topbar-arrows">
           <button id="topbar-back" class="topbar-arrow" type="button"
                   aria-label="Go back" title="Back">&#9664;</button>
@@ -181,8 +184,8 @@
 
   <!-- shell -->
   <script src="js/sidebar-icons.js?v=20260921a" defer></script>
-  <script src="js/app.js?v=20260921a" defer></script>
+  <script src="js/app.js?v=20260922b" defer></script>
   <!-- motion effects: runs after app.js and before DOMContentLoaded, so PGRE.motion exists before PGRE.boot runs -->
-  <script src="js/motion.js?v=20260916f" defer></script>
+  <script src="js/motion.js?v=20260922b" defer></script>
 </body>
 </html>

@@ -977,6 +977,12 @@ PGRE.boot = function () {
   window.addEventListener('resize', onBreak);
 
   PGRE.buildNav();
+  if (PGRE.motion && typeof PGRE.motion.letterSwapNav === 'function') {
+    var brand = document.getElementById('brand-home');
+    if (brand) PGRE.motion.letterSwapNav(brand);
+    var topBrand = document.getElementById('topbar-brand');
+    if (topBrand) PGRE.motion.letterSwapNav(topBrand);
+  }
   PGRE.studyTime.start();       // passive active-minutes heartbeat
   if (PGRE.timer) PGRE.timer.boot();   // F3 focus timer: resume/credit + wire the top-bar widget
   var toggle = document.getElementById('theme-toggle');
