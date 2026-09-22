@@ -26,6 +26,7 @@ I have little background in computer science. When a decision is required of me,
 - `99_System/`: Meta project files and structured cross-agent handoffs (`Handoff documents/`).
 - `.agents/`: Custom agent capabilities, configurations, and skills (`skills/`).
 - `.no-mistakes.yaml`: Gate agent fallback (Grok Build, then Anti-Gravity). Not Claude-first `auto`. Not practice UI.
+- `CLAUDE.md`: One-line pointer that imports this file (`@AGENTS.md`). Edit `AGENTS.md`, not the pointer.
 - `vendor/`: Vendored offline third-party libraries (KaTeX, Marked).
 - `fonts/`: Locally hosted web fonts.
 - `package.json` / `package-lock.json`: npm metadata for Hugeicons packages used to author `js/sidebar-icons.js`. Runtime still loads the inlined SVGs; `node_modules/` is gitignored.

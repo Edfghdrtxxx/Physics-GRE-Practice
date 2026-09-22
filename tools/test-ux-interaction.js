@@ -1111,6 +1111,36 @@ function runAsync() {
   assert(!!PGRE.views.practice && typeof PGRE.views.practice.mount === 'function',
     'loaded shipped js/view-practice.js');
 
+  /* PGRE.formulaTextHTML: angle-bracket expectation/average notation */
+  console.log('\nformulaTextHTML: angle-bracket math notation');
+  assert(typeof PGRE.formulaTextHTML === 'function', 'formulaTextHTML is exposed on PGRE');
+  var dipolePrompt = 'What is the total average power <P>_B radiated by an oscillating magnetic dipole of amplitude m_0 at frequency \\omega?';
+  var dipoleHTML = PGRE.formulaTextHTML(dipolePrompt);
+  assert(dipoleHTML.indexOf('$\\langle P \\rangle_B$') !== -1,
+    'formulaTextHTML converts <P>_B to $\\langle P \\rangle_B$, got: ' + dipoleHTML);
+  assert(dipoleHTML.indexOf('<p>') === -1 && dipoleHTML.indexOf('<P>') === -1,
+    'formulaTextHTML does not emit raw or unescaped HTML <p>/<P> tags');
+  assert(dipoleHTML.indexOf('_B radiated') === -1,
+    'formulaTextHTML leaves no orphaned subscript _B');
+  assert(dipoleHTML.indexOf('$m_0$') !== -1 && dipoleHTML.indexOf('$\\omega$') !== -1,
+    'formulaTextHTML formats $m_0$ and $\\omega$ in math');
+
+  var eDipolePrompt = 'What is the total average power <P>_E radiated by an oscillating electric dipole of amplitude p_0 at frequency omega?';
+  var eDipoleHTML = PGRE.formulaTextHTML(eDipolePrompt);
+  assert(eDipoleHTML.indexOf('$\\langle P \\rangle_E$') !== -1,
+    'formulaTextHTML converts <P>_E to $\\langle P \\rangle_E$');
+
+  var poyntingPrompt = 'What is the time-averaged radiated intensity <S> of an oscillating electric dipole...';
+  var poyntingHTML = PGRE.formulaTextHTML(poyntingPrompt);
+  assert(poyntingHTML.indexOf('$\\langle S \\rangle$') !== -1,
+    'formulaTextHTML converts <S> to $\\langle S \\rangle$');
+
+  var expectations = PGRE.formulaTextHTML('Expectations <x>, <v>, and <x^2>');
+  assert(expectations.indexOf('$\\langle x \\rangle$') !== -1 &&
+         expectations.indexOf('$\\langle v \\rangle$') !== -1 &&
+         expectations.indexOf('$\\langle x^2 \\rangle$') !== -1,
+    'formulaTextHTML converts <x>, <v>, and <x^2>');
+
   /* Match: click and keyboard share onPick */
   console.log('\nmatch click vs keyboard (shipped onKey → onPick)');
   var matchHost = ix.document.createElement('div');
