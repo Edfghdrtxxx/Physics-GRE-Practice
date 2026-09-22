@@ -261,6 +261,20 @@ PGRE.formulaTextHTML = function (text) {
     return out;
   }).join('');
 
+  // Inline markdown bold: **text** -> <strong>text</strong>
+  // Cards and formula references use **...** for emphasis. Protect math and code
+  // blocks first so equations, multiplication symbols (*), or double-asterisk
+  // notation inside math pass through untouched.
+  var mathBlocks = [];
+  text = text.replace(mathOrCodeBlock, function (m) {
+    mathBlocks.push(m);
+    return '\u0002MB' + (mathBlocks.length - 1) + '\u0002';
+  });
+  text = text.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/\u0002MB(\d+)\u0002/g, function (_, i) {
+    return mathBlocks[Number(i)];
+  });
+
   var protectedPart = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$]*?\$|<[^>]*>)/g;
   function plain(part) {
     // The passes below run in sequence over one string, so a token an earlier

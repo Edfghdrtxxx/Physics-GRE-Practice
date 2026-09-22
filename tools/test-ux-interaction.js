@@ -1197,6 +1197,26 @@ function runAsync() {
          expectations.indexOf('$\\langle x^2 \\rangle$') !== -1,
     'formulaTextHTML converts <x>, <v>, and <x^2>');
 
+  /* PGRE.formulaTextHTML: inline markdown bold (**text** -> <strong>text</strong>) */
+  console.log('\nformulaTextHTML: inline markdown bold');
+  var polCard = PGRE.FORMULAS ? PGRE.FORMULAS.find(function (c) { return c.id === 'cpgf-2.56a'; }) : null;
+  var polBack = polCard ? polCard.back : 'Definition: $$\\mathbf{P} = \\frac{d\\mathbf{p}}{dV}$$\nDirection: Points from **negative to positive** bound charge';
+  var polHTML = PGRE.formulaTextHTML(polBack);
+  assert(polHTML.indexOf('<strong>negative to positive</strong>') !== -1,
+    'formulaTextHTML renders **negative to positive** as <strong>negative to positive</strong>, got: ' + polHTML);
+  assert(polHTML.indexOf('**negative to positive**') === -1 && polHTML.indexOf('**') === -1,
+    'formulaTextHTML leaves no literal ** markdown asterisks');
+
+  var mathBoldHTML = PGRE.formulaTextHTML('1. **$H = E$** requires a time-independent map');
+  assert(mathBoldHTML.indexOf('<strong>$H = E$</strong>') !== -1,
+    'formulaTextHTML renders bold containing math: ' + mathBoldHTML);
+
+  var multHTML = PGRE.formulaTextHTML('Calculate 2 * 3 * 4 and check $A * B$');
+  assert(multHTML.indexOf('2 * 3 * 4') !== -1 && multHTML.indexOf('$A * B$') !== -1,
+    'formulaTextHTML preserves literal asterisks in multiplication and math, got: ' + multHTML);
+  assert(multHTML.indexOf('<strong>') === -1 && multHTML.indexOf('<em>') === -1,
+    'formulaTextHTML does not convert single asterisks to HTML tags');
+
   /* Match: click and keyboard share onPick */
   console.log('\nmatch click vs keyboard (shipped onKey → onPick)');
   var matchHost = ix.document.createElement('div');
