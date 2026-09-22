@@ -6,6 +6,7 @@ I have little background in computer science. When a decision is required of me,
 # Progress origin
 - Study state is **per origin**. `file://…/index.html`, `http://localhost:8000`, and `http://127.0.0.1:8000` do not share localStorage/IndexedDB.
 - On this machine the rich daily store has lived on the **file://** Prep tab. Do not open a second origin for “practice” or you get an empty Studio.
+- The studio behind that file:// tab is `/Users/Reid Hu/Physics GRE` — the primary checkout, not a disposable copy. Its `localStorage['pgre-state-v1']` on the file:// origin holds the captain's streaks, SRS schedules, decks, and progress. Treehouse copies under `/Users/leyi/.treehouse/` are in-flight worktrees; never treat them as the live studio.
 - Timed pack launch for the user is owned by OrbitOS `/practice-physics-gre-set` (reuse richest live tab; same-origin reload if packs scripts missing).
 - Automated verify/tests: isolated profile + non-user port only (see `.agents/skills/verify/SKILL.md`).
 
@@ -26,6 +27,7 @@ I have little background in computer science. When a decision is required of me,
 - `99_System/`: Meta project files and structured cross-agent handoffs (`Handoff documents/`).
 - `.agents/`: Custom agent capabilities, configurations, and skills (`skills/`).
 - `.no-mistakes.yaml`: Gate agent fallback (Grok Build, then Anti-Gravity). Not Claude-first `auto`. Not practice UI.
+- `CLAUDE.md`: One-line pointer that imports this file (`@AGENTS.md`). Edit `AGENTS.md`, not the pointer.
 - `vendor/`: Vendored offline third-party libraries (KaTeX, Marked).
 - `fonts/`: Locally hosted web fonts.
 - `package.json` / `package-lock.json`: npm metadata for Hugeicons packages used to author `js/sidebar-icons.js`. Runtime still loads the inlined SVGs; `node_modules/` is gitignored.
@@ -47,6 +49,7 @@ I have little background in computer science. When a decision is required of me,
 - **Plan, packs, and Learn transfers are joined:** plan set tasks are `set-NN`, packs are `NN`. `view-plan.js` / the dashboard "This week" card launch via `PGRE.launchPack(n)`; a finished pack ticks its `set-NN` task through `gamify.toggleTask` (never un-ticks). Learn transfers use `PGRE.launchLearnDrill({ topicIds, subtopics, concepts, weakSpots, excludeIds, difficulty })`, which selects exactly three eligible questions before delegating to the guarded `PGRE.launchCustomQuiz` path. They never change timed-pack tasks. Learn sessions use `pgre-learn-drill-receipt` plus a Start/Resume gate, matching metadata, and full question payload; timed packs alone use `pgre-agent-receipt`, `packReceipts[NN]`, and plan progress.
 - **Lazy-loaded scripts** (`flashmodes.js`, `formula-search.js`, `search.js`) are injected at runtime from `view-formulas.js` / `view-search.js`; their `?v=` lives at the inject site — bump it there when the module changes. `#formulas-print` is built on `beforeprint` / `printSheet()` only, never on mount.
 - **Formula recall agent perception & export:** `view-formulas.js` exports the user's whole learning status and recalled formulas via `PGRE.buildFormulaReceipt(scope)` (default `'today'`, plus `'7d'`, `'30d'`, `'all'`) and `PGRE.exportFormulaStatus()` (modal dialog with `#export-scope-sel` time-scope control defaulting to Today, Copy, and Download JSON). Export buttons sit on the formulas home caught-up row (`#home-export-btn` next to `#pick-btn`), the in-progress card (`#session-export-btn` in `.practice-meta`), the round checkpoint (`#cp-export`), and the review complete summary (`#summary-export-btn`). Durable writes: `sessionStorage`, `localStorage['pgre-formula-receipt']`, and `state.lastFormulaReceipt` (`kind: 'pgre-formula-receipt'`).
+- **Similar-problem control on every flashcard:** `bank.js` owns `PGRE.similarQuestionForCard(card)` (same-topic token overlap with a qualifying threshold; circuit cards may cross the book's lb↔em split; intact exams always excluded), `PGRE.similarProblemButtonHTML` (inert "No similar problem" label when nothing qualifies — never an unrelated question), `PGRE.wireSimilarProblemButtons(root)`, and `PGRE.openSimilarProblem` → `PGRE.launchSimilarProblem` in `packs.js` (one-question `pgre-quiz-config` with `purpose: 'similar'` → `#/practice/custom`, clearing any stale `pgre-practice-session`). Every card surface renders it: Study front row + revealed grade row, session peek, post-Again scaffold, browse peeks, picker previews, search cards (`view-formulas.js`), and Match tiles, Type, Quiz, Cloze (`flashmodes.js`). New card surfaces must include it.
 
 # Content Rules
 

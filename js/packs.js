@@ -193,3 +193,50 @@ PGRE.launchCustomQuiz = function (opts, storage, loc) {
   }
   return cfg;
 };
+
+/* Most-similar-problem lookup for a formula card: the single practice-pool
+   question that best matches the card's topic and wording. The matcher lives
+   in js/bank.js (PGRE.similarQuestionForCard) beside the pool it scores —
+   same-topic token overlap with a qualifying threshold, intact exams always
+   excluded, so a similar problem can never spoil a mock. */
+PGRE.similarProblemFor = function (card) {
+  if (typeof PGRE.similarQuestionForCard !== 'function') return null;
+  return PGRE.similarQuestionForCard(card);
+};
+
+/* One-question handoff into #/practice/custom — the same sessionStorage
+   contract launchPack uses, but for a single id, so it cannot go through
+   launchCustomQuiz (which requires exactly three). purpose:'similar' marks
+   the saved session so a resume never mistakes it for a Learn drill, and any
+   leftover pgre-practice-session is cleared so the new set cannot resume the
+   old one. storage and loc are injectable so Node tests can drive the
+   shipped function. */
+PGRE.launchSimilarProblem = function (card, storage, loc) {
+  var q = PGRE.similarProblemFor(card);
+  if (!q) return null;
+  var store = storage;
+  if (!store && typeof sessionStorage !== 'undefined') store = sessionStorage;
+  if (!store || typeof store.setItem !== 'function') return null;
+  var cfg = {
+    ids: [q.id],
+    label: 'Similar problem · ' + (card.name || card.tag || card.id),
+    purpose: 'similar'
+  };
+  try {
+    store.setItem('pgre-quiz-config', JSON.stringify(cfg));
+    if (typeof store.removeItem === 'function') store.removeItem('pgre-practice-session');
+  } catch (e) {
+    return null;
+  }
+  var where = loc;
+  if (!where && typeof location !== 'undefined') where = location;
+  if (where) {
+    var dest = '#/practice/custom';
+    if (where.hash === dest) {
+      if (typeof PGRE.route === 'function') PGRE.route();
+    } else {
+      where.hash = dest;
+    }
+  }
+  return cfg;
+};

@@ -86,6 +86,23 @@ PGRE.views.formulas = (function () {
     });
   }
 
+  /* "Similar problem" — every flashcard surface carries a control that jumps
+     to the practice-pool question closest to the card. The matcher, button
+     markup and delegated wiring live in js/bank.js
+     (PGRE.similarProblemButtonHTML / wireSimilarProblemButtons); the click
+     hands the card to PGRE.openSimilarProblem → PGRE.launchSimilarProblem
+     (js/packs.js). A card with no qualifying match renders an inert
+     "No similar problem" label rather than an unrelated question. */
+  function similarButton(card, extraClass) {
+    return PGRE.similarProblemButtonHTML
+      ? PGRE.similarProblemButtonHTML(card, extraClass) : '';
+  }
+
+  function wireSimilar(rootEl) {
+    if (PGRE.wireSimilarProblemButtons) PGRE.wireSimilarProblemButtons(rootEl);
+  }
+
+
   function visualizerModalOpen() {
     return !!document.getElementById('viz-modal-backdrop');
   }
@@ -185,7 +202,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20260918b';
+      s.src = 'js/flashmodes.js?v=20260922b';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -1231,12 +1248,14 @@ PGRE.views.formulas = (function () {
           '<div class="fcard-back">' + backHTML(c) +
           (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') +
           vizNavButtonHTML(c.id, 'btn-sm') + '</div>' +
+          '<div class="btn-row peek-similar-row">' + similarButton(c, 'btn-sm') + '</div>' +
           '<div class="peek-history"></div>' +
           '<div class="peek-suspend" data-susp-for="' + PGRE.ui.esc(c.id) + '"></div>' +
           '<div class="peek-mnemonic" data-mnem-for="' + PGRE.ui.esc(c.id) + '"></div>';
         peek.setAttribute('data-filled', '1');
         PGRE.typesetMath(peek);
         wireVizNav(peek);
+        wireSimilar(peek);
         // F2: mnemonic editor lives below the card body (plain text, no math).
         wireMnemonic(peek.querySelector('.peek-mnemonic'), c.id);
       }
@@ -1252,7 +1271,8 @@ PGRE.views.formulas = (function () {
 
   function wirePeek(box) {
     box.querySelectorAll('.browse-row').forEach(function (row) {
-      row.addEventListener('click', function () {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('.similar-problem-btn')) return;
         var id = row.getAttribute('data-cardid');
         var peek = box.querySelector('.browse-peek[data-peek="' + cssAttr(id) + '"]');
         openPeekFor(row, peek, id);
@@ -1478,7 +1498,7 @@ PGRE.views.formulas = (function () {
           '<span class="deck-name">' + label + '</span>' + chip +
         '</div>' +
         '<div class="browse-peek picker-peek picker-preview">' +
-          formulaHTML(c.back) +
+          formulaHTML(c.back) + similarButton(c, 'btn-sm') +
         '</div>' +
       '</div>';
     }
@@ -1596,7 +1616,8 @@ PGRE.views.formulas = (function () {
       });
       wrap.querySelectorAll('.picker-row').forEach(function (row) {
         row.addEventListener('click', function (e) {
-          if (e.target.closest('.picker-check') || e.target.closest('.picker-box')) return;
+          if (e.target.closest('.similar-problem-btn') ||
+              e.target.closest('.picker-check') || e.target.closest('.picker-box')) return;
           var b = row.querySelector('.picker-box');
           if (!b || b.getAttribute('data-locked')) return;
           toggleToday(b.value);
@@ -1619,6 +1640,7 @@ PGRE.views.formulas = (function () {
       });
       wrap.innerHTML = htmlRows;
       wrap.hidden = false;
+      wireSimilar(wrap);
       if (PGRE.typesetMath) PGRE.typesetMath(wrap);
       wireChapterBody(wrap);
     }
@@ -1915,6 +1937,7 @@ PGRE.views.formulas = (function () {
         (reverse ? '' : '<button class="btn btn-ghost" id="rebuild-btn">Rebuild hints</button>') +
         '<button class="btn btn-ghost" id="skip-btn">Skip</button>' +
         '<button class="btn btn-ghost" id="putaway-btn">Put away</button>' +
+        similarButton(c, 'btn-sm') +
       '</div></div>';
     body().innerHTML = html;
     PGRE.typesetMath(body());
@@ -1942,6 +1965,7 @@ PGRE.views.formulas = (function () {
     var eb = document.getElementById('session-export-btn');
     if (eb) eb.addEventListener('click', function (e) { e.stopPropagation(); openFormulaExportModal(); });
     wireVizNav(body());
+    wireSimilar(body());
   }
 
   /* F8 pre-flip scaffold: swap the card front for the generic prompt list; the
@@ -1990,6 +2014,7 @@ PGRE.views.formulas = (function () {
         '<button class="btn btn-ghost" id="peek-newer"' + (atNewest ? ' disabled' : '') +
           '>Newer →</button>' +
         '<span class="session-peek-actions">' +
+          similarButton(c, 'btn-sm') +
           '<button class="btn btn-primary" id="peek-resume">Resume study</button>' +
         '</span>' +
       '</div></div>';
@@ -2001,6 +2026,7 @@ PGRE.views.formulas = (function () {
     if (nb) nb.addEventListener('click', function () { peekStep(1); });
     document.getElementById('peek-resume').addEventListener('click', resumePeek);
     wireVizNav(body());
+    wireSimilar(body());
   }
 
   function peekStep(d) {
@@ -2053,6 +2079,9 @@ PGRE.views.formulas = (function () {
         '<span class="grade-top">' + g.label + ' <span class="key-hint">' + g.hint + '</span></span>' +
         '<span class="grade-ivl">' + lbl + '</span></button>';
     });
+    // The grade row replaces the whole action strip, so the similar-problem
+    // control is re-emitted here to stay visible after the reveal.
+    html += similarButton(c, 'btn-sm');
     var box = document.getElementById('fcard-actions');
     box.innerHTML = html;
     box.querySelectorAll('[data-grade]').forEach(function (b, i) {
@@ -2062,6 +2091,7 @@ PGRE.views.formulas = (function () {
         b.style.animationDelay = (i * 60) + 'ms';
       }
     });
+    wireSimilar(box);
   }
 
   /* F7 learning steps live ONLY in Study mode. Match/Type/Quiz commit gradeCard
@@ -2228,9 +2258,11 @@ PGRE.views.formulas = (function () {
       '<div class="fcard-back scaffold-back">' + backHTML(c) + '</div>' +
       scaffoldPromptsHTML() +
       '<div class="btn-row"><button class="btn btn-primary" id="scaffold-continue">' +
-      'Continue <span class="key-hint">space</span></button></div></div>';
+      'Continue <span class="key-hint">space</span></button>' +
+      similarButton(c, 'btn-sm') + '</div></div>';
     PGRE.typesetMath(body());
     document.getElementById('scaffold-continue').addEventListener('click', runNextOverlay);
+    wireSimilar(body());
   }
 
   /* F11 round checkpoint: pause after ROUND_SIZE presses with cards still queued. */
@@ -3246,6 +3278,9 @@ PGRE.views.formulas = (function () {
         }
         return;
       }
+      // The similar-problem control handles its own click (and the inert
+      // "No similar problem" label must not toggle the card either).
+      if (e.target.closest('.similar-problem-btn')) return;
       // Soft-add one card into today's batch without flipping the card.
       var addBtn = e.target.closest('[data-fs-add]');
       if (addBtn) {
@@ -3437,6 +3472,7 @@ PGRE.views.formulas = (function () {
         '<span class="fs-card-actions">' +
           '<button type="button" class="btn btn-ghost btn-sm fs-modal-btn" data-fs-modal="' +
             ui.esc(c.id) + '"' + modalAria + '>' + modalLabel + '</button>' +
+          similarButton(c, 'btn-sm') +
           addCtrl +
         '</span>' +
         '<span class="fs-chips">' + searchChipsHTML(c) + '</span>' +
@@ -3493,6 +3529,7 @@ PGRE.views.formulas = (function () {
     }
     el.innerHTML = html;
     PGRE.typesetMath(el);
+    wireSimilar(el);
     // Re-fill the faces of cards the reader had already flipped open.
     el.querySelectorAll('.fs-card.is-open').forEach(function (art) { fillSearchBack(art); });
     markSearchHits(el, collectMarks(slice));

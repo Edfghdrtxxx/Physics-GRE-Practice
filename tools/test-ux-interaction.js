@@ -745,11 +745,21 @@ function loadShipped(reduced, opts) {
   runFile('js/motion.js');
   runFile('js/app.js');
   if (opts.views) {
+    runFile('js/bank.js');
     runFile('js/flashmodes.js');
     runFile('js/view-formulas.js');
     runFile('js/view-exam.js');
     runFile('js/view-practice.js');
   }
+  // bank.js ships the real questionById/allQuestions; the sandbox has no bank
+  // data files, so restore the harness stubs that the exam/practice views need.
+  pgre.questionById = function (id) {
+    if (id === 'eq1') return examQ;
+    for (var i = 0; i < pqs.length; i++) if (pqs[i].id === id) return pqs[i];
+    return null;
+  };
+  pgre.questionsForTopic = function () { return pqs.slice(); };
+  pgre.allQuestions = function () { return pqs.slice(); };
   sandbox.PGRE = sandbox.window.PGRE;
   return {
     sandbox: sandbox,
@@ -1153,6 +1163,82 @@ function runAsync() {
     'loaded shipped js/view-exam.js');
   assert(!!PGRE.views.practice && typeof PGRE.views.practice.mount === 'function',
     'loaded shipped js/view-practice.js');
+  /* Type-to-recall accepts notation-only differences without dropping
+     semantic operators: rho_b/rho, nabla·/div, and vector decorations. */
+  console.log('\ntype notation equivalence and sign safety');
+  function typeVerdict(typed) {
+    var host = ix.document.createElement('div');
+    ix.document.body.appendChild(host);
+    PGRE.flashmodes.startType({
+      el: host,
+      cards: [{
+        id: 'repro-2.57',
+        name: 'Dielectrics',
+        front: 'What is the bound volume charge density rho_b in terms of the polarization P?',
+        back: '$$\\rho_b = -\\nabla\\cdot\\mathbf{P}$$',
+        eq: '2.57'
+      }],
+      onReplay: function () {},
+      onExit: function () {}
+    });
+    host.querySelector('#flash-input').value = typed;
+    host.querySelector('#flash-submit').click();
+    var verdict = host.querySelector('.flash-auto');
+    var matched = !!verdict && verdict.classList.contains('is-hit');
+    host.remove();
+    return matched;
+  }
+  assert(typeVerdict('rho = - divP vector'), 'notation-equivalent dielectric recall matches');
+  assert(!typeVerdict('rho = divP vector'), 'wrong-sign dielectric recall misses');
+  assert(!typeVerdict('rho_b = divP vector'), 'missing-minus dielectric recall misses');
+  assert(!typeVerdict('sigma = - divE vector'), 'unrelated dielectric recall misses');
+
+
+  /* PGRE.formulaTextHTML: angle-bracket expectation/average notation */
+  console.log('\nformulaTextHTML: angle-bracket math notation');
+  assert(typeof PGRE.formulaTextHTML === 'function', 'formulaTextHTML is exposed on PGRE');
+  var dipolePrompt = 'What is the total average power <P>_B radiated by an oscillating magnetic dipole of amplitude m_0 at frequency \\omega?';
+  var dipoleHTML = PGRE.formulaTextHTML(dipolePrompt);
+  assert(dipoleHTML.indexOf('$\\langle P \\rangle_B$') !== -1,
+    'formulaTextHTML converts <P>_B to $\\langle P \\rangle_B$, got: ' + dipoleHTML);
+  assert(dipoleHTML.indexOf('<p>') === -1 && dipoleHTML.indexOf('<P>') === -1,
+    'formulaTextHTML does not emit raw or unescaped HTML <p>/<P> tags');
+  assert(dipoleHTML.indexOf('_B radiated') === -1,
+    'formulaTextHTML leaves no orphaned subscript _B');
+  assert(dipoleHTML.indexOf('$m_0$') !== -1 && dipoleHTML.indexOf('$\\omega$') !== -1,
+    'formulaTextHTML formats $m_0$ and $\\omega$ in math');
+
+  var eDipolePrompt = 'What is the total average power <P>_E radiated by an oscillating electric dipole of amplitude p_0 at frequency omega?';
+  var eDipoleHTML = PGRE.formulaTextHTML(eDipolePrompt);
+  assert(eDipoleHTML.indexOf('$\\langle P \\rangle_E$') !== -1,
+    'formulaTextHTML converts <P>_E to $\\langle P \\rangle_E$');
+
+  var poyntingPrompt = 'What is the time-averaged radiated intensity <S> of an oscillating electric dipole of amplitude p_0 at frequency omega, at distance r and polar angle theta?';
+  var poyntingHTML = PGRE.formulaTextHTML(poyntingPrompt);
+  assert(poyntingHTML.indexOf('$\\langle S \\rangle$') !== -1,
+    'formulaTextHTML converts <S> to $\\langle S \\rangle$');
+  assert(poyntingHTML.indexOf('<s>') === -1 && poyntingHTML.indexOf('<S>') === -1,
+    'formulaTextHTML emits no raw <s>/<S> strikethrough tag');
+
+  var hermitianPrompt = 'How is the Hermitian conjugate A-dagger of an operator defined through its action inside the bracket <a|A-hat b>?';
+  var hermitianHTML = PGRE.formulaTextHTML(hermitianPrompt);
+  assert(hermitianHTML.indexOf('$\\langle a|A-hat b \\rangle$') !== -1,
+    'formulaTextHTML converts a spaced inner product <a|A-hat b>');
+  assert(hermitianHTML.indexOf('<a|') === -1,
+    'formulaTextHTML emits no raw <a| tag opener');
+
+  var overlapPrompt = 'In Dirac notation, what does the overlap of a position eigenbra <x| with a state |f> equal?';
+  var overlapHTML = PGRE.formulaTextHTML(overlapPrompt);
+  assert(overlapHTML.indexOf('$\\langle x|$') !== -1 && overlapHTML.indexOf('$|f\\rangle$') !== -1,
+    'formulaTextHTML converts a split bra/ket pair <x| ... |f>');
+  assert(overlapHTML.indexOf('<x|') === -1 && overlapHTML.indexOf('|f>') === -1,
+    'formulaTextHTML emits no raw <x| or |f> tag fragments');
+
+  var expectations = PGRE.formulaTextHTML('Expectations <x>, <v>, and <x^2>');
+  assert(expectations.indexOf('$\\langle x \\rangle$') !== -1 &&
+         expectations.indexOf('$\\langle v \\rangle$') !== -1 &&
+         expectations.indexOf('$\\langle x^2 \\rangle$') !== -1,
+    'formulaTextHTML converts <x>, <v>, and <x^2>');
 
   /* Match: click and keyboard share onPick */
   console.log('\nmatch click vs keyboard (shipped onKey → onPick)');
