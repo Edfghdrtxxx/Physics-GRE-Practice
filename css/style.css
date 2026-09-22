@@ -1047,6 +1047,7 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 
 /* ——— Small buttons (inline actions) ——— */
 .btn-sm { font-size: 12.5px; padding: 5px 12px; border-radius: var(--ctl-r); min-height: var(--ctl-h-sm); }
+.similar-problem-btn { white-space: nowrap; }
 
 /* ——— Sidebar due badges ——— */
 .nav-badge-due { background: var(--ivory); color: var(--ink); font-weight: 500; }
@@ -2261,6 +2262,8 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 /* Hover is the quiet ghost-button move (ink-3 hairline on the cream inset);
    coral is reserved for .selected, the one live marker in the match grid. */
 .flash-tile:hover:not(:disabled):not(.matched) { border-color: var(--ink-3); background: var(--ivory); }
+.flash-tile-wrap { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.flash-tile-action { display: flex; justify-content: center; }
 .flash-tile-kind {
   font-size: 10px;
   text-transform: uppercase;
@@ -4824,6 +4827,7 @@ button.btn-ok {
   .breadcrumbs { flex-basis: 100%; }
   .btn { min-height: 42px; }
   .btn-sm { min-height: var(--ctl-h-sm); }
+  .similar-problem-btn { min-height: 42px; }
 }
 @media (max-width: 480px) {
   .card { padding: 16px; border-radius: 10px; }

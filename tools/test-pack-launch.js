@@ -35,6 +35,7 @@ sandbox.window = sandbox;
 sandbox.PGRE = {};
 vm.createContext(sandbox);
 vm.runInContext(mustRead('js/data-packs.js'), sandbox);
+vm.runInContext(mustRead('js/bank.js'), sandbox);
 vm.runInContext(mustRead('js/packs.js'), sandbox);
 
 var PGRE = sandbox.PGRE;
@@ -60,6 +61,7 @@ function mockStorage() {
   return {
     setItem: function (k, v) { data[k] = String(v); },
     getItem: function (k) { return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+    removeItem: function (k) { delete data[k]; },
     _data: data
   };
 }
@@ -215,8 +217,10 @@ console.log('\nsimilar problem handoff');
   var stored = JSON.parse(storage.getItem('pgre-quiz-config'));
   assert(stored.ids.length === 1 && stored.ids[0] === 'kepler',
     'launchSimilarProblem stores exactly the matched question id');
-  assert(stored.learnDrill !== true && stored.purpose == null,
-    'similar problem is a plain custom set, not a Learn drill or pack');
+  assert(stored.learnDrill !== true && stored.purpose === 'similar',
+    'similar problem is a purpose-tagged custom set, not a Learn drill or pack');
+  assert(stored.label === 'Similar problem · Kepler’s third law',
+    'similar problem label names the source card');
 
   var storage2 = mockStorage();
   var loc2 = { hash: '#/practice/custom' };
