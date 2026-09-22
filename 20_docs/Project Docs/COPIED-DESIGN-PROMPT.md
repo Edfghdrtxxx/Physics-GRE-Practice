@@ -1,3 +1,9 @@
+# Copied design prompt
+
+Archived external prompt, kept in full below. Studio architecture stays plain HTML, CSS, and JS with no build step; that contract is [DESIGN.md](DESIGN.md). The React, TypeScript, Tailwind, and shadcn steps in the prompt were not applied. Its visual direction was translated into the shared shell in `css/style.css` (professional surface pass) and the reduced-motion resets in `css/motion.css`.
+
+---
+
 You are given a task to integrate an existing React component in the codebase
 
 The codebase should support:

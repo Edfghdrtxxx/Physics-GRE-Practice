@@ -4695,10 +4695,9 @@ button.btn-ok {
 }
 /* ==================================================================
    PROFESSIONAL SURFACE PASS
-   The copied feature-block prompt describes a compact product language:
-   quiet badges, segmented tabs, generous card rhythm, and interaction
-   states that stay legible without a component runtime. These primitives
-   translate that language into the existing offline shell.
+   Archived prompt: 20_docs/Project Docs/COPIED-DESIGN-PROMPT.md.
+   These primitives translate that compact product language (quiet badges,
+   segmented tabs, card rhythm, legible states) into the offline shell.
    ================================================================== */
 .card {
   transition: border-color .16s ease, background .16s ease;
