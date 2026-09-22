@@ -745,11 +745,21 @@ function loadShipped(reduced, opts) {
   runFile('js/motion.js');
   runFile('js/app.js');
   if (opts.views) {
+    runFile('js/bank.js');
     runFile('js/flashmodes.js');
     runFile('js/view-formulas.js');
     runFile('js/view-exam.js');
     runFile('js/view-practice.js');
   }
+  // bank.js ships the real questionById/allQuestions; the sandbox has no bank
+  // data files, so restore the harness stubs that the exam/practice views need.
+  pgre.questionById = function (id) {
+    if (id === 'eq1') return examQ;
+    for (var i = 0; i < pqs.length; i++) if (pqs[i].id === id) return pqs[i];
+    return null;
+  };
+  pgre.questionsForTopic = function () { return pqs.slice(); };
+  pgre.allQuestions = function () { return pqs.slice(); };
   sandbox.PGRE = sandbox.window.PGRE;
   return {
     sandbox: sandbox,

@@ -185,7 +185,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20260918b';
+      s.src = 'js/flashmodes.js?v=20260922a';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -1248,6 +1248,7 @@ PGRE.views.formulas = (function () {
         peek.innerHTML = '<div class="fcard-front">' + formulaHTML(c.front) + '</div>' +
           '<div class="fcard-back">' + backHTML(c) +
           (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') +
+          PGRE.similarProblemButtonHTML(c, 'btn-sm') +
           vizNavButtonHTML(c.id, 'btn-sm') + '</div>' +
           '<div class="peek-history"></div>' +
           '<div class="peek-suspend" data-susp-for="' + PGRE.ui.esc(c.id) + '"></div>' +
@@ -1256,6 +1257,7 @@ PGRE.views.formulas = (function () {
         PGRE.typesetMath(peek);
         wireVizNav(peek);
         // F2: mnemonic editor lives below the card body (plain text, no math).
+        PGRE.wireSimilarProblemButtons(peek);
         wireMnemonic(peek.querySelector('.peek-mnemonic'), c.id);
       }
     }
@@ -1496,7 +1498,7 @@ PGRE.views.formulas = (function () {
           '<span class="deck-name">' + label + '</span>' + chip +
         '</div>' +
         '<div class="browse-peek picker-peek picker-preview">' +
-          formulaHTML(c.back) +
+          formulaHTML(c.back) + PGRE.similarProblemButtonHTML(c, 'btn-sm') +
         '</div>' +
       '</div>';
     }
@@ -1637,6 +1639,7 @@ PGRE.views.formulas = (function () {
       });
       wrap.innerHTML = htmlRows;
       wrap.hidden = false;
+      PGRE.wireSimilarProblemButtons(wrap);
       if (PGRE.typesetMath) PGRE.typesetMath(wrap);
       wireChapterBody(wrap);
     }
@@ -1927,6 +1930,7 @@ PGRE.views.formulas = (function () {
         '<div class="fcard-back" id="fcard-back" hidden>' + backFace + '</div>' +
       '</div>' +
       '<div class="btn-row" id="fcard-actions">' +
+        PGRE.similarProblemButtonHTML(c, 'btn-sm') +
         '<button class="btn btn-primary" id="flip-btn">Show answer <span class="key-hint">space</span></button>' +
         // F8 scaffold prompts reconstruct a formula, so they only fit the
         // forward face — suppress in reverse (F5) where the formula IS the prompt.
@@ -1936,6 +1940,7 @@ PGRE.views.formulas = (function () {
       '</div></div>';
     body().innerHTML = html;
     PGRE.typesetMath(body());
+    PGRE.wireSimilarProblemButtons(body());
     if (window.PGRE && PGRE.motion && PGRE.motion.animateMeter) {
       var mf = body().querySelector('.meter-thin .meter-fill');
       if (mf) PGRE.motion.animateMeter(mf, 100 * study.done / (study.done + study.queue.length));
@@ -2003,6 +2008,7 @@ PGRE.views.formulas = (function () {
           vizNavButtonHTML(c.id, 'btn-sm', 'peek-viz') + '</div>' +
       '</div>' +
       '<div class="btn-row session-peek-bar">' +
+        PGRE.similarProblemButtonHTML(c, 'btn-sm') +
         '<button class="btn btn-ghost" id="peek-older"' + (idx <= 0 ? ' disabled' : '') +
           '>← Older</button>' +
         '<button class="btn btn-ghost" id="peek-newer"' + (atNewest ? ' disabled' : '') +
@@ -2013,6 +2019,7 @@ PGRE.views.formulas = (function () {
       '</div></div>';
     body().innerHTML = html;
     PGRE.typesetMath(body());
+    PGRE.wireSimilarProblemButtons(body());
     var ob = document.getElementById('peek-older');
     var nb = document.getElementById('peek-newer');
     if (ob) ob.addEventListener('click', function () { peekStep(-1); });
@@ -2058,7 +2065,7 @@ PGRE.views.formulas = (function () {
     var st = PGRE.srs.cardState(c.id);
     var ivls = PGRE.srs.nextIntervals(st);      // already exam-cap clamped (F3)
     var stateless = !st, step = study.steps[c.id] || 0;
-    var html = '';
+    var html = PGRE.similarProblemButtonHTML(c, 'btn-sm');
     GRADES.forEach(function (g) {
       // F7: a stateless card at step 0 requeues in-session on Hard/Good (a learning
       // step, not a scheduled interval) — show "soon"; Easy commits its real
@@ -2073,6 +2080,7 @@ PGRE.views.formulas = (function () {
     });
     var box = document.getElementById('fcard-actions');
     box.innerHTML = html;
+    PGRE.wireSimilarProblemButtons(box);
     box.querySelectorAll('[data-grade]').forEach(function (b, i) {
       b.addEventListener('click', function () { grade(b.getAttribute('data-grade')); });
       if (PGRE.motion && !PGRE.motion.reduced) {
@@ -2245,8 +2253,10 @@ PGRE.views.formulas = (function () {
       '<p class="muted">Missed — rebuild this one from the ground up before moving on.</p>' +
       '<div class="fcard-back scaffold-back">' + backHTML(c) + '</div>' +
       scaffoldPromptsHTML() +
-      '<div class="btn-row"><button class="btn btn-primary" id="scaffold-continue">' +
+      '<div class="btn-row">' + PGRE.similarProblemButtonHTML(c, 'btn-sm') +
+      '<button class="btn btn-primary" id="scaffold-continue">' +
       'Continue <span class="key-hint">space</span></button></div></div>';
+    PGRE.wireSimilarProblemButtons(body());
     PGRE.typesetMath(body());
     document.getElementById('scaffold-continue').addEventListener('click', runNextOverlay);
   }
@@ -3454,7 +3464,8 @@ PGRE.views.formulas = (function () {
           (open ? 'Hide formula' : 'Show formula') + '</button>' +
         '<span class="fs-card-actions">' +
           '<button type="button" class="btn btn-ghost btn-sm fs-modal-btn" data-fs-modal="' +
-            ui.esc(c.id) + '"' + modalAria + '>' + modalLabel + '</button>' +
+          ui.esc(c.id) + '"' + modalAria + '>' + modalLabel + '</button>' +
+          PGRE.similarProblemButtonHTML(c, 'btn-sm') +
           addCtrl +
         '</span>' +
         '<span class="fs-chips">' + searchChipsHTML(c) + '</span>' +
@@ -3511,6 +3522,7 @@ PGRE.views.formulas = (function () {
     }
     el.innerHTML = html;
     PGRE.typesetMath(el);
+    PGRE.wireSimilarProblemButtons(el);
     // Re-fill the faces of cards the reader had already flipped open.
     el.querySelectorAll('.fs-card.is-open').forEach(function (art) { fillSearchBack(art); });
     markSearchHits(el, collectMarks(slice));

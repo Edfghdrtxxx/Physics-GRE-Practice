@@ -354,9 +354,9 @@ PGRE.flashmodes = (function () {
                start: Date.now(), timer: null };
 
     cards.forEach(function (c) {
-      st.tiles.push({ id: c.id, kind: 'prompt',
+      st.tiles.push({ id: c.id, card: c, kind: 'prompt',
         html: c.front ? formulaHTML(c.front) : PGRE.ui.esc(cardName(c)) });
-      st.tiles.push({ id: c.id, kind: 'formula', html: formulaHTML(c.back) });
+      st.tiles.push({ id: c.id, card: c, kind: 'formula', html: formulaHTML(c.back) });
     });
     st.tiles = shuffle(st.tiles);
 
@@ -393,7 +393,8 @@ PGRE.flashmodes = (function () {
       st.tiles.forEach(function (t, idx) {
         grid += '<button class="flash-tile" data-tile="' + idx + '" aria-pressed="false">' +
           '<span class="flash-tile-kind">' + (t.kind === 'prompt' ? 'Prompt' : 'Formula') + '</span>' +
-          '<span class="flash-tile-body">' + t.html + '</span></button>';
+          '<span class="flash-tile-body">' + t.html + '</span>' +
+          PGRE.similarProblemInlineHTML(t.card) + '</button>';
       });
       el.innerHTML = '<div class="card">' +
         '<div class="flash-hud"><span class="flash-title">Match · ' + st.total + ' pairs</span>' +
@@ -403,6 +404,7 @@ PGRE.flashmodes = (function () {
         '<div class="btn-row"><button class="btn btn-ghost" id="flash-exit">Back to deck</button></div>' +
         '</div>';
       PGRE.typesetMath(el);
+      PGRE.wireSimilarProblemButtons(el);
       el.querySelectorAll('.flash-tile').forEach(function (b) {
         b.addEventListener('click', function () {
           onPick(parseInt(b.getAttribute('data-tile'), 10));
@@ -536,10 +538,12 @@ PGRE.flashmodes = (function () {
         '<input class="flash-type-input" id="flash-input" type="text" autocomplete="off" ' +
           'spellcheck="false" placeholder="Type the formula, then press Enter">' +
         '<div class="btn-row">' +
+          PGRE.similarProblemButtonHTML(c, 'btn-sm') +
           '<button class="btn btn-primary" id="flash-submit">Check <span class="key-hint">enter</span></button>' +
           '<button class="btn btn-ghost" id="flash-reveal-btn">Reveal</button></div>' +
         '<div id="flash-reveal"></div></div>';
       PGRE.typesetMath(el);
+      PGRE.wireSimilarProblemButtons(el);
       var inp = document.getElementById('flash-input');
       inp.focus();
       inp.addEventListener('keydown', function (e) {
@@ -748,8 +752,10 @@ PGRE.flashmodes = (function () {
           '<span class="choice-letter">' + (idx + 1) + '</span>' +
           '<span class="choice-body">' + o + '</span></button>';
       });
-      html += '</div><div id="flash-fb"></div></div>';
+      html += '</div><div class="btn-row">' + PGRE.similarProblemButtonHTML(c, 'btn-sm') +
+        '</div><div id="flash-fb"></div></div>';
       el.innerHTML = html;
+      PGRE.wireSimilarProblemButtons(el);
       PGRE.typesetMath(el);
       el.querySelectorAll('.choice').forEach(function (b) {
         b.addEventListener('click', function () {
@@ -1120,9 +1126,11 @@ PGRE.flashmodes = (function () {
           '<span class="choice-letter">' + (idx + 1) + '</span>' +
           '<span class="choice-body">$' + o + '$</span></button>';
       });
-      html += '</div><div id="cloze-fb"></div></div>';
+      html += '</div><div class="btn-row">' + PGRE.similarProblemButtonHTML(c, 'btn-sm') +
+        '</div><div id="cloze-fb"></div></div>';
       el.innerHTML = html;
       PGRE.typesetMath(el);
+      PGRE.wireSimilarProblemButtons(el);
       el.querySelectorAll('.cloze-option').forEach(function (b) {
         b.addEventListener('click', function () { pick(parseInt(b.getAttribute('data-idx'), 10)); });
       });
