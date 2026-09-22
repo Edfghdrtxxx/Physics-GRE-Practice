@@ -193,3 +193,61 @@ PGRE.launchCustomQuiz = function (opts, storage, loc) {
   }
   return cfg;
 };
+
+/* Most-similar-problem lookup for a formula card: the single practice-pool
+   question that best matches the card's topic and wording. Same scoring
+   shape as selectLearnQuestions — topic match dominates, then card terms
+   (name, tag, front, note) hit the question's subtopic hard and its stem
+   softly. The default pool already excludes intact exams, so a similar
+   problem can never spoil a mock. Deterministic: ties break on id. */
+PGRE.similarProblemFor = function (card) {
+  if (!card || typeof PGRE.allQuestions !== 'function') return null;
+  var terms = learnTerms([card.name, card.tag, card.front, card.note]);
+  var topic = String(card.topic || '');
+  var best = null, bestScore = -1;
+  PGRE.allQuestions().forEach(function (q) {
+    if (!q || !q.id || q.src === 'ets-exam' || q.src === 'cpg-exam') return;
+    var sub = String(q.subtopic || '').toLowerCase();
+    var text = String(q.q || '').toLowerCase();
+    var score = String(q.topic || '') === topic ? 100 : 0;
+    terms.forEach(function (term) {
+      if (sub.indexOf(term) !== -1) score += 45;
+      else if (text.indexOf(term) !== -1) score += 10;
+    });
+    if (score > bestScore ||
+        (score === bestScore && best && String(q.id).localeCompare(String(best.id)) < 0)) {
+      bestScore = score;
+      best = q;
+    }
+  });
+  return best;
+};
+
+/* One-question handoff into #/practice/custom — the same sessionStorage
+   contract launchPack uses, but for a single id, so it cannot go through
+   launchCustomQuiz (which requires exactly three). storage and loc are
+   injectable so Node tests can drive the shipped function. */
+PGRE.launchSimilarProblem = function (card, storage, loc) {
+  var q = PGRE.similarProblemFor(card);
+  if (!q) return null;
+  var store = storage;
+  if (!store && typeof sessionStorage !== 'undefined') store = sessionStorage;
+  if (!store || typeof store.setItem !== 'function') return null;
+  var cfg = { ids: [q.id], label: 'Similar problem' };
+  try {
+    store.setItem('pgre-quiz-config', JSON.stringify(cfg));
+  } catch (e) {
+    return null;
+  }
+  var where = loc;
+  if (!where && typeof location !== 'undefined') where = location;
+  if (where) {
+    var dest = '#/practice/custom';
+    if (where.hash === dest) {
+      if (typeof PGRE.route === 'function') PGRE.route();
+    } else {
+      where.hash = dest;
+    }
+  }
+  return cfg;
+};

@@ -1160,10 +1160,26 @@ function runAsync() {
   assert(eDipoleHTML.indexOf('$\\langle P \\rangle_E$') !== -1,
     'formulaTextHTML converts <P>_E to $\\langle P \\rangle_E$');
 
-  var poyntingPrompt = 'What is the time-averaged radiated intensity <S> of an oscillating electric dipole...';
+  var poyntingPrompt = 'What is the time-averaged radiated intensity <S> of an oscillating electric dipole of amplitude p_0 at frequency omega, at distance r and polar angle theta?';
   var poyntingHTML = PGRE.formulaTextHTML(poyntingPrompt);
   assert(poyntingHTML.indexOf('$\\langle S \\rangle$') !== -1,
     'formulaTextHTML converts <S> to $\\langle S \\rangle$');
+  assert(poyntingHTML.indexOf('<s>') === -1 && poyntingHTML.indexOf('<S>') === -1,
+    'formulaTextHTML emits no raw <s>/<S> strikethrough tag');
+
+  var hermitianPrompt = 'How is the Hermitian conjugate A-dagger of an operator defined through its action inside the bracket <a|A-hat b>?';
+  var hermitianHTML = PGRE.formulaTextHTML(hermitianPrompt);
+  assert(hermitianHTML.indexOf('$\\langle a|A-hat b \\rangle$') !== -1,
+    'formulaTextHTML converts a spaced inner product <a|A-hat b>');
+  assert(hermitianHTML.indexOf('<a|') === -1,
+    'formulaTextHTML emits no raw <a| tag opener');
+
+  var overlapPrompt = 'In Dirac notation, what does the overlap of a position eigenbra <x| with a state |f> equal?';
+  var overlapHTML = PGRE.formulaTextHTML(overlapPrompt);
+  assert(overlapHTML.indexOf('$\\langle x|$') !== -1 && overlapHTML.indexOf('$|f\\rangle$') !== -1,
+    'formulaTextHTML converts a split bra/ket pair <x| ... |f>');
+  assert(overlapHTML.indexOf('<x|') === -1 && overlapHTML.indexOf('|f>') === -1,
+    'formulaTextHTML emits no raw <x| or |f> tag fragments');
 
   var expectations = PGRE.formulaTextHTML('Expectations <x>, <v>, and <x^2>');
   assert(expectations.indexOf('$\\langle x \\rangle$') !== -1 &&

@@ -86,6 +86,33 @@ PGRE.views.formulas = (function () {
     });
   }
 
+  /* "Similar problem" — every flashcard surface carries a control that jumps
+     to the practice-pool question closest to the card (PGRE.similarProblemFor
+     in js/packs.js). The button is emitted unconditionally: the launcher is
+     what decides whether a match exists, and the pool always does. */
+  function similarBtnHTML(id, extraClass) {
+    if (!id) return '';
+    var cls = 'btn btn-ghost similar-btn' + (extraClass ? ' ' + extraClass : '');
+    return '<button type="button" class="' + cls + '" data-similar="' +
+      PGRE.ui.esc(id) + '">Similar problem</button>';
+  }
+
+  function wireSimilarButtons(scope) {
+    var rootEl = scope || document;
+    if (!rootEl || !rootEl.querySelectorAll) return;
+    rootEl.querySelectorAll('[data-similar]').forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var c = deckById(b.getAttribute('data-similar'));
+        if (c && typeof PGRE.launchSimilarProblem === 'function') {
+          PGRE.launchSimilarProblem(c);
+        }
+      });
+    });
+  }
+
+
   function visualizerModalOpen() {
     return !!document.getElementById('viz-modal-backdrop');
   }
@@ -185,7 +212,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20260918b';
+      s.src = 'js/flashmodes.js?v=20260922a';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -1249,12 +1276,14 @@ PGRE.views.formulas = (function () {
           '<div class="fcard-back">' + backHTML(c) +
           (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') +
           vizNavButtonHTML(c.id, 'btn-sm') + '</div>' +
+          '<div class="btn-row peek-similar-row">' + similarBtnHTML(c.id, 'btn-sm') + '</div>' +
           '<div class="peek-history"></div>' +
           '<div class="peek-suspend" data-susp-for="' + PGRE.ui.esc(c.id) + '"></div>' +
           '<div class="peek-mnemonic" data-mnem-for="' + PGRE.ui.esc(c.id) + '"></div>';
         peek.setAttribute('data-filled', '1');
         PGRE.typesetMath(peek);
         wireVizNav(peek);
+        wireSimilarButtons(peek);
         // F2: mnemonic editor lives below the card body (plain text, no math).
         wireMnemonic(peek.querySelector('.peek-mnemonic'), c.id);
       }
@@ -1933,6 +1962,7 @@ PGRE.views.formulas = (function () {
         (reverse ? '' : '<button class="btn btn-ghost" id="rebuild-btn">Rebuild hints</button>') +
         '<button class="btn btn-ghost" id="skip-btn">Skip</button>' +
         '<button class="btn btn-ghost" id="putaway-btn">Put away</button>' +
+        similarBtnHTML(c.id) +
       '</div></div>';
     body().innerHTML = html;
     PGRE.typesetMath(body());
@@ -1960,6 +1990,7 @@ PGRE.views.formulas = (function () {
     var eb = document.getElementById('session-export-btn');
     if (eb) eb.addEventListener('click', function (e) { e.stopPropagation(); openFormulaExportModal(); });
     wireVizNav(body());
+    wireSimilarButtons(body());
   }
 
   /* F8 pre-flip scaffold: swap the card front for the generic prompt list; the
@@ -2008,6 +2039,7 @@ PGRE.views.formulas = (function () {
         '<button class="btn btn-ghost" id="peek-newer"' + (atNewest ? ' disabled' : '') +
           '>Newer →</button>' +
         '<span class="session-peek-actions">' +
+          similarBtnHTML(c.id) +
           '<button class="btn btn-primary" id="peek-resume">Resume study</button>' +
         '</span>' +
       '</div></div>';
@@ -2019,6 +2051,7 @@ PGRE.views.formulas = (function () {
     if (nb) nb.addEventListener('click', function () { peekStep(1); });
     document.getElementById('peek-resume').addEventListener('click', resumePeek);
     wireVizNav(body());
+    wireSimilarButtons(body());
   }
 
   function peekStep(d) {
@@ -2071,6 +2104,9 @@ PGRE.views.formulas = (function () {
         '<span class="grade-top">' + g.label + ' <span class="key-hint">' + g.hint + '</span></span>' +
         '<span class="grade-ivl">' + lbl + '</span></button>';
     });
+    // The grade row replaces the whole action strip, so the similar-problem
+    // control is re-emitted here to stay visible after the reveal.
+    html += similarBtnHTML(c.id);
     var box = document.getElementById('fcard-actions');
     box.innerHTML = html;
     box.querySelectorAll('[data-grade]').forEach(function (b, i) {
@@ -2080,6 +2116,7 @@ PGRE.views.formulas = (function () {
         b.style.animationDelay = (i * 60) + 'ms';
       }
     });
+    wireSimilarButtons(box);
   }
 
   /* F7 learning steps live ONLY in Study mode. Match/Type/Quiz commit gradeCard
@@ -2246,9 +2283,11 @@ PGRE.views.formulas = (function () {
       '<div class="fcard-back scaffold-back">' + backHTML(c) + '</div>' +
       scaffoldPromptsHTML() +
       '<div class="btn-row"><button class="btn btn-primary" id="scaffold-continue">' +
-      'Continue <span class="key-hint">space</span></button></div></div>';
+      'Continue <span class="key-hint">space</span></button>' +
+      similarBtnHTML(c.id) + '</div></div>';
     PGRE.typesetMath(body());
     document.getElementById('scaffold-continue').addEventListener('click', runNextOverlay);
+    wireSimilarButtons(body());
   }
 
   /* F11 round checkpoint: pause after ROUND_SIZE presses with cards still queued. */
@@ -3264,6 +3303,17 @@ PGRE.views.formulas = (function () {
         }
         return;
       }
+      // Jump to the closest practice-pool question without toggling the card.
+      var simBtn = e.target.closest('[data-similar]');
+      if (simBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        var simCard = deckById(simBtn.getAttribute('data-similar'));
+        if (simCard && typeof PGRE.launchSimilarProblem === 'function') {
+          PGRE.launchSimilarProblem(simCard);
+        }
+        return;
+      }
       // Soft-add one card into today's batch without flipping the card.
       var addBtn = e.target.closest('[data-fs-add]');
       if (addBtn) {
@@ -3455,6 +3505,7 @@ PGRE.views.formulas = (function () {
         '<span class="fs-card-actions">' +
           '<button type="button" class="btn btn-ghost btn-sm fs-modal-btn" data-fs-modal="' +
             ui.esc(c.id) + '"' + modalAria + '>' + modalLabel + '</button>' +
+          similarBtnHTML(c.id, 'btn-sm') +
           addCtrl +
         '</span>' +
         '<span class="fs-chips">' + searchChipsHTML(c) + '</span>' +

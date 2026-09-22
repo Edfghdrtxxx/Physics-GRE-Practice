@@ -6,6 +6,7 @@ I have little background in computer science. When a decision is required of me,
 # Progress origin
 - Study state is **per origin**. `file://…/index.html`, `http://localhost:8000`, and `http://127.0.0.1:8000` do not share localStorage/IndexedDB.
 - On this machine the rich daily store has lived on the **file://** Prep tab. Do not open a second origin for “practice” or you get an empty Studio.
+- The studio behind that file:// tab is `/Users/Reid Hu/Physics GRE` — the primary checkout, not a disposable copy. Its `localStorage['pgre-state-v1']` on the file:// origin holds the captain's streaks, SRS schedules, decks, and progress. Treehouse copies under `/Users/leyi/.treehouse/` are in-flight worktrees; never treat them as the live studio.
 - Timed pack launch for the user is owned by OrbitOS `/practice-physics-gre-set` (reuse richest live tab; same-origin reload if packs scripts missing).
 - Automated verify/tests: isolated profile + non-user port only (see `.agents/skills/verify/SKILL.md`).
 
