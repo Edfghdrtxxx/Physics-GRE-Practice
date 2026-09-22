@@ -224,8 +224,34 @@ PGRE.formulaTextHTML = function (text) {
     nu: '\\nu', rho: '\\rho', sigma: '\\sigma', tau: '\\tau', phi: '\\phi',
     omega: '\\omega', Omega: '\\Omega'
   };
-  var protectedPart = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$]*?\$|<[^>]*>)/g;
+  // Angle-bracket expectation/average notation: <P>_B, <P>_E, <S>, <x>, <v>, or <[A-Za-z]>.
+  // Convert to $\langle ... \rangle$ before splitting by <[^>]*> so they are not
+  // swallowed as unescaped HTML element tags (e.g. <P> parsed as an empty <p> element).
+  var mathOrCodeBlock = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$]*?\$|<code\b[^>]*>[\s\S]*?<\/code>|<pre\b[^>]*>[\s\S]*?<\/pre>)/gi;
+  var angleExp = /<([A-Za-z](?:[A-Za-z0-9_^*+()\\-]|\{[^}]*\})*(?:\|[A-Za-z0-9_^*+()\\-]+)?|\\[A-Za-z]+)>((?:_(?:[A-Za-z0-9]+|\{[^}]+\})|\^(?:[A-Za-z0-9]+|\{[^}]+\}))*)/g;
+  var HTML_TAGS = {
+    a: 1, b: 1, i: 1, p: 1, q: 1, s: 1, u: 1, em: 1, strong: 1, code: 1, pre: 1,
+    div: 1, span: 1, blockquote: 1, table: 1, thead: 1, tbody: 1, tr: 1, td: 1,
+    th: 1, ul: 1, ol: 1, li: 1, img: 1, hr: 1, br: 1, small: 1, sub: 1, sup: 1
+  };
 
+  text = String(text).split(mathOrCodeBlock).map(function (part) {
+    if (!part || /^(?:\$\$[\s\S]*\$\$|\\\[[\s\S]*\\\]|\\\([\s\S]*\\\)|\$[^$]*\$|<(?:code|pre)\b)/i.test(part)) return part;
+    return part.replace(angleExp, function (match, inner, decor) {
+      if (!decor) {
+        var lower = inner.toLowerCase();
+        if (HTML_TAGS[lower]) {
+          var hasClosing = new RegExp('</' + inner + '>', 'i').test(part);
+          if (hasClosing || (/^[a-z]/.test(inner) && !/[_^|\\+-]/.test(inner) && lower !== 'x' && lower !== 'v')) {
+            return match;
+          }
+        }
+      }
+      return '$\\langle ' + inner + ' \\rangle' + (decor || '') + '$';
+    });
+  }).join('');
+
+  var protectedPart = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$]*?\$|<[^>]*>)/g;
   function plain(part) {
     // The passes below run in sequence over one string, so a token an earlier
     // pass built is still ordinary prose to a later one: the standalone-symbol
@@ -260,7 +286,8 @@ PGRE.formulaTextHTML = function (text) {
       });
 
     // Handle named Greek variants first so tau_0 is one mathematical span.
-    part = part.replace(/\b(alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|rho|sigma|tau|phi|omega|Omega)(?:_([A-Za-z0-9]+|\{[^}]+\})|\^([A-Za-z0-9]+|\{[^}]+\}))?(\/\d+)?\b/g,
+    // Tolerates an optional leading backslash in prose (\omega -> $\omega$).
+    part = part.replace(/\\?\b(alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|rho|sigma|tau|phi|omega|Omega)(?:_([A-Za-z0-9]+|\{[^}]+\})|\^([A-Za-z0-9]+|\{[^}]+\}))?(\/\d+)?\b/g,
       function (_, name, sub, sup, frac) {
         return mathToken(greek[name] + (sub ? '_' + sub : '') + (sup ? '^' + sup : '') + (frac || ''));
       });
