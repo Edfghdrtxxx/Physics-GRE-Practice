@@ -4728,7 +4728,6 @@ button.btn-ok {
 .card > h2 + .muted { max-width: 68ch; }
 
 .btn {
-  gap: 8px;
   transition: background .16s ease, border-color .16s ease, color .16s ease, transform .12s ease;
 }
 .btn:focus-visible,
@@ -4812,6 +4811,7 @@ button.btn-ok {
 
 @media (max-width: 860px) {
   .card { padding: 18px; }
+  .week { padding: 0; }
   .topic-card:hover,
   .ach-card:hover,
   .fs-card:hover,
@@ -4828,6 +4828,7 @@ button.btn-ok {
 }
 @media (max-width: 480px) {
   .card { padding: 16px; border-radius: 10px; }
+  .week { padding: 0; }
   .flash-tabs-bar { gap: 8px; }
   .browse-tabs { overflow-x: auto; flex-wrap: nowrap; }
 }
