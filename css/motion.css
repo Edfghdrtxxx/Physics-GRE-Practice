@@ -43,8 +43,9 @@
 
 /* ——— Staggered children ——— */
 .stagger-in {
-  opacity: 0;
-  animation: stagger-in var(--dur) var(--ease-out) both;
+  /* backwards only: hold the hidden start during the delay, then release
+     transform so a later hover lift is not pinned at translateY(0). */
+  animation: stagger-in var(--dur) var(--ease-out) backwards;
 }
 @keyframes stagger-in {
   from { opacity: 0; transform: translateY(6px); }
@@ -87,6 +88,16 @@
     opacity: 1;
   }
   .btn:active {
+    transform: none;
+  }
+  .ach-card:hover,
+  .fs-card:hover,
+  .nb-entry:hover,
+  .exam-format:hover,
+  .file-card:hover,
+  .dash-qotd-card:hover,
+  .filter-btn:active:not(:disabled),
+  .browse-tab:active:not(:disabled) {
     transform: none;
   }
   .motion-loader {
