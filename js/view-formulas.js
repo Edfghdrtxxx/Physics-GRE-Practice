@@ -185,7 +185,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20260918b';
+      s.src = 'js/flashmodes.js?v=20260922a';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -369,6 +369,14 @@ PGRE.views.formulas = (function () {
 
   function formulaHTML(text) {
     return PGRE.formulaTextHTML ? PGRE.formulaTextHTML(text) : (text || '');
+  }
+  function similarButton(card, extraClass) {
+    return PGRE.similarProblemButtonHTML
+      ? PGRE.similarProblemButtonHTML(card, extraClass) : '';
+  }
+
+  function wireSimilar(rootEl) {
+    if (PGRE.wireSimilarProblemButtons) PGRE.wireSimilarProblemButtons(rootEl);
   }
 
   /* The answer face of a card: the same formula with its book equation number
@@ -1248,12 +1256,14 @@ PGRE.views.formulas = (function () {
         peek.innerHTML = '<div class="fcard-front">' + formulaHTML(c.front) + '</div>' +
           '<div class="fcard-back">' + backHTML(c) +
           (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') +
+          similarButton(c, 'btn-sm') +
           vizNavButtonHTML(c.id, 'btn-sm') + '</div>' +
           '<div class="peek-history"></div>' +
           '<div class="peek-suspend" data-susp-for="' + PGRE.ui.esc(c.id) + '"></div>' +
           '<div class="peek-mnemonic" data-mnem-for="' + PGRE.ui.esc(c.id) + '"></div>';
         peek.setAttribute('data-filled', '1');
         PGRE.typesetMath(peek);
+        wireSimilar(peek);
         wireVizNav(peek);
         // F2: mnemonic editor lives below the card body (plain text, no math).
         wireMnemonic(peek.querySelector('.peek-mnemonic'), c.id);
@@ -1270,7 +1280,8 @@ PGRE.views.formulas = (function () {
 
   function wirePeek(box) {
     box.querySelectorAll('.browse-row').forEach(function (row) {
-      row.addEventListener('click', function () {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('.similar-problem-btn') || e.target.closest('.similar-problem-inline')) return;
         var id = row.getAttribute('data-cardid');
         var peek = box.querySelector('.browse-peek[data-peek="' + cssAttr(id) + '"]');
         openPeekFor(row, peek, id);
@@ -1493,12 +1504,12 @@ PGRE.views.formulas = (function () {
           '<label class="picker-check"' + tip + '><input type="checkbox" class="picker-box" value="' +
             ui.esc(c.id) + '"' + tip + (filled ? ' checked' : '') +
             (isLocked ? ' disabled data-locked="1"' : '') + '></label>' +
-          '<span class="deck-name">' + label + '</span>' + chip +
-        '</div>' +
-        '<div class="browse-peek picker-peek picker-preview">' +
-          formulaHTML(c.back) +
-        '</div>' +
-      '</div>';
+        '<span class="deck-name">' + label + '</span>' + chip +
+      '</div>' +
+      '<div class="browse-peek picker-peek picker-preview">' +
+        formulaHTML(c.back) + similarButton(c, 'btn-sm') +
+      '</div>' +
+    '</div>';
     }
 
     html += '<div id="picker-view-chapters">';
@@ -1614,7 +1625,8 @@ PGRE.views.formulas = (function () {
       });
       wrap.querySelectorAll('.picker-row').forEach(function (row) {
         row.addEventListener('click', function (e) {
-          if (e.target.closest('.picker-check') || e.target.closest('.picker-box')) return;
+          if (e.target.closest('.similar-problem-btn') || e.target.closest('.similar-problem-inline') ||
+              e.target.closest('.picker-check') || e.target.closest('.picker-box')) return;
           var b = row.querySelector('.picker-box');
           if (!b || b.getAttribute('data-locked')) return;
           toggleToday(b.value);
@@ -1638,6 +1650,7 @@ PGRE.views.formulas = (function () {
       wrap.innerHTML = htmlRows;
       wrap.hidden = false;
       if (PGRE.typesetMath) PGRE.typesetMath(wrap);
+      wireSimilar(wrap);
       wireChapterBody(wrap);
     }
 
@@ -1927,6 +1940,7 @@ PGRE.views.formulas = (function () {
         '<div class="fcard-back" id="fcard-back" hidden>' + backFace + '</div>' +
       '</div>' +
       '<div class="btn-row" id="fcard-actions">' +
+        similarButton(c, 'btn-sm') +
         '<button class="btn btn-primary" id="flip-btn">Show answer <span class="key-hint">space</span></button>' +
         // F8 scaffold prompts reconstruct a formula, so they only fit the
         // forward face — suppress in reverse (F5) where the formula IS the prompt.
@@ -1936,6 +1950,7 @@ PGRE.views.formulas = (function () {
       '</div></div>';
     body().innerHTML = html;
     PGRE.typesetMath(body());
+    wireSimilar(body());
     if (window.PGRE && PGRE.motion && PGRE.motion.animateMeter) {
       var mf = body().querySelector('.meter-thin .meter-fill');
       if (mf) PGRE.motion.animateMeter(mf, 100 * study.done / (study.done + study.queue.length));
@@ -2000,6 +2015,7 @@ PGRE.views.formulas = (function () {
         '<div class="fcard-front">' + formulaHTML(c.front) + '</div>' +
         '<div class="fcard-back">' + backHTML(c) +
           (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') +
+          similarButton(c, 'btn-sm') +
           vizNavButtonHTML(c.id, 'btn-sm', 'peek-viz') + '</div>' +
       '</div>' +
       '<div class="btn-row session-peek-bar">' +
@@ -2013,6 +2029,7 @@ PGRE.views.formulas = (function () {
       '</div></div>';
     body().innerHTML = html;
     PGRE.typesetMath(body());
+    wireSimilar(body());
     var ob = document.getElementById('peek-older');
     var nb = document.getElementById('peek-newer');
     if (ob) ob.addEventListener('click', function () { peekStep(-1); });
@@ -2058,7 +2075,7 @@ PGRE.views.formulas = (function () {
     var st = PGRE.srs.cardState(c.id);
     var ivls = PGRE.srs.nextIntervals(st);      // already exam-cap clamped (F3)
     var stateless = !st, step = study.steps[c.id] || 0;
-    var html = '';
+    var html = similarButton(c, 'btn-sm');
     GRADES.forEach(function (g) {
       // F7: a stateless card at step 0 requeues in-session on Hard/Good (a learning
       // step, not a scheduled interval) — show "soon"; Easy commits its real
@@ -2073,6 +2090,7 @@ PGRE.views.formulas = (function () {
     });
     var box = document.getElementById('fcard-actions');
     box.innerHTML = html;
+    wireSimilar(box);
     box.querySelectorAll('[data-grade]').forEach(function (b, i) {
       b.addEventListener('click', function () { grade(b.getAttribute('data-grade')); });
       if (PGRE.motion && !PGRE.motion.reduced) {
@@ -2237,17 +2255,18 @@ PGRE.views.formulas = (function () {
     else renderCheckpoint();
   }
 
-  /* F8 post-Again interstitial: the formula + the same 5 prompts, then Continue. */
   function renderScaffold(c) {
     study.overlay = 'scaffold';
     body().innerHTML = '<div class="card practice-card scaffold-card">' +
       '<h2>Reconstruct it</h2>' +
       '<p class="muted">Missed — rebuild this one from the ground up before moving on.</p>' +
       '<div class="fcard-back scaffold-back">' + backHTML(c) + '</div>' +
+      similarButton(c, 'btn-sm') +
       scaffoldPromptsHTML() +
       '<div class="btn-row"><button class="btn btn-primary" id="scaffold-continue">' +
       'Continue <span class="key-hint">space</span></button></div></div>';
     PGRE.typesetMath(body());
+    wireSimilar(body());
     document.getElementById('scaffold-continue').addEventListener('click', runNextOverlay);
   }
 
@@ -3272,6 +3291,7 @@ PGRE.views.formulas = (function () {
         softAddToToday([addBtn.getAttribute('data-fs-add')]);
         return;
       }
+      if (e.target.closest('.similar-problem-btn') || e.target.closest('.similar-problem-inline')) return;
       // The revealed face is for reading, not a second toggle: collapsing the
       // card out from under the formula you are studying (or mid text-selection)
       // is never what was meant. The button and the prompt still flip it.
@@ -3455,6 +3475,7 @@ PGRE.views.formulas = (function () {
         '<span class="fs-card-actions">' +
           '<button type="button" class="btn btn-ghost btn-sm fs-modal-btn" data-fs-modal="' +
             ui.esc(c.id) + '"' + modalAria + '>' + modalLabel + '</button>' +
+          similarButton(c, 'btn-sm') +
           addCtrl +
         '</span>' +
         '<span class="fs-chips">' + searchChipsHTML(c) + '</span>' +
@@ -3511,6 +3532,7 @@ PGRE.views.formulas = (function () {
     }
     el.innerHTML = html;
     PGRE.typesetMath(el);
+    wireSimilar(el);
     // Re-fill the faces of cards the reader had already flipped open.
     el.querySelectorAll('.fs-card.is-open').forEach(function (art) { fillSearchBack(art); });
     markSearchHits(el, collectMarks(slice));

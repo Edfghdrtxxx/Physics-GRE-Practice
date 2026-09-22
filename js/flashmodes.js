@@ -59,6 +59,14 @@ PGRE.flashmodes = (function () {
   function backHTML(c) {
     return formulaHTML(PGRE.formulaBackTagged ? PGRE.formulaBackTagged(c.back, c.eq) : c.back);
   }
+  function similarProblemButton(card, extraClass) {
+    return PGRE.similarProblemButtonHTML
+      ? PGRE.similarProblemButtonHTML(card, extraClass) : '';
+  }
+  function wireSimilar(root) {
+    if (PGRE.wireSimilarProblemButtons) PGRE.wireSimilarProblemButtons(root);
+  }
+
 
   /* Plain-text normalization for the type-to-recall auto-check: peel the common
      LaTeX wrappers, then drop everything that isn't a letter or digit so
@@ -332,9 +340,9 @@ PGRE.flashmodes = (function () {
                start: Date.now(), timer: null };
 
     cards.forEach(function (c) {
-      st.tiles.push({ id: c.id, kind: 'prompt',
+      st.tiles.push({ id: c.id, card: c, kind: 'prompt',
         html: c.front ? formulaHTML(c.front) : PGRE.ui.esc(cardName(c)) });
-      st.tiles.push({ id: c.id, kind: 'formula', html: formulaHTML(c.back) });
+      st.tiles.push({ id: c.id, card: c, kind: 'formula', html: formulaHTML(c.back) });
     });
     st.tiles = shuffle(st.tiles);
 
@@ -369,9 +377,11 @@ PGRE.flashmodes = (function () {
     function render() {
       var grid = '';
       st.tiles.forEach(function (t, idx) {
-        grid += '<button class="flash-tile" data-tile="' + idx + '" aria-pressed="false">' +
+        grid += '<div class="flash-tile-wrap">' +
+          '<button class="flash-tile" data-tile="' + idx + '" aria-pressed="false">' +
           '<span class="flash-tile-kind">' + (t.kind === 'prompt' ? 'Prompt' : 'Formula') + '</span>' +
-          '<span class="flash-tile-body">' + t.html + '</span></button>';
+          '<span class="flash-tile-body">' + t.html + '</span></button>' +
+          '<div class="flash-tile-action">' + similarProblemButton(t.card, 'btn-sm') + '</div></div>';
       });
       el.innerHTML = '<div class="card">' +
         '<div class="flash-hud"><span class="flash-title">Match · ' + st.total + ' pairs</span>' +
@@ -381,6 +391,7 @@ PGRE.flashmodes = (function () {
         '<div class="btn-row"><button class="btn btn-ghost" id="flash-exit">Back to deck</button></div>' +
         '</div>';
       PGRE.typesetMath(el);
+      wireSimilar(el);
       el.querySelectorAll('.flash-tile').forEach(function (b) {
         b.addEventListener('click', function () {
           onPick(parseInt(b.getAttribute('data-tile'), 10));
@@ -514,10 +525,12 @@ PGRE.flashmodes = (function () {
         '<input class="flash-type-input" id="flash-input" type="text" autocomplete="off" ' +
           'spellcheck="false" placeholder="Type the formula, then press Enter">' +
         '<div class="btn-row">' +
+          similarProblemButton(c, 'btn-sm') +
           '<button class="btn btn-primary" id="flash-submit">Check <span class="key-hint">enter</span></button>' +
           '<button class="btn btn-ghost" id="flash-reveal-btn">Reveal</button></div>' +
         '<div id="flash-reveal"></div></div>';
       PGRE.typesetMath(el);
+      wireSimilar(el);
       var inp = document.getElementById('flash-input');
       inp.focus();
       inp.addEventListener('keydown', function (e) {
@@ -720,6 +733,7 @@ PGRE.flashmodes = (function () {
         PGRE.ui.meter(100 * st.i / st.queue.length, 'meter-thin') +
         (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
         '<div class="q-text">' + formulaHTML(c.front || 'Which formula matches?') + '</div>' +
+        '<div class="btn-row">' + similarProblemButton(c, 'btn-sm') + '</div>' +
         '<div class="choices">';
       st.built.opts.forEach(function (o, idx) {
         html += '<button class="choice" data-idx="' + idx + '" aria-pressed="false">' +
@@ -729,6 +743,7 @@ PGRE.flashmodes = (function () {
       html += '</div><div id="flash-fb"></div></div>';
       el.innerHTML = html;
       PGRE.typesetMath(el);
+      wireSimilar(el);
       el.querySelectorAll('.choice').forEach(function (b) {
         b.addEventListener('click', function () {
           pick(parseInt(b.getAttribute('data-idx'), 10));
@@ -1089,9 +1104,8 @@ PGRE.flashmodes = (function () {
         '<div class="flash-hud"><span class="flash-title">Cloze</span>' +
           '<span class="chip">' + (st.i + 1) + ' / ' + st.queue.length + '</span></div>' +
         PGRE.ui.meter(100 * st.i / st.queue.length, 'meter-thin') +
-        (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
-        (c.front ? '<div class="q-text">' + formulaHTML(c.front) + '</div>' : '') +
         '<div class="cloze-formula">' + spec.display + '</div>' +
+        '<div class="btn-row">' + similarProblemButton(c, 'btn-sm') + '</div>' +
         '<div class="cloze-options">';
       spec.opts.forEach(function (o, idx) {
         html += '<button class="choice cloze-option" data-idx="' + idx + '">' +
@@ -1101,6 +1115,7 @@ PGRE.flashmodes = (function () {
       html += '</div><div id="cloze-fb"></div></div>';
       el.innerHTML = html;
       PGRE.typesetMath(el);
+      wireSimilar(el);
       el.querySelectorAll('.cloze-option').forEach(function (b) {
         b.addEventListener('click', function () { pick(parseInt(b.getAttribute('data-idx'), 10)); });
       });
