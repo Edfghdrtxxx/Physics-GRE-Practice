@@ -141,5 +141,15 @@ PGRE.FORMULAS = [
     front: "For a vacuum plane wave, how are k-hat, E, and B related, and what must be true of the Poynting vector?",
     back: "$$\\hat{\\mathbf{k}},\\ \\mathbf{E},\\ \\mathbf{B}\\ \\text{are right-handed};\\quad \\mathbf{B}=\\frac{1}{c}\\hat{\\mathbf{k}}\\times\\mathbf{E},\\quad \\mathbf{S}\\parallel\\hat{\\mathbf{k}}$$\nApply this separately to every traveling piece (incident, reflected, transmitted). After a bounce $\\hat{\\mathbf{k}}$ has changed, so $\\mathbf{B}$ must be rebuilt from the new $\\hat{\\mathbf{k}}$ and the new $\\mathbf{E}$.",
     note: "Supplemental — operational form of eqs. 2.62–2.63. The book cards state the formulas; this card is the do-not-reuse-the-incident-triad rule."
+  },
+  {
+    id: "supp-torque-cross",
+    eq: "supp",
+    topic: "cm",
+    tag: "Angular Momentum",
+    name: "Torque cross product, expanded (supplemental)",
+    front: "What is the full expanded cross product for torque $\\tau = \\mathbf{r} \\times \\mathbf{F}$, component by component?",
+    back: "$$\\tau = (yF_z - zF_y)\\hat{i} + (zF_x - xF_z)\\hat{j} + (xF_y - yF_x)\\hat{k}$$\n- x-component ($\\tau_x$): $yF_z - zF_y$\n- y-component ($\\tau_y$): $zF_x - xF_z$\n- z-component ($\\tau_z$): $xF_y - yF_x$",
+    note: "Supplemental — not a numbered CPG equation. Determinant expansion of $\\mathbf{r} \\times \\mathbf{F}$; companion to the torque cards cpgf-1.18/1.20."
   }
 ];
