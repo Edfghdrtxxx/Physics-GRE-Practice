@@ -15,9 +15,10 @@ Everything runs from static files; all data stays on this machine (localStorage 
   `focusSessions`, `formulaSuspended`, `formulaCheckIn`, `cards`, `cardReviews`,
   `cardNotes`, `log`, `contentMeta`, `_rev`, `_epoch`. Persistence is
   read-merge-write (`save()`): `_rev` is a monotonic counter, `_epoch` is a wipe
-  marker, `_mergeFromDisk` unions append-only arrays and takes maxes of counters.
-  A `storage` listener adopts sibling-tab writes; `PGRE.onStateAdopted` is the
-  repaint hook. Not last-write-wins.
+  marker, and `_mergeFromDisk` uses field-specific rules. Append-only arrays are
+  unioned and counters take maxes; explicit `formulaDay` mutations carry a local
+  mutation marker so newer replace/remove actions beat stale tabs. A `storage`
+  listener adopts sibling-tab writes; `PGRE.onStateAdopted` is the repaint hook.
 - **Book content** in `IndexedDB` (`pgre-content`): raw imported markdown, chapter splits,
   chapter→topic mapping. Kept out of localStorage because of its ~5 MB quota.
 - **Vendored libraries** (offline): `marked` (markdown → HTML), `KaTeX` + auto-render
@@ -213,11 +214,13 @@ exact next interval. `gradeCard` also stamps
 `lastReviewedDay` (LOCAL date) — the `studiedToday` source of truth (never compare a
 UTC ISO prefix to a local date string).
 
-**User-curated daily batch** (`srs.formulaDay()` is prune-only — it never auto-fills).
+**User-curated daily batch** (`srs.formulaDay()` is prune-only — it never auto-fills
+outside the resolved final-pass allocator).
 The daily target is a **soft
 suggestion** (clamp **1–100**, default **10**; every read routes the raw value through
 `srs.clampTarget`, so an imported/corrupt value can't poison the UI). `state.formulaDay`
-= `{ date, reviewIds: [], newIds: [], softIds?: [] }` holds the picked batch. It starts EMPTY
+= `{ date, reviewIds: [], newIds: [], softIds?: [], _opAt?: number, _opId?: string, _opKind?: string }`
+holds the picked batch and its cross-tab mutation marker. It starts EMPTY
 and grows through explicit user actions: the picker, browse/search Add, and the **fill**
 CTA (`srs.fillFormulaDayIfEmpty`) on the dashboard (`js/view-dashboard.js`) and formulas
 home (`js/view-formulas.js`), which fills up to `clampTarget` unseen ids when the batch
@@ -225,6 +228,13 @@ is empty. It **persists across day rolls** (un-studied
 picks carry over) and is reconciled on every access (`srs.formulaDay(deck)`, persisted only
 when it changed; an empty batch returns a transient object WITHOUT persisting, guarding the
 nav-badge path that runs before IndexedDB resolves):
+- The Today dashboard and Formula Recall home also have a separate explicit due path
+  (`srs.fillFormulaDayDueIfEmpty`): when no active remaining batch cards exist and
+  postponed due/overdue cards exist, it appends up to the target with unsuspended due
+  cards only, in due-date order. Completed-today locks and future deliberate picks are
+  retained; an active deliberate batch is never replaced. When due cards exist, the
+  Formula Recall home does not present the unseen-card landing. When no due cards exist,
+  the existing unseen-card fill remains the fallback.
 - **Reconcile (prune-only):** drop ids no longer in the deck or suspended; drop soft pins
   that left the deck, are suspended, or were studied today; retire completed picks (graded
   on an earlier day, due now in the future). Never adds, never trims to the target.
@@ -245,10 +255,15 @@ nav-badge path that runs before IndexedDB resolves):
   studied today)** — an Again-graded card (due today) stays remaining across reloads; a
   Good/Hard/Easy card (future due) is done and reconcile prunes it.
 - **Overflow line:** due reviews not picked are counted as "due but not picked" (advisory).
-- **No auto-substitution:** Study/Match/Type/Quiz/Cloze draw ONLY from the picked batch's
+- **Final-pass exception:** when a resolved Today or Formula Recall deck is mounted and
+  `0 < daysUntil(examDate) ≤ 7`, `fillFormulaDayFinalPass` appends every unsuspended
+  learned card to `reviewIds`, preserving all existing deliberate IDs and order. It is
+  idempotent, ignores the advisory target, excludes new/suspended/removed cards, and
+  persists the result. During this window `formulaDayRemaining` treats appended future-due
+  learned cards as eligible until they are reviewed today; new cards remain manual-only.
+- Outside final pass, Study/Match/Type/Quiz/Cloze draw only from the picked batch's
   remaining cards (`formulaDayRemaining`); an empty batch means an empty round with a
-  "pick today's cards" prompt. The final-pass week shows a banner suggesting due picks —
-  it never adds cards on its own.
+  "pick today's cards" prompt.
 
 Remaining count drives the dashboard *Review queue* card and the sidebar badge.
 **Browse** the deck via **Learned** (cards with state: last-grade + due chips) / **Upcoming**
@@ -263,8 +278,8 @@ cards (older/newer/Resume).
   `settings.formulaExamCap !== false`; off when $\text{days}\le 1$ or `formulaExamCap === false`
   (also off if the date is invalid/past). `nextIntervals` clamps hard/good/easy to the cap (Again
   stays 0), so grade-button previews match reality. **Final pass** (`srs.finalPassActive()`,
-  active `0 < days ≤ 7`): scheduling is unchanged; the home banner nudges the user to pick
-  due cards into the batch so every learned formula gets one more look — no auto-inclusion.
+  active `0 < days ≤ 7`): passing grades on active records use a one-day interval, while the
+  automatic pool allocator surfaces every unsuspended learned card; new cards remain manual.
 - **Learning steps (F7):** stateless cards graduate on Easy (commit) or on a 2nd Hard/Good; a 1st
   Hard/Good bumps to step 1 (chip "learning 1/2", +2 XP, reinsert 3–5 back, no commit); Again
   resets to step 0 (reinsert, no lapse). `study.done` counts only commits; every press is +2 XP.
