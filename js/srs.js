@@ -210,9 +210,11 @@ PGRE.srs = {
     if (!isFinite(days) || days <= 1) return null;
     return Math.max(1, days - 1);
   },
-  /* F3 — final pass: the last week before the exam. Scheduling is unchanged;
-     the formula home shows a banner nudging the user to pick due cards into
-     the batch so every learned formula gets one more look before exam day. */
+  /* F3 — final pass: the last week before the exam. The resolved Today and
+     Formula Recall views call fillFormulaDayFinalPass(), which appends every
+     unsuspended learned card to the persisted batch. New cards remain manual.
+     Passing grades use a one-day interval while the final pass is active, so
+     retention checks repeat daily without growing beyond the exam horizon. */
   finalPassActive: function () {
     var days = this.daysUntil(PGRE.store.state.settings.examDate);
     return isFinite(days) && days > 0 && days <= 7;
@@ -251,6 +253,12 @@ PGRE.srs = {
       if (easy < good + 1) easy = good + 1;
       out = { again: 0, hard: hard, good: good, easy: easy };
     }
+    // F3 final pass: active records are checked daily rather than allowed to
+    // grow through the normal SM-2 intervals. A stateless preview keeps the
+    // ordinary new-card labels until the first grade creates its record.
+    if (this.finalPassActive()) {
+      out = { again: 0, hard: 1, good: 1, easy: 1 };
+    }
     // F3: clamp each non-Again interval to the exam cap so the grade-button
     // previews match what gradeCard schedules automatically (Again stays 0).
     // Backward cascade clamping preserves strict monotonicity (Hard < Good < Easy)
@@ -268,6 +276,11 @@ PGRE.srs = {
         out.easy = Math.min(out.easy, cap);
       }
     }
+    // The final-pass override is deliberately applied after horizon
+    // differentiation: a one-day pool must not be cascaded into Good=0.
+    if (this.finalPassActive()) {
+      out.hard = 1; out.good = 1; out.easy = 1;
+    }
     return out;
   },
 
@@ -282,6 +295,7 @@ PGRE.srs = {
      yields the stateless Easy floor and the plain 20-day value as before. */
   MASTERED_DAYS: 20,
   masteredInterval: function (st) {
+    if (st && this.finalPassActive()) return 1;
     var cap = this.examCap();
     var raw = Math.max(this.MASTERED_DAYS, this.nextIntervals(st).easy);
     return cap != null ? Math.min(raw, cap) : raw;
@@ -419,6 +433,19 @@ PGRE.srs = {
     return n < 1 ? 1 : n > 100 ? 100 : n;
   },
 
+  /* Mark a user-visible batch mutation for cross-tab reconciliation. The
+     store can still union legacy/unmarked disjoint additions, while marked
+     writes let a newer explicit replace/remove beat a stale tab. */
+  _markFormulaDayMutation: function (batch, kind) {
+    if (!batch) return;
+    var now = Date.now();
+    if (now <= (this._formulaMutationAt || 0)) now = this._formulaMutationAt + 1;
+    this._formulaMutationAt = now;
+    batch._opAt = now;
+    batch._opId = now.toString(36) + '-' + Math.random().toString(36).slice(2);
+    batch._opKind = kind || 'replace';
+  },
+
   /* In-place reconcile of the persistent batch; returns whether anything
      changed (so the caller only persists on a real edit). The batch is fully
      user-curated: reconcile only prunes — it never adds or re-fills. */
@@ -447,6 +474,10 @@ PGRE.srs = {
     function drop(id) {
       if (!byId[id] || susp[id]) return true;
       var st = self.cardState(id);
+      // During final pass, future-due learned picks are intentionally eligible
+      // today; do not prune a deliberate pick before the allocator can merge in
+      // the rest of the learned pool.
+      if (self.finalPassActive() && st && !self.studiedToday(st)) return false;
       return !!st && st.due > t && !softSet[id] && !self.studiedToday(st);
     }
     var beforeR = batch.reviewIds.length, beforeN = batch.newIds.length;
@@ -480,7 +511,10 @@ PGRE.srs = {
     } else {
       changed = this._reconcileFormulaDay(batch, deck, byId, t);
     }
-    if (changed) PGRE.store.save();
+    if (changed) {
+      this._markFormulaDayMutation(batch, 'remove');
+      PGRE.store.save();
+    }
     return batch;
   },
 
@@ -503,7 +537,76 @@ PGRE.srs = {
       return ids.length >= T;
     });
     if (!ids.length) return batch;
+    // An empty carry-over shell can retain yesterday's date. The first explicit
+    // population today starts today's batch, even when the shell itself was
+    // intentionally preserved across the day boundary.
+    batch.date = this.today();
+    this._markFormulaDayMutation(batch, 'replace');
     batch.newIds = ids;
+    PGRE.store.state.formulaDay = batch;
+    PGRE.store.save();
+    return batch;
+  },
+
+  /* Explicit Today-agenda due fill. Keep this separate from the unseen-card
+     starter so the dashboard can honor due work without changing the
+     user-curated batch contract. Active remaining picks are never replaced;
+     completed locks and future deliberate picks are retained while due cards
+     are appended. The caller owns the Study transition. */
+  fillFormulaDayDueIfEmpty: function (deck) {
+    deck = deck || [];
+    var batch = this.formulaDay(deck);
+    // A batch can retain cards already completed today so they stay locked in
+    // the picker. That shell is non-empty by id but empty for Study; allow due
+    // work to join it. An active remaining card still blocks substitution.
+    if (!deck.length || this.formulaDayRemaining(deck).length) return batch;
+    var self = this, t = this.today();
+    var due = [];
+    var inBatch = {};
+    batch.reviewIds.concat(batch.newIds).forEach(function (id) { inBatch[id] = 1; });
+    deck.forEach(function (c, index) {
+      if (!c || !c.id || self.isSuspended(c.id)) return;
+      var st = self.cardState(c.id);
+      if (st && st.due <= t && !inBatch[c.id]) due.push({ card: c, index: index, due: st.due });
+    });
+    if (!due.length) return batch;
+    due.sort(function (a, b) {
+      if (a.due < b.due) return -1;
+      if (a.due > b.due) return 1;
+      return a.index - b.index;
+    });
+    var T = this.clampTarget(PGRE.store.state.settings &&
+      PGRE.store.state.settings.formulaDailyTarget);
+    var ids = due.slice(0, T).map(function (x) { return x.card.id; });
+    // Append due cards so completed locks and intentional future picks survive.
+    batch.reviewIds = batch.reviewIds.concat(ids);
+    batch.date = this.today();
+    this._markFormulaDayMutation(batch, 'add');
+    PGRE.store.state.formulaDay = batch;
+    PGRE.store.save();
+    return batch;
+  },
+
+  /* Automatic final-pass inclusion. This runs only after a resolved deck is
+     available (Today or Formula Recall mount), never from formulaDay() itself.
+     Every unsuspended learned card is appended once, regardless of due date or
+     the advisory daily target. Existing deliberate IDs and their order remain
+     untouched; new/unlearned cards stay manual-only. */
+  fillFormulaDayFinalPass: function (deck) {
+    deck = deck || [];
+    if (!deck.length || !this.finalPassActive()) return this.formulaDay(deck);
+    var batch = this.formulaDay(deck), self = this, inBatch = {};
+    batch.reviewIds.concat(batch.newIds).forEach(function (id) { inBatch[id] = 1; });
+    var ids = [];
+    deck.forEach(function (c) {
+      if (!c || !c.id || inBatch[c.id] || self.isSuspended(c.id) || !self.cardState(c.id)) return;
+      ids.push(c.id);
+      inBatch[c.id] = 1;
+    });
+    if (!ids.length) return batch;
+    batch.reviewIds = batch.reviewIds.concat(ids);
+    batch.date = this.today();
+    this._markFormulaDayMutation(batch, 'add');
     PGRE.store.state.formulaDay = batch;
     PGRE.store.save();
     return batch;
@@ -559,6 +662,10 @@ PGRE.srs = {
 
     if (!batch.softIds.length) delete batch.softIds;
     if (changed) {
+      // Manual Add is another explicit population boundary. Stamp the batch
+      // with the local day in which the user changed it.
+      batch.date = self.today();
+      self._markFormulaDayMutation(batch, 'add');
       PGRE.store.state.formulaDay = batch;
       PGRE.store.save();
     }
@@ -577,11 +684,15 @@ PGRE.srs = {
     }
     var batch = this.formulaDay(deck);
     var drop = {};
+    var changed = false;
     ids.forEach(function (id) { if (id) drop[id] = 1; });
     if (batch.softIds && batch.softIds.length) {
+      var beforeSoft = batch.softIds.length;
       batch.softIds = batch.softIds.filter(function (id) { return !drop[id]; });
       if (!batch.softIds.length) delete batch.softIds;
+      changed = (batch.softIds ? batch.softIds.length : 0) !== beforeSoft;
     }
+    var beforeReview = batch.reviewIds.length, beforeNew = batch.newIds.length;
     batch.reviewIds = batch.reviewIds.filter(function (id) {
       if (!drop[id]) return true;
       // Keep studiedToday members in the batch even when the pin is cleared.
@@ -591,6 +702,8 @@ PGRE.srs = {
       if (!drop[id]) return true;
       return self.studiedToday(self.cardState(id));
     });
+    changed = changed || batch.reviewIds.length !== beforeReview || batch.newIds.length !== beforeNew;
+    if (changed) self._markFormulaDayMutation(batch, 'remove');
     PGRE.store.state.formulaDay = batch;
     PGRE.store.save();
     return batch;
@@ -615,6 +728,7 @@ PGRE.srs = {
       if (!c) return;
       var st = self.cardState(id);
       if (!st || st.due <= t ||
+          (self.finalPassActive() && !self.studiedToday(st)) ||
           (softSet[id] && !self.studiedToday(st))) out.push(c);
     });
     return out;
@@ -677,6 +791,7 @@ PGRE.srs = {
     else delete batch.softIds;
     delete batch.skipNew;
     batch.date = this.today();
+    this._markFormulaDayMutation(batch, 'replace');
     PGRE.store.state.formulaDay = batch;
     PGRE.store.save();
     return batch;

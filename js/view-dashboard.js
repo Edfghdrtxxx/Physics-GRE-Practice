@@ -471,11 +471,14 @@ PGRE.views.dashboard = (function () {
                 hour < 18 ? 'Good afternoon' : 'Good evening';
     var examDate = (s.settings && s.settings.examDate) || PGRE.EXAM_DATE;
     var days = PGRE.srs.daysUntil(examDate);
+    var dateLine = new Date().toLocaleDateString('en-US', {
+      weekday: 'long', month: 'long', day: 'numeric'
+    });
     var html = '<div class="card review-queue" id="today-agenda">' +
       '<div class="hero">' +
         '<div class="hero-left">' +
-          '<p class="muted today-greet">' + ui.esc(greet) + '.</p>' +
-          '<h2>Today</h2>' +
+          '<p class="today-kicker">Today · ' + ui.esc(dateLine) + '</p>' +
+          '<h1 class="today-greet">' + ui.esc(greet) + '.</h1>' +
         '</div>' +
         '<div class="hero-right">' +
           '<div class="countdown"><div class="countdown-num">' + days + '</div>' +
@@ -493,7 +496,7 @@ PGRE.views.dashboard = (function () {
           (dueM ? 'Drill →' : 'Open →') + '</a></div>' +
       '<div class="rq-row"><span class="rq-label">Formula review</span>' +
         '<span class="rq-count" id="today-formulas">…</span>' +
-        '<button type="button" class="btn btn-primary btn-sm" id="today-formulas-btn">Study →</button></div>';
+        '<button type="button" class="btn btn-ghost btn-sm" id="today-formulas-btn">Study →</button></div>';
     if (mock) {
       var mockSchedule = mock.scheduledFor
         ? ' · scheduled ' + new Date(mock.scheduledFor + 'T12:00:00').toLocaleDateString('en-US', {
@@ -516,17 +519,26 @@ PGRE.views.dashboard = (function () {
       return { text: 'deck empty — awaits the book', remaining: 0,
         unlearned: 0, picked: 0, target: T };
     }
+    if (srs.fillFormulaDayFinalPass) srs.fillFormulaDayFinalPass(deck);
     var remaining = srs.formulaDayRemaining(deck).length;
     var batch = srs.formulaDay(deck);
     var picked = batch.reviewIds.length + batch.newIds.length;
     var unlearned = srs.newInDeck(deck).length;
+    var postponed = srs.formulaDayPostponed(deck);
+    var dueTarget = Math.min(T, postponed);
     var text;
-    if (remaining) text = remaining + ' left today';
+    if (remaining) {
+      text = remaining + ' left today';
+      if (postponed) text += ' · ' + postponed + ' due not picked';
+    }
+    else if (postponed) text = postponed > dueTarget
+      ? postponed + ' due now · study ' + dueTarget
+      : dueTarget + ' due now';
     else if (picked) text = 'all caught up';
     else if (unlearned) text = unlearned + ' not yet introduced';
     else text = 'all introduced';
     return { text: text, remaining: remaining, unlearned: unlearned,
-      picked: picked, target: T };
+      picked: picked, postponed: postponed, dueTarget: dueTarget, target: T };
   }
 
   function startFormulaFromToday(ev) {
@@ -534,7 +546,12 @@ PGRE.views.dashboard = (function () {
     var todayBtn = document.getElementById('today-formulas-btn');
     if (todayBtn) todayBtn.disabled = true;
     PGRE.formulaDeck().then(function (deck) {
-      PGRE.srs.fillFormulaDayIfEmpty(deck);
+      if (PGRE.srs.fillFormulaDayFinalPass) PGRE.srs.fillFormulaDayFinalPass(deck);
+      var batch = PGRE.srs.fillFormulaDayDueIfEmpty
+        ? PGRE.srs.fillFormulaDayDueIfEmpty(deck) : PGRE.srs.formulaDay(deck);
+      if (!batch.reviewIds.length && !batch.newIds.length && !PGRE.srs.finalPassActive()) {
+        PGRE.srs.fillFormulaDayIfEmpty(deck);
+      }
       if (PGRE.views.formulas && PGRE.views.formulas.armStudyFromFill) {
         PGRE.views.formulas.armStudyFromFill();
       }
@@ -567,8 +584,7 @@ PGRE.views.dashboard = (function () {
       '<div class="muted">' + ui.dateRange(cw.week.start, cw.week.end) + ' · ' + ui.esc(cw.phase.name) + ' · ~' + cw.week.hours + ' h</div>' +
       ui.meter(100 * doneCount / Math.max(1, weekTasks.length), 'meter-thin', {
         word: 'complete', meta: doneCount + ' of ' + weekTasks.length + ' tasks'
-      }) +
-      '<div class="challenge-prog">' + doneCount + ' / ' + weekTasks.length + ' tasks done</div>';
+      });
     if (nextTasks.length) {
       html += '<ul class="next-tasks">';
       nextTasks.forEach(function (t) {
@@ -826,7 +842,15 @@ PGRE.views.dashboard = (function () {
           tfBtn.classList.remove('btn-ghost');
           tfBtn.classList.add('btn-primary');
           tfBtn.textContent = 'Study →';
-        } else if (st.unlearned && !st.picked) tfBtn.textContent = 'Study ' + st.target + ' →';
+        } else if (st.postponed) {
+          tfBtn.classList.remove('btn-ghost');
+          tfBtn.classList.add('btn-primary');
+          tfBtn.textContent = 'Study ' + st.dueTarget + ' due →';
+        } else if (st.unlearned && !st.picked && !PGRE.srs.finalPassActive()) {
+          tfBtn.textContent = 'Study ' + st.target + ' →';
+        } else if (st.unlearned && !st.picked) {
+          tfBtn.textContent = 'Open →';
+        }
         else tfBtn.textContent = 'Open →';
       }
       // remaining counts may tween; do not tween "N not yet introduced"
