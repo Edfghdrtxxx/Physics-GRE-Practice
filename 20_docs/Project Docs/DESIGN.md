@@ -206,16 +206,17 @@ wrong pick, miss/solve counts, and a review schedule. Rules (user-chosen):
 
 ### Formula recall (`#/formulas`, `js/view-formulas.js`, deck: `PGRE.formulaDeck()`)
 Vocabulary-app flip cards: prompt → flip → self-grade **Again / Hard / Good / Easy**.
-Anki SM-2 scheduling (`js/srs.js` `nextIntervals`, lines 205–236) per card in
+Anki SM-2 scheduling (`js/srs.js` `nextIntervals`) per card in
 `state.cards` (`ease` 1.3–3.0 starting 2.5; Again resets reps and repeats within
-the session). New cards: Hard/Good = 1d, Easy = 4d. Reviews add `daysLate`. Floors:
-Hard $\ge$ ivl+1, Good $\ge$ Hard+1, Easy $\ge$ Good+1. Button labels preview the
+the session). New cards: Hard/Good = 1d, Easy = 4d (during final pass, passing
+grades are 1d — see below). Reviews add `daysLate`. Floors:
+Hard $\ge$ ivl+1, Good $\ge$ Hard+1, Easy $\ge$ Good+1 (collapsed during final pass). Button labels preview the
 exact next interval. `gradeCard` also stamps
 `lastReviewedDay` (LOCAL date) — the `studiedToday` source of truth (never compare a
 UTC ISO prefix to a local date string).
 
-**User-curated daily batch** (`srs.formulaDay()` is prune-only — it never auto-fills
-outside the resolved final-pass allocator).
+**User-curated daily batch** (`srs.formulaDay()` is prune-only — it never auto-fills;
+automatic inclusion is the separate mount-time allocator `fillFormulaDayFinalPass`).
 The daily target is a **soft
 suggestion** (clamp **1–100**, default **10**; every read routes the raw value through
 `srs.clampTarget`, so an imported/corrupt value can't poison the UI). `state.formulaDay`
@@ -237,7 +238,9 @@ nav-badge path that runs before IndexedDB resolves):
   the existing unseen-card fill remains the fallback.
 - **Reconcile (prune-only):** drop ids no longer in the deck or suspended; drop soft pins
   that left the deck, are suspended, or were studied today; retire completed picks (graded
-  on an earlier day, due now in the future). Never adds, never trims to the target.
+  on an earlier day, due now in the future). During final pass, learned picks that have
+  not been studied today are kept even if due in the future. Never adds, never trims to
+  the target.
 - **Picker** ("Pick today's cards", `srs.setFormulaDayPicks`): the batch composer — due-now
   cards first, then upcoming, then never-studied, each section topic-grouped, with a name
   filter. Save replaces the batch wholesale; `studiedToday` members are locked (a grade
@@ -253,7 +256,8 @@ nav-badge path that runs before IndexedDB resolves):
   until the user clicks Add (`isInFormulaDay` / status:today never call `formulaDay()`).
 - **Remaining** = batch cards where **(no state) OR (`due ≤ today`) OR (soft-pinned AND not
   studied today)** — an Again-graded card (due today) stays remaining across reloads; a
-  Good/Hard/Easy card (future due) is done and reconcile prunes it.
+  Good/Hard/Easy card (future due) is done and reconcile prunes it, except during final
+  pass (see below).
 - **Overflow line:** due reviews not picked are counted as "due but not picked" (advisory).
 - **Final-pass exception:** when a resolved Today or Formula Recall deck is mounted and
   `0 < daysUntil(examDate) ≤ 7`, `fillFormulaDayFinalPass` appends every unsuspended
@@ -278,7 +282,7 @@ cards (older/newer/Resume).
   `settings.formulaExamCap !== false`; off when $\text{days}\le 1$ or `formulaExamCap === false`
   (also off if the date is invalid/past). `nextIntervals` clamps hard/good/easy to the cap (Again
   stays 0), so grade-button previews match reality. **Final pass** (`srs.finalPassActive()`,
-  active `0 < days ≤ 7`): passing grades on active records use a one-day interval, while the
+  active `0 < days ≤ 7`): passing grades use a one-day interval, while the
   automatic pool allocator surfaces every unsuspended learned card; new cards remain manual.
 - **Learning steps (F7):** stateless cards graduate on Easy (commit) or on a 2nd Hard/Good; a 1st
   Hard/Good bumps to step 1 (chip "learning 1/2", +2 XP, reinsert 3–5 back, no commit); Again
