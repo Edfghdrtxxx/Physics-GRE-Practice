@@ -7,7 +7,9 @@
    - Formula cards: classic Anki SM-2 with Again/Hard/Good/Easy grades, an
      ease factor per card, and day-granularity due dates. An optional
      exam-date cap (settings.formulaExamCap, default on) squeezes long
-     intervals toward exam day without inverting grade order. */
+     intervals toward exam day without inverting grade order. In the last
+     seven days before the exam, passing grades are held to one day
+     (see finalPassActive). */
 window.PGRE = window.PGRE || {};
 
 PGRE.srs = {
@@ -253,9 +255,10 @@ PGRE.srs = {
       if (easy < good + 1) easy = good + 1;
       out = { again: 0, hard: hard, good: good, easy: easy };
     }
-    // F3 final pass: active records are checked daily rather than allowed to
-    // grow through the normal SM-2 intervals. A stateless preview keeps the
-    // ordinary new-card labels until the first grade creates its record.
+    // F3 final pass: passing grades are held to one day rather than allowed
+    // to grow through the normal SM-2 intervals. Applied here before the cap
+    // so a later post-cascade override can restore 1/1/1 if H>=3 would have
+    // differentiated Good down to 0.
     if (this.finalPassActive()) {
       out = { again: 0, hard: 1, good: 1, easy: 1 };
     }
@@ -416,12 +419,13 @@ PGRE.srs = {
     return n;
   },
 
-  /* ——— User-curated daily formula batch ———
-     Nothing is auto-selected. state.formulaDay starts empty and contains only
-     cards the user explicitly picked (picker dialog, browse chips, search
-     Add). The batch PERSISTS across day rolls: un-studied picks carry over,
+  /* ——— Daily formula batch ———
+     formulaDay() itself is prune-only. The picker, browse/search Add, and the
+     explicit fill helpers grow the batch. In the last seven days before the
+     exam, fillFormulaDayFinalPass appends every unsuspended learned card.
+     The batch PERSISTS across day rolls: un-studied picks carry over,
      completed ones are pruned by reconcile. The daily target (clampTarget)
-     is a soft suggestion shown in the UI — never a cap or an auto-fill quota. */
+     is a soft suggestion — never a cap, and ignored by the final-pass allocator. */
 
   /* Integer clamp of the daily target to [1, 100]; 10 when it isn't a finite
      number. Every batch read routes the raw setting through here so a corrupt

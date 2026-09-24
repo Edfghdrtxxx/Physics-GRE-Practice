@@ -730,7 +730,7 @@ PGRE.views.formulas = (function () {
     var T = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
     var M = srs.formulaDayRemaining(deck).length;
     var reviewsN = batch.reviewIds.length, newN = batch.newIds.length;
-    var pickedN = reviewsN + newN;            // the batch is fully user-curated
+    var pickedN = reviewsN + newN;
     var postponed = srs.formulaDayPostponed(deck);
     var resumeCards = rehydrateSavedStudy();
 
