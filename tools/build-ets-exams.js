@@ -90,6 +90,15 @@ const latexErrors = [];
 function checkLatex(label, html) {
   if (!katex) return;
   for (const seg of mathSegments(html)) {
+    // A literal \\ (line break) immediately followed by a letter is almost
+    // always a double-escaped command (\\\\text -> renders "text" as raw
+    // letters). Legit row breaks are followed by space, digit, or delimiter.
+    const badBreak = seg.tex.match(/\\\\[A-Za-z]+/);
+    if (badBreak) {
+      latexErrors.push(label + ': literal \\\\ before "' + badBreak[0].slice(2) +
+        '" — double-escaped command? — in $' + seg.tex + '$');
+      continue;
+    }
     try {
       katex.renderToString(seg.tex, {
         displayMode: seg.display,
