@@ -151,5 +151,15 @@ PGRE.FORMULAS = [
     front: "What is the full expanded cross product for torque $\\tau = \\mathbf{r} \\times \\mathbf{F}$, component by component?",
     back: "$$\\tau = (yF_z - zF_y)\\hat{i} + (zF_x - xF_z)\\hat{j} + (xF_y - yF_x)\\hat{k}$$\n- x-component ($\\tau_x$): $yF_z - zF_y$\n- y-component ($\\tau_y$): $zF_x - xF_z$\n- z-component ($\\tau_z$): $xF_y - yF_x$",
     note: "Supplemental — not a numbered CPG equation. Determinant expansion of $\\mathbf{r} \\times \\mathbf{F}$; companion to the torque cards cpgf-1.18/1.20."
+  },
+  {
+    id: "supp-moment-of-inertia",
+    eq: "supp",
+    topic: "cm",
+    tag: "Moment of Inertia",
+    name: "Moments of inertia — standard geometries (supplemental)",
+    front: "What are the standard moments of inertia for the common GRE geometries (point mass/hoop, disk, spherical shell, solid sphere, rod about center and about end)?",
+    back: "All about the symmetry axis through the center of mass unless noted:\n- Point mass or thin hoop/ring of radius $R$: $I = MR^2$\n- Solid disk or solid cylinder of radius $R$: $I = \\frac{1}{2}MR^2$\n- Thin spherical shell of radius $R$ (about a diameter): $I = \\frac{2}{3}MR^2$\n- Solid sphere of radius $R$ (about a diameter): $I = \\frac{2}{5}MR^2$\n- Uniform thin rod of length $L$, axis $\\perp$ rod through center: $I = \\frac{1}{12}ML^2$\n- Uniform thin rod of length $L$, axis $\\perp$ rod through one end: $I = \\frac{1}{3}ML^2$",
+    note: "Supplemental — not a numbered CPG equation. The ETS sheet lists only a few of these; the rest must be reflexes. Rod-about-end follows from rod-about-center by the parallel-axis theorem $I = I_{\\rm CM} + Md^2$ with $d = L/2$."
   }
 ];
