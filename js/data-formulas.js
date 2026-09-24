@@ -161,5 +161,25 @@ PGRE.FORMULAS = [
     front: "What are the standard moments of inertia for the common GRE geometries (point mass/hoop, disk, spherical shell, solid sphere, rod about center and about end)?",
     back: "All about the symmetry axis through the center of mass unless noted:\n- Point mass or thin hoop/ring of radius $R$: $I = MR^2$\n- Solid disk or solid cylinder of radius $R$: $I = \\frac{1}{2}MR^2$\n- Thin spherical shell of radius $R$ (about a diameter): $I = \\frac{2}{3}MR^2$\n- Solid sphere of radius $R$ (about a diameter): $I = \\frac{2}{5}MR^2$\n- Uniform thin rod of length $L$, axis $\\perp$ rod through center: $I = \\frac{1}{12}ML^2$\n- Uniform thin rod of length $L$, axis $\\perp$ rod through one end: $I = \\frac{1}{3}ML^2$",
     note: "Supplemental — not a numbered CPG equation. The ETS sheet lists only a few of these; the rest must be reflexes. Rod-about-end follows from rod-about-center by the parallel-axis theorem $I = I_{\\rm CM} + Md^2$ with $d = L/2$."
+  },
+  {
+    id: "supp-discrete-physical-pendulum",
+    eq: "supp",
+    topic: "cm",
+    tag: "Oscillations",
+    name: "Physical pendulum small-oscillation frequency — discrete masses (supplemental)",
+    front: "For a rigid body pivoted at one end carrying discrete point masses $m_i$ at distances $x_i$ from the pivot, what is the small-oscillation angular frequency $\\omega$?",
+    back: "$$\\omega^2 = \\frac{g \\sum_i m_i x_i}{\\sum_i m_i x_i^2} \\iff \\omega = \\sqrt{\\frac{g \\sum_i m_i x_i}{\\sum_i m_i x_i^2}}$$\n- **Numerator** ($g \\sum_i m_i x_i$): Gravitational restoring torque coefficient per unit angle (first mass moment $\\times g = M g d_{\\mathrm{CM}}$).\n- **Denominator** ($\\sum_i m_i x_i^2$): Moment of inertia $I_{\\mathrm{pivot}}$ about the pivot (second mass moment).\n- **Effective simple-pendulum length**: $$L_{\\mathrm{eff}} = \\frac{I_{\\mathrm{pivot}}}{M d_{\\mathrm{CM}}} = \\frac{\\sum_i m_i x_i^2}{\\sum_i m_i x_i} \\implies \\omega = \\sqrt{\\frac{g}{L_{\\mathrm{eff}}}}$$",
+    note: "Supplemental — discrete physical pendulum $\\omega = \\sqrt{mgd_{\\mathrm{CM}}/I_{\\mathrm{pivot}}}$. For two masses $m$ on rod length $\\ell$, both at $\\ell$ gives $\\omega_I = \\sqrt{g/\\ell}$; one at $\\ell/2$ and one at $\\ell$ gives $\\sum m_i x_i = \\frac{3}{2}m\\ell$, $\\sum m_i x_i^2 = \\frac{5}{4}m\\ell^2$, yielding $\\omega_{II}^2 = \\frac{6}{5}\\frac{g}{\\ell}$ and ratio $\\omega_{II}/\\omega_I = \\sqrt{6/5}$."
+  },
+  {
+    id: "supp-pendulum-mass-shift-shortcut",
+    eq: "supp",
+    topic: "cm",
+    tag: "Oscillations",
+    name: "Physical pendulum mass-shift frequency shortcut (supplemental)",
+    front: "For a physical pendulum pivoted at one end, how do the oscillation frequency $\\omega$ and period $T$ change when a mass is shifted inward toward the pivot, and why?",
+    back: "$$\\omega \\text{ increases } \\left(\\frac{\\omega_{\\mathrm{new}}}{\\omega_{\\mathrm{old}}} > 1\\right), \\qquad T \\text{ decreases } \\left(\\frac{T_{\\mathrm{new}}}{T_{\\mathrm{old}}} < 1\\right)$$\n- **Scaling mechanism**: Inertia shrinks as $x^2$ ($I = \\sum m_i x_i^2$) **faster** than restoring torque shrinks ($\\tau \\propto x$).\n- **Frequency scaling**: $$\\omega^2 = \\frac{\\tau/\\theta}{I} \\sim \\frac{x}{x^2} \\sim \\frac{1}{x}$$\nMoving mass inward toward the pivot raises $\\omega$ and shortens $T$.\n- **GRE shortcut**: When mass is moved toward the pivot, immediately eliminate all frequency ratio options $\\le 1$ and period ratio options $\\ge 1$.",
+    note: "Supplemental — high-yield GRE scaling shortcut. Shifting mass toward the pivot shrinks inertia faster than torque, so oscillations speed up."
   }
 ];
