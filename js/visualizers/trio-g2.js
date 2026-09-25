@@ -1759,15 +1759,13 @@ Mass $M$ and radius $R$ cancel out completely, so size and mass do not affect th
           body: 'Shape factor $\\beta = ' + beta.toFixed(3) + '$. Moment of inertia $I = ' + I.toFixed(4) + '\\text{ kg}\\cdot\\text{m}^2$. Scales as $M R^2$.'
         });
 
-        if (PGRE.appendVizLegend) {
-          PGRE.appendVizLegend([
-            { label: 'Geometry', value: shapeName, hint: 'Selected rigid body geometry.' },
-            { label: 'Shape factor $\\beta$', value: beta.toFixed(3), hint: 'Dimensionless shape factor in $I = \\beta M R^2$.' },
-            { label: 'Inertia $I$', value: I.toFixed(4) + ' kg*m^2', hint: 'Total moment of inertia about the rotation axis.' },
-            { label: 'Spin speed $\\omega$', value: '2.4 rad/s', hint: 'Visualization spin rate.' },
-            { label: 'Energy $K_{\\mathrm{rot}}$', value: (0.5 * I * 2.4 * 2.4).toFixed(3) + ' J', hint: 'Rotational kinetic energy $K = \\frac{1}{2} I \\omega^2$.' }
-          ]);
-        }
+        legend('Geometry inspect', [
+          { label: 'Geometry', value: shapeName, hint: 'Selected rigid body geometry.' },
+          { label: 'Shape factor $\\beta$', value: beta.toFixed(3), hint: 'Dimensionless shape factor in $I = \\beta M R^2$.' },
+          { label: 'Inertia $I$', value: I.toFixed(4) + ' kg*m^2', hint: 'Total moment of inertia about the rotation axis.' },
+          { label: 'Spin speed $\\omega$', value: '2.4 rad/s', hint: 'Visualization spin rate.' },
+          { label: 'Energy $K_{\\mathrm{rot}}$', value: (0.5 * I * 2.4 * 2.4).toFixed(3) + ' J', hint: 'Rotational kinetic energy $K = \\frac{1}{2} I \\omega^2$.' }
+        ]);
       } else if (mode === 'Incline Race') {
         state.raceTime = (state.raceTime || 0) + dt;
         var tRace = state.raceTime;
@@ -1892,15 +1890,13 @@ Mass $M$ and radius $R$ cancel out completely, so size and mass do not affect th
           state.raceTime = 0;
         }
 
-        if (PGRE.appendVizLegend) {
-          PGRE.appendVizLegend([
-            { label: 'Ramp slope $\\theta$', value: inclineDeg + '°', hint: 'Incline angle from horizontal.' },
-            { label: '1st: Sphere', value: racers[0].a.toFixed(2) + ' m/s^2', hint: 'Solid sphere acceleration $a = \\frac{5}{7}g\\sin\\theta$ (1st place).' },
-            { label: '2nd: Disk', value: racers[1].a.toFixed(2) + ' m/s^2', hint: 'Solid disk acceleration $a = \\frac{2}{3}g\\sin\\theta$ (2nd place).' },
-            { label: '3rd: Shell', value: racers[2].a.toFixed(2) + ' m/s^2', hint: 'Spherical shell acceleration $a = \\frac{3}{5}g\\sin\\theta$ (3rd place).' },
-            { label: '4th: Hoop', value: racers[3].a.toFixed(2) + ' m/s^2', hint: 'Thin hoop acceleration $a = \\frac{1}{2}g\\sin\\theta$ (4th place).' }
-          ]);
-        }
+        legend('Incline race', [
+          { label: 'Ramp slope $\\theta$', value: inclineDeg + '°', hint: 'Incline angle from horizontal.' },
+          { label: '1st: Sphere', value: racers[0].a.toFixed(2) + ' m/s^2', hint: 'Solid sphere acceleration $a = \\frac{5}{7}g\\sin\\theta$ (1st place).' },
+          { label: '2nd: Disk', value: racers[1].a.toFixed(2) + ' m/s^2', hint: 'Solid disk acceleration $a = \\frac{2}{3}g\\sin\\theta$ (2nd place).' },
+          { label: '3rd: Shell', value: racers[2].a.toFixed(2) + ' m/s^2', hint: 'Spherical shell acceleration $a = \\frac{3}{5}g\\sin\\theta$ (3rd place).' },
+          { label: '4th: Hoop', value: racers[3].a.toFixed(2) + ' m/s^2', hint: 'Thin hoop acceleration $a = \\frac{1}{2}g\\sin\\theta$ (4th place).' }
+        ]);
       } else {
         state.torqueTime = (state.torqueTime || 0) + dt;
         var tTorque = state.torqueTime;
@@ -1998,15 +1994,13 @@ Mass $M$ and radius $R$ cancel out completely, so size and mass do not affect th
           body: 'Current spin speed: $' + omega.toFixed(1) + '\\text{ rad/s}$. Kinetic energy $K = \\frac{1}{2}I\\omega^2 = ' + K_rot.toFixed(1) + '\\text{ J}$.'
         });
 
-        if (PGRE.appendVizLegend) {
-          PGRE.appendVizLegend([
-            { label: 'Applied torque $\\tau$', value: tau.toFixed(1) + ' N*m', hint: 'Constant net torque acting on the body.' },
-            { label: 'Angular accel $\\alpha$', value: alpha.toFixed(2) + ' rad/s^2', hint: 'Angular acceleration $\\alpha = \\tau / I$.' },
-            { label: 'Angular speed $\\omega$', value: omega.toFixed(1) + ' rad/s', hint: 'Current rotational velocity $\\omega(t) = \\alpha t$.' },
-            { label: 'Angular momentum $L$', value: L_ang.toFixed(2) + ' kg*m^2/s', hint: 'Angular momentum $L = I \\omega$.' },
-            { label: 'Energy $K_{\\mathrm{rot}}$', value: K_rot.toFixed(1) + ' J', hint: 'Rotational kinetic energy $K = \\frac{1}{2} I \\omega^2$.' }
-          ]);
-        }
+        legend('Torque spin-up', [
+          { label: 'Applied torque $\\tau$', value: tau.toFixed(1) + ' N*m', hint: 'Constant net torque acting on the body.' },
+          { label: 'Angular accel $\\alpha$', value: alpha.toFixed(2) + ' rad/s^2', hint: 'Angular acceleration $\\alpha = \\tau / I$.' },
+          { label: 'Angular speed $\\omega$', value: omega.toFixed(1) + ' rad/s', hint: 'Current rotational velocity $\\omega(t) = \\alpha t$.' },
+          { label: 'Angular momentum $L$', value: L_ang.toFixed(2) + ' kg*m^2/s', hint: 'Angular momentum $L = I \\omega$.' },
+          { label: 'Energy $K_{\\mathrm{rot}}$', value: K_rot.toFixed(1) + ' J', hint: 'Rotational kinetic energy $K = \\frac{1}{2} I \\omega^2$.' }
+        ]);
       }
 
       if (PGRE.setVizHotspots) PGRE.setVizHotspots(hotspots);

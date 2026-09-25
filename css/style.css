@@ -1367,22 +1367,8 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
   padding-top: 18px;
   border-top: 1px dashed var(--line);
 }
-.fcard-back ul,
-.fcard-back ol {
-  text-align: left;
-  display: inline-block;
-  margin: 12px auto 0;
-  padding-left: 24px;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-.fcard-back li {
-  margin: 6px 0;
-  font-size: 17px;
-  line-height: 1.6;
-}
-.fcard-back table,
-.fcard-table {
+/* Scoped to supp-moment-of-inertia card back only — do not style every .fcard-back table/list. */
+.moi-inertia-table {
   margin: 14px auto 0;
   border-collapse: collapse;
   text-align: left;
@@ -1392,18 +1378,21 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
   max-width: 100%;
   box-sizing: border-box;
 }
-.fcard-back th,
-.fcard-back td,
-.fcard-table th,
-.fcard-table td {
+.moi-inertia-table th,
+.moi-inertia-table td {
   padding: 6px 14px;
   border-bottom: 1px solid var(--line);
+  vertical-align: top;
 }
-.fcard-back th,
-.fcard-table th {
+.moi-inertia-table th {
   font-weight: 600;
   color: var(--ink-2);
   border-bottom: 2px solid var(--line);
+}
+.moi-inertia-table .moi-group-hoop-disk td:first-child,
+.moi-inertia-table .moi-group-shell-sphere td:first-child,
+.moi-inertia-table .moi-group-rod td:first-child {
+  padding-top: 10px;
 }
 .fcard-note { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; }
 /* In-card action row & button hierarchy */
@@ -2627,28 +2616,15 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .browse-peek .fcard-front { font-size: 15px; margin-bottom: 8px; }
 .browse-peek .fcard-back { font-size: 16px; line-height: 1.6; }
 .browse-peek .fcard-note { margin-top: 8px; font-size: 13px; color: var(--ink-2); }
-.browse-peek .fcard-back ul,
-.browse-peek .fcard-back ol,
-.fs-back .fcard-back ul,
-.fs-back .fcard-back ol {
-  padding-left: 20px;
-  margin: 8px auto 0;
-}
-.browse-peek .fcard-back li,
-.fs-back .fcard-back li {
-  margin: 3px 0;
-  font-size: 14px;
-  line-height: 1.5;
-}
-.browse-peek .fcard-table,
-.fs-back .fcard-table {
+.browse-peek .moi-inertia-table,
+.fs-back .moi-inertia-table {
   margin: 8px auto 0;
   font-size: 13.5px;
 }
-.browse-peek .fcard-table th,
-.browse-peek .fcard-table td,
-.fs-back .fcard-table th,
-.fs-back .fcard-table td {
+.browse-peek .moi-inertia-table th,
+.browse-peek .moi-inertia-table td,
+.fs-back .moi-inertia-table th,
+.fs-back .moi-inertia-table td {
   padding: 4px 8px;
 }
 .picker-peek { margin-left: 24px; }
