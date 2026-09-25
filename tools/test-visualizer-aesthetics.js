@@ -21,7 +21,8 @@ var EXPECTED_IDS = [
   'cpgf-1.31', 'cpgf-1.32', 'cpgf-1.33',
   'cpgf-1.9', 'cpgf-2.4', 'cpgf-2.6', 'cpgf-2.8', 'cpgf-2.14', 'cpgf-2.15', 'cpgf-2.32', 'cpgf-2.33', 'cpgf-2.43',
   'cpgf-2.70', 'cpgf-4.14', 'cpgf-4.32', 'cpgf-5.18',
-  'cpgf-5.27', 'cpgf-6.18', 'cpgf-7.17'
+  'cpgf-5.27', 'cpgf-6.18', 'cpgf-7.17',
+  'supp-moment-of-inertia'
 ];
 
 var TRIO_FILES = [];
@@ -801,14 +802,14 @@ assert(!!PGRE.visualizers && typeof PGRE.visualizers === 'object', 'PGRE.visuali
 
 console.log('\n(a) thirty cpgf- registrations');
 var visualizers = PGRE.visualizers || {};
-var cpgfKeys = Object.keys(visualizers).filter(function (k) { return k.indexOf('cpgf-') === 0; }).sort();
+var cpgfKeys = Object.keys(visualizers).filter(function (k) { return (k.indexOf('cpgf-') === 0 || k.indexOf('supp-') === 0); }).sort();
 assert(cpgfKeys.length === EXPECTED_IDS.length,
-  'exactly ' + EXPECTED_IDS.length + ' cpgf- keys (got ' + cpgfKeys.length + ': ' + cpgfKeys.join(', ') + ')');
+  'exactly ' + EXPECTED_IDS.length + ' visualizer keys (got ' + cpgfKeys.length + ': ' + cpgfKeys.join(', ') + ')');
 
 var missing = EXPECTED_IDS.filter(function (id) { return cpgfKeys.indexOf(id) < 0; });
 var extra = cpgfKeys.filter(function (id) { return EXPECTED_IDS.indexOf(id) < 0; });
-assert(missing.length === 0, missing.length ? ('missing cpgf- ids: ' + missing.join(', ')) : 'all expected cpgf- ids present');
-assert(extra.length === 0, extra.length ? ('extra cpgf- ids: ' + extra.join(', ')) : 'no extra cpgf- keys');
+assert(missing.length === 0, missing.length ? ('missing visualizer ids: ' + missing.join(', ')) : 'all expected visualizer ids present');
+assert(extra.length === 0, extra.length ? ('extra visualizer keys: ' + extra.join(', ')) : 'no extra visualizer keys');
 
 Object.keys(visualizers).forEach(function (k) {
   if (k === 'cluster3' || k === 'cluster-5') {
@@ -1109,7 +1110,7 @@ console.log('\n(b1) hover explanations, pause, reset, previous/next');
     assert(/Hint value 4/.test(massSpot.body || ''), 'Reset restores state seen by draw()');
 
     // Previous / Next follow registration order; disabled at the ends.
-    var order = Object.keys(PGRE.visualizers).filter(function (k) { return k.indexOf('cpgf-') === 0 && typeof PGRE.visualizers[k].draw === 'function'; });
+    var order = Object.keys(PGRE.visualizers).filter(function (k) { return (k.indexOf('cpgf-') === 0 || k.indexOf('supp-') === 0) && typeof PGRE.visualizers[k].draw === 'function'; });
     var nextBtn = doc.getElementById('viz-next-btn');
     var prevBtn = doc.getElementById('viz-prev-btn');
     assert(order[order.length - 1] === 'cpgf-test-b' && order[order.length - 2] === 'cpgf-test-a', 'test cards sit last in registration order');

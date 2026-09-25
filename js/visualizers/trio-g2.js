@@ -1312,5 +1312,706 @@ In the **Rotating Frame** (where the turntable appears stationary), the exact sa
     }
   };
 
+  /* ——— Supplemental: Moments of Inertia — Standard Geometries ——— */
+  PGRE.visualizers['supp-moment-of-inertia'] = {
+    id: 'supp-moment-of-inertia',
+    topic: 'cm',
+    title: 'Moments of Inertia — Standard Geometries',
+    formulaLatex: 'I = \\int r_\\perp^2\\, dm = \\beta M R^2',
+    physicalStory: `The moment of inertia $I = \\int r_\\perp^2 dm$ measures a rigid body's resistance to rotational acceleration about a specified axis, serving as the rotational analogue of inertial mass $M$. Because each mass element $dm$ is weighted by the square of its perpendicular distance $r_\\perp$ from the rotation axis, mass located farther from the axis contributes disproportionately to $I$.
+
+For geometrically similar bodies of identical mass $M$ and characteristic radius $R$, the moment of inertia simplifies to $I = \\beta M R^2$, where the dimensionless shape factor $\\beta \\le 1$ reflects how mass is distributed relative to the axis. A thin cylindrical hoop concentrates all its mass at the outer rim ($r_\\perp = R$), yielding the maximum factor $\\beta = 1$. A uniform solid disk distributes mass continuously from the axis outward, giving $\\beta = 1/2$. Similarly, a thin spherical shell has $\\beta = 2/3$, whereas a solid sphere has $\\beta = 2/5 = 0.40$ because substantial mass resides near the center.
+
+When bodies roll down an incline without slipping, gravitational potential energy converts into both translational and rotational kinetic energy: $M g h = \\frac{1}{2} M v^2 + \\frac{1}{2} I \\omega^2 = \\frac{1}{2} M v^2 (1 + \\beta)$. The linear acceleration is therefore $a = \\frac{g \\sin\\theta}{1 + \\beta}$. Notice that mass $M$ and radius $R$ cancel completely: the race winner is determined solely by the shape factor $\\beta$. The solid sphere ($\\beta = 0.40$) accelerates fastest and always finishes first, followed by the solid disk ($\\beta = 0.50$), the spherical shell ($\\beta = 0.67$), and the hoop ($\\beta = 1.00$) last.
+
+When the rotation axis is shifted away from the center of mass by a distance $d$, Steiner's parallel-axis theorem dictates that $I = I_{\\mathrm{CM}} + M d^2$. For a uniform thin rod of length $L$, the center-of-mass inertia is $I_{\\mathrm{CM}} = \\frac{1}{12} M L^2$. Shifting the axis to one end ($d = L/2$) adds $M (L/2)^2 = \\frac{1}{4} M L^2$, yielding $I_{\\mathrm{end}} = \\frac{1}{3} M L^2$ — exactly four times the resistance to angular acceleration.`,
+
+    derivationSteps: [
+      {
+        step: 1,
+        title: 'Continuous mass integral definition',
+        latex: 'I = \\int r_\\perp^2\\, dm',
+        explanation: 'Each differential mass element $dm$ contributes $dI = r_\\perp^2 dm$, where $r_\\perp$ is the shortest perpendicular distance from $dm$ to the chosen axis of rotation.'
+      },
+      {
+        step: 2,
+        title: 'Thin cylindrical hoop or ring of radius $R$',
+        latex: 'I_{\\mathrm{hoop}} = \\int r_\\perp^2\\, dm = R^2 \\int dm = M R^2',
+        explanation: 'Every element of the thin hoop lies at exactly distance $r_\\perp = R$ from the central symmetry axis. The constant $R^2$ pulls out of the integral, yielding shape factor $\\beta = 1$.'
+      },
+      {
+        step: 3,
+        title: 'Uniform solid disk or cylinder of radius $R$',
+        latex: 'I_{\\mathrm{disk}} = \\int_0^R r^2 \\left(\\frac{M}{\\pi R^2} 2\\pi r\\, dr\\right) = \\frac{2M}{R^2} \\int_0^R r^3\\, dr = \\frac{1}{2} M R^2',
+        explanation: 'Decompose the solid disk into concentric thin rings of radius $r$, thickness $dr$, and area $2\\pi r dr$. Integrating $r^3$ from $0$ to $R$ yields $\\frac{1}{4} R^4$, giving $\\beta = 1/2$.'
+      },
+      {
+        step: 4,
+        title: 'Spherical shell vs solid uniform sphere',
+        latex: 'I_{\\mathrm{shell}} = \\frac{2}{3} M R^2, \\qquad I_{\\mathrm{sphere}} = \\frac{2}{5} M R^2',
+        explanation: 'By spherical symmetry $\\int x^2 dm = \\int y^2 dm = \\int z^2 dm = \\frac{1}{3} \\int r^2 dm$. Since $r_\\perp^2 = x^2 + y^2$, the diameter inertia is $I = \\frac{2}{3} \\int r^2 dm$. For a shell $r = R$ constantly, yielding $\\frac{2}{3} M R^2$. For a solid sphere, radial integration $\\int_0^R r^4 dr$ yields $\\frac{2}{5} M R^2$.'
+      },
+      {
+        step: 5,
+        title: 'Thin rod and the parallel-axis theorem',
+        latex: 'I(d) = I_{\\mathrm{CM}} + M d^2 = \\frac{1}{12} M L^2 + M d^2',
+        explanation: 'Integrating $x^2 (M/L) dx$ from $-L/2$ to $+L/2$ gives $I_{\\mathrm{CM}} = \\frac{1}{12} M L^2$. Shifting the pivot to the rod end ($d = L/2$) adds $M(L/2)^2 = \\frac{1}{4} M L^2$, yielding $I_{\\mathrm{end}} = \\left(\\frac{1}{12} + \\frac{1}{4}\\right) M L^2 = \\frac{1}{3} M L^2$.'
+      }
+    ],
+
+    limitingCases: [
+      {
+        name: 'All mass at maximum radius $R$ (thin hoop limit)',
+        condition: 'r_\\perp = R \\text{ for all } dm',
+        result: 'I = M R^2 \\quad (\\beta = 1)',
+        explanation: 'The thin hoop has the highest possible moment of inertia for any axially symmetric body bounded within radius $R$.'
+      },
+      {
+        name: 'Mass concentrated near axis ($R \\to 0$ or point mass on axis)',
+        condition: 'r_\\perp \\to 0',
+        result: 'I \\to 0',
+        explanation: 'Rotational inertia vanishes when mass is concentrated on the rotation axis, requiring zero torque to spin up.'
+      },
+      {
+        name: 'Rod pivot at center of mass ($d = 0$)',
+        condition: 'd = 0',
+        result: 'I = \\frac{1}{12} M L^2',
+        explanation: 'The moment of inertia about the center-of-mass axis is the absolute minimum for any set of parallel axes (Steiner theorem).'
+      },
+      {
+        name: 'Rod pivot shifted to one end ($d = L/2$)',
+        condition: 'd = L/2',
+        result: 'I = \\frac{1}{3} M L^2 = 4 I_{\\mathrm{CM}}',
+        explanation: 'End rotation increases inertia by a factor of 4 compared to center rotation, dramatically reducing swing frequency.'
+      },
+      {
+        name: 'Rolling down an incline without slipping',
+        condition: 'a = \\frac{g\\sin\\theta}{1 + \\beta}',
+        result: 'a_{\\mathrm{sphere}} > a_{\\mathrm{disk}} > a_{\\mathrm{shell}} > a_{\\mathrm{hoop}}',
+        explanation: 'Because $\\beta_{\\mathrm{sphere}} (0.40) < \\beta_{\\mathrm{disk}} (0.50) < \\beta_{\\mathrm{shell}} (0.67) < \\beta_{\\mathrm{hoop}} (1.00)$, acceleration depends strictly on shape factor $\\beta$, independent of mass $M$ and radius $R$.'
+      }
+    ],
+
+    greTraps: [
+      {
+        trap: 'Applying the parallel-axis theorem between two non-CM axes ($I_2 = I_1 + M d^2$)',
+        warning: 'The parallel-axis theorem applies ONLY when one of the axes passes through the Center of Mass ($I = I_{\\mathrm{CM}} + M d^2$).',
+        strategy: 'To shift between arbitrary parallel axes $A$ and $B$, always shift to CM first: $I_{\\mathrm{CM}} = I_A - M d_A^2$, then shift from CM to $B$: $I_B = I_{\\mathrm{CM}} + M d_B^2$. Note that $I_{\\mathrm{CM}}$ is always the minimum.'
+      },
+      {
+        trap: 'Confusing thin spherical shell $\\frac{2}{3} M R^2$ with solid sphere $\\frac{2}{5} M R^2$',
+        warning: 'ETS frequently tests the distinction between hollow and solid spheres on the GRE.',
+        strategy: 'Remember: mass farther out creates more inertia. A hollow shell has all its mass on the rim ($2/3 \\approx 0.67$), while a solid sphere has mass packed inward ($2/5 = 0.40$). The hollow sphere is always more sluggish to spin and loses the incline race.'
+      },
+      {
+        trap: 'Assuming a heavier or larger sphere rolls down an incline faster',
+        warning: 'Students intuitively think a heavy bowling ball beats a small marble down a ramp.',
+        strategy: 'Both mass $M$ and radius $R$ cancel completely in the equations of motion ($a = g\\sin\\theta / (1 + \\beta)$). All solid spheres roll with identical acceleration regardless of size or mass. Only the shape factor $\\beta$ matters.'
+      }
+    ],
+
+    parameters: [
+      { id: 'mode', label: 'View Mode', type: 'select', options: ['Inspect Geometry', 'Incline Race', 'Torque Spin-Up'], default: 'Inspect Geometry', hint: 'Select between inspecting mass distribution of individual geometries, racing them down an incline, or testing rotational acceleration under applied torque.' },
+      { id: 'geometry', label: 'Geometry', type: 'select', options: ['Solid Disk ($I = \\frac{1}{2} M R^2$)', 'Thin Hoop ($I = M R^2$)', 'Solid Sphere ($I = \\frac{2}{5} M R^2$)', 'Spherical Shell ($I = \\frac{2}{3} M R^2$)', 'Thin Rod ($I = \\frac{1}{12} M L^2 + M d^2$)'], default: 'Solid Disk ($I = \\frac{1}{2} M R^2$)', hint: 'Standard rigid body geometry with characteristic radius $R$ or length $L$.' },
+      { id: 'mass', label: 'Total Mass ($M$)', min: 0.5, max: 5.0, step: 0.5, default: 2.0, unit: 'kg', hint: 'Total mass of the body. Inertia $I$ scales directly proportional to mass $M$.' },
+      { id: 'dimension', label: 'Radius ($R$) / Length ($L$)', min: 0.2, max: 1.5, step: 0.1, default: 0.8, unit: 'm', hint: 'Radius $R$ for circular/spherical bodies, or total length $L$ for the thin rod. Inertia scales with the square of this dimension ($R^2$ or $L^2$).' },
+      { id: 'rodShift', label: 'Rod Axis Shift ($d$)', min: 0.0, max: 0.5, step: 0.05, default: 0.0, unit: 'L', hint: 'Pivot offset $d$ from rod center. $d=0$ is center-of-mass axis ($I = \\frac{1}{12}ML^2$); $d=0.5L$ is end pivot ($I = \\frac{1}{3}ML^2$). Demonstrates Steiner parallel-axis theorem.' },
+      { id: 'inclineAngle', label: 'Incline Angle ($\\theta$)', min: 10, max: 45, step: 5, default: 25, unit: 'deg', hint: 'Ramp slope for Incline Race mode. Linear acceleration without slipping is $a = \\frac{g\\sin\\theta}{1 + \\beta}$.' },
+      { id: 'appliedTorque', label: 'Applied Torque ($\\tau$)', min: 0.5, max: 10.0, step: 0.5, default: 4.0, unit: 'N*m', hint: 'Constant net torque applied to the body. Angular acceleration is $\\alpha = \\tau / I$.' },
+      { id: 'simSpeed', label: 'Simulation Speed', min: 0.2, max: 3.0, step: 0.1, default: 1.0, unit: 'x' }
+    ],
+
+    challenge: {
+      question: 'Four uniform objects of identical mass $M$ and outer radius $R$ — a solid sphere ($I = \\frac{2}{5}MR^2$), a solid cylinder/disk ($I = \\frac{1}{2}MR^2$), a thin spherical shell ($I = \\frac{2}{3}MR^2$), and a thin hoop ($I = MR^2$) — are released from rest at the same height on an incline of angle $\\theta$ and roll down without slipping. In what order do they reach the bottom?',
+      options: [
+        'A: Solid sphere, solid disk, spherical shell, thin hoop',
+        'B: Thin hoop, spherical shell, solid disk, solid sphere',
+        'C: Solid disk, solid sphere, spherical shell, thin hoop',
+        'D: They all tie because mass $M$ and radius $R$ are equal',
+        'E: Spherical shell, solid sphere, solid disk, thin hoop'
+      ],
+      correct: 0,
+      explanation: `By conservation of energy, gravitational potential energy $Mgh$ converts into translational and rotational kinetic energy:
+$$M g h = \\frac{1}{2} M v^2 + \\frac{1}{2} I \\omega^2 = \\frac{1}{2} M v^2 \\left(1 + \\frac{I}{M R^2}\\right) = \\frac{1}{2} M v^2 (1 + \\beta)$$
+
+Solving for acceleration down the incline:
+$$a = \\frac{g \\sin\\theta}{1 + \\beta}$$
+
+The object with the **smallest shape factor $\\beta$** converts the least fraction of its energy into rotation, leaving the greatest energy for forward translation:
+1. **Solid sphere**: $\\beta = \\frac{2}{5} = 0.40 \\implies a = \\frac{5}{7} g \\sin\\theta \\approx 0.714 g \\sin\\theta$ (1st)
+2. **Solid disk**: $\\beta = \\frac{1}{2} = 0.50 \\implies a = \\frac{2}{3} g \\sin\\theta \\approx 0.667 g \\sin\\theta$ (2nd)
+3. **Spherical shell**: $\\beta = \\frac{2}{3} \\approx 0.667 \\implies a = \\frac{3}{5} g \\sin\\theta = 0.600 g \\sin\\theta$ (3rd)
+4. **Thin hoop**: $\\beta = 1.00 \\implies a = \\frac{1}{2} g \\sin\\theta = 0.500 g \\sin\\theta$ (4th / last)
+
+Mass $M$ and radius $R$ cancel out completely, so size and mass do not affect the race outcome!`
+    },
+
+    init: function (container, state, redraw) {
+      state.angle = 0;
+      state.raceTime = 0;
+      state.torqueTime = 0;
+      state._lastMode = state.mode || 'Inspect Geometry';
+    },
+
+    onParamChange: function (id, val, state) {
+      if (!state) return;
+      if (id === 'mode' || id === 'inclineAngle' || id === 'geometry') {
+        state.raceTime = 0;
+        state.torqueTime = 0;
+      }
+    },
+
+    draw: function (ctx, width, height, state, dt) {
+      creamFill(ctx, width, height);
+      dt = stepDt(dt);
+      state = state || {};
+
+      var mode = state.mode || 'Inspect Geometry';
+      var geomStr = state.geometry || 'Solid Disk ($I = \\frac{1}{2} M R^2$)';
+      var M = numParam(state, 'mass', 2.0);
+      var R = numParam(state, 'dimension', 0.8);
+      var rodShift = numParam(state, 'rodShift', 0.0);
+      var inclineDeg = numParam(state, 'inclineAngle', 25);
+      var tau = numParam(state, 'appliedTorque', 4.0);
+      var simSpeed = numParam(state, 'simSpeed', 1.0);
+      if (simSpeed < 0.2) simSpeed = 0.2;
+      if (simSpeed > 3.0) simSpeed = 3.0;
+      dt = dt * simSpeed;
+
+      if (state._lastMode !== mode) {
+        state.raceTime = 0;
+        state.torqueTime = 0;
+        state._lastMode = mode;
+      }
+
+      var beta = 0.5;
+      var shapeName = 'Solid Disk';
+      var formulaStr = 'I = \\frac{1}{2} M R^2';
+      var geomKey = 'disk';
+
+      if (geomStr.indexOf('Hoop') !== -1) {
+        beta = 1.0; shapeName = 'Thin Hoop'; formulaStr = 'I = M R^2'; geomKey = 'hoop';
+      } else if (geomStr.indexOf('Sphere') !== -1 && geomStr.indexOf('Shell') === -1) {
+        beta = 0.40; shapeName = 'Solid Sphere'; formulaStr = 'I = \\frac{2}{5} M R^2'; geomKey = 'sphere';
+      } else if (geomStr.indexOf('Shell') !== -1) {
+        beta = 2.0 / 3.0; shapeName = 'Spherical Shell'; formulaStr = 'I = \\frac{2}{3} M R^2'; geomKey = 'shell';
+      } else if (geomStr.indexOf('Rod') !== -1) {
+        beta = (1.0 / 12.0) + (rodShift * rodShift);
+        shapeName = 'Thin Rod';
+        formulaStr = 'I = \\frac{1}{12} M L^2 + M d^2';
+        geomKey = 'rod';
+      }
+
+      var I = beta * M * R * R;
+      var hotspots = [];
+
+      if (mode === 'Inspect Geometry') {
+        state.angle = (state.angle || 0) + 2.4 * dt;
+        var ang = state.angle;
+        var cx = 210, cy = 210;
+        var rPx = Math.round(75 * (R / 0.8));
+
+        ctx.save();
+        if (geomKey === 'disk') {
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, rPx, rPx * 0.65, 0, 0, Math.PI * 2);
+          ctx.fillStyle = C.teal + '33';
+          ctx.fill();
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = C.teal;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, rPx * 0.5, rPx * 0.32, 0, 0, Math.PI * 2);
+          ctx.fillStyle = C.teal + '22';
+          ctx.fill();
+
+          for (var sp = 0; sp < 4; sp++) {
+            var th = ang + (sp * Math.PI / 2);
+            var sx = cx + rPx * Math.cos(th);
+            var sy = cy + (rPx * 0.65) * Math.sin(th);
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(sx, sy);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = C.teal;
+            ctx.stroke();
+          }
+
+          ctx.beginPath();
+          ctx.moveTo(cx, cy - 70);
+          ctx.lineTo(cx, cy + 70);
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = C.coral;
+          ctx.stroke();
+          ctx.fillStyle = C.coral;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+          ctx.fill();
+
+          hotspots.push({
+            id: 'disk-body',
+            kind: 'circle',
+            x: cx, y: cy, r: rPx,
+            title: 'Solid Disk / Cylinder ($I = \\frac{1}{2} M R^2$)',
+            body: 'Mass is uniformly distributed from axis $r=0$ to rim $R$. Integrating rings gives factor $\\beta = 1/2$. Current $I = ' + I.toFixed(3) + '\\text{ kg}\\cdot\\text{m}^2$.'
+          });
+        } else if (geomKey === 'hoop') {
+          var rInner = rPx * 0.82;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, rPx, rPx * 0.65, 0, 0, Math.PI * 2);
+          ctx.fillStyle = C.coral + '44';
+          ctx.fill();
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = C.coral;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, rInner, rInner * 0.65, 0, 0, Math.PI * 2);
+          ctx.fillStyle = C.bg;
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = C.coral;
+          ctx.stroke();
+
+          for (var hp = 0; hp < 6; hp++) {
+            var thH = ang + (hp * Math.PI / 3);
+            var hx = cx + ((rPx + rInner) / 2) * Math.cos(thH);
+            var hy = cy + (((rPx + rInner) / 2) * 0.65) * Math.sin(thH);
+            ctx.beginPath();
+            ctx.arc(hx, hy, 4, 0, Math.PI * 2);
+            ctx.fillStyle = C.gold;
+            ctx.fill();
+          }
+
+          ctx.beginPath();
+          ctx.moveTo(cx, cy - 70);
+          ctx.lineTo(cx, cy + 70);
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = C.ink;
+          ctx.stroke();
+
+          hotspots.push({
+            id: 'hoop-body',
+            kind: 'circle',
+            x: cx, y: cy, r: rPx,
+            title: 'Thin Hoop / Ring ($I = M R^2$)',
+            body: 'All mass resides at radius $R$, maximizing distance from the axis. Gives highest inertia factor $\\beta = 1.00$. Current $I = ' + I.toFixed(3) + '\\text{ kg}\\cdot\\text{m}^2$.'
+          });
+        } else if (geomKey === 'sphere') {
+          ctx.beginPath();
+          ctx.arc(cx, cy, rPx, 0, Math.PI * 2);
+          ctx.fillStyle = C.emerald + '33';
+          ctx.fill();
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = C.emerald;
+          ctx.stroke();
+
+          var wEq = Math.cos(ang) * rPx;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, Math.abs(wEq), rPx, 0, 0, Math.PI * 2);
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = C.emerald;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, rPx, rPx * 0.35, 0, 0, Math.PI * 2);
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = C.muted;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(cx, cy - rPx - 25);
+          ctx.lineTo(cx, cy + rPx + 25);
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = C.coral;
+          ctx.stroke();
+
+          hotspots.push({
+            id: 'sphere-body',
+            kind: 'circle',
+            x: cx, y: cy, r: rPx,
+            title: 'Solid Sphere ($I = \\frac{2}{5} M R^2$)',
+            body: 'Mass distributed throughout $0 \\le r \\le R$ results in $\\beta = 2/5 = 0.40$, lowest of all symmetric 3D solids. Current $I = ' + I.toFixed(3) + '\\text{ kg}\\cdot\\text{m}^2$.'
+          });
+        } else if (geomKey === 'shell') {
+          ctx.beginPath();
+          ctx.arc(cx, cy, rPx, 0, Math.PI * 2);
+          ctx.fillStyle = C.violet + '22';
+          ctx.fill();
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = C.violet;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, rPx - 8, 0, Math.PI * 2);
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = C.violet + '88';
+          ctx.stroke();
+
+          var wSh = Math.cos(ang) * rPx;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, Math.abs(wSh), rPx, 0, 0, Math.PI * 2);
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = C.violet;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(cx, cy - rPx - 25);
+          ctx.lineTo(cx, cy + rPx + 25);
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = C.coral;
+          ctx.stroke();
+
+          hotspots.push({
+            id: 'shell-body',
+            kind: 'circle',
+            x: cx, y: cy, r: rPx,
+            title: 'Spherical Shell ($I = \\frac{2}{3} M R^2$)',
+            body: 'Mass sits entirely on outer surface $R$, yielding $\\beta = 2/3 \\approx 0.67$. Sluggish compared to solid sphere ($0.40$). Current $I = ' + I.toFixed(3) + '\\text{ kg}\\cdot\\text{m}^2$.'
+          });
+        } else {
+          var rodL = Math.round(210 * (R / 0.8));
+          var shiftPx = Math.round(rodShift * rodL);
+          var pivotX = cx + shiftPx;
+          var pivotY = cy;
+
+          ctx.save();
+          ctx.translate(pivotX, pivotY);
+          ctx.rotate(Math.sin(ang * 0.8) * 0.45);
+          ctx.beginPath();
+          ctx.rect(-shiftPx - (rodL / 2), -7, rodL, 14);
+          ctx.fillStyle = C.gold + '44';
+          ctx.fill();
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = C.gold;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(-shiftPx, 0, 5, 0, Math.PI * 2);
+          ctx.fillStyle = C.emerald;
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(0, 0, 6, 0, Math.PI * 2);
+          ctx.fillStyle = C.coral;
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = C.ink;
+          ctx.stroke();
+          ctx.restore();
+
+          hotspots.push({
+            id: 'rod-body',
+            kind: 'circle',
+            x: cx, y: cy, r: 80,
+            title: 'Thin Rod with Steiner Shift ($I = \\frac{1}{12}ML^2 + Md^2$)',
+            body: 'Center $d=0 \\implies I = \\frac{1}{12}ML^2$. End $d=0.5L \\implies I = \\frac{1}{3}ML^2$ ($4\\times$ inertia). Current $I = ' + I.toFixed(3) + '\\text{ kg}\\cdot\\text{m}^2$.'
+          });
+        }
+        ctx.restore();
+
+        var px0 = 360, py0 = 90, pw = 250, ph = 230;
+        ctx.save();
+        ctx.fillStyle = C.panel;
+        ctx.strokeStyle = C.line;
+        ctx.lineWidth = 1.5;
+        ctx.fillRect(px0, py0, pw, ph);
+        ctx.strokeRect(px0, py0, pw, ph);
+
+        ctx.fillStyle = C.ink;
+        ctx.font = '600 13px sans-serif';
+        ctx.fillText(shapeName, px0 + 14, py0 + 24);
+
+        ctx.font = '12px sans-serif';
+        ctx.fillStyle = C.muted;
+        ctx.fillText('Shape factor \\beta: ' + beta.toFixed(3), px0 + 14, py0 + 46);
+        ctx.fillText('Inertia I: ' + I.toFixed(4) + ' kg*m^2', px0 + 14, py0 + 66);
+        ctx.fillText('Mass M: ' + M.toFixed(1) + ' kg', px0 + 14, py0 + 86);
+        ctx.fillText('Dimension: ' + R.toFixed(2) + ' m', px0 + 14, py0 + 106);
+
+        if (geomKey === 'rod') {
+          var ratio = (I / ((1.0 / 12.0) * M * R * R)).toFixed(2);
+          ctx.fillStyle = C.coral;
+          ctx.font = '600 12px sans-serif';
+          ctx.fillText('I / I_CM = ' + ratio + 'x', px0 + 14, py0 + 130);
+          ctx.font = '11px sans-serif';
+          ctx.fillStyle = C.muted;
+          ctx.fillText('Shift d = ' + (rodShift * 100).toFixed(0) + '% of L', px0 + 14, py0 + 150);
+          ctx.fillText('I = (1/12 + d^2) M L^2', px0 + 14, py0 + 172);
+        } else {
+          ctx.fillStyle = C.teal;
+          ctx.font = '600 12px sans-serif';
+          ctx.fillText('Formula: ' + formulaStr, px0 + 14, py0 + 134);
+          ctx.font = '11px sans-serif';
+          ctx.fillStyle = C.muted;
+          ctx.fillText('Rotational kinetic energy:', px0 + 14, py0 + 156);
+          var Krot = 0.5 * I * (2.4 * 2.4);
+          ctx.fillText('K_rot = ' + Krot.toFixed(3) + ' J (at 2.4 rad/s)', px0 + 14, py0 + 174);
+        }
+        ctx.restore();
+
+        hotspots.push({
+          id: 'inspect-panel',
+          kind: 'rect',
+          x: px0, y: py0, w: pw, h: ph,
+          title: 'Properties & Scaling',
+          body: 'Shape factor $\\beta = ' + beta.toFixed(3) + '$. Moment of inertia $I = ' + I.toFixed(4) + '\\text{ kg}\\cdot\\text{m}^2$. Scales as $M R^2$.'
+        });
+
+        if (PGRE.appendVizLegend) {
+          PGRE.appendVizLegend([
+            { label: 'Geometry', value: shapeName, hint: 'Selected rigid body geometry.' },
+            { label: 'Shape factor $\\beta$', value: beta.toFixed(3), hint: 'Dimensionless shape factor in $I = \\beta M R^2$.' },
+            { label: 'Inertia $I$', value: I.toFixed(4) + ' kg*m^2', hint: 'Total moment of inertia about the rotation axis.' },
+            { label: 'Spin speed $\\omega$', value: '2.4 rad/s', hint: 'Visualization spin rate.' },
+            { label: 'Energy $K_{\\mathrm{rot}}$', value: (0.5 * I * 2.4 * 2.4).toFixed(3) + ' J', hint: 'Rotational kinetic energy $K = \\frac{1}{2} I \\omega^2$.' }
+          ]);
+        }
+      } else if (mode === 'Incline Race') {
+        state.raceTime = (state.raceTime || 0) + dt;
+        var tRace = state.raceTime;
+        var radTheta = (inclineDeg * Math.PI) / 180;
+        var g = 9.81;
+        var gSin = g * Math.sin(radTheta);
+
+        var racers = [
+          { name: 'Solid Sphere', beta: 0.40, color: C.emerald, formula: '2/5' },
+          { name: 'Solid Disk', beta: 0.50, color: C.teal, formula: '1/2' },
+          { name: 'Spherical Shell', beta: 2.0 / 3.0, color: C.violet, formula: '2/3' },
+          { name: 'Thin Hoop', beta: 1.00, color: C.coral, formula: '1' }
+        ];
+
+        var rampX0 = 50, rampY0 = 70;
+        var rampLen = 480;
+        var rampDx = Math.cos(radTheta * 0.7) * rampLen;
+        var rampDy = Math.sin(radTheta * 0.7) * rampLen;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(rampX0, rampY0);
+        ctx.lineTo(rampX0 + rampDx, rampY0 + rampDy);
+        ctx.lineTo(rampX0 + rampDx, rampY0 + rampDy + 24);
+        ctx.lineTo(rampX0, rampY0 + rampDy + 24);
+        ctx.closePath();
+        ctx.fillStyle = C.line;
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = C.muted;
+        ctx.stroke();
+
+        var fx0 = rampX0 + rampDx, fy0 = rampY0 + rampDy;
+        ctx.beginPath();
+        ctx.moveTo(fx0, fy0 - 15);
+        ctx.lineTo(fx0, fy0 + 15);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = C.rose;
+        ctx.stroke();
+        ctx.fillStyle = C.rose;
+        ctx.font = '600 11px sans-serif';
+        ctx.fillText('FINISH', fx0 - 18, fy0 - 20);
+
+        var rWheel = 13;
+        var allDone = true;
+        for (var rc = 0; rc < racers.length; rc++) {
+          var rcr = racers[rc];
+          var aLin = gSin / (1.0 + rcr.beta);
+          rcr.a = aLin;
+          var sDist = 0.5 * (aLin * 26) * tRace * tRace;
+          if (sDist < rampLen) allDone = false;
+          else sDist = rampLen;
+          rcr.s = sDist;
+
+          var fFrac = sDist / rampLen;
+          var curX = rampX0 + rampDx * fFrac;
+          var curY = rampY0 + rampDy * fFrac - rWheel - (rc * 4);
+
+          ctx.beginPath();
+          ctx.arc(curX, curY, rWheel, 0, Math.PI * 2);
+          ctx.fillStyle = rcr.color + '44';
+          ctx.fill();
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = rcr.color;
+          ctx.stroke();
+
+          var phiRoll = sDist / rWheel;
+          ctx.beginPath();
+          ctx.moveTo(curX, curY);
+          ctx.lineTo(curX + rWheel * Math.cos(phiRoll), curY + rWheel * Math.sin(phiRoll));
+          ctx.strokeStyle = rcr.color;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          hotspots.push({
+            id: 'racer-' + rc,
+            kind: 'circle',
+            x: curX, y: curY, r: rWheel + 2,
+            title: rcr.name + ' (\\beta = ' + rcr.formula + ')',
+            body: 'Acceleration $a = \\frac{g\\sin\\theta}{1 + \\beta} = ' + aLin.toFixed(2) + '\\text{ m/s}^2$. Rank depends ONLY on $\\beta$, independent of mass $M$ or radius $R$.'
+          });
+        }
+
+        var lbX = 50, lbY = 270, lbW = 540, lbH = 120;
+        ctx.fillStyle = C.panel;
+        ctx.strokeStyle = C.line;
+        ctx.lineWidth = 1.5;
+        ctx.fillRect(lbX, lbY, lbW, lbH);
+        ctx.strokeRect(lbX, lbY, lbW, lbH);
+
+        ctx.fillStyle = C.ink;
+        ctx.font = '600 13px sans-serif';
+        ctx.fillText('Incline Race Standings (Without Slipping: a = g sin\\theta / (1 + \\beta))', lbX + 14, lbY + 22);
+
+        var colW = 128;
+        for (var rk = 0; rk < racers.length; rk++) {
+          var rkItem = racers[rk];
+          var cellX = lbX + 14 + (rk * colW);
+          var medal = (rk + 1) + (rk === 0 ? 'st: ' : rk === 1 ? 'nd: ' : rk === 2 ? 'rd: ' : 'th: ');
+          ctx.fillStyle = rkItem.color;
+          ctx.font = '600 12px sans-serif';
+          ctx.fillText(medal + rkItem.name, cellX, lbY + 48);
+
+          ctx.fillStyle = C.ink;
+          ctx.font = '11px sans-serif';
+          ctx.fillText('\\beta = ' + rkItem.formula, cellX, lbY + 68);
+          ctx.fillText('a = ' + rkItem.a.toFixed(2) + ' m/s^2', cellX, lbY + 86);
+          ctx.fillStyle = C.muted;
+          ctx.fillText('Ratio: ' + (rkItem.a / racers[0].a * 100).toFixed(0) + '%', cellX, lbY + 104);
+        }
+        ctx.restore();
+
+        hotspots.push({
+          id: 'race-board',
+          kind: 'rect',
+          x: lbX, y: lbY, w: lbW, h: lbH,
+          title: 'Race Order Rule',
+          body: 'Solid Sphere always wins! Order: Sphere (0.40) > Disk (0.50) > Shell (0.67) > Hoop (1.00). Mass and radius cancel out completely!'
+        });
+
+        if (allDone && state.raceTime > 4.5) {
+          state.raceTime = 0;
+        }
+
+        if (PGRE.appendVizLegend) {
+          PGRE.appendVizLegend([
+            { label: 'Ramp slope $\\theta$', value: inclineDeg + '°', hint: 'Incline angle from horizontal.' },
+            { label: '1st: Sphere', value: racers[0].a.toFixed(2) + ' m/s^2', hint: 'Solid sphere acceleration $a = \\frac{5}{7}g\\sin\\theta$ (1st place).' },
+            { label: '2nd: Disk', value: racers[1].a.toFixed(2) + ' m/s^2', hint: 'Solid disk acceleration $a = \\frac{2}{3}g\\sin\\theta$ (2nd place).' },
+            { label: '3rd: Shell', value: racers[2].a.toFixed(2) + ' m/s^2', hint: 'Spherical shell acceleration $a = \\frac{3}{5}g\\sin\\theta$ (3rd place).' },
+            { label: '4th: Hoop', value: racers[3].a.toFixed(2) + ' m/s^2', hint: 'Thin hoop acceleration $a = \\frac{1}{2}g\\sin\\theta$ (4th place).' }
+          ]);
+        }
+      } else {
+        state.torqueTime = (state.torqueTime || 0) + dt;
+        var tTorque = state.torqueTime;
+        var alpha = tau / I;
+        var omega = Math.min(60.0, alpha * tTorque);
+        var rotAngle = 0.5 * alpha * tTorque * tTorque;
+        var L_ang = I * omega;
+        var K_rot = 0.5 * I * omega * omega;
+
+        var tcx = 190, tcy = 205;
+        var trPx = Math.round(75 * (R / 0.8));
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(tcx, tcy, trPx, 0, Math.PI * 2);
+        ctx.fillStyle = C.gold + '33';
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = C.gold;
+        ctx.stroke();
+
+        for (var tsp = 0; tsp < 4; tsp++) {
+          var tAng = rotAngle + (tsp * Math.PI / 2);
+          ctx.beginPath();
+          ctx.moveTo(tcx, tcy);
+          ctx.lineTo(tcx + trPx * Math.cos(tAng), tcy + trPx * Math.sin(tAng));
+          ctx.strokeStyle = C.gold;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        ctx.beginPath();
+        ctx.arc(tcx, tcy, 5, 0, Math.PI * 2);
+        ctx.fillStyle = C.ink;
+        ctx.fill();
+
+        var arrX = tcx, arrY = tcy - trPx;
+        ctx.beginPath();
+        ctx.moveTo(arrX - 35, arrY);
+        ctx.lineTo(arrX + 35, arrY);
+        ctx.lineTo(arrX + 25, arrY - 6);
+        ctx.moveTo(arrX + 35, arrY);
+        ctx.lineTo(arrX + 25, arrY + 6);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = C.coral;
+        ctx.stroke();
+
+        ctx.fillStyle = C.coral;
+        ctx.font = '600 12px sans-serif';
+        ctx.fillText('\\tau = ' + tau.toFixed(1) + ' N*m', arrX - 25, arrY - 12);
+
+        hotspots.push({
+          id: 'torque-body',
+          kind: 'circle',
+          x: tcx, y: tcy, r: trPx,
+          title: shapeName + ' under Torque (\\tau = ' + tau.toFixed(1) + '\\text{ N}\\cdot\\text{m})',
+          body: 'Angular acceleration $\\alpha = \\tau / I = ' + alpha.toFixed(2) + '\\text{ rad/s}^2$. Higher $I \\implies$ slower spin-up.'
+        });
+
+        var dialX = 460, dialY = 190, dialR = 75;
+        ctx.beginPath();
+        ctx.arc(dialX, dialY, dialR, Math.PI * 0.8, Math.PI * 2.2);
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = C.line;
+        ctx.stroke();
+
+        var gaugeFrac = Math.min(1.0, omega / 60.0);
+        ctx.beginPath();
+        ctx.arc(dialX, dialY, dialR, Math.PI * 0.8, Math.PI * 0.8 + (gaugeFrac * Math.PI * 1.4));
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = C.coral;
+        ctx.stroke();
+
+        ctx.fillStyle = C.ink;
+        ctx.font = '700 20px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(omega.toFixed(1), dialX, dialY - 5);
+        ctx.font = '12px sans-serif';
+        ctx.fillStyle = C.muted;
+        ctx.fillText('rad/s', dialX, dialY + 15);
+        ctx.textAlign = 'left';
+
+        ctx.font = '12px sans-serif';
+        ctx.fillStyle = C.ink;
+        ctx.fillText('Angular accel \\alpha: ' + alpha.toFixed(2) + ' rad/s^2', 370, 290);
+        ctx.fillText('Angular momentum L: ' + L_ang.toFixed(2) + ' kg*m^2/s', 370, 310);
+        ctx.fillText('Rotational energy K: ' + K_rot.toFixed(1) + ' J', 370, 330);
+        ctx.restore();
+
+        hotspots.push({
+          id: 'tachometer',
+          kind: 'circle',
+          x: dialX, y: dialY, r: dialR,
+          title: 'Angular Velocity \\omega(t) = \\alpha t',
+          body: 'Current spin speed: $' + omega.toFixed(1) + '\\text{ rad/s}$. Kinetic energy $K = \\frac{1}{2}I\\omega^2 = ' + K_rot.toFixed(1) + '\\text{ J}$.'
+        });
+
+        if (PGRE.appendVizLegend) {
+          PGRE.appendVizLegend([
+            { label: 'Applied torque $\\tau$', value: tau.toFixed(1) + ' N*m', hint: 'Constant net torque acting on the body.' },
+            { label: 'Angular accel $\\alpha$', value: alpha.toFixed(2) + ' rad/s^2', hint: 'Angular acceleration $\\alpha = \\tau / I$.' },
+            { label: 'Angular speed $\\omega$', value: omega.toFixed(1) + ' rad/s', hint: 'Current rotational velocity $\\omega(t) = \\alpha t$.' },
+            { label: 'Angular momentum $L$', value: L_ang.toFixed(2) + ' kg*m^2/s', hint: 'Angular momentum $L = I \\omega$.' },
+            { label: 'Energy $K_{\\mathrm{rot}}$', value: K_rot.toFixed(1) + ' J', hint: 'Rotational kinetic energy $K = \\frac{1}{2} I \\omega^2$.' }
+          ]);
+        }
+      }
+
+      if (PGRE.setVizHotspots) PGRE.setVizHotspots(hotspots);
+    }
+  };
+
 
 })(typeof window !== 'undefined' ? window : globalThis);

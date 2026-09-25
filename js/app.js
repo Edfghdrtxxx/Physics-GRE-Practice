@@ -332,6 +332,90 @@ PGRE.formulaTextHTML = function (text) {
     return '\u0002MB' + (mathBlocks.length - 1) + '\u0002';
   });
   text = text.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+
+  function formatMarkdownBlocks(src) {
+    if (!src || (src.indexOf('\n') === -1 && !/^\s*\|.*\|\s*$/.test(src) && !/^\s*[-*]\s+/.test(src) && !/^\s*\d+\.\s+/.test(src))) {
+      return src;
+    }
+    var lines = src.split('\n');
+    var out = [];
+    var inList = null; // 'ul' or 'ol'
+    var inTable = false;
+    var tableRows = [];
+
+    function flushTable() {
+      if (!inTable || !tableRows.length) { inTable = false; tableRows = []; return; }
+      var html = '<table class="fcard-table">';
+      for (var r = 0; r < tableRows.length; r++) {
+        var row = tableRows[r];
+        if (r === 1 && row.every(function (c) { return /^:?-+:?$/.test(c.trim()); })) {
+          continue;
+        }
+        if (r === 0) {
+          html += '<thead><tr>' + row.map(function (c) { return '<th>' + c.trim() + '</th>'; }).join('') + '</tr></thead><tbody>';
+        } else {
+          html += '<tr>' + row.map(function (c) { return '<td>' + c.trim() + '</td>'; }).join('') + '</tr>';
+        }
+      }
+      html += (tableRows.length > 1 ? '</tbody>' : '') + '</table>';
+      out.push(html);
+      inTable = false;
+      tableRows = [];
+    }
+
+    function flushList() {
+      if (inList) {
+        out.push(inList === 'ul' ? '</ul>' : '</ol>');
+        inList = null;
+      }
+    }
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var isTableLine = /^\s*\|.*\|\s*$/.test(line);
+      var ulMatch = line.match(/^(\s*)[-*]\s+(.*)$/);
+      var olMatch = line.match(/^(\s*)\d+\.\s+(.*)$/);
+
+      if (isTableLine) {
+        flushList();
+        inTable = true;
+        var cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|');
+        tableRows.push(cells);
+        continue;
+      } else if (inTable) {
+        flushTable();
+      }
+
+      if (ulMatch) {
+        if (inList === 'ol') flushList();
+        if (!inList) { out.push('<ul>'); inList = 'ul'; }
+        out.push('<li>' + ulMatch[2] + '</li>');
+      } else if (olMatch) {
+        if (inList === 'ul') flushList();
+        if (!inList) { out.push('<ol>'); inList = 'ol'; }
+        out.push('<li>' + olMatch[2] + '</li>');
+      } else {
+        if (inList && line.trim() === '') {
+          flushList();
+          out.push('');
+        } else if (inList) {
+          var lastIdx = out.length - 1;
+          if (out[lastIdx].slice(-5) === '</li>') {
+            out[lastIdx] = out[lastIdx].slice(0, -5) + '<br>' + line + '</li>';
+          } else {
+            out.push(line);
+          }
+        } else {
+          out.push(line);
+        }
+      }
+    }
+    flushList();
+    flushTable();
+    return out.join('\n');
+  }
+
+  text = formatMarkdownBlocks(text);
   text = text.replace(/\u0002MB(\d+)\u0002/g, function (_, i) {
     return mathBlocks[Number(i)];
   });
