@@ -191,6 +191,52 @@ async function main() {
     throw new Error('real formula deck did not render in Formula Recall: ' + JSON.stringify(realUi));
   }
 
+  /* Real-deck pickup: run the final-pass allocator against actual cpgf-* cards
+     and traverse the user path Dashboard → Today → Formula Recall → Study. */
+  var realIds = realDeck.slice(0, 3).map(function (c) { return c.id; });
+  var realPickup = await evaluate(`(function () {
+    var s = PGRE.store.state, today = PGRE.srs.today(), d = new Date();
+    d.setDate(d.getDate() + 7);
+    s.settings.examDate = PGRE.srs.dayStr(d);
+    s.settings.formulaDailyTarget = 1;
+    s.cards = {};
+    ${JSON.stringify(realIds)}.forEach(function (id, i) {
+      s.cards[id] = { reps: 2, lapses: 0, interval: 10 + i, ease: 2.5,
+        due: PGRE.srs.addDaysTo(today, 2 + i), reviews: 2,
+        lastReviewedDay: PGRE.srs.addDaysTo(today, -1) };
+    });
+    s.formulaSuspended = {};
+    s.formulaDay = { date: today, reviewIds: [], newIds: [] };
+    s.formulaStudy = null;
+    PGRE.store.save();
+    location.hash = '#/'; PGRE.route();
+    return ${JSON.stringify(realIds)};
+  })()`);
+  await sleep(500);
+  for (var realPickupWait = 0; realPickupWait < 30; realPickupWait++) {
+    if (await evaluate("document.getElementById('today-formulas') && document.getElementById('today-formulas').textContent !== '…'")) break;
+    await sleep(150);
+  }
+  var realPickupUi = await evaluate(`({
+    text: (document.getElementById('today-formulas') || {}).textContent || '',
+    batch: PGRE.store.state.formulaDay
+  })`);
+  if (realPickupUi.text !== '3 left today' ||
+      realPickupUi.batch.reviewIds.join(',') !== realIds.join(',')) {
+    throw new Error('real formula pickup did not allocate the real cards: ' + JSON.stringify(realPickupUi));
+  }
+  await evaluate("document.getElementById('today-formulas-btn').click()");
+  await sleep(500);
+  var realStudy = await evaluate(`({
+    hash: location.hash,
+    queue: (PGRE.store.state.formulaStudy || {}).queueIds || []
+  })`);
+  if (realStudy.hash !== '#/formulas' || realStudy.queue.slice().sort().join(',') !== realIds.slice().sort().join(',')) {
+    throw new Error('real formula cards did not reach Study: ' + JSON.stringify(realStudy));
+  }
+  await evaluate("PGRE.store.state.cards = {}; PGRE.store.state.formulaDay = null; PGRE.store.state.formulaStudy = null; PGRE.store.save(); location.hash = '#/'; PGRE.route();");
+  await sleep(250);
+
   var seeded = await evaluate(`(async function () {
     PGRE.BOOK_FORMULAS = [];
     PGRE.FORMULAS = [];
