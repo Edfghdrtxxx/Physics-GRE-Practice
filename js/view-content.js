@@ -210,7 +210,7 @@ PGRE.views.library = (function () {
   return {
     render: function () {
       return '' +
-      '<div class="card"><h1>Library</h1>' +
+      '<div class="card page-head"><h1>Library</h1>' +
         '<p class="muted">Everything stays on this machine: progress in localStorage, book content in IndexedDB. Nothing is sent anywhere.</p>' +
         '<div id="dropzone" class="dropzone">' +
           '<p><strong>Drop the book markdown or a PDF here</strong> (.md / .txt / .pdf)</p>' +

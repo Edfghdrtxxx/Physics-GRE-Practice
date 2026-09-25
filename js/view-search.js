@@ -148,7 +148,7 @@ PGRE.views.search = (function () {
   return {
     render: function () {
       return '<div class="srch-wrap">' +
-        '<div class="card srch-box">' +
+        '<div class="card srch-box page-head">' +
           '<h1>Search</h1>' +
           '<p class="muted">One box across questions, solutions, the mistake book, ' +
           'formula cards, imported book sections and your notes.</p>' +

@@ -226,10 +226,6 @@ code { background: var(--ivory); border-radius: 4px; padding: 1px 5px; font-size
 /* Foldable sidebar: the top-bar button toggles this body class (app.js),
    persisted in settings.sidebarFolded. */
 body.sidebar-folded #sidebar { display: none; opacity: 0; }
-#sidebar-toggle {
-  font-size: 13px;
-  line-height: 1;
-}
 
 /* Home control: the sidebar title block is a real hash link to #/. */
 .brand {
@@ -1140,11 +1136,17 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 .rq-row .btn { margin: 0; }
 
 /* Today agenda — warm ivory fill, same padding as .card. */
-#today-agenda { background: var(--ivory); }
-#today-agenda .hero { margin-bottom: 8px; align-items: center; }
-#today-agenda h2 { margin-bottom: 0; }
-#today-agenda .today-greet { margin: 0 0 4px; }
-#today-agenda .countdown { background: var(--surface); }
+#today-agenda { background: var(--ivory); padding-top: 26px; }
+#today-agenda .hero { margin-bottom: 14px; align-items: flex-end; }
+#today-agenda .today-kicker {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+#today-agenda h1.today-greet { font-size: 38px; line-height: 1.08; letter-spacing: -0.6px; margin: 0; }
 /* ——— Due chips (mistake book, formula deck) ——— */
 .due-chip {
   font-size: 11px;
@@ -4777,6 +4779,171 @@ button.btn-ok {
 }
 .flash-tabs::-webkit-scrollbar,
 .browse-tabs::-webkit-scrollbar { display: none; }
+
+/* ==================================================================
+   EDITORIAL PASS (2026-09-25)
+   1. Page masthead. A page's opening block (.page-head) is not a card:
+      it sits on the floor like a magazine masthead — bigger serif title,
+      a readable lead, one hairline rule underneath. Cards start below it,
+      so "what page am I on" and "what can I do here" stop sharing a box.
+   2. Display numerals. Stat values and scores use the display serif at
+      400 (the countdown and meter percentages already did); bigger,
+      never bolder, so the 600/650 weights here come down to 500.
+   3. One box per band. A progress meter inside a card no longer draws
+      its own bordered box; the card is already the frame.
+   4. Disclosure summaries draw the sidebar's chevron, not the UA
+      triangle, so a collapsed band reads as a quiet control.
+   ================================================================== */
+.card.page-head {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 6px 0 24px;
+  margin-bottom: 26px;
+}
+.card.page-head h1 {
+  font-size: 36px;
+  line-height: 1.1;
+  letter-spacing: -0.6px;
+  margin-bottom: 10px;
+}
+.card.page-head h1 + .muted,
+.card.page-head .hero-left > .muted,
+.card.page-head .ach-header .muted {
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 64ch;
+}
+.card.page-head.hero { align-items: flex-end; }
+.card.page-head.portal-head .portal-title h1 { margin-bottom: 6px; }
+/* The countdown inside a masthead is a column of type set off by one
+   hairline, not a second box competing with the title. */
+:is(#today-agenda, .card.page-head) .countdown {
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  padding: 2px 0 2px 28px;
+  min-width: 0;
+  text-align: left;
+}
+:is(#today-agenda, .card.page-head) .countdown-num { font-size: 52px; letter-spacing: -1px; line-height: 1; }
+:is(#today-agenda, .card.page-head) .countdown-label { line-height: 1.45; margin-top: 6px; }
+
+/* 2. Display numerals */
+.stat-value,
+.summary-score {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.stat-value { font-size: 28px; line-height: 1.15; letter-spacing: -0.3px; }
+.stat-unit { font-family: var(--sans); }
+.summary-score { font-size: 56px; line-height: 1.05; letter-spacing: -1px; }
+.summary-pct { font-family: var(--sans); letter-spacing: 0; }
+.rq-label { font-weight: 500; }
+#sidebar-nav a.active { font-weight: 500; }
+.crumb-here { font-weight: 500; }
+
+/* 3. One box per band */
+.card .meter-chrome {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  margin-top: 18px;
+}
+
+/* Dashboard "this week": the next tasks read as a short checklist of rows,
+   with the launch button pinned right, instead of bullets with a button
+   floating mid-sentence. */
+.next-tasks {
+  list-style: none;
+  margin: 16px 0 4px;
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 14px;
+}
+.next-tasks li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.next-tasks li .btn { margin: 0 0 0 auto; flex: none; }
+
+/* 4. Disclosure summaries */
+.card:is(.dashboard-progress, .formulas-options, .archived-block) > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.card:is(.dashboard-progress, .formulas-options, .archived-block) > summary::-webkit-details-marker { display: none; }
+.card:is(.dashboard-progress, .formulas-options, .archived-block) > summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  border-right: 1.5px solid var(--ink-2);
+  border-bottom: 1.5px solid var(--ink-2);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 150ms ease;
+}
+.card:is(.dashboard-progress, .formulas-options, .archived-block)[open] > summary { margin-bottom: 16px; }
+.card:is(.dashboard-progress, .formulas-options, .archived-block)[open] > summary::after {
+  transform: rotate(-135deg) translate(-2px, -1px);
+}
+.card.archived-block > summary { font-size: 14px; font-weight: 400; color: var(--ink-2); }
+
+/* Week cards keep their own summary layout (badge row + meter), so the
+   chevron docks in the corner instead of joining a flex row. */
+.card.week > summary { position: relative; padding-right: 40px; }
+.card.week > summary::after {
+  content: "";
+  position: absolute;
+  right: 20px;
+  top: 22px;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--ink-2);
+  border-bottom: 1.5px solid var(--ink-2);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 150ms ease;
+}
+.card.week[open] > summary::after { transform: rotate(-135deg) translate(-2px, -1px); }
+
+/* Top bar: stroked icons at the sidebar's line weight replace the
+   ☰ ◀ ▶ text glyphs, which rendered at font-dependent sizes. */
+.topbar-ico {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (max-width: 860px) {
+  .card.page-head { padding: 2px 0 18px; margin-bottom: 20px; }
+  .card.page-head.hero { align-items: stretch; }
+  .card.page-head h1 { font-size: 30px; }
+  #today-agenda h1.today-greet { font-size: 30px; }
+}
+@media (max-width: 480px) {
+  .card.page-head { padding: 0 0 16px; }
+  .stat-value { font-size: 24px; }
+  .summary-score { font-size: 44px; }
+}
 
 @media (max-width: 860px) {
   .card { padding: 18px; }

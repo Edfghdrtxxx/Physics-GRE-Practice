@@ -344,6 +344,12 @@
   border: 0;
 }
 
+/* When the swap wrap overflows its label (long names), the label's
+   text-overflow:ellipsis paints "…" at the atomic inline's left edge —
+   over the first glyph — instead of the clip edge. Clip instead; the
+   wrap still truncates at the label's overflow edge. */
+.nav-label:has(.letter-swap) { text-overflow: clip; }
+
 /* ——— Reduced motion: static everything ——— */
 @media (prefers-reduced-motion: reduce) {
   .skel-bar { animation: none; }

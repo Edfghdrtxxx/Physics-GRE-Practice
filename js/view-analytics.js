@@ -445,7 +445,7 @@ PGRE.views.analytics = (function () {
       var target = (s.settings && s.settings.paceTargetSec) || 103;
       var agg = aggregate();
 
-      var head = '<div class="card"><h1>Analytics &amp; trends</h1>' +
+      var head = '<div class="card page-head"><h1>Analytics &amp; trends</h1>' +
         '<p class="muted">Where your practice is going — accuracy over time, the topics costing you ' +
         'the most points, your pace against the ' + target + '-second budget, and how often you show up. ' +
         'Everything here is computed from your own answer log.</p></div>';

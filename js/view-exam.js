@@ -164,7 +164,7 @@ PGRE.views.exam = (function () {
     var next = PGRE.nextMockPointer ? PGRE.nextMockPointer() : null;
     var nextExam = next && eng.examById(next.id);
 
-    var html = '<div class="card"><h1>Timed mock exam</h1>' +
+    var html = '<div class="card page-head"><h1>Timed mock exam</h1>' +
       '<p class="muted">A full exam-room simulation: countdown clock, question palette, ' +
       'flag-for-review, and <strong>no feedback until you submit</strong>. Every sitting is ' +
       'scored, saved, and feeds your <a href="#/analytics">analytics</a> and the ' +

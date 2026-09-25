@@ -263,7 +263,7 @@ PGRE.views.mistakes = (function () {
       return (a.mk.srs ? a.mk.srs.due : '9999') < (b.mk.srs ? b.mk.srs.due : '9999') ? -1 : 1;
     });
 
-    var html = '<div class="card"><h1>Mistake book</h1>' +
+    var html = '<div class="card page-head"><h1>Mistake book</h1>' +
       '<p class="muted">Every question you have missed, kept until <em>you</em> archive it. ' +
       'Re-solving a mistake never removes it — it schedules the next review further out ' +
       '(' + PGRE.srs.MISTAKE_LADDER.join(' → ') + ' days). Missing it again resets the ladder.</p>' +

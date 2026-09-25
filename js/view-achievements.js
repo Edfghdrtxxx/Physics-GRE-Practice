@@ -41,7 +41,7 @@ PGRE.views.achievements = (function () {
     var total = PGRE.ACHIEVEMENTS.length;
     var got = Object.keys(s.achievements).length;
 
-    var html = '<div class="card"><div class="ach-header">' +
+    var html = '<div class="card page-head"><div class="ach-header">' +
       '<div><h1>Achievements</h1>' +
       '<p class="muted">' + got + ' of ' + total + ' unlocked · tier bonuses: Bronze +25 · Silver +50 · Gold +100 · Platinum +200 XP</p></div>' +
       '</div>' + PGRE.ui.meter(100 * got / total, '', {

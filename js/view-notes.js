@@ -25,7 +25,7 @@ PGRE.views.notes = (function () {
   function build() {
     var c = PGRE.notes.counts();
     root().innerHTML =
-      '<div class="card nb-intro"><h1>Notes &amp; bookmarks</h1>' +
+      '<div class="card nb-intro page-head"><h1>Notes &amp; bookmarks</h1>' +
         '<p class="muted">Everything you have starred or annotated while practicing, most recently ' +
           'updated first. Notes save as you type — clearing one removes it.</p></div>' +
       '<div class="nb-stats">' +

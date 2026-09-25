@@ -253,24 +253,29 @@
   }
 
   /* Brand and page titles may wrap glyphs in spans (e.g. .accent). Collapse
-     to one text node so the swap covers the whole label. Skip KaTeX hosts. */
+     to one text node so the swap covers the whole label. Skip KaTeX hosts.
+     A .nav-mono topic chip is decoration beside the label, not part of it:
+     it survives, and the swap takes the text node that follows it. */
+  function keepsSwapChild(child) {
+    var cl = child.classList;
+    return !!cl && (cl.contains('letter-swap') || cl.contains('letter-swap-sr') ||
+      cl.contains('nav-mono'));
+  }
   function flattenSwapHost(el) {
     if (!el || !el.childNodes || el.querySelector && el.querySelector('.katex')) return;
-    var hasEl = false;
+    var kept = [], flat = '', hasEl = false;
     var i, child;
     for (i = 0; i < el.childNodes.length; i++) {
       child = el.childNodes[i];
-      if (child.nodeType === 1 && !(child.classList && child.classList.contains('letter-swap')) &&
-          !(child.classList && child.classList.contains('letter-swap-sr'))) {
-        hasEl = true;
-        break;
-      }
+      if (child.nodeType === 1 && keepsSwapChild(child)) { kept.push(child); continue; }
+      if (child.nodeType === 1) hasEl = true;
+      flat += child.textContent || '';
     }
     if (!hasEl) return;
-    var label = String(el.textContent || '');
-    if (!label.replace(/\s+/g, '')) return;
+    if (!flat.replace(/\s+/g, '')) return;
     while (el.firstChild) el.removeChild(el.firstChild);
-    el.appendChild(el.ownerDocument.createTextNode(label));
+    for (i = 0; i < kept.length; i++) el.appendChild(kept[i]);
+    el.appendChild(el.ownerDocument.createTextNode(flat));
   }
 
   function buildSwap(label) {

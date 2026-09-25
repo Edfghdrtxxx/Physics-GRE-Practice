@@ -170,7 +170,7 @@ PGRE.views.history = (function () {
         ? Math.round(timed.reduce(function (sum, a) { return sum + a.ms; }, 0) / timed.length) : null;
       var openMistakes = PGRE.srs.openMistakes().length;
 
-      var html = '<div class="card"><h1>History</h1>' +
+      var html = '<div class="card page-head"><h1>History</h1>' +
         '<p class="muted">Every answer you have ever given, kept for good — which question, ' +
         'what you picked, and how long it took. Misses feed the ' +
         '<a href="#/mistakes">mistake book</a>.</p></div>';

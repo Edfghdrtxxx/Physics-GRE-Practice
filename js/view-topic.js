@@ -48,7 +48,7 @@ PGRE.views.topic = {
         ' for this topic, drawn from ' + drawn + '.';
     }
 
-    var html = '<div class="card portal-head">' +
+    var html = '<div class="card portal-head page-head">' +
       '<div class="portal-title">' + ui.monogram(t) +
         '<div><h1>' + t.name + '</h1>' +
         '<div class="muted">' + ui.esc(t.blurb) + ' · <strong>' + t.weight + '%</strong> of the exam</div></div>' +

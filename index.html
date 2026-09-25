@@ -11,10 +11,10 @@
        when you change a file, bump the token on ITS tag (or inject site) so a
        returning browser never mixes a fresh view with a stale engine. -->
   <link rel="stylesheet" href="css/fonts.css?v=20260918b">
-  <link rel="stylesheet" href="css/style.css?v=20260922d">
+  <link rel="stylesheet" href="css/style.css?v=20260925a">
   <link rel="stylesheet" href="css/visualizer.css?v=20260922a">
   <link rel="stylesheet" href="css/print.css?v=20260916f">
-  <link rel="stylesheet" href="css/motion.css?v=20260922c">
+  <link rel="stylesheet" href="css/motion.css?v=20260925a">
   <link rel="stylesheet" href="css/concepts.css?v=20260922a">
   <link rel="stylesheet" href="vendor/katex/katex.min.css?v=20260916f">
 </head>
@@ -41,15 +41,15 @@
       <div class="topbar-inner">
         <button id="sidebar-toggle" class="topbar-arrow" type="button"
                 aria-expanded="true" aria-controls="sidebar"
-                aria-label="Hide sidebar" title="Hide sidebar">&#9776;</button>
+                aria-label="Hide sidebar" title="Hide sidebar"><svg class="topbar-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg></button>
         <a class="topbar-brand" id="topbar-brand" href="#/" aria-label="Physics GRE home">
           <span class="brand-name">Physics GRE</span>
         </a>
         <div class="topbar-arrows">
           <button id="topbar-back" class="topbar-arrow" type="button"
-                  aria-label="Go back" title="Back">&#9664;</button>
+                  aria-label="Go back" title="Back"><svg class="topbar-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 6l-6 6 6 6"/></svg></button>
           <button id="topbar-fwd" class="topbar-arrow" type="button"
-                  aria-label="Go forward" title="Forward">&#9654;</button>
+                  aria-label="Go forward" title="Forward"><svg class="topbar-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6"/></svg></button>
         </div>
         <nav id="breadcrumbs" class="breadcrumbs" aria-label="Breadcrumb"></nav>
         <span id="origin-line" class="origin-line" title="Progress is stored separately for each browser origin"></span>
@@ -136,8 +136,8 @@
   <script src="content/bank/ets-exams.js?v=20260916f" defer></script>  <!-- released ETS exams (gitignored — ETS copyright) -->
 
   <!-- engine -->
-  <script src="js/store.js?v=20260921a" defer></script>
-  <script src="js/srs.js?v=20260921c" defer></script>
+  <script src="js/store.js?v=20260925a" defer></script>
+  <script src="js/srs.js?v=20260925a" defer></script>
   <script src="js/status.js?v=20260922a" defer></script>
   <script src="js/bank.js?v=20260922b" defer></script>
   <script src="js/packs.js?v=20260922b" defer></script>
@@ -150,22 +150,23 @@
   <script src="js/formula-checkin.js?v=20260916f" defer></script>  <!-- formula-recall daily check-in -->
   <script src="js/chart-tip.js?v=20260916f" defer></script>  <!-- delegated [data-tip] chart popover -->
 
-  <script src="js/view-dashboard.js?v=20260920c" defer></script>
-  <script src="js/view-topic.js?v=20260916f" defer></script>
+  <script src="js/view-dashboard.js?v=20260925a" defer></script>
+  <script src="js/view-topic.js?v=20260925a" defer></script>
   <script src="js/view-practice.js?v=20260922b" defer></script>
-  <script src="js/view-history.js?v=20260916f" defer></script>
-  <script src="js/view-analytics.js?v=20260916f" defer></script>
-  <script src="js/view-build.js?v=20260919a" defer></script>
-  <script src="js/view-search.js?v=20260918b" defer></script>
-  <script src="js/view-notes.js?v=20260916f" defer></script>
-  <script src="js/view-mistakes.js?v=20260921c" defer></script>
-  <script src="js/view-formulas.js?v=20260922b" defer></script>
+  <script src="js/view-history.js?v=20260925a" defer></script>
+  <script src="js/view-analytics.js?v=20260925a" defer></script>
+  <script src="js/view-build.js?v=20260925a" defer></script>
+  <script src="js/view-search.js?v=20260925a" defer></script>
+  <script src="js/view-notes.js?v=20260925a" defer></script>
+  <script src="js/view-mistakes.js?v=20260925a" defer></script>
+  <script src="js/view-formulas.js?v=20260925a" defer></script>
   <script src="js/view-focus.js?v=20260921a" defer></script>        <!-- F5 focus page -->
-  <script src="js/view-study-time.js?v=20260917i" defer></script>   <!-- dedicated study-time page -->
-  <script src="js/view-achievements.js?v=20260916f" defer></script>
-  <script src="js/view-plan.js?v=20260918a" defer></script>
+  <script src="js/view-study-time.js?v=20260925a" defer></script>   <!-- dedicated study-time page -->
+  <script src="js/view-achievements.js?v=20260925a" defer></script>
+  <script src="js/view-plan.js?v=20260925a" defer></script>
   <script src="js/exam-engine.js?v=20260919a" defer></script>
-  <script src="js/view-exam.js?v=20260919a" defer></script>
+  <script src="js/view-exam.js?v=20260925a" defer></script>
+  <script src="js/view-content.js?v=20260925a" defer></script>     <!-- Library view (PGRE.views.library) -->
   <script src="js/visualizer-engine.js?v=20260921b" defer></script>
   <script src="js/visualizers/trio-g1.js?v=20260921b" defer></script>
   <script src="js/visualizers/trio-g2.js?v=20260921b" defer></script>
@@ -187,6 +188,6 @@
   <script src="js/sidebar-icons.js?v=20260921a" defer></script>
   <script src="js/app.js?v=20260922b" defer></script>
   <!-- motion effects: runs after app.js and before DOMContentLoaded, so PGRE.motion exists before PGRE.boot runs -->
-  <script src="js/motion.js?v=20260922b" defer></script>
+  <script src="js/motion.js?v=20260925a" defer></script>
 </body>
 </html>

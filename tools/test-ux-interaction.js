@@ -984,6 +984,36 @@ assert(aNested.querySelectorAll('.letter-swap-cell').length === 9,
 assert(aNested.getAttribute('data-letter-swap') === '1',
   'letterSwapNav marks the nested-label link');
 
+var navTopic = envOn.document.createElement('nav');
+var aTopic = envOn.document.createElement('a');
+aTopic.setAttribute('data-nav', 'topic-cm');
+aTopic.innerHTML = '<svg></svg><span class="nav-label"><span class="nav-mono">CM</span>' +
+  'Classical Mechanics</span><span class="nav-weight">20%</span>';
+navTopic.appendChild(aTopic);
+envOn.document.body.appendChild(navTopic);
+motionOn.letterSwapNav(navTopic);
+var topicChip = aTopic.querySelector('.nav-mono');
+assert(!!topicChip && topicChip.textContent === 'CM' &&
+       topicChip.parentNode === aTopic.querySelector('.nav-label'),
+  'letterSwapNav keeps the topic monogram chip as its own element');
+assert(aTopic.querySelector('.letter-swap-sr').textContent === 'Classical Mechanics',
+  'letterSwapNav swaps only the topic name, not the chip letters');
+
+var navTopic2 = envOn.document.createElement('nav');
+var aTopic2 = envOn.document.createElement('a');
+aTopic2.setAttribute('data-nav', 'topic-ow');
+aTopic2.innerHTML = '<span class="nav-label"><span class="nav-mono">OW</span>' +
+  '<span class="nav-badge">3</span>Optics &amp; Wave Phenomena</span>';
+navTopic2.appendChild(aTopic2);
+envOn.document.body.appendChild(navTopic2);
+motionOn.letterSwapNav(navTopic2);
+var chip2 = aTopic2.querySelector('.nav-mono');
+assert(!!chip2 && chip2.textContent === 'OW' &&
+       chip2.parentNode === aTopic2.querySelector('.nav-label'),
+  'letterSwapNav keeps the chip when other element children flatten');
+assert(aTopic2.querySelector('.letter-swap-sr').textContent.indexOf('OW') === -1,
+  'letterSwapNav swap text excludes the chip letters');
+
 var brandHost = envOn.document.createElement('a');
 brandHost.className = 'brand';
 brandHost.innerHTML = '<div class="brand-name">Physics <span class="accent">GRE</span></div><div class="brand-sub">Prep Studio</div>';

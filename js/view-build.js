@@ -183,7 +183,7 @@ PGRE.views.build = (function () {
 
   function render(params) {
     var ui = PGRE.ui;
-    var html = '<div class="card"><h1>Custom quiz</h1>' +
+    var html = '<div class="card page-head"><h1>Custom quiz</h1>' +
       '<p class="muted">Assemble a practice set the way UWorld does — pick topics, ' +
       'difficulty and status, then start. Nothing is timed here; misses still feed the ' +
       '<a href="#/mistakes">mistake book</a>.</p></div>';

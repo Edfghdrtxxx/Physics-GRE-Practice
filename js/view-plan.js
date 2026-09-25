@@ -29,13 +29,12 @@ PGRE.views.plan = (function () {
       });
     });
 
-    var html = '<div class="card hero">' +
+    var html = '<div class="card hero page-head">' +
       '<div class="hero-left"><h1>Review plan</h1>' +
       '<p class="muted">Sep 14 → November 1, 2026 · 7 live weeks · ~16 h/wk: 5 timed sets, 6 formula sessions, 2 extras · checkpoint Oct 4 · intact mocks Oct 11 / 18 / 25 · exam-week taper</p>' +
       ui.meter(100 * allDone / Math.max(1, allTasks), '', {
         word: 'complete', meta: allDone + ' of ' + allTasks + ' tasks'
-      }) +
-      '<div class="hero-xp-note">' + allDone + ' / ' + allTasks + ' tasks complete</div></div>' +
+      }) + '</div>' +
       '<div class="hero-right"><div class="countdown"><div class="countdown-num">' + days + '</div>' +
       '<div class="countdown-label">day' + (days === 1 ? '' : 's') + ' to go</div></div></div></div>';
 
@@ -195,22 +194,7 @@ PGRE.views.plan = (function () {
     mount: function () {
       PGRE.typesetMath(document.getElementById('plan-root'));
       wire();
-      if (PGRE.motion && !PGRE.motion.reduced) {
-        // the countdown paints at its final value — never tweened from 0
-        var note = document.querySelector('#plan-root .hero-xp-note');
-        if (note && PGRE.motion.countUp) {
-          var nm = note.textContent.trim().match(/^(\d+)\s*\/\s*(\d+)(.*)$/);
-          if (nm) {
-            var targetDone = parseInt(nm[1], 10);
-            var totalStr = nm[2] + nm[3];
-            PGRE.motion.countUp(note, targetDone, {
-              duration: 700,
-              format: function (v) { return Math.round(v) + ' / ' + totalStr; }
-            });
-          }
-        }
-        animateMeters();
-      }
+      if (PGRE.motion && !PGRE.motion.reduced) animateMeters();
     }
   };
 })();
