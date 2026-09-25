@@ -212,9 +212,9 @@ resetStore({ examDate: daysFromNow(8) }); // cap = 7, outside the ≤7-day final
 var cap3 = srs.nextIntervals({ reps: 2, interval: 5, ease: 2.5 });
 assert(cap3.easy === 7 && cap3.good === 6 && cap3.hard === 5, 'cap 7 cascades to easy=7, good=6, hard=5');
 
-resetStore({ examDate: daysFromNow(4) }); // cap = 3
+resetStore({ examDate: daysFromNow(4) }); // cap = 3, also inside final pass
 var cap3b = srs.nextIntervals({ reps: 2, interval: 5, ease: 2.5 });
-assert(cap3b.easy === 3 && cap3b.good === 2 && cap3b.hard === 1, 'cap 3 cascades to easy=3, good=2, hard=1');
+assert(cap3b.easy === 1 && cap3b.good === 1 && cap3b.hard === 1, 'final pass holds all grades at 1 day');
 
 console.log('\nstore.resetFormulaCards');
 resetStore();
