@@ -176,6 +176,8 @@ I_{\text{good}} &\ge I_{\text{hard}} + 1\text{ d} \\
 I_{\text{easy}} &\ge I_{\text{good}} + 1\text{ d}
 \end{aligned}$$
 
+Final Pass (§4.4) is the exception: while $0 < d \le 7$, passing grades share $I = 1\text{ d}$.
+
 ### 3.2 Cognitive Science and Pedagogical Basis
 1. **Exponential Retrieval Strength Scaling:**
    According to Bjork's New Theory of Disuse and the memory consolidation models of SuperMemo (Wozniak 1990) and FSRS, memory stability $S$ scales exponentially with retrieval success. Rating $\text{Easy}$ reflects higher retrieval automaticity than $\text{Good}$, which in turn reflects higher stability than $\text{Hard}$. Scheduling identical intervals for disparate stability states distorts optimal retrievability:
@@ -215,13 +217,16 @@ I_{\text{hard}} &= \min\left(I_{\text{hard}}^{\text{raw}}, I_{\text{good}} - 1\r
 \end{aligned}$$
 
 #### Horizon Capacity Constraint:
-If $H < 3$, strict day-level differentiation ($I_{\text{hard}} \ge 1, I_{\text{good}} \ge 2, I_{\text{easy}} \ge 3$) is geometrically impossible within the remaining days. In such boundary regimes ($H \le 3\text{ d}$), the scheduler transitions smoothly into the Final Pass protocol (§4.4), where all active cards enter daily queue eligibility.
+If $H < 3$, strict day-level differentiation ($I_{\text{hard}} \ge 1, I_{\text{good}} \ge 2, I_{\text{easy}} \ge 3$) is geometrically impossible within the remaining days. The Final Pass protocol (§4.4) activates on its own window ($0 < d \le 7$) and holds passing grades at one day, which also covers this $H < 3$ regime.
 
 ### 4.4 Final Pass Protocol
-When the remaining time until the exam satisfies $d \le 7\text{ d}$:
-1. The standard spaced repetition growth is suspended.
-2. All cards with active learning records are surfaced in the daily review pool.
-3. Successful reviews confirm retention without pushing intervals past $T_{\text{exam}}$.
+When the remaining time until the exam satisfies $0 < d \le 7\text{ d}$ (exam day itself is outside the window):
+1. Standard spaced-repetition growth is suspended. `nextIntervals` returns Hard $=$ Good $=$ Easy $= 1\text{ d}$ for every card while the window is active, including a stateless preview. Mastered is $1\text{ d}$ when a record exists. Among passing grades this is a deliberate exception to §3.1: the four-button UI remains, but the next calendar day is the only remaining horizon that does not grow past $T_{\text{exam}}$.
+2. The one-day override is applied after horizon cascade so $I_{\text{good}}$ is not differentiated down to $0$.
+3. Every unsuspended learned card (an active `state.cards` record) is eligible for the daily review pool, regardless of its ordinary due date and regardless of the advisory daily target. New/stateless cards stay out of automatic inclusion. Suspended cards stay out.
+4. Successful reviews confirm retention without scheduling beyond the exam horizon.
+
+The product-side batch allocator, remaining-count eligibility, and reconcile exceptions are owned by `20_docs/Project Docs/DESIGN.md` §4b.
 
 ---
 
@@ -367,3 +372,5 @@ assert(strictlyOrdered(capped), 'Strict ordering preserved under exam horizon');
 | Minimum Good Advance | $\delta_{\text{good}}$ | $I_{\text{hard}} + 1\text{ d}$ |
 | Minimum Easy Advance | $\delta_{\text{easy}}$ | $I_{\text{good}} + 1\text{ d}$ |
 | Exam Horizon Bound | $H$ | $\text{daysUntil}(T_{\text{exam}}) - 1\text{ d}$ |
+| Final Pass window | $d_{\text{fp}}$ | $0 < \text{daysUntil}(T_{\text{exam}}) \le 7\text{ d}$ |
+| Final Pass passing interval | $I_{\text{fp}}$ | $1\text{ d}$ (`nextIntervals`; Mastered when a record exists) |

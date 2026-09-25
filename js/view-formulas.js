@@ -724,10 +724,13 @@ PGRE.views.formulas = (function () {
       return;
     }
     var batch = srs.formulaDay(deck);
+    if (srs.fillFormulaDayFinalPass) {
+      batch = srs.fillFormulaDayFinalPass(deck);
+    }
     var T = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
     var M = srs.formulaDayRemaining(deck).length;
     var reviewsN = batch.reviewIds.length, newN = batch.newIds.length;
-    var pickedN = reviewsN + newN;            // the batch is fully user-curated
+    var pickedN = reviewsN + newN;
     var postponed = srs.formulaDayPostponed(deck);
     var resumeCards = rehydrateSavedStudy();
 
@@ -736,7 +739,7 @@ PGRE.views.formulas = (function () {
     var fillable = 0;
     fresh.forEach(function (c) { if (!srs.isSuspended(c.id)) fillable++; });
     var fillN = Math.min(T, fillable);
-    var landing = !resumeCards && M === 0 && !pickedN && fillN > 0;
+    var landing = !resumeCards && M === 0 && !pickedN && postponed === 0 && fillN > 0;
     if (resumeCards) {
       html += '<div class="card fm-landing"><div class="btn-row">' +
         '<button class="btn btn-primary" id="resume-btn">' +
@@ -752,8 +755,9 @@ PGRE.views.formulas = (function () {
         '<button class="btn btn-primary" id="study-btn">Study → ' + M + ' left</button>' +
         '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div></div>';
     } else if (postponed > 0) {
+      var dueStudyN = Math.min(T, postponed);
       html += '<div class="card fm-landing"><div class="btn-row">' +
-        '<button class="btn btn-primary" id="study-btn">Study → ' + postponed + ' left</button>' +
+        '<button class="btn btn-primary" id="study-btn">Study → ' + dueStudyN + ' due</button>' +
         '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div></div>';
     }
 
@@ -767,12 +771,14 @@ PGRE.views.formulas = (function () {
     // ——— Final-pass banner (F3) — active in the last week before the exam ———
     if (srs.finalPassActive()) {
       var days = srs.daysUntil(PGRE.store.state.settings.examDate);
-      var learnedN = deck.filter(function (c) { return srs.cardState(c.id); }).length;
+      var learnedN = deck.filter(function (c) {
+        return srs.cardState(c.id) && !srs.isSuspended(c.id);
+      }).length;
       html += '<div class="card final-pass-banner"><strong>Final pass</strong> — ' +
         learnedN + ' learned formula' + (learnedN === 1 ? '' : 's') + ', ' +
         days + ' day' + (days === 1 ? '' : 's') + ' left. ' +
-        '<span class="muted">Pick due cards into today’s batch so every formula ' +
-        'gets one more look before exam day.</span></div>';
+        '<span class="muted">Every learned, unsuspended formula is in today’s ' +
+        'review pool; new cards remain manual.</span></div>';
     }
 
     // ——— Leech nudge (F2) — cards that keep slipping despite reviews ———
@@ -859,22 +865,27 @@ PGRE.views.formulas = (function () {
     if (sb) sb.addEventListener('click', function () {
       var cards = PGRE.srs.formulaDayRemaining(deck);
       if (!cards.length) {
-        var batchNow = PGRE.srs.formulaDay(deck);
-        var inB = {};
-        batchNow.reviewIds.concat(batchNow.newIds).forEach(function (id) { inB[id] = 1; });
-        var t = PGRE.srs.today();
-        var dueIds = [];
-        deck.forEach(function (c) {
-          var st = PGRE.srs.cardState(c.id);
-          if (st && !PGRE.srs.isSuspended(c.id) && st.due <= t && !inB[c.id]) dueIds.push(c.id);
-        });
-        if (dueIds.length) {
-          if (PGRE.srs.addFormulaDaySoft) PGRE.srs.addFormulaDaySoft(deck, dueIds);
+        if (PGRE.srs.fillFormulaDayDueIfEmpty) {
+          PGRE.srs.fillFormulaDayDueIfEmpty(deck);
           cards = PGRE.srs.formulaDayRemaining(deck);
-          if (!cards.length) {
-            var byId = {};
-            deck.forEach(function (c) { byId[c.id] = c; });
-            cards = dueIds.map(function (id) { return byId[id]; }).filter(Boolean);
+        } else {
+          var batchNow = PGRE.srs.formulaDay(deck);
+          var inB = {};
+          batchNow.reviewIds.concat(batchNow.newIds).forEach(function (id) { inB[id] = 1; });
+          var t = PGRE.srs.today();
+          var dueIds = [];
+          deck.forEach(function (c) {
+            var st = PGRE.srs.cardState(c.id);
+            if (st && !PGRE.srs.isSuspended(c.id) && st.due <= t && !inB[c.id]) dueIds.push(c.id);
+          });
+          if (dueIds.length) {
+            if (PGRE.srs.addFormulaDaySoft) PGRE.srs.addFormulaDaySoft(deck, dueIds);
+            cards = PGRE.srs.formulaDayRemaining(deck);
+            if (!cards.length) {
+              var byId = {};
+              deck.forEach(function (c) { byId[c.id] = c; });
+              cards = dueIds.map(function (id) { return byId[id]; }).filter(Boolean);
+            }
           }
         }
       }
@@ -3760,6 +3771,7 @@ PGRE.views.formulas = (function () {
         deck = d;
         PGRE.deck = d;
         PGRE.getFormulaCard = deckById;
+        if (PGRE.srs.fillFormulaDayFinalPass) PGRE.srs.fillFormulaDayFinalPass(deck);
         if (root()) { renderShell(); }
         if (window.PGRE && PGRE.motion && PGRE.motion.loader) PGRE.motion.loader.done();
       });

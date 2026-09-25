@@ -327,11 +327,36 @@ PGRE.store = {
       lt.claimed = unionArr(lt.claimed || [], dt.claimed || [], function (x) { return x; });
       if (!lt.qotd && dt.qotd) lt.qotd = dt.qotd;
     }
-    // formulaDay: same date → union the id lists; different date → live wins
-    if (isObj(disk.formulaDay) && isObj(st.formulaDay) && disk.formulaDay.date === st.formulaDay.date) {
-      ['reviewIds', 'newIds', 'softIds'].forEach(function (f) {
-        st.formulaDay[f] = unionArr(st.formulaDay[f] || [], disk.formulaDay[f] || [], function (x) { return x; });
-      });
+    // formulaDay is user selection state, not an append-only log. Explicit
+    // writes carry a mutation timestamp/kind so a newer replace/remove from a
+    // sibling cannot be undone by a stale heap. Legacy batches without the
+    // marker retain the old disjoint-add union behavior.
+    if (isObj(disk.formulaDay) && isObj(st.formulaDay)) {
+      var df = disk.formulaDay, lf = st.formulaDay;
+      var dd = String(df.date || ''), ld = String(lf.date || '');
+      var da = Number(df._opAt) || 0, la = Number(lf._opAt) || 0;
+      var di = String(df._opId || ''), li = String(lf._opId || '');
+      if (dd !== ld) {
+        // A current-day explicit fill must beat a stale previous-day shell.
+        if (dd > ld) st.formulaDay = df;
+      } else if (da && !la) {
+        st.formulaDay = df;
+      } else if (la && !da) {
+        // The live tab has a newer explicit mutation; keep it.
+      } else if (da > la) {
+        st.formulaDay = df;
+      } else if (la > da) {
+        // Keep the newer live mutation.
+      } else if (da && la && di && li && di !== li) {
+        // Same-millisecond writes are still explicit mutations; choose one
+        // deterministically instead of falling back to a resurrection-prone
+        // union.
+        if (di > li) st.formulaDay = df;
+      } else {
+        ['reviewIds', 'newIds', 'softIds'].forEach(function (f) {
+          st.formulaDay[f] = unionArr(st.formulaDay[f] || [], df[f] || [], function (x) { return x; });
+        });
+      }
       // a soft pin only makes sense for a card still in the batch
       if (st.formulaDay.softIds) {
         var inBatch = {};
