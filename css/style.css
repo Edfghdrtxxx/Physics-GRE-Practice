@@ -1368,6 +1368,33 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
   padding-top: 18px;
   border-top: 1px dashed var(--line);
 }
+/* Scoped to supp-moment-of-inertia card back only — do not style every .fcard-back table/list. */
+.moi-inertia-table {
+  margin: 14px auto 0;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 16px;
+  line-height: 1.5;
+  display: inline-table;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.moi-inertia-table th,
+.moi-inertia-table td {
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.moi-inertia-table th {
+  font-weight: 600;
+  color: var(--ink-2);
+  border-bottom: 2px solid var(--line);
+}
+.moi-inertia-table .moi-group-hoop-disk td:first-child,
+.moi-inertia-table .moi-group-shell-sphere td:first-child,
+.moi-inertia-table .moi-group-rod td:first-child {
+  padding-top: 10px;
+}
 .fcard-note { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; }
 /* In-card action row & button hierarchy */
 #fcard-actions {
@@ -2590,6 +2617,17 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .browse-peek .fcard-front { font-size: 15px; margin-bottom: 8px; }
 .browse-peek .fcard-back { font-size: 16px; line-height: 1.6; }
 .browse-peek .fcard-note { margin-top: 8px; font-size: 13px; color: var(--ink-2); }
+.browse-peek .moi-inertia-table,
+.fs-back .moi-inertia-table {
+  margin: 8px auto 0;
+  font-size: 13.5px;
+}
+.browse-peek .moi-inertia-table th,
+.browse-peek .moi-inertia-table td,
+.fs-back .moi-inertia-table th,
+.fs-back .moi-inertia-table td {
+  padding: 4px 8px;
+}
 .picker-peek { margin-left: 24px; }
 
 /* Grade + today/done-today chips (browse, picker, in-session peek) */

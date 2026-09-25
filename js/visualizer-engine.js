@@ -921,7 +921,7 @@ window.PGRE.visualizers = window.PGRE.visualizers || {};
   // when the formula deck is loaded, otherwise the registration order.
   function visualizerOrder() {
     var keys = Object.keys(window.PGRE.visualizers || {}).filter(function(k) {
-      return k.indexOf("cpgf-") === 0 && typeof window.PGRE.visualizers[k].draw === "function";
+      return (k.indexOf("cpgf-") === 0 || k.indexOf("supp-") === 0) && typeof window.PGRE.visualizers[k].draw === "function";
     });
     var rank = {};
     var deck = null;

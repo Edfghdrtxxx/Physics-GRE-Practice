@@ -551,7 +551,7 @@ PGRE.views.formulas = (function () {
 
     function renderLabContent() {
       var allVizIds = Object.keys((window.PGRE && window.PGRE.visualizers) || {}).filter(function (k) {
-        return k.startsWith('cpgf-');
+        return k.startsWith('cpgf-') || k.startsWith('supp-');
       });
       var cards = allVizIds.map(function (id) {
         var v = PGRE.visualizers[id];
