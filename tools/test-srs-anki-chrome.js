@@ -158,6 +158,39 @@ async function main() {
     await sleep(100);
   }
 
+  /* Real-deck smoke: prove the shipped browser path loads the generated
+     Conquering the Physics GRE formula bank before the isolated mechanics
+     fixtures below replace it. This is intentionally a user-visible check:
+     the upcoming browse pane must expose real book cards, not only synthetic
+     ids such as fp-a/fp-b. */
+  var realDeck = await evaluate("PGRE.formulaDeck()");
+  if (!realDeck || realDeck.length < 300 ||
+      !realDeck.some(function (c) { return /^cpgf-/.test(c.id); })) {
+    throw new Error('real Physics GRE formula deck missing or too small: ' +
+      JSON.stringify({ count: realDeck && realDeck.length,
+        first: realDeck && realDeck.slice(0, 3).map(function (c) { return c.id; }) }));
+  }
+  await evaluate("location.hash = '#/'; PGRE.route();");
+  await sleep(250);
+  await evaluate("location.hash = '#/formulas'");
+  await sleep(500);
+  for (var realWait = 0; realWait < 30; realWait++) {
+    if (await evaluate("!!document.querySelector('[data-btab=\\\"upcoming\\\"]')")) break;
+    await sleep(150);
+  }
+  await evaluate("document.querySelector('[data-btab=\\\"upcoming\\\"]').click()");
+  await sleep(250);
+  var realUi = await evaluate(`({
+    visibleCards: document.querySelectorAll('#browse-body .browse-row').length,
+    names: Array.prototype.slice.call(document.querySelectorAll('#browse-body .deck-name')).slice(0, 5).map(function (e) { return e.textContent; }),
+    body: (document.getElementById('formulas-root') || document.body).innerText.slice(0, 1200)
+  })`);
+  if (realUi.visibleCards < 300 || !realUi.names.some(function (n) {
+    return /Kinematics|Circular Motion|Dielectrics|Conductors/.test(n);
+  })) {
+    throw new Error('real formula deck did not render in Formula Recall: ' + JSON.stringify(realUi));
+  }
+
   var seeded = await evaluate(`(async function () {
     PGRE.BOOK_FORMULAS = [];
     PGRE.FORMULAS = [];
@@ -185,6 +218,8 @@ async function main() {
     throw new Error('scheduler inversion in nextIntervals: ' + JSON.stringify(seeded.iv));
   }
 
+  await evaluate("location.hash = '#/'; PGRE.route();");
+  await sleep(250);
   await evaluate("location.hash = '#/formulas'");
   await sleep(800);
   var homeReady = false;
