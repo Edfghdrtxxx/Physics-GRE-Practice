@@ -1270,6 +1270,15 @@ function runAsync() {
          expectations.indexOf('$\\langle x^2 \\rangle$') !== -1,
     'formulaTextHTML converts <x>, <v>, and <x^2>');
 
+  var psiPrompt = 'When a wavefunction Psi(x,t) is expanded in an orthonormal eigenbasis {f_n(x)} of an observable, how is the expansion coefficient c_n obtained?';
+  var psiHTML = PGRE.formulaTextHTML(psiPrompt);
+  assert(psiHTML.indexOf('$\\Psi$') !== -1,
+    'formulaTextHTML converts named Psi to $\\Psi$, got: ' + psiHTML);
+  assert(psiHTML.replace(/\\Psi/g, '').indexOf('Psi') === -1,
+    'formulaTextHTML leaves no bare Psi, got: ' + psiHTML);
+  assert(psiHTML.indexOf('$\\Psi$(') !== -1,
+    'formulaTextHTML keeps the parenthesized argument outside the Psi token, got: ' + psiHTML);
+
   /* PGRE.formulaTextHTML: inline markdown bold (**text** -> <strong>text</strong>) */
   console.log('\nformulaTextHTML: inline markdown bold');
   var polCard = PGRE.FORMULAS ? PGRE.FORMULAS.find(function (c) { return c.id === 'cpgf-2.56a'; }) : null;

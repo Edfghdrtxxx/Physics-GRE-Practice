@@ -283,7 +283,7 @@ PGRE.formulaTextHTML = function (text) {
     alpha: '\\alpha', beta: '\\beta', gamma: '\\gamma', delta: '\\delta',
     epsilon: '\\epsilon', theta: '\\theta', lambda: '\\lambda', mu: '\\mu',
     nu: '\\nu', rho: '\\rho', sigma: '\\sigma', tau: '\\tau', phi: '\\phi',
-    omega: '\\omega', Omega: '\\Omega'
+    psi: '\\psi', Psi: '\\Psi', omega: '\\omega', Omega: '\\Omega'
   };
   // Angle-bracket expectation/average and Dirac bra-ket notation: <P>_B, <S>,
   // <a|b>, <a|A-hat b>, or a split pair <x| ... |f>. Convert to $\langle...\rangle$
@@ -372,7 +372,7 @@ PGRE.formulaTextHTML = function (text) {
 
     // Handle named Greek variants first so tau_0 is one mathematical span.
     // Tolerates an optional leading backslash in prose (\omega -> $\omega$).
-    part = part.replace(/\\?\b(alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|rho|sigma|tau|phi|omega|Omega)(?:_([A-Za-z0-9]+|\{[^}]+\})|\^([A-Za-z0-9]+|\{[^}]+\}))?(\/\d+)?\b/g,
+    part = part.replace(/\\?\b(alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|rho|sigma|tau|phi|psi|Psi|omega|Omega)(?:_([A-Za-z0-9]+|\{[^}]+\})|\^([A-Za-z0-9]+|\{[^}]+\}))?(\/\d+)?\b/g,
       function (_, name, sub, sup, frac) {
         return mathToken(greek[name] + (sub ? '_' + sub : '') + (sup ? '^' + sup : '') + (frac || ''));
       });
