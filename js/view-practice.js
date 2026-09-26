@@ -304,6 +304,30 @@ PGRE.views.practice = (function () {
     });
   }
 
+  /* A planned set should always have an obvious exit back to the calendar.
+     Store the current week before leaving so the plan can reopen the same
+     section after the session summary or an intentional mid-session exit. */
+  function bindPlanReturn() {
+    var btn = el() && el().querySelector('[data-plan-return]');
+    if (!btn || btn._pgrePlanReturnBound) return;
+    btn._pgrePlanReturnBound = true;
+    btn.addEventListener('click', function () {
+      try {
+        var cw = PGRE.currentWeek && PGRE.currentWeek();
+        var week = cw && cw.week;
+        sessionStorage.setItem('pgre-plan-return', JSON.stringify({
+          week: week && week.id ? week.id : null,
+          at: Date.now()
+        }));
+      } catch (e) {}
+    });
+  }
+
+  function planReturnLink() {
+    var pack = session && inferPackId(session.qs.map(function (q) { return q.id; }), session.label);
+    return pack ? '<a class="btn btn-ghost btn-sm session-back" data-plan-return href="#/plan">Back to plan</a>' : '';
+  }
+
   function nextLabel() {
     if (!session) return 'Next question';
     if (session.i + 1 < session.qs.length) return 'Next question';
@@ -672,6 +696,7 @@ PGRE.views.practice = (function () {
         (session.label ? '<span class="chip chip-session">' + PGRE.ui.esc(session.label) + '</span>' : '') +
         '<span class="chip">' + t.name + '</span>' +
         '<span class="chip chip-diff">' + PGRE.ui.diffDots(q.difficulty) + '</span>' +
+        planReturnLink() +
         (settings().paceTrainer ? '<span class="chip pace-chip" id="pace-chip" title="Time on this question">0 s</span>' : '') +
       '</div>' +
       PGRE.ui.meter(100 * session.i / session.qs.length, 'meter-thin') +
@@ -703,6 +728,7 @@ PGRE.views.practice = (function () {
 
     session.choiceCommit = PGRE.ui.bindChoiceCommit(el(), { onCommit: answer });
     bindLiveJumps();
+    bindPlanReturn();
   }
 
   function renderAnsweredLive() {
@@ -722,6 +748,7 @@ PGRE.views.practice = (function () {
         (session.label ? '<span class="chip chip-session">' + PGRE.ui.esc(session.label) + '</span>' : '') +
         '<span class="chip">' + t.name + '</span>' +
         '<span class="chip chip-diff">' + PGRE.ui.diffDots(q.difficulty) + '</span>' +
+        planReturnLink() +
       '</div>' +
       PGRE.ui.meter(100 * session.i / session.qs.length, 'meter-thin') +
       '<div class="q-text">' + q.q + '</div>' +
@@ -761,6 +788,7 @@ PGRE.views.practice = (function () {
     }
     saveSession();
     bindLiveJumps();
+    bindPlanReturn();
     var nb = document.getElementById('next-btn');
     if (nb) {
       nb.addEventListener('click', next);
@@ -1273,6 +1301,15 @@ PGRE.views.practice = (function () {
     var k = e.key;
 
     if (session.stage === 'question') {
+      if (k === 'ArrowLeft' || k === 'ArrowRight') {
+        var step = k === 'ArrowLeft' ? -1 : 1;
+        var target = session.i + step;
+        if (target >= 0 && target < session.qs.length) {
+          e.preventDefault();
+          openLive(target);
+        }
+        return;
+      }
       var idx = -1;
       if (/^[a-eA-E]$/.test(k)) idx = k.toUpperCase().charCodeAt(0) - 65;
       else if (/^[1-5]$/.test(k)) idx = parseInt(k, 10) - 1;

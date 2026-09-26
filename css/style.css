@@ -5009,6 +5009,113 @@ button.btn-ok {
   .browse-tabs { overflow-x: auto; flex-wrap: nowrap; }
 }
 
+/* ==================================================================
+   STUDY COCKPIT PASS
+   The home agenda has one clear next move, while a live practice session
+   keeps the question map in reach on wide screens. These are layout rules
+   only: the existing question, SRS, and plan data remain authoritative.
+   ================================================================== */
+.today-agenda-shell {
+  background: var(--ivory);
+  border-color: var(--line);
+}
+.today-agenda-shell .today-lead {
+  margin-top: 8px;
+  max-width: 36ch;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+.today-agenda-shell .rq-rows {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 24px;
+}
+.today-agenda-shell .rq-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 76px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--ctl-r);
+  background: var(--surface);
+}
+.today-agenda-shell .rq-row.rq-primary {
+  grid-column: 1 / -1;
+  min-height: 92px;
+  padding: 18px 20px;
+  border-color: var(--accent);
+  background: var(--bg);
+}
+.today-agenda-shell .rq-row-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.today-agenda-shell .rq-label { min-width: 0; font-size: 14px; }
+.today-agenda-shell .rq-count { min-width: 0; line-height: 1.4; }
+.today-agenda-shell .rq-row .btn { margin-left: auto; flex: none; }
+.today-agenda-shell .rq-primary .rq-label { font-size: 17px; }
+.today-agenda-shell .rq-primary .rq-count { font-size: 13px; }
+
+/* Live practice is a reading room: stem and choices stay in the main column,
+   while the question map remains visible as a quiet navigation rail. */
+.practice-card.practice-live {
+  max-width: 980px;
+}
+@media (min-width: 901px) {
+  .practice-card.practice-live .practice-scroll {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 188px;
+    column-gap: 28px;
+    align-content: start;
+  }
+  .practice-card.practice-live .practice-scroll > .practice-meta,
+  .practice-card.practice-live .practice-scroll > .meter-chrome,
+  .practice-card.practice-live .practice-scroll > .q-text,
+  .practice-card.practice-live .practice-scroll > .choices,
+  .practice-card.practice-live .practice-scroll > #feedback {
+    grid-column: 1;
+  }
+  .practice-card.practice-live .practice-scroll > .practice-palette {
+    grid-column: 2;
+    grid-row: 1 / span 5;
+    align-self: start;
+    position: sticky;
+    top: 16px;
+    margin: 0;
+    padding: 4px 0 0 18px;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+  .practice-card.practice-live .practice-palette .exam-palette-grid {
+    grid-template-columns: repeat(4, minmax(28px, 1fr));
+  }
+  .practice-card.practice-live .practice-palette .drill-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+/* Plan rows expose the action without making the checkbox the only target. */
+.week-current .task-list { background: color-mix(in srgb, var(--surface) 58%, transparent); }
+.task { min-height: 40px; }
+.task:not(.done):has([data-launch-set]) { background: var(--ivory); border-radius: var(--ctl-r); padding-inline: 10px; }
+.task:not(.done):has([data-launch-set]) .task-label { font-weight: 500; }
+
+@media (max-width: 900px) {
+  .today-agenda-shell .rq-rows { grid-template-columns: 1fr; }
+  .today-agenda-shell .rq-row.rq-primary { grid-column: auto; }
+}
+@media (max-width: 560px) {
+  #today-agenda.today-agenda-shell .hero { flex-direction: column; align-items: stretch; }
+  #today-agenda.today-agenda-shell .countdown { border-left: 0; border-top: 1px solid var(--line); padding: 14px 0 0; }
+  .today-agenda-shell .rq-row { min-height: 68px; padding: 12px; }
+}
+
 
 /* ==================================================================
    DARK THEME — [data-theme="dark"] token overrides.
