@@ -313,7 +313,7 @@ PGRE.formulaTextHTML = function (text) {
           }
         }
       }
-      return '$\\langle ' + inner + ' \\rangle' + (decor || '') + '$';
+      return '$\\langle ' + inner.replace(/\b([A-Za-z]+)((?:[_^](?:[A-Za-z0-9]+|\{[^}]+\}))*)-hat\b/g, '\\hat{$1}$2') + ' \\rangle' + (decor || '') + '$';
     });
     // Split bra/ket pairs that carry prose between them: "<x| with a state |f>".
     // angleExp cannot span the words, so close each half on its own.
@@ -369,6 +369,16 @@ PGRE.formulaTextHTML = function (text) {
         var cmd = kind === 'ddot' ? '\\ddot' : '\\dot';
         return mathToken(cmd + '{' + base + '}' + (sub || ''));
       });
+    // Operator and unit-vector hats written X-hat / X_i-hat / X-squared-hat
+    // (H-hat, n-hat, L_z-hat, L-squared-hat). Same slot as the dot pass: it
+    // must run before the single-letter pass, which would otherwise hand back
+    // "$H$-hat".
+    part = part.replace(/\b([A-Za-z]+)((?:[_^](?:[A-Za-z0-9]+|\{[^}]+\}))*)(-squared)?-hat\b/g,
+      function (_, name, decor, sq) {
+        var base = greek[name] || name;
+        return mathToken('\\hat{' + base + '}' + (decor || '') + (sq ? '^2' : ''));
+      });
+
 
     // Handle named Greek variants first so tau_0 is one mathematical span.
     // Tolerates an optional leading backslash in prose (\omega -> $\omega$).
