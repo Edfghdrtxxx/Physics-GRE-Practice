@@ -1252,8 +1252,8 @@ function runAsync() {
 
   var hermitianPrompt = 'How is the Hermitian conjugate A-dagger of an operator defined through its action inside the bracket <a|A-hat b>?';
   var hermitianHTML = PGRE.formulaTextHTML(hermitianPrompt);
-  assert(hermitianHTML.indexOf('$\\langle a|A-hat b \\rangle$') !== -1,
-    'formulaTextHTML converts a spaced inner product <a|A-hat b>');
+  assert(hermitianHTML.indexOf('$\\langle a|\\hat{A} b \\rangle$') !== -1,
+    'formulaTextHTML converts a spaced inner product <a|A-hat b> with the hat on A, got: ' + hermitianHTML);
   assert(hermitianHTML.indexOf('<a|') === -1,
     'formulaTextHTML emits no raw <a| tag opener');
 
@@ -1278,6 +1278,18 @@ function runAsync() {
     'formulaTextHTML leaves no bare Psi, got: ' + psiHTML);
   assert(psiHTML.indexOf('$\\Psi$(') !== -1,
     'formulaTextHTML keeps the parenthesized argument outside the Psi token, got: ' + psiHTML);
+
+  var hhatPrompt = 'What is the time-dependent Schrodinger equation governing the evolution of Psi(x,t) under the Hamiltonian operator H-hat?';
+  var hhatHTML = PGRE.formulaTextHTML(hhatPrompt);
+  assert(hhatHTML.indexOf('$\\hat{H}$') !== -1,
+    'formulaTextHTML converts H-hat to $\\hat{H}$, got: ' + hhatHTML);
+  assert(hhatHTML.indexOf('-hat') === -1,
+    'formulaTextHTML leaves no bare -hat suffix, got: ' + hhatHTML);
+  var hatForms = PGRE.formulaTextHTML('position operator x-hat, momentum p-hat, L_z-hat, L-squared-hat, direction n-hat');
+  ['$\\hat{x}$', '$\\hat{p}$', '$\\hat{L}_z$', '$\\hat{L}^2$', '$\\hat{n}$'].forEach(function (want) {
+    assert(hatForms.indexOf(want) !== -1,
+      'formulaTextHTML converts hat suffixes, wanted ' + want + ' in: ' + hatForms);
+  });
 
   /* PGRE.formulaTextHTML: inline markdown bold (**text** -> <strong>text</strong>) */
   console.log('\nformulaTextHTML: inline markdown bold');
