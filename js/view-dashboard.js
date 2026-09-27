@@ -465,6 +465,11 @@ PGRE.views.dashboard = (function () {
     var s = PGRE.store.state;
     var mock = nextMockPointer();
     var dueM = PGRE.srs.dueMistakes().length;
+    var mixedCount = Math.min(10, PGRE.allQuestions().length);
+    var mixedCopy = mixedCount
+      ? mixedCount + ' question' + (mixedCount === 1 ? '' : 's') + ' from the daily pool · about ' + Math.max(2, mixedCount * 2) + ' min'
+      : 'The daily pool is waiting for questions';
+    var mixedLabel = mixedCount ? 'Start ' + mixedCount + ' →' : 'Open practice →';
     var hour = new Date().getHours();
     var greet = hour < 5 ? 'Burning the midnight oil' :
                 hour < 12 ? 'Good morning' :
@@ -474,11 +479,12 @@ PGRE.views.dashboard = (function () {
     var dateLine = new Date().toLocaleDateString('en-US', {
       weekday: 'long', month: 'long', day: 'numeric'
     });
-    var html = '<div class="card review-queue" id="today-agenda">' +
+    var html = '<div class="card review-queue today-agenda-shell" id="today-agenda">' +
       '<div class="hero">' +
         '<div class="hero-left">' +
           '<p class="today-kicker">Today · ' + ui.esc(dateLine) + '</p>' +
           '<h1 class="today-greet">' + ui.esc(greet) + '.</h1>' +
+          '<p class="today-lead">One focused set keeps your streak moving.</p>' +
         '</div>' +
         '<div class="hero-right">' +
           '<div class="countdown"><div class="countdown-num">' + days + '</div>' +
@@ -487,15 +493,15 @@ PGRE.views.dashboard = (function () {
         '</div>' +
       '</div>' +
       '<div class="rq-rows">' +
-      '<div class="rq-row"><span class="rq-label">Mixed practice</span>' +
-        '<span class="rq-count">Questions from the daily pool</span>' +
-        '<a class="btn btn-primary btn-sm" href="#/practice/all">Practice →</a></div>' +
-      '<div class="rq-row"><span class="rq-label">Mistake book</span>' +
-        '<span class="rq-count">' + (dueM ? dueM + ' due now' : 'nothing due') + '</span>' +
+      '<div class="rq-row rq-primary"><div class="rq-row-copy"><span class="rq-label">Mixed practice</span>' +
+        '<span class="rq-count">' + ui.esc(mixedCopy) + '</span></div>' +
+        '<a class="btn btn-primary btn-sm" href="#/practice/all">' + ui.esc(mixedLabel) + '</a></div>' +
+      '<div class="rq-row"><div class="rq-row-copy"><span class="rq-label">Mistake book</span>' +
+        '<span class="rq-count">' + (dueM ? dueM + ' due now' : 'nothing due') + '</span></div>' +
         '<a class="btn ' + (dueM ? 'btn-primary' : 'btn-ghost') + ' btn-sm" href="#/mistakes">' +
           (dueM ? 'Drill →' : 'Open →') + '</a></div>' +
-      '<div class="rq-row"><span class="rq-label">Formula review</span>' +
-        '<span class="rq-count" id="today-formulas">…</span>' +
+      '<div class="rq-row"><div class="rq-row-copy"><span class="rq-label">Formula review</span>' +
+        '<span class="rq-count" id="today-formulas">…</span></div>' +
         '<button type="button" class="btn btn-ghost btn-sm" id="today-formulas-btn">Study →</button></div>';
     if (mock) {
       var mockSchedule = mock.scheduledFor
@@ -503,8 +509,8 @@ PGRE.views.dashboard = (function () {
           month: 'short', day: 'numeric'
         })
         : '';
-      html += '<div class="rq-row"><span class="rq-label">Mock exam</span>' +
-        '<span class="rq-count">Next planned intact mock: ' + ui.esc(mock.title) + ui.esc(mockSchedule) + '</span>' +
+      html += '<div class="rq-row"><div class="rq-row-copy"><span class="rq-label">Mock exam</span>' +
+        '<span class="rq-count">Next planned intact mock: ' + ui.esc(mock.title) + ui.esc(mockSchedule) + '</span></div>' +
         '<a class="btn btn-ghost btn-sm" href="#/exam">Open →</a></div>';
     }
     html += '</div></div>';

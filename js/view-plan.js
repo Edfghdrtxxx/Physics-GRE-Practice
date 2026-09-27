@@ -102,6 +102,8 @@ PGRE.views.plan = (function () {
         var taskXp = parseInt(cb.getAttribute('data-xp'), 10);
         var weekDetails = cb.closest('details[data-week]');
         var weekId = weekDetails ? weekDetails.getAttribute('data-week') : null;
+        var scrollY = window.scrollY;
+        var focusTask = document.activeElement === cb ? taskId : null;
 
         // Capture previous widths of hero and affected week meters before re-render
         var prevWeekFill = weekDetails ? weekDetails.querySelector('summary .meter-fill') : null;
@@ -124,6 +126,14 @@ PGRE.views.plan = (function () {
         });
         PGRE.typesetMath(root);
         wire();
+        window.scrollTo(0, scrollY);
+        if (focusTask) {
+          var focusAgain = document.querySelector('#plan-root input[data-task="' +
+            CSS.escape(focusTask) + '"]');
+          if (focusAgain) {
+            try { focusAgain.focus({ preventScroll: true }); } catch (e) { focusAgain.focus(); }
+          }
+        }
 
         // Views-A: smoothly glide affected meters from previous to new value, and flash row
         if (PGRE.motion && !PGRE.motion.reduced) {
@@ -173,10 +183,33 @@ PGRE.views.plan = (function () {
     });
     document.querySelectorAll('#plan-root [data-launch-set]').forEach(function (btn) {
       btn.addEventListener('click', function () {
+        var week = btn.closest('details[data-week]');
+        try {
+          sessionStorage.setItem('pgre-plan-return', JSON.stringify({
+            week: week ? week.getAttribute('data-week') : null,
+            at: Date.now()
+          }));
+        } catch (e) {}
         if (PGRE.launchPack(btn.getAttribute('data-launch-set')) == null) {
           PGRE.toast('That set is not available.');
         }
       });
+    });
+  }
+
+  function restoreReturnContext() {
+    var raw = null;
+    try { raw = sessionStorage.getItem('pgre-plan-return'); } catch (e) {}
+    if (!raw) return;
+    var info = null;
+    try { info = JSON.parse(raw); } catch (e2) { info = null; }
+    try { sessionStorage.removeItem('pgre-plan-return'); } catch (e3) {}
+    if (!info || !info.week || !info.at || Date.now() - info.at > 6 * 3600000) return;
+    var details = document.querySelector('#plan-root details[data-week="' + CSS.escape(info.week) + '"]');
+    if (!details) return;
+    details.open = true;
+    requestAnimationFrame(function () {
+      details.scrollIntoView({ block: 'center', behavior: 'smooth' });
     });
   }
 
@@ -194,6 +227,7 @@ PGRE.views.plan = (function () {
     mount: function () {
       PGRE.typesetMath(document.getElementById('plan-root'));
       wire();
+      restoreReturnContext();
       if (PGRE.motion && !PGRE.motion.reduced) animateMeters();
     }
   };
