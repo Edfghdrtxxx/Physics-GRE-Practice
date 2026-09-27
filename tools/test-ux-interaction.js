@@ -1291,6 +1291,59 @@ function runAsync() {
       'formulaTextHTML converts hat suffixes, wanted ' + want + ' in: ' + hatForms);
   });
 
+  /* PGRE.formulaTextHTML: word-suffix accents beyond -hat
+     (A-dagger, x-bar, phi-tilde, v-vec, -squared/-cubed/-star/-prime) */
+  console.log('\nformulaTextHTML: word-suffix accents');
+  var daggerPrompt = 'How is the Hermitian conjugate A-dagger of an operator defined through its action inside the bracket <a|A-hat b>?';
+  var daggerHTML = PGRE.formulaTextHTML(daggerPrompt);
+  assert(daggerHTML.indexOf('$A^{\\dagger}$') !== -1,
+    'formulaTextHTML converts A-dagger to $A^{\\dagger}$, got: ' + daggerHTML);
+  assert(daggerHTML.indexOf('-dagger') === -1,
+    'formulaTextHTML leaves no bare -dagger suffix, got: ' + daggerHTML);
+  var daggerInnerHTML = PGRE.formulaTextHTML('matrix elements <a|A-dagger b> and <a|A_i-dagger b>');
+  assert(daggerInnerHTML.indexOf('$\\langle a|A^{\\dagger} b \\rangle$') !== -1 &&
+         daggerInnerHTML.indexOf('$\\langle a|A_i^{\\dagger} b \\rangle$') !== -1,
+    'formulaTextHTML renders dagger inside angle brackets, got: ' + daggerInnerHTML);
+  var accentForms = PGRE.formulaTextHTML('average P-bar, density rho-bar_0, amplitude phi-tilde, velocity v-vec, Planck h-bar');
+  ['$\\bar{P}$', '$\\bar{\\rho}_0$', '$\\tilde{\\phi}$', '$\\vec{v}$', '$\\hbar$'].forEach(function (want) {
+    assert(accentForms.indexOf(want) !== -1,
+      'formulaTextHTML converts accent suffixes, wanted ' + want + ' in: ' + accentForms);
+  });
+  var powerForms = PGRE.formulaTextHTML('spin operators J-squared and S-squared, chi-squared statistic, x-cubed term, conjugate a-star, slope x-prime');
+  ['$J^2$', '$S^2$', '$\\chi^2$', '$x^3$', '$a^*$', "$x'$"].forEach(function (want) {
+    assert(powerForms.indexOf(want) !== -1,
+      'formulaTextHTML converts power/star/prime suffixes, wanted ' + want + ' in: ' + powerForms);
+  });
+
+  /* PGRE.formulaTextHTML: bare primes, word sub/sup, digit subscripts, +/- suffixes */
+  var primePrompt = 'In a frame S\u0027 the primed coordinates x\u0027 and t\u0027 read differently; lambda\u0027/lambda gives the shift.';
+  var primeHTML = PGRE.formulaTextHTML(primePrompt);
+  ['$S\u0027$', '$x\u0027$', '$t\u0027$', '$\\lambda\u0027$'].forEach(function (want) {
+    assert(primeHTML.indexOf(want) !== -1,
+      'formulaTextHTML converts bare primes, wanted ' + want + ' in: ' + primeHTML);
+  });
+  assert(PGRE.formulaTextHTML("Newton's laws and particles' spins").indexOf('$') === -1,
+    'formulaTextHTML leaves English apostrophes alone');
+  var wordScripts = PGRE.formulaTextHTML('equilibrium x-sub-0, energy E-sup-2, levels n1 and n2, operators S+ and S-');
+  ['$x_0$', '$E^2$', '$n_1$', '$n_2$', '$S_{+}$', '$S_{-}$'].forEach(function (want) {
+    assert(wordScripts.indexOf(want) !== -1,
+      'formulaTextHTML converts word/digit/sign scripts, wanted ' + want + ' in: ' + wordScripts);
+  });
+
+  /* PGRE.formulaTextHTML: products, parenthesized powers, wider greek map */
+  var productHTML = PGRE.formulaTextHTML('how can the operator L-dot-S be expressed in terms of J-squared, L-squared, and S-squared?');
+  assert(productHTML.indexOf('$L \\cdot S$') !== -1 && productHTML.indexOf('-dot-') === -1,
+    'formulaTextHTML converts L-dot-S to $L \\cdot S$, got: ' + productHTML);
+  var intervalHTML = PGRE.formulaTextHTML('Sign condition on the invariant interval (Delta x)^2 for two events to be timelike-separated?');
+  assert(intervalHTML.indexOf('$(\\Delta x)^2$') !== -1,
+    'formulaTextHTML converts (Delta x)^2 to $(\\Delta x)^2$, got: ' + intervalHTML);
+  var greekHTML = PGRE.formulaTextHTML('a dielectric of constant kappa and interval Delta t read by the clock');
+  assert(greekHTML.indexOf('$\\kappa$') !== -1 && greekHTML.indexOf('$\\Delta$') !== -1,
+    'formulaTextHTML converts kappa and Delta, got: ' + greekHTML);
+  var greekInnerHTML = PGRE.formulaTextHTML('overlap <psi|phi> of two states');
+  assert(greekInnerHTML.indexOf('$\\langle \\psi|\\phi \\rangle$') !== -1,
+    'formulaTextHTML converts greek words inside angle brackets, got: ' + greekInnerHTML);
+
   /* PGRE.formulaTextHTML: inline markdown bold (**text** -> <strong>text</strong>) */
   console.log('\nformulaTextHTML: inline markdown bold');
   var polCard = PGRE.FORMULAS ? PGRE.FORMULAS.find(function (c) { return c.id === 'cpgf-2.56a'; }) : null;
