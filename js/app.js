@@ -281,10 +281,52 @@ PGRE.formulaTextHTML = function (text) {
   if (text == null || text === '') return '';
   var greek = {
     alpha: '\\alpha', beta: '\\beta', gamma: '\\gamma', delta: '\\delta',
-    epsilon: '\\epsilon', theta: '\\theta', lambda: '\\lambda', mu: '\\mu',
-    nu: '\\nu', rho: '\\rho', sigma: '\\sigma', tau: '\\tau', phi: '\\phi',
-    psi: '\\psi', Psi: '\\Psi', omega: '\\omega', Omega: '\\Omega'
+    epsilon: '\\epsilon', zeta: '\\zeta', eta: '\\eta', theta: '\\theta',
+    iota: '\\iota', kappa: '\\kappa', lambda: '\\lambda', mu: '\\mu',
+    nu: '\\nu', xi: '\\xi', omicron: 'o', pi: '\\pi', rho: '\\rho',
+    sigma: '\\sigma', tau: '\\tau', upsilon: '\\upsilon', phi: '\\phi',
+    chi: '\\chi', psi: '\\psi', omega: '\\omega',
+    Gamma: '\\Gamma', Delta: '\\Delta', Theta: '\\Theta', Lambda: '\\Lambda',
+    Xi: '\\Xi', Pi: '\\Pi', Sigma: '\\Sigma', Upsilon: '\\Upsilon',
+    Phi: '\\Phi', Psi: '\\Psi', Omega: '\\Omega',
+    nabla: '\\nabla', hbar: '\\hbar'
   };
+  // Notation suffixes written as words after a symbol: X-hat, X-dagger,
+  // x-bar, phi-tilde, v-vec, X-squared, X-cubed, X-star, X-prime. The base is a
+  // single letter or a named symbol (greek word or hbar). h-bar is Planck's
+  // constant, not an overbar, so it is folded into the greek lookup above.
+  var ACCENT_BASE = '([A-Za-z]|alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|nabla|hbar)';
+  var DECOR = '((?:[_^](?:[A-Za-z0-9]+|\\{[^}]+\\}))*)';
+  var accentSuffix = new RegExp('\\b' + ACCENT_BASE + DECOR +
+    '(-(squared|cubed))?-(hat|bar|tilde|vec|dot|ddot|dagger|star|prime|double-prime|triple-prime|squared|cubed)' + DECOR + '\\b', 'g');
+  function accentTeX(base, decor, sq, suffix) {
+    var sym = greek[base] || base;
+    var tail = sq === 'cubed' ? '^3' : sq === 'squared' ? '^2' : '';
+    switch (suffix) {
+      case 'hat': return '\\hat{' + sym + '}' + decor + tail;
+      case 'bar': return base === 'h' ? '\\hbar' + decor : '\\bar{' + sym + '}' + decor + tail;
+      case 'tilde': return '\\tilde{' + sym + '}' + decor + tail;
+      case 'vec': return '\\vec{' + sym + '}' + decor + tail;
+      case 'dot': return '\\dot{' + sym + '}' + decor + tail;
+      case 'ddot': return '\\ddot{' + sym + '}' + decor + tail;
+      case 'dagger': return sym + decor + '^{\\dagger}' + tail;
+      case 'star': return sym + decor + '^*' + tail;
+      case 'prime': return sym + decor + "'" + tail;
+      case 'double-prime': return sym + decor + "''" + tail;
+      case 'triple-prime': return sym + decor + "'''" + tail;
+      case 'squared': return sym + decor + '^2';
+      case 'cubed': return sym + decor + '^3';
+    }
+    return base + decor;
+  }
+  // Rewrite word-suffix and greek-word tokens inside a bra-ket's inner text so
+  // <a|A-dagger b> and <psi|phi> typeset the way the same prose would.
+  function innerMath(inner) {
+    return inner
+      .replace(accentSuffix, function (_, b, d, _sq, sq, s, post) { return accentTeX(b, d || '', sq, s) + (post || ''); })
+      .replace(/\b(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|nabla|hbar)\b/g,
+        function (_, w) { return greek[w]; });
+  }
   // Angle-bracket expectation/average and Dirac bra-ket notation: <P>_B, <S>,
   // <a|b>, <a|A-hat b>, or a split pair <x| ... |f>. Convert to $\langle...\rangle$
   // before splitting by <[^>]*> so they are not swallowed as unescaped HTML tags
@@ -313,12 +355,12 @@ PGRE.formulaTextHTML = function (text) {
           }
         }
       }
-      return '$\\langle ' + inner.replace(/\b([A-Za-z]+)((?:[_^](?:[A-Za-z0-9]+|\{[^}]+\}))*)-hat\b/g, '\\hat{$1}$2') + ' \\rangle' + (decor || '') + '$';
+      return '$\\langle ' + innerMath(inner) + ' \\rangle' + (decor || '') + '$';
     });
     // Split bra/ket pairs that carry prose between them: "<x| with a state |f>".
     // angleExp cannot span the words, so close each half on its own.
-    out = out.replace(splitBra, '$\\langle $1|$');
-    out = out.replace(splitKet, '$|$1\\rangle$2$');
+    out = out.replace(splitBra, function (_, inner) { return '$\\langle ' + innerMath(inner) + '|$'; });
+    out = out.replace(splitKet, function (_, inner, decor) { return '$|' + innerMath(inner) + '\\rangle' + decor + '$'; });
     return out;
   }).join('');
 
@@ -359,36 +401,65 @@ PGRE.formulaTextHTML = function (text) {
       return HOLD + (held.push(tex) - 1) + HOLD;
     }
 
-    // Time derivatives written q-dot / q-ddot / q-dot_i. Must run before the
-    // Greek and letter passes, which would otherwise claim the base (`q` in
-    // q-dot_i → "$q$-dot_i"). A trailing hyphen means a product (L-dot-S), not
-    // a derivative.
+    // Word-suffix operator decorations: X-hat, A-dagger, x-bar, phi-tilde,
+    // v-vec, q-dot, L-squared, x-cubed, A-star, x-prime, plus pre-suffix
+    // powers (L-squared-hat). Must run before the greek/letter passes, which
+    // would otherwise claim the base and hand back "$H$-hat"/"$A$-dagger".
+    // h-bar folds to \hbar, never an overbar. A trailing hyphen-letter pair
+    // means a product (L-dot-S), not an accent, so products run first.
+    part = part.replace(new RegExp('\\b' + ACCENT_BASE + '-dot-' + ACCENT_BASE + '\\b', 'g'),
+      function (_, left, right) {
+        return mathToken((greek[left] || left) + ' \\cdot ' + (greek[right] || right));
+      });
+    // Time derivatives written q-dot / q-ddot / q-dot_i.
     part = part.replace(/\b([A-Za-z]+)-(d?dot)(_(?:[A-Za-z0-9]+|\{[^}]+\}))?(?![\w-])/g,
       function (_, name, kind, sub) {
         var base = greek[name] || name;
         var cmd = kind === 'ddot' ? '\\ddot' : '\\dot';
         return mathToken(cmd + '{' + base + '}' + (sub || ''));
       });
-    // Operator and unit-vector hats written X-hat / X_i-hat / X-squared-hat
-    // (H-hat, n-hat, L_z-hat, L-squared-hat). Same slot as the dot pass: it
-    // must run before the single-letter pass, which would otherwise hand back
-    // "$H$-hat".
-    part = part.replace(/\b([A-Za-z]+)((?:[_^](?:[A-Za-z0-9]+|\{[^}]+\}))*)(-squared)?-hat\b/g,
-      function (_, name, decor, sq) {
+    part = part.replace(accentSuffix,
+      function (_, base, decor, _sq, sq, suffix, post) {
+        return mathToken(accentTeX(base, decor || '', sq, suffix) + (post || ''));
+      });
+    // Subscript/superscript written as words: x-sub-0, E-sup-2.
+    part = part.replace(new RegExp('\\b' + ACCENT_BASE + '-(sub|sup)-([A-Za-z0-9]+)\\b', 'g'),
+      function (_, name, kind, arg) {
         var base = greek[name] || name;
-        return mathToken('\\hat{' + base + '}' + (decor || '') + (sq ? '^2' : ''));
+        return mathToken(base + (kind === 'sub' ? '_' : '^') + arg);
+      });
+    // Bare primes on a symbol: x', t'', S' (frame names). The base must be a
+    // single letter or named symbol so English possessives and contractions
+    // ('s, particles') never reach this pass.
+    part = part.replace(new RegExp('\\b' + ACCENT_BASE + DECOR + "('{1,3})(?![\\w'])", 'g'),
+      function (_, name, decor, ticks) {
+        var base = greek[name] || name;
+        return mathToken(base + (decor || '') + ticks);
+      });
+    // Parenthesized greek/letter groups carrying an exponent: (Delta x)^2.
+    part = part.replace(/\(([A-Za-z]+(?: [A-Za-z]+)*)\)\^(\d+)/g,
+      function (_, inner, pow) {
+        return mathToken('(' + innerMath(inner) + ')^' + pow);
+      });
+    // A letter glued to digits is a subscript: n1, n2 -> n_1, n_2.
+    part = part.replace(/\b([A-Za-z])([0-9]+)\b/g,
+      function (_, name, digits) { return mathToken(name + '_' + digits); });
+    // Spin raising/lowering and similar signed operators: S+, S-, J_+.
+    part = part.replace(/\b([A-Za-z])((?:[_^](?:[A-Za-z0-9]+|\{[^}]+\}))*)([+-])(?![\w+-])/g,
+      function (_, name, decor, sign) {
+        return mathToken(name + (decor || '') + '_{' + sign + '}');
       });
 
 
     // Handle named Greek variants first so tau_0 is one mathematical span.
     // Tolerates an optional leading backslash in prose (\omega -> $\omega$).
-    part = part.replace(/\\?\b(alpha|beta|gamma|delta|epsilon|theta|lambda|mu|nu|rho|sigma|tau|phi|psi|Psi|omega|Omega)(?:_([A-Za-z0-9]+|\{[^}]+\})|\^([A-Za-z0-9]+|\{[^}]+\}))?(\/\d+)?\b/g,
-      function (_, name, sub, sup, frac) {
-        return mathToken(greek[name] + (sub ? '_' + sub : '') + (sup ? '^' + sup : '') + (frac || ''));
+    part = part.replace(/\\?\b(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|nabla|hbar)(?:_([A-Za-z0-9]+|\{[^}]+\})|\^([A-Za-z0-9]+|\{[^}]+\}))?('?)(\/\d+)?\b/g,
+      function (_, name, sub, sup, tick, frac) {
+        return mathToken(greek[name] + (sub ? '_' + sub : '') + (sup ? '^' + sup : '') + (tick || '') + (frac || ''));
       });
     // A subscript/superscript makes a one-letter token unambiguously mathematical.
-    part = part.replace(/\b([A-Za-z])(_(?:[A-Za-z0-9]+|\{[^}]+\})|\^(?:[A-Za-z0-9]+|\{[^}]+\}))(\/\d+)?\b/g,
-      function (_, base, decoration, frac) { return mathToken(base + decoration + (frac || '')); });
+    part = part.replace(/\b([A-Za-z])(_(?:[A-Za-z0-9]+|\{[^}]+\})|\^(?:[A-Za-z0-9]+|\{[^}]+\}))('?)(\/\d+)?\b/g,
+      function (_, base, decoration, tick, frac) { return mathToken(base + decoration + (tick || '') + (frac || '')); });
     // These are common standalone physics variables; omit prose words such as a,
     // an, and I so the formula-card prompt remains readable. Sentence-initial
     // 'A' (article) and 'I' (pronoun) followed by a lowercase word are prose —
