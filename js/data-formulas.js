@@ -202,4 +202,14 @@ PGRE.FORMULAS = [
     back: "Each QM problem's constants combine into exactly one length:\n- **Oscillator ground-state width**: $\\sqrt{\\hbar/(m\\omega)}$ — the only length from $\\hbar$, $m$, $\\omega$.\n- **Bohr radius**: $a_0 = \\dfrac{4\\pi\\epsilon_0\\hbar^2}{\\mu e^2}$ — only length from $\\mu$, $\\hbar$, $e^2/4\\pi\\epsilon_0$ (eq. 5.44). Positronium has $\\mu = m_e/2$, so its Bohr radius is double hydrogen's.\n- **Compton wavelength**: $\\lambda_C = \\dfrac{h}{mc}$ — depends only on mass, not momentum (eq. 7.15).\n- **de Broglie wavelength**: $\\lambda = h/p$ — momentum-dependent (eq. 5.28, $p = \\hbar k$).",
     note: "Supplemental — not a numbered CPG equation; Kahn derives the oscillator width, Bohr radius, and Compton wavelength by the same trick: the parameters admit exactly one combination with units of length. The Bohr radius, Compton, and de Broglie formulas already have their own cards (cpgf-5.44, 7.15, 5.28); this card drills the shared dimensional-analysis pattern."
   },
+  {
+    id: "supp-coulomb-coupling",
+    eq: "supp",
+    topic: "em",
+    tag: "Electrostatics",
+    name: "Coulomb coupling in natural fm·MeV units (supplemental)",
+    front: "What is the Coulomb coupling constant $e^2/(4\\pi\\epsilon_0)$ in natural $\\mathrm{MeV\\cdot fm}$ units, and how does it follow from the fine-structure constant $\\alpha$ and $\\hbar c$?",
+    back: "$$\\frac{e^2}{4\\pi\\epsilon_0} = \\alpha \\hbar c \\approx \\frac{197\\ \\mathrm{MeV\\cdot fm}}{137} \\approx 1.44\\ \\mathrm{MeV\\cdot fm}$$\n- **Fine-structure constant**: $$\\alpha = \\frac{e^2}{4\\pi\\epsilon_0 \\hbar c} = \\frac{1}{137}$$\n- **Reduced Planck $\\times$ $c$**: $\\hbar c \\approx 197\\ \\mathrm{MeV\\cdot fm}$ (often quoted as $\\approx 200\\ \\mathrm{MeV\\cdot fm}$).\n- **Use**: the Coulomb energy of two elementary charges separated by $r$ is $U = \\dfrac{e^2}{4\\pi\\epsilon_0}\\dfrac{1}{r} \\approx \\dfrac{1.44\\ \\mathrm{MeV\\cdot fm}}{r}$ — e.g., two protons $1$ fm apart repel with $\\sim 1.4$ MeV.",
+    note: "Supplemental — not a numbered CPG equation. Transcribed from the captain's handwritten note: combining $\\alpha = 1/137$ with $\\hbar c \\approx 197\\ \\mathrm{MeV\\cdot fm}$ yields the Coulomb scale $e^2/4\\pi\\epsilon_0 \\approx 1.44\\ \\mathrm{MeV\\cdot fm}$, the fast route to electrostatic energies at atomic and nuclear scales."
+  },
 ];
