@@ -181,5 +181,15 @@ PGRE.FORMULAS = [
     front: "For a physical pendulum pivoted at one end, how do the oscillation frequency $\\omega$ and period $T$ change when a mass is shifted inward toward the pivot, and why?",
     back: "$$\\omega \\text{ increases } \\left(\\frac{\\omega_{\\mathrm{new}}}{\\omega_{\\mathrm{old}}} > 1\\right), \\qquad T \\text{ decreases } \\left(\\frac{T_{\\mathrm{new}}}{T_{\\mathrm{old}}} < 1\\right)$$\n- **Scaling mechanism**: Inertia shrinks as $x^2$ ($I = \\sum m_i x_i^2$) **faster** than restoring torque shrinks ($\\tau \\propto x$).\n- **Frequency scaling**: $$\\omega^2 = \\frac{\\tau/\\theta}{I} \\sim \\frac{x}{x^2} \\sim \\frac{1}{x}$$\nMoving mass inward toward the pivot raises $\\omega$ and shortens $T$.\n- **GRE shortcut**: When mass is moved toward the pivot, immediately eliminate all frequency ratio options $\\le 1$ and period ratio options $\\ge 1$.",
     note: "Supplemental — high-yield GRE scaling shortcut. Shifting mass toward the pivot shrinks inertia faster than torque, so oscillations speed up."
-  }
+  },
+  {
+    id: "supp-nuclear-force-range",
+    eq: "supp",
+    topic: "sp",
+    tag: "Nuclear Physics",
+    name: "Characteristic range of the nuclear force (supplemental)",
+    front: "What is the characteristic range (characteristic length) of the strong nuclear force — i.e., at approximately what separation does Coulomb repulsion between two protons overtake the strong attraction?",
+    back: "$$r \\sim 1\\ \\mathrm{fm} = 10^{-15}\\ \\mathrm{m}$$\nThe strong force is short-ranged (pion exchange gives an exponentially decaying potential), so beyond $\\sim 1$ fm the nuclear attraction dies out and Coulomb repulsion wins. Comparison anchors: atomic scale $\\sim 10^{-10}$ m (Angstrom), nuclear scale $\\sim 10^{-15}$ m (fermi).",
+    note: "Supplemental — not a numbered CPG equation. Kahn states this as a fact to know cold (ch. 8 solutions, problem 8.5-10). Useful companion scale: $\\hbar c \\approx 200\\ \\mathrm{MeV\\cdot fm}$."
+  },
 ];
