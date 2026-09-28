@@ -1256,6 +1256,15 @@ function runAsync() {
     'formulaTextHTML converts a spaced inner product <a|A-hat b> with the hat on A, got: ' + hermitianHTML);
   assert(hermitianHTML.indexOf('<a|') === -1,
     'formulaTextHTML emits no raw <a| tag opener');
+  var diracHTML = PGRE.formulaTextHTML('Matrix elements <a|A-hat|b> and <a|A-dagger|b> and expectation <psi|H-hat|psi>.');
+  assert(diracHTML.indexOf('$\\langle a|\\hat{A}|b \\rangle$') !== -1,
+    'formulaTextHTML converts a three-part bra-ket <a|A-hat|b>, got: ' + diracHTML);
+  assert(diracHTML.indexOf('$\\langle a|A^{\\dagger}|b \\rangle$') !== -1,
+    'formulaTextHTML converts <a|A-dagger|b>, got: ' + diracHTML);
+  assert(diracHTML.indexOf('$\\langle \\psi|\\hat{H}|\\psi \\rangle$') !== -1,
+    'formulaTextHTML converts <psi|H-hat|psi>, got: ' + diracHTML);
+  assert(diracHTML.indexOf('-hat') === -1 && diracHTML.indexOf('-dagger') === -1,
+    'formulaTextHTML leaves no bare accent suffix inside bra-kets, got: ' + diracHTML);
 
   var overlapPrompt = 'In Dirac notation, what does the overlap of a position eigenbra <x| with a state |f> equal?';
   var overlapHTML = PGRE.formulaTextHTML(overlapPrompt);

@@ -334,7 +334,7 @@ PGRE.formulaTextHTML = function (text) {
   // the bracket unambiguous — no real HTML tag contains one — so inner products
   // may carry spaces; a bare <a href=...> still must not.
   var mathOrCodeBlock = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$]*?\$|<code\b[^>]*>[\s\S]*?<\/code>|<pre\b[^>]*>[\s\S]*?<\/pre>)/gi;
-  var angleExp = /<([A-Za-z](?:[A-Za-z0-9_^*+()\\-]|\{[^}]*\})*(?:\|[A-Za-z0-9_^*+()\\ -]*)?|\\[A-Za-z]+)>((?:_(?:[A-Za-z0-9]+|\{[^}]+\})|\^(?:[A-Za-z0-9]+|\{[^}]+\}))*)/g;
+  var angleExp = /<([A-Za-z](?:[A-Za-z0-9_^*+()\\-]|\{[^}]*\})*(?:\|[A-Za-z0-9_^*+()\\ -]*[A-Za-z]-(?:hat|bar|tilde|vec|dot|ddot|dagger|star|prime|squared|cubed))?(?:\|[A-Za-z0-9_^*+()\\ -]*)?|\\[A-Za-z]+)>((?:_(?:[A-Za-z0-9]+|\{[^}]+\})|\^(?:[A-Za-z0-9]+|\{[^}]+\}))*)/g;
   var splitBra = /<([A-Za-z](?:[A-Za-z0-9_^*+()\\-]|\{[^}]*\})*)\|/g;
   var splitKet = /\|([A-Za-z](?:[A-Za-z0-9_^*+()\\-]|\{[^}]*\})*)>((?:_(?:[A-Za-z0-9]+|\{[^}]+\})|\^(?:[A-Za-z0-9]+|\{[^}]+\}))*)/g;
   var HTML_TAGS = {
