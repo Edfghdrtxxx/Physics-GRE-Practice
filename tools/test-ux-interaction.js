@@ -2136,6 +2136,41 @@ function runAsync() {
       assert(doc.querySelectorAll('#picker-list .pick-cart-row').length === 1,
         'Clear leaves the fixed row in place');
     });
+  }).then(function () {
+    console.log('\nformulas: resume count follows mid-session list edits');
+    var ms = autoPickEnv();
+    var P = ms.P;
+    ms.env.location.hash = '#/formulas';
+    ensureView(ms.env, P.views.formulas.render());
+    P.views.formulas.mount();
+    return wait(0).then(function () {
+      var doc = ms.env.document;
+      doc.getElementById('study-btn').click();          // auto-picks 6, starts
+      doc.getElementById('flip-btn').click();
+      doc.querySelector('#fcard-actions [data-grade="good"]').click();
+      // Mid-session: one card leaves the list (unpick), three join it
+      // (e.g. search "Add to today" / a late Fill). Before the fix the saved
+      // queue stayed frozen and "Resume — N left" no longer counted the list.
+      var queued = P.store.state.formulaStudy.queueIds;
+      P.srs.addFormulaDaySoft(ms.env.cards, ['f1', 'f2', 'f3']);
+      P.srs.setFormulaDayPicks(ms.env.cards,
+        queued.filter(function (id) { return id !== 'cpgf-2.3'; })
+          .concat(['f1', 'f2', 'f3']));
+      var want = P.srs.formulaDayRemaining(ms.env.cards).length;
+      P.views.formulas.mount();                         // exit → home re-render
+      return wait(0).then(function () {
+        var rb = doc.getElementById('resume-btn');
+        assert(!!rb && rb.textContent === 'Resume session — ' + want + ' left',
+          'resume count matches the edited list, got: ' +
+            (rb ? rb.textContent : 'no resume button') + ' vs ' + want);
+        assert(P.store.state.formulaStudy.queueIds.indexOf('cpgf-2.3') === -1,
+          'a card removed mid-session leaves the saved queue');
+        doc.getElementById('pick-btn').click();
+        assert(doc.getElementById('picker-count').textContent === want + ' / 6',
+          'composer header agrees with resume, got: ' +
+            doc.getElementById('picker-count').textContent);
+      });
+    });
   });
 }
 

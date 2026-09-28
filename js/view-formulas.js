@@ -924,7 +924,7 @@ PGRE.views.formulas = (function () {
     if (ld) ld.addEventListener('click', function () {
       startStudy(deck.filter(function (c) {
         return PGRE.srs.isLeech(PGRE.srs.cardState(c.id)) && !PGRE.srs.isSuspended(c.id);
-      }));
+      }), false);
     });
     // F10: collapse/expand Memory stats (built lazily on first open).
     var mt = document.getElementById('mem-stats-toggle');
@@ -1811,13 +1811,17 @@ PGRE.views.formulas = (function () {
     refreshCart(false);
   }
 
-  function startStudy(cards) {
+  /* dayBound === false marks an ad-hoc session (leech drill, search "Study
+     these N") whose queue is independent of today's list. List sessions keep
+     the default true so a resume follows mid-session batch edits. */
+  function startStudy(cards, dayBound) {
     if (!cards.length) return;
     if (PGRE.nav) PGRE.nav.setTrail(['Study']);   // BUNDLE G: session is live
     study = { queue: interleaveByTopic(cards), total: cards.length, done: 0,
               doneBase: 0, again: 0, againBase: 0, xp: 0, flipped: false,
               history: [], peek: null,
               overlay: null, steps: {}, undo: [], pressCount: 0,
+              dayBound: dayBound !== false,
               pendingOverlays: [], settled: false };
     persistStudy();          // ITEM 2: snapshot the fresh order so a resume matches
     PGRE.store.save();
@@ -1839,6 +1843,7 @@ PGRE.views.formulas = (function () {
     for (var k in study.steps) stepsCopy[k] = study.steps[k];
     PGRE.store.state.formulaStudy = {
       date: PGRE.srs.today(),
+      dayBound: study.dayBound !== false,
       queueIds: study.queue.map(function (c) { return c.id; }),
       done: study.done,
       again: study.again,
@@ -1851,7 +1856,14 @@ PGRE.views.formulas = (function () {
   /* Rebuild the card list for a session saved earlier TODAY, or null. Drops ids
      that have left the deck; drops (and clears) the whole saved session when it
      is from another day or rehydrates to an empty queue. Never touches the
-     schedule — it only reads the deck. */
+     schedule — it only reads the deck.
+     For a day-list session (dayBound, the default) the queue is reconciled
+     against the batch first: ids the list dropped (unpicked, suspended) leave
+     the queue and ids added mid-session (Fill after Study, search Add, the
+     final-pass allocator) join it — in batch order, after the queued ones —
+     so "Resume session — N left" counts the same work "Today's list" does.
+     Ad-hoc sessions (dayBound === false: leech drill, search "Study these N")
+     keep their frozen queue — their cards may never have been on the list. */
   function rehydrateSavedStudy() {
     var saved = PGRE.store.state.formulaStudy;
     // Array.isArray (not a truthy check): a corrupt/hand-edited backup may carry a
@@ -1863,8 +1875,27 @@ PGRE.views.formulas = (function () {
       if (saved) { PGRE.store.state.formulaStudy = null; PGRE.store.save(); }
       return null;
     }
+    var queueIds = saved.queueIds;
+    if (saved.dayBound !== false) {
+      var remaining = PGRE.srs.formulaDayRemaining(deck), remIds = {};
+      remaining.forEach(function (c) { remIds[c.id] = 1; });
+      var kept = {}, keptIds = [];
+      queueIds.forEach(function (id) {
+        if (remIds[id]) { kept[id] = 1; keptIds.push(id); }
+      });
+      // Learning-step requeues are real duplicates: a kept id keeps every
+      // queue entry. New list members append once each, in batch order.
+      remaining.forEach(function (c) {
+        if (!kept[c.id]) { kept[c.id] = 1; keptIds.push(c.id); }
+      });
+      if (keptIds.join('') !== queueIds.join('')) {
+        queueIds = keptIds;
+        saved.queueIds = keptIds;
+        PGRE.store.save();
+      }
+    }
     var cards = [];
-    saved.queueIds.forEach(function (id) {
+    queueIds.forEach(function (id) {
       var c = deckById(id);
       if (c) cards.push(c);
     });
@@ -1900,6 +1931,7 @@ PGRE.views.formulas = (function () {
               again: saved.again || 0, againBase: saved.again || 0, xp: 0,
               flipped: false, history: history, peek: null, overlay: null,
               steps: stepsCopy, undo: [], pressCount: saved.pressCount || 0,
+              dayBound: saved.dayBound !== false,
               pendingOverlays: [], settled: false };
     renderCard();
   }
@@ -3421,7 +3453,7 @@ PGRE.views.formulas = (function () {
     if (!searchLast || !searchLast.total) return;
     var cards = searchLast.hits.map(function (h) { return h.card; });
     switchMode('study');
-    startStudy(cards);
+    startStudy(cards, false);
   }
 
   /* The "why did this card come back" chip — only for the matches a reader would
