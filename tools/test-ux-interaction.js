@@ -2027,6 +2027,13 @@ function runAsync() {
       assert(row('cpgf-2.4').querySelector('.picker-meta').textContent.indexOf('due in 5 d') !== -1,
         'row meta carries the schedule status');
       var r24 = row('cpgf-2.4');
+      assert(r24.classList.contains('is-scheduled'),
+        'a card in the queue with a future due date is marked scheduled');
+      assert(r24.querySelector('.picker-status').classList.contains('is-scheduled'),
+        'the due-in status reads as a scheduled pill');
+      assert(!row('cpgf-2.1').classList.contains('is-scheduled') &&
+        !row('cpgf-2.2').classList.contains('is-scheduled'),
+        'due-now and new cards are not marked scheduled');
       assert(!r24.hasAttribute('title'), 'picker row no longer carries a native title tooltip');
       // Styled tooltip: delegated document mouseover + delay before paint.
       fireDoc(cp.env, 'mouseover', { target: r24.querySelector('.picker-text') });

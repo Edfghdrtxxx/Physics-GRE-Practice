@@ -2608,6 +2608,50 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 }
 .pick-cart-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .pick-cart-head h3 { margin: 0; font-size: 16px; }
+
+/* ——— Scheduled-but-not-due rows + selected checkbox ———
+   A card already in the SRS queue with a future due date gets a faint ivory
+   tint on the row and a matching pill around its 'due in …' status, so it
+   reads "scheduled" at a glance next to new and due-now rows. */
+.picker-row.is-scheduled { background: var(--ivory); }
+.picker-row.is-scheduled:hover { background: var(--floor); }
+.picker-status.is-scheduled {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--ivory);
+  color: var(--ink-2);
+  font-weight: 500;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.picker-row.is-scheduled .picker-status.is-scheduled { background: var(--surface); }
+/* Picked box: coral fill + cream check drawn in CSS, distinct from the
+   neutral unchecked outline. Locked (disabled) boxes keep the same mark at
+   reduced opacity — locked rows are always 'in the list'. */
+.picker-box {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1.5px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  display: inline-grid;
+  place-content: center;
+}
+.picker-box:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.picker-box:checked::before {
+  content: '';
+  width: 9px;
+  height: 5px;
+  border: 2px solid var(--on-accent);
+  border-top: 0;
+  border-right: 0;
+  transform: rotate(-45deg) translateY(-1px);
+}
+.picker-box:disabled:checked { opacity: 0.55; }
+.picker-box:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pick-cart-count { font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .pick-cart-mix { margin: -6px 0 0; font-size: 13px; color: var(--ink-2); }
 .pick-cart-tools,

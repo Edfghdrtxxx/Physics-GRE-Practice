@@ -1575,8 +1575,10 @@ PGRE.views.formulas = (function () {
     }
     function metaHTML(c) {
       var status = statusText(c);
+      var sched = status.slice(0, 6) === 'due in';
       return '<div class="picker-meta">' + ui.esc(cardLabel(c)) + ' · ' +
-        '<span class="picker-status' + (status === 'due now' ? ' is-due' : '') + '">' +
+        '<span class="picker-status' + (status === 'due now' ? ' is-due' : '') +
+          (sched ? ' is-scheduled' : '') + '">' +
         status + '</span></div>';
     }
     /* Styled popover content (pickTip component above): the same
@@ -1622,8 +1624,11 @@ PGRE.views.formulas = (function () {
     function rowHTML(c) {
       var id = ui.esc(c.id), on = !!inList[c.id], isLocked = !!locked[c.id];
       var label = ui.esc(cardLabel(c));
+      var st = srs.cardState(c.id);
+      var sched = !isLocked && st && srs.daysUntil(st.due) > 0;  // in the queue, not due yet
       return '<div class="picker-item">' +
         '<div class="picker-row' + (isLocked ? ' is-locked' : '') + (on ? ' is-picked' : '') +
+          (sched ? ' is-scheduled' : '') +
           '" data-cardid="' + id + '">' +
           '<label class="picker-check"><input type="checkbox" class="picker-box" value="' + id + '"' +
             ' aria-label="' + (isLocked ? label + ' — ' + statusText(c) : 'Today’s list: ' + label) + '"' +
