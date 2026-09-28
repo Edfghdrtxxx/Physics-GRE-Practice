@@ -531,20 +531,28 @@ PGRE.views.dashboard = (function () {
     var picked = batch.reviewIds.length + batch.newIds.length;
     var unlearned = srs.newInDeck(deck).length;
     var postponed = srs.formulaDayPostponed(deck);
-    var dueTarget = Math.min(T, postponed);
+    // The auto-pick (due first, then new in book order). Once today's list
+    // is done, only due work is offered here; more new cards are an explicit
+    // "Study more" on Formula recall.
+    var fillOpts = picked ? { fresh: false } : null;
+    var pick = remaining ? { reviewIds: [], newIds: [] } : srs.suggestFormulaDay(deck, fillOpts);
+    var dueN = pick.reviewIds.length, newN = pick.newIds.length;
+    var fill = dueN + newN > 0;
     var text;
     if (remaining) {
       text = remaining + ' left today';
       if (postponed) text += ' · ' + postponed + ' due not picked';
     }
-    else if (postponed) text = postponed > dueTarget
-      ? postponed + ' due now · study ' + dueTarget
-      : dueTarget + ' due now';
+    else if (dueN) {
+      text = postponed > dueN ? postponed + ' due now · study ' + dueN : dueN + ' due now';
+      if (newN) text += ' · +' + newN + ' new';
+    }
     else if (picked) text = 'all caught up';
     else if (unlearned) text = unlearned + ' not yet introduced';
     else text = 'all introduced';
     return { text: text, remaining: remaining, unlearned: unlearned,
-      picked: picked, postponed: postponed, dueTarget: dueTarget, target: T };
+      picked: picked, postponed: postponed, fill: fill, fillOpts: fillOpts,
+      dueN: dueN, newN: newN, target: T };
   }
 
   function startFormulaFromToday(ev) {
@@ -552,12 +560,10 @@ PGRE.views.dashboard = (function () {
     var todayBtn = document.getElementById('today-formulas-btn');
     if (todayBtn) todayBtn.disabled = true;
     PGRE.formulaDeck().then(function (deck) {
-      if (PGRE.srs.fillFormulaDayFinalPass) PGRE.srs.fillFormulaDayFinalPass(deck);
-      var batch = PGRE.srs.fillFormulaDayDueIfEmpty
-        ? PGRE.srs.fillFormulaDayDueIfEmpty(deck) : PGRE.srs.formulaDay(deck);
-      if (!batch.reviewIds.length && !batch.newIds.length && !PGRE.srs.finalPassActive()) {
-        PGRE.srs.fillFormulaDayIfEmpty(deck);
-      }
+      // formulaStatus runs the final-pass allocator first; the click then
+      // takes exactly the auto-pick the button promised.
+      var st = formulaStatus(deck);
+      if (st.fill) PGRE.srs.autoFillFormulaDay(deck, st.fillOpts);
       if (PGRE.views.formulas && PGRE.views.formulas.armStudyFromFill) {
         PGRE.views.formulas.armStudyFromFill();
       }
@@ -844,19 +850,13 @@ PGRE.views.dashboard = (function () {
       var todayEl = document.getElementById('today-formulas');
       if (todayEl) todayEl.textContent = st.text;
       if (tfBtn && !tfBtn.disabled) {
-        if (st.remaining) {
+        if (st.remaining || (st.fill && st.dueN)) {
           tfBtn.classList.remove('btn-ghost');
           tfBtn.classList.add('btn-primary');
-          tfBtn.textContent = 'Study →';
-        } else if (st.postponed) {
-          tfBtn.classList.remove('btn-ghost');
-          tfBtn.classList.add('btn-primary');
-          tfBtn.textContent = 'Study ' + st.dueTarget + ' due →';
-        } else if (st.unlearned && !st.picked && !PGRE.srs.finalPassActive()) {
-          tfBtn.textContent = 'Study ' + st.target + ' →';
-        } else if (st.unlearned && !st.picked) {
-          tfBtn.textContent = 'Open →';
         }
+        if (st.remaining) tfBtn.textContent = 'Study →';
+        else if (st.fill && !st.newN) tfBtn.textContent = 'Study ' + st.dueN + ' due →';
+        else if (st.fill) tfBtn.textContent = 'Study ' + (st.dueN + st.newN) + ' →';
         else tfBtn.textContent = 'Open →';
       }
       // remaining counts may tween; do not tween "N not yet introduced"

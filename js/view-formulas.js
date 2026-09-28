@@ -259,6 +259,14 @@ PGRE.views.formulas = (function () {
     html += '<div class="direction-row"><span class="exam-day-label">Intervals</span>' +
       '<button class="btn btn-ghost btn-sm" id="exam-cap-toggle">' +
       (capOn ? 'Capped to exam day' : 'Classic Anki (uncapped)') + '</button></div>';
+    // F5: Study direction. false = Prompt → Formula (recall the equation);
+    // true = Formula → Prompt (name it / say when it applies).
+    var reverse = !!PGRE.store.state.settings.formulaReverse;
+    html += '<div class="direction-row"><span class="exam-day-label">Direction</span>' +
+      '<button class="btn btn-ghost btn-sm" id="dir-toggle">' +
+      (reverse ? 'Formula → Prompt' : 'Prompt → Formula') + '</button></div>';
+    html += '<div class="direction-row"><span class="exam-day-label">Card progress</span>' +
+      '<button class="btn btn-ghost btn-sm" id="reset-cards-btn">Reset card progress</button></div>';
     return html;
   }
 
@@ -281,6 +289,20 @@ PGRE.views.formulas = (function () {
       s.formulaExamCap = s.formulaExamCap === false;
       PGRE.store.save();
       renderHome();
+    });
+    var dt = document.getElementById('dir-toggle');
+    if (dt) dt.addEventListener('click', function () {
+      PGRE.store.state.settings.formulaReverse = !PGRE.store.state.settings.formulaReverse;
+      PGRE.store.save();
+      renderHome();
+    });
+    var rcb = document.getElementById('reset-cards-btn');
+    if (rcb) rcb.addEventListener('click', function () {
+      if (confirm('Reset all formula flashcard intervals and progress so you can recall them from scratch? Your question bank and exam scores will not be affected.')) {
+        PGRE.store.resetFormulaCards();
+        renderHome();
+        if (PGRE.toast) PGRE.toast('All formula cards have been reset to new.', 'info');
+      }
     });
   }
 
@@ -680,6 +702,92 @@ PGRE.views.formulas = (function () {
     return html;
   }
 
+  /* ——— Today card: one line on what Study will do, one primary button ———
+     remaining = cards still owed from the saved list. When nothing remains the
+     Study button takes the auto-pick (srs.suggestFormulaDay: due reviews
+     first, then new cards in book order, up to the daily target). */
+  function todayState() {
+    var srs = PGRE.srs;
+    var batch = srs.formulaDay(deck);
+    var remaining = srs.formulaDayRemaining(deck);
+    var done = 0, unseen = 0, left = {};
+    remaining.forEach(function (c) { left[c.id] = 1; });
+    batch.reviewIds.concat(batch.newIds).forEach(function (id) {
+      if (!left[id] && srs.studiedToday(srs.cardState(id))) done++;
+    });
+    deck.forEach(function (c) {
+      if (!srs.cardState(c.id) && !srs.isSuspended(c.id)) unseen++;
+    });
+    var remNew = remaining.filter(function (c) { return !srs.cardState(c.id); }).length;
+    return {
+      target: srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget),
+      remaining: remaining,
+      remReviews: remaining.length - remNew,
+      remNew: remNew,
+      done: done,
+      unseen: unseen,
+      postponed: srs.formulaDayPostponed(deck),
+      sug: remaining.length ? { reviewIds: [], newIds: [] } : srs.suggestFormulaDay(deck),
+      resume: rehydrateSavedStudy()
+    };
+  }
+
+  function mixText(reviews, fresh) {
+    var parts = [];
+    if (reviews) parts.push(reviews + ' due review' + (reviews === 1 ? '' : 's'));
+    if (fresh) parts.push(fresh + ' new card' + (fresh === 1 ? '' : 's'));
+    return parts.join(' + ');
+  }
+
+  function todayCardHTML(t) {
+    var sugR = t.sug.reviewIds.length, sugN = t.sug.newIds.length, sugAll = sugR + sugN;
+    var backlog = t.postponed - sugR;
+    var sugWhy = (sugR && sugN ? ': due reviews first, then new cards in book order.'
+      : sugR ? ', most overdue first.' : ', in book order.') +
+      (backlog > 0 ? ' ' + backlog + ' more due after these.' : '');
+    var M = t.remaining.length;
+    var title = 'Today’s cards', line, buttons;
+    var edit = '<button class="btn btn-ghost" id="pick-btn">' +
+      (M || t.resume ? 'Edit today’s list' : 'Choose cards') + '</button>';
+    var exp = '<button class="btn btn-accent" id="home-export-btn" ' +
+      'title="Export learning status for agent">Export data</button>';
+    function study(label, primary) {
+      return '<button class="btn ' + (primary ? 'btn-primary' : 'btn-ghost') +
+        '" id="study-btn">' + label + '</button>';
+    }
+    if (t.resume) {
+      buttons = '<button class="btn btn-primary" id="resume-btn">' +
+        'Resume session — ' + t.resume.length + ' left</button>' + edit;
+      line = 'A study session is in progress.';
+    } else if (M) {
+      buttons = study('Study ' + M + ' card' + (M === 1 ? '' : 's'), true) + edit;
+      line = mixText(t.remReviews, t.remNew) + ' left in today’s list' +
+        (t.done ? ' · ' + t.done + ' done' : '') + '.';
+      if (t.postponed) {
+        line += ' ' + t.postponed + ' more due ' + (t.postponed === 1 ? 'is' : 'are') +
+          ' not in the list.';
+      }
+    } else if (t.done) {
+      title = 'Today’s list is done';
+      buttons = (sugAll ? study('Study ' + sugAll + ' more', sugR > 0) : '') + edit + exp;
+      line = t.done + ' studied today. ' + (sugAll
+        ? 'Up next if you keep going: ' + mixText(sugR, sugN) + sugWhy
+        : 'Nothing else is due — the next cards return on their schedule.');
+    } else if (sugAll) {
+      buttons = study('Study ' + sugAll + ' card' + (sugAll === 1 ? '' : 's'), true) + edit;
+      line = mixText(sugR, sugN) + ' — picked for you' + sugWhy;
+    } else {
+      title = 'All caught up';
+      buttons = edit + exp;
+      line = (t.unseen && PGRE.srs.finalPassActive())
+        ? 'Nothing is due. In the final week new cards stay manual — choose any you still want.'
+        : 'Nothing is due and every card has been introduced.';
+    }
+    return '<div class="card fm-landing"><h2 class="fm-today-title">' + title + '</h2>' +
+      '<p class="muted fm-today-line">' + line + '</p>' +
+      '<div class="btn-row">' + buttons + '</div></div>';
+  }
+
   /* ——— Study mode home — progressive daily batch, rendered into body ——— */
   function renderHome() {
     study = null;
@@ -723,47 +831,13 @@ PGRE.views.formulas = (function () {
       PGRE.refreshNavBadges();
       return;
     }
-    var batch = srs.formulaDay(deck);
-    if (srs.fillFormulaDayFinalPass) {
-      batch = srs.fillFormulaDayFinalPass(deck);
-    }
-    var T = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
-    var M = srs.formulaDayRemaining(deck).length;
-    var reviewsN = batch.reviewIds.length, newN = batch.newIds.length;
-    var pickedN = reviewsN + newN;
-    var postponed = srs.formulaDayPostponed(deck);
-    var resumeCards = rehydrateSavedStudy();
-
-    // Empty-day / remaining-batch landing: one primary Study control. Tabs,
-    // check-in, and SM-2 settings live in the Options disclosure.
-    var fillable = 0;
-    fresh.forEach(function (c) { if (!srs.isSuspended(c.id)) fillable++; });
-    var fillN = Math.min(T, fillable);
-    var landing = !resumeCards && M === 0 && !pickedN && postponed === 0 && fillN > 0;
-    if (resumeCards) {
-      html += '<div class="card fm-landing"><div class="btn-row">' +
-        '<button class="btn btn-primary" id="resume-btn">' +
-        'Resume session — ' + resumeCards.length + ' left</button>' +
-        '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div></div>';
-    } else if (landing) {
-      html += '<div class="card fm-landing"><div class="btn-row">' +
-          '<button class="btn btn-primary" id="fill-study-btn">Study ' + fillN + ' today</button>' +
-          '<button class="btn btn-ghost" id="landing-pick-btn">Pick cards myself</button>' +
-        '</div></div>';
-    } else if (M > 0) {
-      html += '<div class="card fm-landing"><div class="btn-row">' +
-        '<button class="btn btn-primary" id="study-btn">Study → ' + M + ' left</button>' +
-        '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div></div>';
-    } else if (postponed > 0) {
-      var dueStudyN = Math.min(T, postponed);
-      html += '<div class="card fm-landing"><div class="btn-row">' +
-        '<button class="btn btn-primary" id="study-btn">Study → ' + dueStudyN + ' due</button>' +
-        '<button class="btn btn-ghost" id="pick-btn">Pick today’s cards</button></div></div>';
-    }
+    if (srs.fillFormulaDayFinalPass) srs.fillFormulaDayFinalPass(deck);
+    var today = todayState();
+    html += todayCardHTML(today);
 
     html += '<div class="stat-row stat-row-4">' +
       ui.statTile('Cards in the deck', ui.fmt(deck.length)) +
-      ui.statTile('Remaining today', ui.fmt(M) + ' <span class="stat-unit">/ ' + T + '</span>') +
+      ui.statTile('Remaining today', ui.fmt(today.remaining.length) + ' <span class="stat-unit">/ ' + today.target + '</span>') +
       ui.statTile('Reviewed today', ui.fmt(reviewedToday)) +
       ui.statTile('Not yet introduced', ui.fmt(fresh.length)) +
     '</div>';
@@ -794,49 +868,6 @@ PGRE.views.formulas = (function () {
         leeches.length + ' struggling</button></div></div>';
     }
 
-    // ——— Today's formulas (direction / reset / picker; SM-2 settings are in Options) ———
-    html += '<div class="card"><h2>Today’s formulas</h2>';
-    // F5: Study direction toggle. false = Prompt → Formula (recall the equation);
-    // true = Formula → Prompt (name it / say when it applies). Persists + re-renders.
-    var reverse = !!PGRE.store.state.settings.formulaReverse;
-    html += '<div class="direction-row"><span class="exam-day-label">Direction</span>' +
-      '<button class="btn btn-ghost btn-sm" id="dir-toggle">' +
-      (reverse ? 'Formula → Prompt' : 'Prompt → Formula') + '</button></div>';
-    html += '<div class="direction-row"><span class="exam-day-label">Card progress</span>' +
-      '<button class="btn btn-ghost btn-sm" id="reset-cards-btn">Reset card progress</button></div>';
-
-    var comp = pickedN
-      ? reviewsN + ' review' + (reviewsN === 1 ? '' : 's') + ' + ' +
-        newN + ' new picked for today.'
-      : (landing ? 'Nothing picked yet — start from the buttons above.'
-                 : (postponed > 0
-                    ? postponed + ' due review' + (postponed === 1 ? ' is' : 's are') +
-                      ' waiting — study them, or pick today’s cards above.'
-                    : 'Nothing picked yet — choose today’s cards below.'));
-    if (pickedN && postponed > 0) {
-      comp += ' ' + postponed + ' more review' + (postponed === 1 ? ' is' : 's are') +
-        ' due but not picked.';
-    }
-    html += '<p class="muted comp-line">' + comp + '</p>';
-    if (batch.softIds && batch.softIds.length) {
-      var nSoft = batch.softIds.length;
-      html += '<p class="muted soft-pin-note">' + nSoft + ' card' +
-        (nSoft === 1 ? '' : 's') +
-        ' added from Search before their due date (kept until studied).</p>';
-    }
-
-    if (!resumeCards && !landing && M === 0 && postponed === 0) {
-      html += '<h3 class="caught-up">' + (pickedN ? 'You’re all caught up' : 'Nothing picked yet') + '</h3>' +
-        '<p class="muted">' + (pickedN
-          ? 'Today’s picks are done — the next cards return on their schedule.'
-          : 'Pick the formulas you want to recall today — nothing is chosen for you.') + '</p>' +
-        '<div class="btn-row">' +
-          '<button class="btn btn-primary" id="pick-btn">Pick today’s cards</button>' +
-          '<button class="btn btn-accent" id="home-export-btn" title="Export learning status for agent">Export data</button>' +
-        '</div>';
-    }
-    html += '</div>';
-
     // ——— Memory stats (F10) — collapsed by default ———
     html += '<div class="card mem-stats-card"><div class="mem-stats-head">' +
       '<h2>Memory stats</h2>' +
@@ -861,33 +892,14 @@ PGRE.views.formulas = (function () {
     PGRE.typesetMath(body());
     PGRE.refreshNavBadges(); // remaining counts change without a route change
 
+    // Study: the list's remaining cards, or — when nothing is left — the
+    // auto-pick the button label promised (srs.suggestFormulaDay).
     var sb = document.getElementById('study-btn');
     if (sb) sb.addEventListener('click', function () {
       var cards = PGRE.srs.formulaDayRemaining(deck);
       if (!cards.length) {
-        if (PGRE.srs.fillFormulaDayDueIfEmpty) {
-          PGRE.srs.fillFormulaDayDueIfEmpty(deck);
-          cards = PGRE.srs.formulaDayRemaining(deck);
-        } else {
-          var batchNow = PGRE.srs.formulaDay(deck);
-          var inB = {};
-          batchNow.reviewIds.concat(batchNow.newIds).forEach(function (id) { inB[id] = 1; });
-          var t = PGRE.srs.today();
-          var dueIds = [];
-          deck.forEach(function (c) {
-            var st = PGRE.srs.cardState(c.id);
-            if (st && !PGRE.srs.isSuspended(c.id) && st.due <= t && !inB[c.id]) dueIds.push(c.id);
-          });
-          if (dueIds.length) {
-            if (PGRE.srs.addFormulaDaySoft) PGRE.srs.addFormulaDaySoft(deck, dueIds);
-            cards = PGRE.srs.formulaDayRemaining(deck);
-            if (!cards.length) {
-              var byId = {};
-              deck.forEach(function (c) { byId[c.id] = c; });
-              cards = dueIds.map(function (id) { return byId[id]; }).filter(Boolean);
-            }
-          }
-        }
+        PGRE.srs.autoFillFormulaDay(deck);
+        cards = PGRE.srs.formulaDayRemaining(deck);
       }
       startStudy(cards);
     });
@@ -900,17 +912,10 @@ PGRE.views.formulas = (function () {
       else renderHome();
     });
     wireOptionsExtra();
-    var pb = document.getElementById('pick-btn') || document.getElementById('landing-pick-btn');
+    var pb = document.getElementById('pick-btn');
     if (pb) pb.addEventListener('click', renderPicker);
     var heb = document.getElementById('home-export-btn');
     if (heb) heb.addEventListener('click', openFormulaExportModal);
-    // Landing CTA: same fill-then-study path the dashboard's Study button arms.
-    var fsb = document.getElementById('fill-study-btn');
-    if (fsb) fsb.addEventListener('click', function () {
-      PGRE.srs.fillFormulaDayIfEmpty(deck);
-      studyFromFill = true;
-      renderHome();
-    });
     // F2: drill the leeches — a normal-grading session independent of the daily
     // batch (these cards may already be studied today; they still surface here).
     // Put-away cards are excluded: a shelved card is very often also a leech,
@@ -920,21 +925,6 @@ PGRE.views.formulas = (function () {
       startStudy(deck.filter(function (c) {
         return PGRE.srs.isLeech(PGRE.srs.cardState(c.id)) && !PGRE.srs.isSuspended(c.id);
       }));
-    });
-    // F5: flip the Study direction, persist, re-render.
-    var dt = document.getElementById('dir-toggle');
-    if (dt) dt.addEventListener('click', function () {
-      PGRE.store.state.settings.formulaReverse = !PGRE.store.state.settings.formulaReverse;
-      PGRE.store.save();
-      renderHome();
-    });
-    var rcb = document.getElementById('reset-cards-btn');
-    if (rcb) rcb.addEventListener('click', function () {
-      if (confirm('Reset all formula flashcard intervals and progress so you can recall them from scratch? Your question bank and exam scores will not be affected.')) {
-        PGRE.store.resetFormulaCards();
-        renderHome();
-        if (PGRE.toast) PGRE.toast('All formula cards have been reset to new.', 'info');
-      }
     });
     // F10: collapse/expand Memory stats (built lazily on first open).
     var mt = document.getElementById('mem-stats-toggle');
@@ -1245,8 +1235,8 @@ PGRE.views.formulas = (function () {
   }
 
   /* Row click toggles a view-only peek (front + back + note); the schedule is
-     never touched. The peek is typeset lazily on first open. Shared by Browse
-     and the daily picker so a name click shows the card without changing picks. */
+     never touched. The peek is typeset lazily on first open. Browse rows only;
+     the today's-list composer has its own Formula toggle (renderPicker). */
   function openPeekFor(row, peek, id) {
     if (!peek) return;
     if (!peek.hidden) { peek.hidden = true; row.classList.remove('open'); return; }
@@ -1307,7 +1297,7 @@ PGRE.views.formulas = (function () {
       var chip = row.querySelector('.suspended-chip');
       if (chip && chip.parentNode) chip.parentNode.removeChild(chip);
       section.innerHTML = '<p class="peek-suspend-note">Restored — add it to today’s ' +
-        'batch with “+ today” or the picker if you want it now.</p>';
+        'list with “+ today” or Edit today’s list if you want it now.</p>';
     });
   }
 
@@ -1356,45 +1346,84 @@ PGRE.views.formulas = (function () {
      but guard the quote/backslash cases regardless). */
   function cssAttr(s) { return String(s).replace(/["\\]/g, '\\$&'); }
 
-  /* ——— Daily picker: Chapters / Schedule views, rows lazy ———
-     Empty landing (no remaining) offers Study N today (one-click
-     Fill → fillFormulaDayIfEmpty). Two panes share one pick set: chapters
-     (cpgf-<ch>.<eq>) and Schedule (learned cards grouped by due date).
-     Collapsed groups keep rows out of the DOM so the 334-card deck is not a
-     wall. The pick set lives in memory so Save still sees collapsed groups.
-     One checkbox, two jobs: filled if ever graded or in today's pick set;
-     a click still only toggles today membership. Learned-only fills are not
-     saved. */
+  /* ——— Today's list composer ("Choose cards" / "Edit today's list") ———
+     Two panes over one draft list. Left: every card, grouped as Due now plus
+     the book chapters — groups start collapsed and paint their rows only when
+     opened, so the 350-card deck is never one wall. Right: today's list
+     itself, always in view, with Fill (the srs.suggestFormulaDay auto-pick)
+     and Clear. A checkbox means exactly one thing: in today's list. Cards
+     graded today are locked. Nothing persists until Study or Save
+     (srs.setFormulaDayPicks); Cancel drops the draft. With no active picks
+     the draft opens pre-filled with the auto-pick, so the default is a
+     sensible day's work rather than a blank list. */
   function renderPicker() {
-    if (PGRE.nav) PGRE.nav.setTrail(['Pick today’s cards']);   // BUNDLE G
+    if (PGRE.nav) PGRE.nav.setTrail(['Today’s cards']);   // BUNDLE G
     var ui = PGRE.ui, srs = PGRE.srs;
     var batch = srs.formulaDay(deck);
     var T = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
-    var picked = {};
-    var locked = {};
-    batch.reviewIds.concat(batch.newIds).forEach(function (id) { picked[id] = 1; });
+    var byId = {};
+    deck.forEach(function (c) { byId[c.id] = c; });
+
+    var list = [], inList = {}, locked = {};
+    function addId(id) {
+      if (!id || inList[id] || locked[id] || !byId[id]) return false;
+      inList[id] = 1;
+      list.push(id);
+      return true;
+    }
+    function removeId(id) {
+      if (!inList[id]) return false;
+      delete inList[id];
+      list.splice(list.indexOf(id), 1);
+      return true;
+    }
+    // Graded today = locked (setFormulaDayPicks keeps them in the saved batch
+    // whatever the draft says). 'done' when the grade sent the card forward;
+    // 'again' when it is due again today — those still sit in today's list,
+    // shown as fixed rows.
+    var today = srs.today();
     deck.forEach(function (c) {
-      if (srs.studiedToday(srs.cardState(c.id))) {
-        locked[c.id] = 1;
-        picked[c.id] = 1;
+      var st = srs.cardState(c.id);
+      if (srs.studiedToday(st)) locked[c.id] = st.due <= today ? 'again' : 'done';
+    });
+    var againIds = [], doneN = 0;
+    batch.reviewIds.concat(batch.newIds).forEach(function (id) {
+      if (locked[id] === 'again' && byId[id]) againIds.push(id);
+      else addId(id);
+    });
+    Object.keys(locked).forEach(function (id) { if (locked[id] === 'done') doneN++; });
+
+    function suggestion(room) {
+      return srs.suggestFormulaDay(deck, { have: inList, room: room });
+    }
+    function takeSuggestion(room) {
+      var sug = suggestion(room);
+      sug.reviewIds.concat(sug.newIds).forEach(addId);
+      return sug.reviewIds.length + sug.newIds.length;
+    }
+    // Same rule as the home Study button: auto-pick only when nothing remains.
+    var prefilled = !list.length && !againIds.length && takeSuggestion(T) > 0;
+
+    // ——— groups: Due now (most overdue first) + book chapters ———
+    var dueCards = [];
+    deck.forEach(function (c, idx) {
+      var st = srs.cardState(c.id);
+      if (st && !srs.isSuspended(c.id) && srs.daysUntil(st.due) <= 0) {
+        dueCards.push({ c: c, due: st.due, idx: idx });
       }
     });
-    var nEver = srs.countEverStudied(deck);
-    function isEver(id) { return srs.everStudied(id); }
+    dueCards.sort(function (x, y) {
+      if (x.due !== y.due) return x.due < y.due ? -1 : 1;
+      return x.idx - y.idx;
+    });
+    dueCards = dueCards.map(function (x) { return x.c; });
 
-    function chapterKey(id) {
-      var m = String(id || '').match(/^cpgf-(\d+)\./);
-      return m ? m[1] : 'other';
-    }
-    var byChapter = {};
-    var chOrder = [];
+    var byChapter = {}, chOrder = [];
     deck.forEach(function (c) {
-      var ch = chapterKey(c.id);
-      if (!byChapter[ch]) {
-        byChapter[ch] = [];
-        chOrder.push(ch);
-      }
-      byChapter[ch].push(c);
+      var ch = srs.formulaChapter(c.id);
+      var key = isFinite(ch) ? String(ch) : 'other';
+      if (!byChapter[key]) { byChapter[key] = []; chOrder.push(key); }
+      byChapter[key].push(c);
     });
     chOrder.sort(function (a, b) {
       if (a === 'other') return 1;
@@ -1402,18 +1431,36 @@ PGRE.views.formulas = (function () {
       return parseInt(a, 10) - parseInt(b, 10);
     });
 
-    function chapterTitle(ch, cards) {
-      if (ch === 'other') return 'Other';
+    function chapterTopic(cards) {
       var counts = {}, best = '', n = -1;
-      cards.forEach(function (c) {
-        var t = c.topic || '';
-        counts[t] = (counts[t] || 0) + 1;
-      });
+      cards.forEach(function (c) { counts[c.topic || ''] = (counts[c.topic || ''] || 0) + 1; });
       Object.keys(counts).forEach(function (t) {
         if (counts[t] > n) { n = counts[t]; best = t; }
       });
-      var topic = PGRE.topicById(best);
-      return 'Chapter ' + ch + (topic ? ' · ' + topic.name : '');
+      return PGRE.topicById(best);
+    }
+    function chapterTitle(key, cards) {
+      if (key === 'other') return 'Supplements';
+      var topic = chapterTopic(cards);
+      return 'Chapter ' + key + (topic ? ' · ' + topic.name : '');
+    }
+    function groupCards(tp) {
+      return tp.getAttribute('data-group') === 'due'
+        ? dueCards : (byChapter[tp.getAttribute('data-ch')] || []);
+    }
+    function groupMeta(cards) {
+      var due = 0, fresh = 0;
+      cards.forEach(function (c) {
+        var st = srs.cardState(c.id);
+        if (srs.isSuspended(c.id)) return;
+        if (!st) fresh++;
+        else if (srs.daysUntil(st.due) <= 0) due++;
+      });
+      var bits = [];
+      if (due) bits.push(due + ' due');
+      if (fresh) bits.push(fresh + ' new');
+      if (!bits.length) bits.push('all learned');
+      return bits.join(' · ') + ' · ' + cards.length + ' cards';
     }
 
     var hay = {};
@@ -1426,380 +1473,322 @@ PGRE.views.formulas = (function () {
       return !filterQ || (hay[c.id] && hay[c.id].indexOf(filterQ) !== -1);
     }
 
-    var dueByKey = {};
-    var dueOrder = [];
-    deck.forEach(function (c, idx) {
+    function cardLabel(c) {
+      var eq = c.eq && c.eq !== 'supp' ? 'Eq ' + c.eq : '';
+      var name = cardName(c);
+      return [name, eq].filter(Boolean).join(' · ') || c.id;
+    }
+    function statusText(c) {
       var st = srs.cardState(c.id);
-      if (!st || srs.isSuspended(c.id)) return;
+      if (locked[c.id]) return locked[c.id] === 'again' ? 'again today' : 'done today';
+      if (srs.isSuspended(c.id)) return 'put away';
+      if (!st) return 'new';
       var du = srs.daysUntil(st.due);
-      var key, title;
-      if (du <= 0) { key = 'now'; title = 'Due now'; }
-      else if (du === 1) { key = '1'; title = 'Tomorrow'; }
-      else { key = 'in:' + srs.ivlLabel(du); title = 'In ' + srs.ivlLabel(du); }
-      if (!dueByKey[key]) {
-        dueByKey[key] = { title: title, sort: du, items: [] };
-        dueOrder.push(key);
-      }
-      var g = dueByKey[key];
-      if (du < g.sort) g.sort = du;
-      g.items.push({ c: c, du: du, idx: idx });
-    });
-    dueOrder.sort(function (a, b) { return dueByKey[a].sort - dueByKey[b].sort; });
-    dueOrder.forEach(function (key) {
-      var g = dueByKey[key];
-      g.items.sort(function (a, b) {
-        if (a.du !== b.du) return a.du - b.du;
-        return a.idx - b.idx;
-      });
-      g.cards = g.items.map(function (x) { return x.c; });
-    });
-
-    var html = '<div class="card"><h2>Pick today’s cards</h2>' +
-      '<p class="muted">Switch between chapters and your review schedule. ' +
-      'Fill today’s batch adds up to the daily target of unseen cards, ' +
-      'or tick cards yourself. Cards already studied today stay in.</p>' +
-      '<div class="picker-bar"><input type="text" class="picker-filter" id="picker-filter" ' +
-      'placeholder="Filter by id or formula">' +
-      '<span class="picker-count" id="picker-count"></span>' +
-      '<div class="btn-row picker-actions">' +
-      '<button type="button" class="btn btn-ghost" id="picker-fill">Fill today’s batch</button>' +
-      '<button type="button" class="btn btn-primary" id="picker-save">Save picks</button>' +
-      '<button type="button" class="btn btn-ghost" id="picker-clear">Clear all</button>' +
-      '<button type="button" class="btn btn-ghost" id="picker-cancel">Cancel</button></div></div>';
-
-    html += '<div class="browse-tabs picker-view-tabs" role="tablist">' +
-      '<button class="browse-tab active" role="tab" data-pview="chapters" aria-selected="true" tabindex="0">Chapters</button>' +
-      '<button class="browse-tab" role="tab" data-pview="schedule" aria-selected="false" tabindex="-1">Schedule</button>' +
-      '</div>';
-
-    function boxTitle(opts) {
-      if (opts.locked) return 'Done today — stays in today\'s batch';
-      if (opts.inToday && opts.learned) return 'In today\'s batch · already studied before';
-      if (opts.inToday) return 'In today\'s batch · not studied yet';
-      if (opts.learned) return 'Studied before · not in today\'s batch — click to add';
-      return 'Not studied · click to add to today';
+      return du <= 0 ? 'due now' : 'due in ' + srs.ivlLabel(du);
+    }
+    function metaHTML(c) {
+      var status = statusText(c);
+      return '<div class="picker-meta">' + ui.esc(cardLabel(c)) + ' · ' +
+        '<span class="picker-status' + (status === 'due now' ? ' is-due' : '') + '">' +
+        status + '</span></div>';
     }
 
     function rowHTML(c) {
-      var st = srs.cardState(c.id);
-      var isLocked = !!locked[c.id];
-      var inToday = !!picked[c.id];
-      var learned = isEver(c.id);
-      var filled = inToday || learned;
-      var chip;
-      if (!st) {
-        chip = '<span class="due-chip">new</span>';
-      } else {
-        var du = srs.daysUntil(st.due);
-        chip = '<span class="due-chip' + (du <= 0 ? ' due-now' : '') + '">' +
-          (du <= 0 ? 'due now' : 'due in ' + srs.ivlLabel(du)) + '</span>';
-      }
-      if (isLocked) chip += '<span class="due-chip today-chip">done today</span>';
-      var title = cardName(c);
-      var label = ui.esc(c.id) + (title ? ' · ' + ui.esc(title) : '');
-      var kind = inToday ? ' picker-today' : (learned ? ' picker-learned-only' : '');
-      var tipText = ui.esc(boxTitle({ locked: isLocked, inToday: inToday, learned: learned }));
-      var tip = ' data-tip="' + tipText + '" data-tip-fast aria-label="' + tipText + '"';
+      var id = ui.esc(c.id), on = !!inList[c.id], isLocked = !!locked[c.id];
+      var label = ui.esc(cardLabel(c));
       return '<div class="picker-item">' +
-        '<div class="picker-row' + (isLocked ? ' is-locked' : '') + kind + '" data-cardid="' +
-          ui.esc(c.id) + '"' + (inToday ? ' data-today="1"' : '') + '>' +
-          '<label class="picker-check"' + tip + '><input type="checkbox" class="picker-box" value="' +
-            ui.esc(c.id) + '"' + tip + (filled ? ' checked' : '') +
-            (isLocked ? ' disabled data-locked="1"' : '') + '></label>' +
-          '<span class="deck-name">' + label + '</span>' + chip +
+        '<div class="picker-row' + (isLocked ? ' is-locked' : '') + (on ? ' is-picked' : '') +
+          '" data-cardid="' + id + '">' +
+          '<label class="picker-check"><input type="checkbox" class="picker-box" value="' + id + '"' +
+            ' aria-label="' + (isLocked ? label + ' — ' + statusText(c) : 'Today’s list: ' + label) + '"' +
+            (on || isLocked ? ' checked' : '') + (isLocked ? ' disabled' : '') + '></label>' +
+          '<div class="picker-text">' +
+            '<div class="picker-prompt">' + formulaHTML(c.front) + '</div>' +
+            metaHTML(c) +
+          '</div>' +
+          '<button type="button" class="btn btn-ghost btn-sm picker-peek-btn" ' +
+            'aria-expanded="false">Formula</button>' +
         '</div>' +
-        '<div class="browse-peek picker-peek picker-preview">' +
-          formulaHTML(c.back) + similarButton(c, 'btn-sm') +
-        '</div>' +
+        '<div class="browse-peek picker-peek picker-preview" hidden></div>' +
       '</div>';
     }
 
-    html += '<div id="picker-view-chapters">';
-    chOrder.forEach(function (ch) {
-      var cards = byChapter[ch];
-      var topic = null;
-      cards.some(function (c) {
-        topic = PGRE.topicById(c.topic);
-        return !!topic;
-      });
-      html += '<div class="picker-topic picker-chapter" data-ch="' + ui.esc(ch) + '">' +
+    function groupHTML(attrs, title, meta, mono) {
+      return '<div class="picker-topic" ' + attrs + '>' +
         '<div class="picker-topic-head">' +
           '<span class="picker-ch-toggle" role="button" tabindex="0" aria-expanded="false">' +
-            (topic ? ui.monogram(topic) + ' ' : '') +
-            ui.esc(chapterTitle(ch, cards)) +
-            '<span class="muted picker-ch-count"> · ' + srs.countEverStudied(cards) + '/' + cards.length + '</span>' +
+            (mono ? mono + ' ' : '') + '<span class="picker-ch-title">' + ui.esc(title) + '</span>' +
+            '<span class="muted picker-ch-count">' + ui.esc(meta) + '</span>' +
           '</span>' +
           '<label class="picker-selall"><input type="checkbox" class="picker-selall-box"> All</label>' +
         '</div>' +
         '<div class="picker-chapter-body" hidden></div>' +
       '</div>';
-    });
-    html += '</div>';
-
-    html += '<div id="picker-view-schedule" class="picker-due-band" hidden>';
-    if (!dueOrder.length) {
-      html += '<p class="muted">No scheduled reviews yet</p>';
-    } else {
-      dueOrder.forEach(function (key) {
-        var g = dueByKey[key];
-        var open = key === 'now';
-        html += '<div class="picker-topic picker-due-group" data-due="' + ui.esc(key) + '"' +
-          (open ? ' data-open="1"' : '') + '>' +
-          '<div class="picker-topic-head">' +
-            '<span class="picker-ch-toggle" role="button" tabindex="0" aria-expanded="' +
-              (open ? 'true' : 'false') + '">' +
-              ui.esc(g.title) +
-              '<span class="muted picker-ch-count"> · ' + srs.countEverStudied(g.cards) + '/' + g.cards.length + '</span>' +
-            '</span>' +
-            '<label class="picker-selall"><input type="checkbox" class="picker-selall-box"> All</label>' +
-          '</div>' +
-          '<div class="picker-chapter-body" hidden></div>' +
-        '</div>';
-      });
     }
-    html += '</div>';
 
-    html += '</div>';
+    var html = '<div class="card picker">' +
+      '<h2>Today’s cards</h2>' +
+      '<p class="muted picker-intro">Tick any card to add it to today’s list. ' +
+      'Fill tops the list up the way Study would: due reviews first, then new cards in book order.</p>' +
+      '<div class="picker-grid">' +
+      '<section class="picker-lib" aria-label="All cards">' +
+        '<input type="search" class="picker-filter" id="picker-filter" ' +
+          'placeholder="Find a card — words from the prompt, a name, or an eq. number" ' +
+          'aria-label="Find a card">' +
+        '<div id="picker-groups">';
+    if (dueCards.length) {
+      html += groupHTML('data-group="due"', 'Due now', dueCards.length + ' cards', '');
+    }
+    chOrder.forEach(function (key) {
+      var cards = byChapter[key];
+      var topic = key === 'other' ? null : chapterTopic(cards);
+      html += groupHTML('data-group="chapter" data-ch="' + ui.esc(key) + '"',
+        chapterTitle(key, cards), groupMeta(cards), topic ? ui.monogram(topic) : '');
+    });
+    html += '</div><p class="muted picker-empty" id="picker-empty" hidden>No card matches.</p>' +
+      '</section>' +
+      '<aside class="pick-cart" aria-label="Today’s list">' +
+        '<div class="pick-cart-head"><h3>Today’s list</h3>' +
+          '<span class="pick-cart-count" id="picker-count"></span></div>' +
+        '<p class="pick-cart-mix" id="picker-mix"></p>' +
+        '<div class="pick-cart-tools">' +
+          '<button type="button" class="btn btn-ghost btn-sm" id="picker-fill"></button>' +
+          '<button type="button" class="btn btn-ghost btn-sm" id="picker-clear">Clear</button>' +
+        '</div>' +
+        '<p class="pick-cart-note" id="picker-note"' + (prefilled ? '' : ' hidden') + '>' +
+          'Suggested for today — remove anything, or tick more cards.</p>' +
+        '<ol class="pick-cart-list" id="picker-list"></ol>' +
+        '<div class="pick-cart-actions">' +
+          '<button type="button" class="btn btn-primary" id="picker-study"></button>' +
+          '<button type="button" class="btn btn-ghost" id="picker-save">Save</button>' +
+          '<button type="button" class="btn btn-ghost" id="picker-cancel">Cancel</button>' +
+        '</div>' +
+      '</aside></div></div>';
 
     body().innerHTML = html;
 
-    function isOpen(tp) { return tp.getAttribute('data-open') === '1'; }
-
-    function groupCards(tp) {
-      if (tp.hasAttribute('data-due')) {
-        var g = dueByKey[tp.getAttribute('data-due')];
-        return (g && g.cards) || [];
-      }
-      return byChapter[tp.getAttribute('data-ch')] || [];
+    // ——— right pane: today's list ———
+    function cartRowHTML(id) {
+      var c = byId[id], fixed = !!locked[id];
+      var label = ui.esc(cardLabel(c));
+      return '<li class="pick-cart-row' + (fixed ? ' is-locked' : '') + '" data-cardid="' + ui.esc(id) + '">' +
+        '<div class="pick-cart-text">' +
+          '<div class="pick-cart-prompt">' + formulaHTML(c.front) + '</div>' +
+          metaHTML(c) +
+        '</div>' +
+        (fixed ? '' : '<button type="button" class="pick-cart-rm" data-rm="' + ui.esc(id) + '" ' +
+          'aria-label="Remove ' + label + ' from today’s list">&times;</button>') +
+      '</li>';
     }
 
-    function groupSelectable(tp) {
-      return groupCards(tp).filter(function (c) {
-        return !locked[c.id] && cardMatches(c);
-      });
-    }
-
-    function toggleToday(id) {
-      if (!id || locked[id]) return;
-      if (picked[id]) delete picked[id];
-      else picked[id] = 1;
-    }
-
-    function syncOneRow(row) {
-      var id = row.getAttribute('data-cardid');
-      if (!id) return;
-      var inToday = !!picked[id];
-      var learned = isEver(id);
-      var box = row.querySelector('.picker-box');
-      var isLocked = !!locked[id] || !!(box && box.getAttribute('data-locked'));
-      if (box && !box.getAttribute('data-locked')) box.checked = inToday || learned;
-      var tip = boxTitle({ locked: isLocked, inToday: inToday, learned: learned });
-      if (box) {
-        box.setAttribute('data-tip', tip);
-        box.setAttribute('data-tip-fast', '');
-        box.setAttribute('aria-label', tip);
-        box.removeAttribute('title');
-      }
-      var lab = row.querySelector('.picker-check');
-      if (lab) {
-        lab.setAttribute('data-tip', tip);
-        lab.setAttribute('data-tip-fast', '');
-        lab.setAttribute('aria-label', tip);
-        lab.removeAttribute('title');
-      }
-      row.classList.toggle('picker-today', inToday);
-      row.classList.toggle('picker-learned-only', learned && !inToday);
-      if (inToday) row.setAttribute('data-today', '1');
-      else row.removeAttribute('data-today');
-    }
-
-    function syncBoxes(scope) {
-      (scope || body()).querySelectorAll('.picker-row').forEach(syncOneRow);
-    }
-
-    function wireChapterBody(wrap) {
-      wrap.querySelectorAll('.picker-box').forEach(function (b) {
-        if (b.getAttribute('data-locked')) return;
-        b.addEventListener('change', function () {
-          toggleToday(b.value);
-          refresh();
+    function paintCart(scrollToEnd) {
+      var box = document.getElementById('picker-list');
+      if (!box) return;
+      var keep = box.scrollTop;
+      var rows = list.concat(againIds);
+      box.innerHTML = rows.length ? rows.map(cartRowHTML).join('')
+        : '<li class="pick-cart-empty muted">Nothing in the list yet. Use Fill, or tick any card.</li>';
+      if (PGRE.typesetMath) PGRE.typesetMath(box);
+      box.querySelectorAll('[data-rm]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          if (removeId(b.getAttribute('data-rm'))) changed(false);
         });
       });
-      wrap.querySelectorAll('.picker-row').forEach(function (row) {
+      box.scrollTop = scrollToEnd ? box.scrollHeight : keep;
+    }
+
+    function refreshCart(scrollToEnd) {
+      var n = list.length + againIds.length, rev = againIds.length;
+      list.forEach(function (id) { if (srs.cardState(id)) rev++; });
+      var cc = document.getElementById('picker-count');
+      if (cc) cc.textContent = n + ' / ' + T;
+      var mix = document.getElementById('picker-mix');
+      if (mix) {
+        var bits = [rev + ' review' + (rev === 1 ? '' : 's'), (n - rev) + ' new'];
+        if (doneN) bits.push(doneN + ' done today');
+        mix.textContent = bits.join(' · ');
+      }
+      var room = T - n;
+      var more = room <= 0;
+      var fill = document.getElementById('picker-fill');
+      if (fill) {
+        var sug = suggestion(more ? T : room);
+        fill.textContent = more ? 'Add ' + T + ' more' : 'Fill to ' + T;
+        fill.disabled = !(sug.reviewIds.length + sug.newIds.length);
+        fill.title = fill.disabled ? 'Nothing left to add — no due reviews' +
+          (srs.finalPassActive() ? '; new cards stay manual in the final week' : ' or new cards') : '';
+      }
+      var clr = document.getElementById('picker-clear');
+      if (clr) clr.disabled = !list.length;
+      var sb = document.getElementById('picker-study');
+      if (sb) {
+        sb.textContent = n ? 'Study ' + n + ' card' + (n === 1 ? '' : 's') : 'Study';
+        sb.disabled = !n;
+      }
+      paintCart(scrollToEnd);
+    }
+
+    // ——— left pane: groups + rows ———
+    function isOpen(tp) { return tp.getAttribute('data-open') === '1' || filterQ.length >= 2; }
+
+    function syncRow(row) {
+      var id = row.getAttribute('data-cardid');
+      var on = !!inList[id] || !!locked[id];
+      var box = row.querySelector('.picker-box');
+      if (box) box.checked = on;
+      row.classList.toggle('is-picked', !!inList[id]);
+    }
+
+    function syncHead(tp) {
+      var cards = groupCards(tp).filter(function (c) { return !locked[c.id] && cardMatches(c); });
+      var sa = tp.querySelector('.picker-selall-box');
+      if (!sa) return;
+      var n = 0;
+      cards.forEach(function (c) { if (inList[c.id]) n++; });
+      sa.disabled = !cards.length;
+      sa.checked = cards.length > 0 && n === cards.length;
+      sa.indeterminate = n > 0 && n < cards.length;
+    }
+
+    function groups() { return body().querySelectorAll('#picker-groups .picker-topic'); }
+
+    function changed(scrollToEnd) {
+      body().querySelectorAll('#picker-groups .picker-row').forEach(syncRow);
+      groups().forEach(syncHead);
+      var note = document.getElementById('picker-note');
+      if (note) note.hidden = true;   // the draft is the user's own now
+      refreshCart(scrollToEnd);
+    }
+
+    function toggleCard(id) {
+      if (!id || locked[id]) return;
+      if (inList[id]) { removeId(id); changed(false); }
+      else { addId(id); changed(true); }
+    }
+
+    function openPreview(item, btn) {
+      var peek = item.querySelector('.picker-preview');
+      if (!peek) return;
+      var open = peek.hidden;
+      if (open && !peek.getAttribute('data-filled')) {
+        var c = byId[item.querySelector('.picker-row').getAttribute('data-cardid')];
+        peek.innerHTML = '<div class="fcard-back">' + backHTML(c) + '</div>' +
+          '<div class="btn-row peek-similar-row">' + similarButton(c, 'btn-sm') + '</div>';
+        peek.setAttribute('data-filled', '1');
+        if (PGRE.typesetMath) PGRE.typesetMath(peek);
+        wireSimilar(peek);
+      }
+      peek.hidden = !open;
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      btn.textContent = open ? 'Hide' : 'Formula';
+    }
+
+    function wireRows(wrap) {
+      wrap.querySelectorAll('.picker-item').forEach(function (item) {
+        var row = item.querySelector('.picker-row');
+        var box = row.querySelector('.picker-box');
+        if (box && !box.disabled) box.addEventListener('change', function () { toggleCard(box.value); });
+        var pbtn = row.querySelector('.picker-peek-btn');
+        if (pbtn) pbtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          openPreview(item, pbtn);
+        });
         row.addEventListener('click', function (e) {
-          if (e.target.closest('.similar-problem-btn') ||
-              e.target.closest('.picker-check') || e.target.closest('.picker-box')) return;
-          var b = row.querySelector('.picker-box');
-          if (!b || b.getAttribute('data-locked')) return;
-          toggleToday(b.value);
-          refresh();
+          if (e.target.closest('.picker-check') || e.target.closest('button')) return;
+          if (box && !box.disabled) toggleCard(box.value);
         });
       });
     }
 
     function paintGroup(tp) {
       var wrap = tp.querySelector('.picker-chapter-body');
-      if (!wrap) return;
-      if (!isOpen(tp)) {
-        wrap.innerHTML = '';
-        wrap.hidden = true;
-        return;
-      }
-      var htmlRows = '';
-      groupCards(tp).forEach(function (c) {
-        if (cardMatches(c)) htmlRows += rowHTML(c);
-      });
-      wrap.innerHTML = htmlRows;
-      wrap.hidden = false;
-      wireSimilar(wrap);
-      if (PGRE.typesetMath) PGRE.typesetMath(wrap);
-      wireChapterBody(wrap);
-    }
-
-    function toggleChapter(tp) {
       var toggle = tp.querySelector('.picker-ch-toggle');
-      if (isOpen(tp)) {
-        tp.removeAttribute('data-open');
-        if (toggle) toggle.setAttribute('aria-expanded', 'false');
-        paintGroup(tp);
-      } else {
-        tp.setAttribute('data-open', '1');
-        if (toggle) toggle.setAttribute('aria-expanded', 'true');
-        paintGroup(tp);
-      }
-    }
-
-    function countPicked() {
-      var n = 0;
-      Object.keys(picked).forEach(function (id) { if (picked[id]) n++; });
-      return n;
-    }
-
-    function syncOneHeading(tp) {
-      var cards = groupCards(tp);
-      var rows = groupSelectable(tp);
-      var sa = tp.querySelector('.picker-selall-box');
-      if (sa) {
-        sa.disabled = rows.length === 0;
-        var allOn = rows.length > 0;
-        rows.forEach(function (c) { if (!picked[c.id]) allOn = false; });
-        sa.checked = allOn;
-      }
-      var countEl = tp.querySelector('.picker-ch-count');
-      if (countEl) {
-        countEl.textContent = ' · ' + srs.countEverStudied(cards) + '/' + cards.length;
-      }
-    }
-
-    function syncHeadings() {
-      body().querySelectorAll('.picker-chapter').forEach(syncOneHeading);
-      body().querySelectorAll('.picker-due-group').forEach(syncOneHeading);
-    }
-
-    function refresh() {
-      var cc = document.getElementById('picker-count');
-      if (cc) cc.textContent = 'today ' + countPicked() + ' · ever ' + nEver + ' · target ' + T;
-      syncBoxes();
-      syncHeadings();
+      var open = isOpen(tp);
+      if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (!wrap) return;
+      if (!open) { wrap.innerHTML = ''; wrap.hidden = true; return; }
+      var rows = '';
+      groupCards(tp).forEach(function (c) { if (cardMatches(c)) rows += rowHTML(c); });
+      wrap.innerHTML = rows;
+      wrap.hidden = false;
+      if (PGRE.typesetMath) PGRE.typesetMath(wrap);
+      wireRows(wrap);
     }
 
     function applyFilter() {
-      function filterGroup(tp) {
-        var any = groupCards(tp).some(cardMatches);
-        tp.hidden = !any;
-        if (isOpen(tp)) paintGroup(tp);
-      }
-      body().querySelectorAll('.picker-chapter').forEach(filterGroup);
-      body().querySelectorAll('.picker-due-group').forEach(filterGroup);
-      refresh();
+      var any = false;
+      groups().forEach(function (tp) {
+        var isDue = tp.getAttribute('data-group') === 'due';
+        // While searching, the Due group would only repeat chapter rows.
+        var show = filterQ.length >= 2 ? (!isDue && groupCards(tp).some(cardMatches)) : true;
+        tp.hidden = !show;
+        if (show) any = true;
+        if (show) paintGroup(tp);
+        syncHead(tp);
+      });
+      var empty = document.getElementById('picker-empty');
+      if (empty) empty.hidden = any;
     }
 
-    function wireGroup(tp) {
+    groups().forEach(function (tp) {
       var toggle = tp.querySelector('.picker-ch-toggle');
+      function flip() {
+        if (filterQ.length >= 2) return;   // search results stay expanded
+        if (tp.getAttribute('data-open') === '1') tp.removeAttribute('data-open');
+        else tp.setAttribute('data-open', '1');
+        paintGroup(tp);
+      }
       if (toggle) {
-        toggle.addEventListener('click', function (e) {
-          e.preventDefault();
-          toggleChapter(tp);
-        });
+        toggle.addEventListener('click', function (e) { e.preventDefault(); flip(); });
         toggle.addEventListener('keydown', function (e) {
           if (e.key !== 'Enter' && e.key !== ' ') return;
           e.preventDefault();
-          toggleChapter(tp);
+          flip();
         });
       }
       var sa = tp.querySelector('.picker-selall-box');
       if (sa) sa.addEventListener('change', function () {
         var on = sa.checked;
-        groupSelectable(tp).forEach(function (c) {
-          if (on) picked[c.id] = 1;
-          else delete picked[c.id];
+        groupCards(tp).forEach(function (c) {
+          if (locked[c.id] || !cardMatches(c)) return;
+          if (on) addId(c.id); else removeId(c.id);
         });
-        syncBoxes();
-        refresh();
-      });
-    }
-
-    body().querySelectorAll('.picker-chapter').forEach(wireGroup);
-    body().querySelectorAll('.picker-due-group').forEach(wireGroup);
-    body().querySelectorAll('.picker-due-group[data-open="1"]').forEach(paintGroup);
-
-    function showPickerView(which) {
-      var chPane = document.getElementById('picker-view-chapters');
-      var schPane = document.getElementById('picker-view-schedule');
-      if (chPane) chPane.hidden = which !== 'chapters';
-      if (schPane) schPane.hidden = which !== 'schedule';
-      body().querySelectorAll('.picker-view-tabs .browse-tab').forEach(function (b) {
-        var on = b.getAttribute('data-pview') === which;
-        b.classList.toggle('active', on);
-        b.setAttribute('aria-selected', on ? 'true' : 'false');
-        b.tabIndex = on ? 0 : -1;
-      });
-    }
-    body().querySelectorAll('.picker-view-tabs .browse-tab').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var which = b.getAttribute('data-pview');
-        if (!which) return;
-        showPickerView(which);
+        changed(on);
       });
     });
 
     var filter = document.getElementById('picker-filter');
     if (filter) filter.addEventListener('input', function () {
-      filterQ = filter.value.trim().toLowerCase();
+      var q = filter.value.trim().toLowerCase();
+      filterQ = q.length >= 2 ? q : '';
       applyFilter();
     });
 
-    var fillBtn = document.getElementById('picker-fill');
-    if (fillBtn) fillBtn.addEventListener('click', function () {
-      // stage into the pick set only — Save persists, Cancel still cancels
-      var room = T - countPicked();
-      if (room <= 0) return;
-      srs.newInDeck(deck).some(function (c) {
-        if (!c || !c.id || locked[c.id] || srs.isSuspended(c.id)) return false;
-        picked[c.id] = 1;
-        return --room <= 0;
-      });
-      syncBoxes();
-      refresh();
+    document.getElementById('picker-fill').addEventListener('click', function () {
+      var room = T - list.length - againIds.length;
+      if (takeSuggestion(room > 0 ? room : T)) changed(true);
     });
     document.getElementById('picker-clear').addEventListener('click', function () {
-      Object.keys(picked).forEach(function (id) {
-        if (!locked[id]) delete picked[id];
-      });
-      syncBoxes();
-      refresh();
+      list.slice().forEach(removeId);
+      changed(false);
     });
     document.getElementById('picker-cancel').addEventListener('click', renderHome);
+    function save() {
+      PGRE.srs.setFormulaDayPicks(deck, list);
+    }
     document.getElementById('picker-save').addEventListener('click', function () {
-      var ids = [];
-      deck.forEach(function (c) {
-        if (picked[c.id] && !locked[c.id]) ids.push(c.id);
-      });
-      PGRE.srs.setFormulaDayPicks(deck, ids);
+      save();
       renderHome();
     });
+    document.getElementById('picker-study').addEventListener('click', function () {
+      save();
+      var cards = PGRE.srs.formulaDayRemaining(deck);
+      if (cards.length) startStudy(cards);
+      else renderHome();
+    });
 
-    refresh();
+    groups().forEach(syncHead);
+    refreshCart(false);
   }
 
   function startStudy(cards) {
@@ -3017,8 +3006,8 @@ PGRE.views.formulas = (function () {
     }
     var ui = PGRE.ui, m = INTRO[kind];
     var remaining = PGRE.srs.formulaDayRemaining(deck).length;
-    var metNote = 'Nothing picked for today — pick cards in Formula recall first; ' +
-      'games drill only the batch you picked.';
+    var metNote = 'Today’s list is empty — start Study or choose cards in Formula recall ' +
+      'first; games drill only today’s list.';
     var html = '<div class="card"><h2>' + m.title + '</h2><p class="muted">' + m.desc + '</p>';
 
     if (kind === 'match') {

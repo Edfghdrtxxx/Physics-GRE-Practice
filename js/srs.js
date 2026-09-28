@@ -404,25 +404,11 @@ PGRE.srs = {
     return deck.filter(function (c) { return !self.cardState(c.id); });
   },
 
-  /* Ever studied = graded at least once (`state.cards[id]` exists after the
-     first grade). Inverse of newInDeck. Existing card state is the backfill —
-     no extra "ever picked" store. */
-  everStudied: function (id) {
-    return !!this.cardState(id);
-  },
-
-  countEverStudied: function (deck) {
-    var self = this, n = 0;
-    (deck || []).forEach(function (c) {
-      if (self.everStudied(c.id)) n++;
-    });
-    return n;
-  },
-
   /* ——— Daily formula batch ———
      formulaDay() itself is prune-only. The picker, browse/search Add, and the
-     explicit fill helpers grow the batch. In the last seven days before the
-     exam, fillFormulaDayFinalPass appends every unsuspended learned card.
+     explicit auto-pick (autoFillFormulaDay) grow the batch. In the last seven
+     days before the exam, fillFormulaDayFinalPass appends every unsuspended
+     learned card.
      The batch PERSISTS across day rolls: un-studied picks carry over,
      completed ones are pruned by reconcile. The daily target (clampTarget)
      is a soft suggestion — never a cap, and ignored by the final-pass allocator. */
@@ -522,68 +508,82 @@ PGRE.srs = {
     return batch;
   },
 
-  /* Explicit Today-agenda fill. formulaDay() still never auto-adds.
-     If the picked batch is empty and unlearned cards exist, put up to
-     clampTarget(formulaDailyTarget) unseen ids into newIds and persist.
-     Does not raise the target. */
-  fillFormulaDayIfEmpty: function (deck) {
+  /* Book chapter of a card id (cpgf-<ch>.<eq>); Infinity for supplements and
+     anything else, so they sort after the numbered chapters. */
+  formulaChapter: function (id) {
+    var m = String(id || '').match(/^cpgf-(\d+)\./);
+    return m ? parseInt(m[1], 10) : Infinity;
+  },
+
+  /* Auto-pick — the one rule behind Study on Formula recall home, the
+     picker's Fill button and the Today dashboard: due reviews first (most
+     overdue, then most lapses, then lowest ease), then never-studied cards in
+     book order (chapter, then deck order), up to the daily target. Skips
+     suspended cards, cards already chosen, and cards graded today. New cards
+     stay manual in the final-pass week. Adds nothing to the batch itself.
+     opts.have — { id: 1 } already chosen (default: the saved batch);
+     opts.room — how many to return (default: target minus remaining picks);
+     opts.fresh === false — due reviews only, no new cards.
+     @returns {{ reviewIds: string[], newIds: string[] }} */
+  suggestFormulaDay: function (deck, opts) {
+    deck = deck || [];
+    opts = opts || {};
+    var self = this, t = this.today();
+    var out = { reviewIds: [], newIds: [] };
+    if (!deck.length) return out;
+    var have = opts.have, room = opts.room;
+    if (!have) {
+      have = {};
+      var batch = this.formulaDay(deck);
+      batch.reviewIds.concat(batch.newIds).forEach(function (id) { have[id] = 1; });
+    }
+    if (room == null) {
+      room = this.clampTarget(PGRE.store.state.settings &&
+        PGRE.store.state.settings.formulaDailyTarget) -
+        this.formulaDayRemaining(deck).length;
+    }
+    if (!(room > 0)) return out;
+    var due = [], fresh = [];
+    deck.forEach(function (c, index) {
+      if (!c || !c.id || have[c.id] || self.isSuspended(c.id)) return;
+      var st = self.cardState(c.id);
+      if (!st) fresh.push({ id: c.id, ch: self.formulaChapter(c.id), index: index });
+      else if (st.due <= t && !self.studiedToday(st)) due.push({ id: c.id, st: st, index: index });
+    });
+    due.sort(function (a, b) {
+      if (a.st.due !== b.st.due) return a.st.due < b.st.due ? -1 : 1;
+      var la = a.st.lapses || 0, lb = b.st.lapses || 0;
+      if (la !== lb) return lb - la;
+      var ea = a.st.ease || 0, eb = b.st.ease || 0;
+      if (ea !== eb) return ea - eb;
+      return a.index - b.index;
+    });
+    fresh.sort(function (a, b) {
+      if (a.ch !== b.ch) return a.ch < b.ch ? -1 : 1;
+      return a.index - b.index;
+    });
+    function ids(list) { return list.map(function (x) { return x.id; }); }
+    out.reviewIds = ids(due.slice(0, room));
+    room -= out.reviewIds.length;
+    if (room > 0 && opts.fresh !== false && !this.finalPassActive()) {
+      out.newIds = ids(fresh.slice(0, room));
+    }
+    return out;
+  },
+
+  /* Append the auto-pick to the saved batch and persist. Existing picks —
+     active, completed-today or deliberate future adds — are never replaced;
+     with no room left under the target this is a no-op. The first population
+     of the day stamps today's date on a carried-over shell. opts as for
+     suggestFormulaDay. The caller owns the Study transition. */
+  autoFillFormulaDay: function (deck, opts) {
     deck = deck || [];
     var batch = this.formulaDay(deck);
     if (!deck.length) return batch;
-    if (batch.reviewIds.length + batch.newIds.length) return batch;
-    var self = this;
-    var ids = [];
-    var T = this.clampTarget(PGRE.store.state.settings &&
-      PGRE.store.state.settings.formulaDailyTarget);
-    this.newInDeck(deck).some(function (c) {
-      if (!c || !c.id || self.isSuspended(c.id)) return false;
-      ids.push(c.id);
-      return ids.length >= T;
-    });
-    if (!ids.length) return batch;
-    // An empty carry-over shell can retain yesterday's date. The first explicit
-    // population today starts today's batch, even when the shell itself was
-    // intentionally preserved across the day boundary.
-    batch.date = this.today();
-    this._markFormulaDayMutation(batch, 'replace');
-    batch.newIds = ids;
-    PGRE.store.state.formulaDay = batch;
-    PGRE.store.save();
-    return batch;
-  },
-
-  /* Explicit Today-agenda due fill. Keep this separate from the unseen-card
-     starter so the dashboard can honor due work without changing the
-     user-curated batch contract. Active remaining picks are never replaced;
-     completed locks and future deliberate picks are retained while due cards
-     are appended. The caller owns the Study transition. */
-  fillFormulaDayDueIfEmpty: function (deck) {
-    deck = deck || [];
-    var batch = this.formulaDay(deck);
-    // A batch can retain cards already completed today so they stay locked in
-    // the picker. That shell is non-empty by id but empty for Study; allow due
-    // work to join it. An active remaining card still blocks substitution.
-    if (!deck.length || this.formulaDayRemaining(deck).length) return batch;
-    var self = this, t = this.today();
-    var due = [];
-    var inBatch = {};
-    batch.reviewIds.concat(batch.newIds).forEach(function (id) { inBatch[id] = 1; });
-    deck.forEach(function (c, index) {
-      if (!c || !c.id || self.isSuspended(c.id)) return;
-      var st = self.cardState(c.id);
-      if (st && st.due <= t && !inBatch[c.id]) due.push({ card: c, index: index, due: st.due });
-    });
-    if (!due.length) return batch;
-    due.sort(function (a, b) {
-      if (a.due < b.due) return -1;
-      if (a.due > b.due) return 1;
-      return a.index - b.index;
-    });
-    var T = this.clampTarget(PGRE.store.state.settings &&
-      PGRE.store.state.settings.formulaDailyTarget);
-    var ids = due.slice(0, T).map(function (x) { return x.card.id; });
-    // Append due cards so completed locks and intentional future picks survive.
-    batch.reviewIds = batch.reviewIds.concat(ids);
+    var pick = this.suggestFormulaDay(deck, opts);
+    if (!pick.reviewIds.length && !pick.newIds.length) return batch;
+    batch.reviewIds = batch.reviewIds.concat(pick.reviewIds);
+    batch.newIds = batch.newIds.concat(pick.newIds);
     batch.date = this.today();
     this._markFormulaDayMutation(batch, 'add');
     PGRE.store.state.formulaDay = batch;
