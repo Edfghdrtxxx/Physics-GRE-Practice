@@ -2007,6 +2007,14 @@ function runAsync() {
         'a learned card outside the list is NOT ticked — one checkbox, one meaning');
       assert(row('cpgf-2.4').querySelector('.picker-meta').textContent.indexOf('due in 5 d') !== -1,
         'row meta carries the schedule status');
+      var tip24 = row('cpgf-2.4').getAttribute('title');
+      assert(tip24.indexOf('due ' + P.srs.addDays(5)) !== -1 && tip24.indexOf('ease 2.50') !== -1 &&
+        tip24.indexOf('lapses 0') !== -1 && tip24.indexOf('reps 2') !== -1,
+        'row tooltip carries the SRS fields, got: ' + tip24);
+      var tip21 = row('cpgf-2.1').getAttribute('title');
+      assert(tip21.indexOf('due today') !== -1 && tip21.indexOf('lapses 2') !== -1,
+        'due-now tooltip names due today and lapses, got: ' + tip21);
+
       assert(ch2.querySelector('.picker-preview').hidden, 'formula stays hidden until asked for');
       var fbtn = row('cpgf-2.1').querySelector('.picker-peek-btn');
       fbtn.click();
@@ -2020,6 +2028,10 @@ function runAsync() {
       assert(lockBox.disabled && lockBox.checked && row('cpgf-1.3').classList.contains('is-locked'),
         'a card graded today is locked');
       assert(cartIds().indexOf('cpgf-1.3') === -1, 'locked cards count as done, not as editable rows');
+      assert(row('cpgf-1.1').getAttribute('title').indexOf('New card') !== -1,
+        'new card tooltip says it has no grades');
+      assert(row('cpgf-1.3').getAttribute('title').indexOf('Done today') !== -1,
+        'locked card tooltip explains the lock');
 
       doc.querySelector('#picker-list [data-rm="cpgf-2.1"]').click();
       assert(cartIds().indexOf('cpgf-2.1') === -1 && !row('cpgf-2.1').querySelector('.picker-box').checked,

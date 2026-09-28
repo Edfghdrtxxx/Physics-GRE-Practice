@@ -1492,13 +1492,33 @@ PGRE.views.formulas = (function () {
         '<span class="picker-status' + (status === 'due now' ? ' is-due' : '') + '">' +
         status + '</span></div>';
     }
+    /* Native title tooltip, same pattern as the mem-hist / leech chips: every
+       field shown below comes straight out of srs.cardState — no invention. */
+    function tipText(c) {
+      if (locked[c.id]) return locked[c.id] === 'again'
+        ? 'Again today — stays in today’s list'
+        : 'Done today — already graded';
+      if (srs.isSuspended(c.id)) return 'Put away — no scheduled reviews';
+      var st = srs.cardState(c.id);
+      if (!st) return 'New card — no grades yet';
+      var bits = ['due ' + st.due];
+      var du = srs.daysUntil(st.due);
+      if (du <= 0) bits.push(du === 0 ? 'due today' : -du + ' day' + (du === -1 ? '' : 's') + ' overdue');
+      bits.push('ease ' + (st.ease || 0).toFixed(2));
+      bits.push('interval ' + srs.ivlLabel(st.interval));
+      bits.push('lapses ' + (st.lapses || 0));
+      bits.push('reps ' + (st.reps || 0));
+      if (st.reviews) bits.push('reviews ' + st.reviews);
+      if (st.lastGrade) bits.push('last grade ' + st.lastGrade);
+      return bits.join(' · ');
+    }
 
     function rowHTML(c) {
       var id = ui.esc(c.id), on = !!inList[c.id], isLocked = !!locked[c.id];
       var label = ui.esc(cardLabel(c));
       return '<div class="picker-item">' +
         '<div class="picker-row' + (isLocked ? ' is-locked' : '') + (on ? ' is-picked' : '') +
-          '" data-cardid="' + id + '">' +
+          '" data-cardid="' + id + '" title="' + ui.esc(tipText(c)) + '">' +
           '<label class="picker-check"><input type="checkbox" class="picker-box" value="' + id + '"' +
             ' aria-label="' + (isLocked ? label + ' — ' + statusText(c) : 'Today’s list: ' + label) + '"' +
             (on || isLocked ? ' checked' : '') + (isLocked ? ' disabled' : '') + '></label>' +
