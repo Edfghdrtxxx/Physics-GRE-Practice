@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-/* Unit tests for formula-picker ever-studied helpers and save filtering.
+/* Unit tests for the formula picker's save filtering and the auto-pick
+   (suggestFormulaDay / autoFillFormulaDay).
    Loads shipped store.js + srs.js (no re-implementation).
    Run: node tools/test-formula-picker.js */
 'use strict';
@@ -43,8 +44,8 @@ var store = sandbox.PGRE.store;
 store.load();
 var storeState = store.state;
 var srs = sandbox.PGRE.srs;
-if (!srs || typeof srs.everStudied !== 'function' || typeof srs.countEverStudied !== 'function') {
-  console.error('FAIL: shipped srs.js did not export everStudied / countEverStudied');
+if (!srs || typeof srs.suggestFormulaDay !== 'function' || typeof srs.autoFillFormulaDay !== 'function') {
+  console.error('FAIL: shipped srs.js did not export suggestFormulaDay / autoFillFormulaDay');
   process.exit(1);
 }
 
@@ -73,21 +74,7 @@ function card(id) { return { id: id }; }
 
 var deck = [card('gauss'), card('faraday'), card('angular'), card('ampere')];
 
-console.log('everStudied / countEverStudied (D1, D4)');
-resetStore();
-assert(!srs.everStudied('gauss'), 'missing card state is not ever-studied');
-assert(srs.countEverStudied(deck) === 0, 'empty cards → ever 0');
-storeState.cards.gauss = { reps: 1, interval: 4, ease: 2.5, due: '2099-01-01' };
-storeState.cards.faraday = { reps: 2, interval: 8, ease: 2.5, due: '2099-02-01' };
-assert(srs.everStudied('gauss') && srs.everStudied('faraday'), 'graded cards are ever-studied');
-assert(!srs.everStudied('angular') && !srs.everStudied('ampere'), 'never-graded cards are not ever-studied');
-assert(srs.countEverStudied(deck) === 2, 'deck-wide ever counts only cards with state');
-assert(srs.countEverStudied([card('gauss'), card('ampere')]) === 1,
-  'chapter ever count is lifetime studied / that list');
-assert(srs.newInDeck(deck).map(function (c) { return c.id; }).join(',') === 'angular,ampere',
-  'newInDeck is the inverse of ever-studied');
-
-console.log('\nsetFormulaDayPicks saves today set only (D6)');
+console.log('setFormulaDayPicks saves today set only (D6)');
 resetStore();
 storeState.cards.gauss = {
   reps: 1, interval: 1, ease: 2.5, due: srs.today(), lastReviewedDay: srs.today()
@@ -111,6 +98,65 @@ batch = srs.setFormulaDayPicks(deck, ['ampere', 'faraday']);
 assert(batch.reviewIds.indexOf('faraday') !== -1,
   'Faraday is saved only after it is in the today set');
 assert(batch.reviewIds.indexOf('gauss') !== -1, 'locked Gauss still kept when Faraday is added');
+
+console.log('\nsuggestFormulaDay — due first, then new in book order, up to target');
+resetStore();
+var t = srs.today();
+var bookDeck = ['supp-a', 'cpgf-3.1', 'cpgf-1.2', 'late', 'cpgf-1.1', 'lapsed', 'plain',
+  'future', 'graded', 'shelved', 'cpgf-2.1'].map(card);
+function ids(list) { return list.join(','); }
+storeState.settings.formulaDailyTarget = 5;
+storeState.settings.examDate = '';
+storeState.cards.late = { reps: 2, interval: 3, ease: 2.5, lapses: 0, due: srs.addDays(-4) };
+storeState.cards.lapsed = { reps: 3, interval: 2, ease: 2.1, lapses: 3, due: t };
+storeState.cards.plain = { reps: 2, interval: 2, ease: 2.5, lapses: 0, due: t };
+storeState.cards.future = { reps: 2, interval: 9, ease: 2.5, lapses: 0, due: srs.addDays(4) };
+storeState.cards.graded = { reps: 1, interval: 1, ease: 2.5, lapses: 1, due: t, lastReviewedDay: t };
+storeState.cards.shelved = { reps: 1, interval: 1, ease: 2.5, lapses: 0, due: srs.addDays(-9) };
+storeState.formulaSuspended = { shelved: new Date().toISOString() };
+
+var sug = srs.suggestFormulaDay(bookDeck);
+assert(ids(sug.reviewIds) === 'late,lapsed,plain',
+  'due reviews: most overdue first, then most lapses (got ' + ids(sug.reviewIds) + ')');
+assert(ids(sug.newIds) === 'cpgf-1.2,cpgf-1.1',
+  'new cards fill the room in chapter order, deck order within a chapter (got ' + ids(sug.newIds) + ')');
+assert(sug.reviewIds.indexOf('future') === -1 && sug.reviewIds.indexOf('graded') === -1 &&
+  sug.reviewIds.indexOf('shelved') === -1,
+  'not-yet-due, graded-today and suspended cards are never auto-picked');
+assert(storeState.formulaDay.reviewIds.length === 0 && storeState.formulaDay.newIds.length === 0,
+  'suggesting adds nothing to the batch');
+
+storeState.settings.formulaDailyTarget = 2;
+sug = srs.suggestFormulaDay(bookDeck);
+assert(ids(sug.reviewIds) === 'late,lapsed' && !sug.newIds.length,
+  'a due backlog fills the whole target before any new card');
+storeState.settings.formulaDailyTarget = 10;
+sug = srs.suggestFormulaDay(bookDeck, { fresh: false });
+assert(!sug.newIds.length && sug.reviewIds.length === 3, 'fresh:false offers due reviews only');
+sug = srs.suggestFormulaDay(bookDeck, { have: { late: 1, 'cpgf-1.2': 1 }, room: 3 });
+assert(ids(sug.reviewIds) + '|' + ids(sug.newIds) === 'lapsed,plain|cpgf-1.1',
+  'have/room let the picker top up a draft (got ' + ids(sug.reviewIds) + '|' + ids(sug.newIds) + ')');
+
+var d = new Date(); d.setDate(d.getDate() + 5);
+storeState.settings.examDate = srs.dayStr(d);
+sug = srs.suggestFormulaDay(bookDeck, { have: {}, room: 10 });
+assert(!sug.newIds.length, 'final-pass week: new cards stay manual');
+storeState.settings.examDate = '';
+
+console.log('\nautoFillFormulaDay — appends, never replaces');
+storeState.settings.formulaDailyTarget = 5;
+storeState.formulaDay = { date: srs.addDays(-1), reviewIds: [], newIds: ['cpgf-3.1'] };
+var filled = srs.autoFillFormulaDay(bookDeck);
+assert(ids(filled.newIds) === 'cpgf-3.1,cpgf-1.2' && ids(filled.reviewIds) === 'late,lapsed,plain',
+  'an active pick keeps its place; the room under the target is auto-picked (got ' +
+    ids(filled.reviewIds) + '|' + ids(filled.newIds) + ')');
+assert(filled.date === t, 'the first population of the day stamps today on a carried shell');
+assert(typeof filled._opAt === 'number', 'the fill is marked for cross-tab reconciliation');
+var again = srs.autoFillFormulaDay(bookDeck);
+assert(ids(again.reviewIds) + '|' + ids(again.newIds) === 'late,lapsed,plain|cpgf-3.1,cpgf-1.2',
+  'a full list is left alone');
+assert(srs.formulaChapter('cpgf-12.3') === 12 && srs.formulaChapter('supp-x') === Infinity,
+  'formulaChapter reads the book chapter from the id');
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

@@ -519,7 +519,7 @@ async function main() {
     postponed: PGRE.srs.formulaDayPostponed(deck)
     };
   })()`);
-  if (directUi.button !== 'Study → 2 due') {
+  if (directUi.button !== 'Study 2 cards') {
     throw new Error('direct Formula Recall due label mismatch: ' + JSON.stringify(directUi));
   }
   await evaluate("document.getElementById('study-btn').click()");
@@ -662,6 +662,43 @@ async function main() {
       stampedFill.batch.newIds.join(',') !== 'new-a,new-b') {
     throw new Error('unseen fallback did not stamp today\'s batch: ' + JSON.stringify(stampedFill));
   }
+
+  /* Mixed auto-pick: when due reviews leave room under the target, the same
+     Today click fills the rest with new cards in book order. */
+  await evaluate(`(function () {
+    var s = PGRE.store.state, today = PGRE.srs.today();
+    s.formulaStudy = null;
+    s.settings.formulaDailyTarget = 3;
+    Object.keys(s.cards).forEach(function (id) { s.cards[id].due = PGRE.srs.addDaysTo(today, 1); });
+    s.cards['due-old'].due = PGRE.srs.addDaysTo(today, -1);
+    s.formulaDay = { date: today, reviewIds: [], newIds: [] };
+    PGRE.store.save();
+    location.hash = '#/';
+    PGRE.route();
+  })()`);
+  await sleep(500);
+  for (var mixWait = 0; mixWait < 30; mixWait++) {
+    if (await evaluate("document.getElementById('today-formulas') && document.getElementById('today-formulas').textContent !== '…'")) break;
+    await sleep(150);
+  }
+  var mixUi = await evaluate(`({
+    text: (document.getElementById('today-formulas') || {}).textContent || '',
+    button: (document.getElementById('today-formulas-btn') || {}).textContent || ''
+  })`);
+  if (mixUi.text !== '1 due now · +2 new' || mixUi.button !== 'Study 3 →') {
+    throw new Error('Today mixed auto-pick UI mismatch: ' + JSON.stringify(mixUi));
+  }
+  await evaluate("document.getElementById('today-formulas-btn').click()");
+  await sleep(500);
+  var mixStudy = await evaluate(`({
+    flip: !!document.getElementById('flip-btn'),
+    batch: PGRE.store.state.formulaDay
+  })`);
+  if (!mixStudy.flip || mixStudy.batch.reviewIds.join(',') !== 'due-old' ||
+      mixStudy.batch.newIds.join(',') !== 'new-a,new-b') {
+    throw new Error('Today mixed auto-pick batch mismatch: ' + JSON.stringify(mixStudy));
+  }
+  await evaluate("PGRE.store.state.formulaStudy = null; PGRE.store.state.settings.formulaDailyTarget = 2; PGRE.store.save()");
 
   /* Cross-tab persistence: a stale empty shell cannot erase a newly filled
      current-day batch, and a stale same-day heap cannot resurrect a card the
@@ -854,7 +891,7 @@ async function main() {
   }
 
   await evaluate("PGRE.contentDB.del('formula-deck')");
-  console.log('PASS — Anki grades + end-to-end Today due pickup, backlog cap, repeat-click safety, persistence, deliberate-batch preservation, rollover, date stamping, overflow copy, cross-tab conflict safety, and automatic final-pass inclusion');
+  console.log('PASS — Anki grades + end-to-end Today due pickup, backlog cap, mixed due+new auto-pick, repeat-click safety, persistence, deliberate-batch preservation, rollover, date stamping, overflow copy, cross-tab conflict safety, and automatic final-pass inclusion');
   console.log('  review (cap 13):', by);
   console.log('  young review (uncapped):', youngBtns);
   console.log('  new card:', fby);

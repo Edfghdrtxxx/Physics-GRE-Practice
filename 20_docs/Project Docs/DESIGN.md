@@ -221,34 +221,38 @@ The daily target is a **soft
 suggestion** (clamp **1–100**, default **10**; every read routes the raw value through
 `srs.clampTarget`, so an imported/corrupt value can't poison the UI). `state.formulaDay`
 = `{ date, reviewIds: [], newIds: [], softIds?: [], _opAt?: number, _opId?: string, _opKind?: string }`
-holds the picked batch and its cross-tab mutation marker. It starts EMPTY
-and grows through explicit user actions: the picker, browse/search Add, and the **fill**
-CTA (`srs.fillFormulaDayIfEmpty`) on the dashboard (`js/view-dashboard.js`) and formulas
-home (`js/view-formulas.js`), which fills up to `clampTarget` unseen ids when the batch
-is empty. It **persists across day rolls** (un-studied
+holds the picked batch ("today's list") and its cross-tab mutation marker. It starts EMPTY
+and grows through explicit user actions: Study on the Formula Recall home and the dashboard
+Today control, the list composer, and browse/search Add. It **persists across day rolls** (un-studied
 picks carry over) and is reconciled on every access (`srs.formulaDay(deck)`, persisted only
 when it changed; an empty batch returns a transient object WITHOUT persisting, guarding the
 nav-badge path that runs before IndexedDB resolves):
-- The Today dashboard and Formula Recall home also have a separate explicit due path
-  (`srs.fillFormulaDayDueIfEmpty`): when no active remaining batch cards exist and
-  postponed due/overdue cards exist, it appends up to the target with unsuspended due
-  cards only, in due-date order. Completed-today locks and future deliberate picks are
-  retained; an active deliberate batch is never replaced. When due cards exist, the
-  Formula Recall home does not present the unseen-card landing. When no due cards exist,
-  the existing unseen-card fill remains the fallback.
+- **Auto-pick** (`srs.suggestFormulaDay`, pure; `srs.autoFillFormulaDay` appends and persists):
+  due reviews first (most overdue, then most lapses, then lowest ease), then never-studied
+  cards in book order (chapter from `cpgf-<ch>.`, then deck order; supplements last), up to
+  the target minus the list's remaining cards. Skips suspended cards, cards already in the
+  list and cards graded today; new cards stay manual in the final-pass week. It only ever
+  appends — active, completed-today and deliberate picks are never replaced.
+- **Formula Recall home** shows one Today card: a line naming the mix ("3 due reviews + 7
+  new cards — picked for you …") and one Study button. With cards remaining it studies them;
+  with none it takes the auto-pick; once today's list is done it offers "Study N more".
+- **Dashboard Today control** offers the auto-pick when nothing remains; once today's list
+  is done it offers due reviews only (`{ fresh: false }`), leaving extra new cards to the
+  Formula Recall home.
 - **Reconcile (prune-only):** drop ids no longer in the deck or suspended; drop soft pins
   that left the deck, are suspended, or were studied today; retire completed picks (graded
   on an earlier day, due now in the future). During final pass, learned picks that have
   not been studied today are kept even if due in the future. Never adds, never trims to
   the target.
-- **Picker** ("Pick today's cards", `srs.setFormulaDayPicks`): the batch composer — due-now
-  cards first, then upcoming, then never-studied, each section topic-grouped, with a name
-  filter. Save replaces the batch wholesale; `studiedToday` members are locked (a grade
-  committed today is not undone by un-picking). No cap — the count line shows
-  "today N · ever M · target T" (N = today's pick set, M = cards with state after
-  first grade, T = daily target). Chapter headers show lifetime ever-studied /
-  chapter size, not today's picks. The checkbox is filled for ever-studied cards
-  even when they are not in today's batch; Save still writes only the today set.
+- **List composer** ("Choose cards" / "Edit today's list", `srs.setFormulaDayPicks`): left,
+  every card in collapsible groups (Due now, then book chapters; rows paint only when a group
+  opens; a filter of 2+ characters expands matching groups); right, today's list itself with
+  Fill (the auto-pick: "Fill to T", or "Add T more" once the list reaches the target) and
+  Clear. A checkbox means exactly one thing: in today's list. Rows show the prompt; the
+  formula stays behind a per-row Formula toggle. Cards graded today are locked and counted as
+  done. An empty list opens pre-filled with the auto-pick. Nothing persists until Study or
+  Save (Save replaces the batch wholesale; `studiedToday` members stay locked); Cancel drops
+  the draft. No cap.
 - **Browse chips / Search Add** (`srs.addFormulaDaySoft` / `removeFormulaDaySoft`): edit the
   same batch one card at a time. No state → `newIds`; has state → `reviewIds` (including
   not-yet-due); suspended → unsuspend then add. Not-yet-due learned adds are pinned in
@@ -267,7 +271,7 @@ nav-badge path that runs before IndexedDB resolves):
   learned cards as eligible until they are reviewed today; new cards remain manual-only.
 - Outside final pass, Study/Match/Type/Quiz/Cloze draw only from the picked batch's
   remaining cards (`formulaDayRemaining`); an empty batch means an empty round with a
-  "pick today's cards" prompt.
+  "choose cards" prompt.
 
 Remaining count drives the dashboard *Review queue* card and the sidebar badge.
 **Browse** the deck via **Learned** (cards with state: last-grade + due chips) / **Upcoming**

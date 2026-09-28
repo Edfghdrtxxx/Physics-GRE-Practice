@@ -620,12 +620,6 @@ function loadShipped(reduced, opts) {
       isLeech: function () { return false; },
       isSuspended: function () { return false; },
       cardState: function (id) { return cardStates[id] || null; },
-      everStudied: function (id) { return !!cardStates[id]; },
-      countEverStudied: function (deck) {
-        var n = 0;
-        (deck || []).forEach(function (c) { if (c && cardStates[c.id]) n++; });
-        return n;
-      },
       gradeCard: function (id, g) {
         cardStates[id] = cardStates[id] || { interval: 1, reps: 1, due: '2026-09-08', lastGrade: g, lapses: 0 };
         cardStates[id].lastGrade = g;
@@ -641,7 +635,13 @@ function loadShipped(reduced, opts) {
       clearLucky: function () {},
       setFormulaDayPicks: function () {},
       addFormulaDaySoft: function () {},
-      removeFormulaDaySoft: function () {}
+      removeFormulaDaySoft: function () {},
+      formulaChapter: function (id) {
+        var m = String(id || '').match(/^cpgf-(\d+)\./);
+        return m ? parseInt(m[1], 10) : Infinity;
+      },
+      suggestFormulaDay: function () { return { reviewIds: [], newIds: [] }; },
+      autoFillFormulaDay: function () {}
     },
     visualizers: {},
     openVisualizerModal: function () {},
@@ -1914,137 +1914,250 @@ function runAsync() {
         'search non-viz card keeps Complete view');
     });
   }).then(function () {
-    console.log('\nformulas: picker groups by chapter, lazy rows, fill + save');
-    var pk = loadShipped(true, { views: true });
-    var P = pk.sandbox.PGRE;
-    // second chapter: cpgf-<ch>.<eq> ids drive the grouping
-    pk.cards.push({ id: 'cpgf-2.1', topic: 'em', name: 'Gauss', front: 'Gauss law', back: '$$\\Phi = Q/\\epsilon_0$$', note: '', aliases: [] });
-    pk.cards.push({ id: 'cpgf-2.2', topic: 'em', name: 'Ampere', front: 'Ampere law', back: '$$\\oint B = \\mu_0 I$$', note: '', aliases: [] });
-    pk.cards.push({ id: 'cpgf-2.3', topic: 'em', name: 'Faraday', front: 'Faraday law', back: '$$\\mathcal{E} = -d\\Phi/dt$$', note: '', aliases: [] });
-    pk.cardStates['cpgf-2.1'] = { due: '2026-09-07', interval: 1, reps: 1 };
-    pk.cardStates['cpgf-2.3'] = { due: '2026-09-10', interval: 4, reps: 1 };
-    P.srs.formulaDay = function () { return { reviewIds: [], newIds: [], softIds: [] }; };
-    P.srs.formulaDayRemaining = function () { return []; };
-    P.srs.buildMemHistory = function () { return null; };
-    // cpgf-2.1 was already studied today -> locked, stays picked, excluded from Save
-    P.srs.studiedToday = function (st) { return st === pk.cardStates['cpgf-2.1']; };
+    console.log('\nformulas: Today card studies the shipped auto-pick');
+    var tc = autoPickEnv();
+    tc.env.location.hash = '#/formulas';
+    ensureView(tc.env, tc.P.views.formulas.render());
+    tc.P.views.formulas.mount();
+    return wait(0).then(function () {
+      var doc = tc.env.document;
+      var card = doc.querySelector('.fm-landing');
+      assert(!!card, 'Today card rendered');
+      var study = doc.getElementById('study-btn');
+      assert(!!study && study.textContent === 'Study 6 cards',
+        'one primary Study button for the auto-pick, got: ' + (study && study.textContent));
+      assert(card.textContent.indexOf('3 due reviews + 3 new cards') !== -1,
+        'Today line names the due/new mix, got: ' + card.textContent);
+      var pick = doc.getElementById('pick-btn');
+      assert(!!pick && pick.textContent === 'Choose cards', 'secondary control opens the composer');
+      assert(!doc.getElementById('fill-study-btn') && !doc.getElementById('landing-pick-btn'),
+        'no second landing control set');
+      assert(tc.P.store.state.formulaDay.reviewIds.length === 0 &&
+        tc.P.store.state.formulaDay.newIds.length === 0,
+        'rendering the suggestion writes nothing to the batch');
+      study.click();
+      var fd = tc.P.store.state.formulaDay;
+      assert(fd.reviewIds.join(',') === 'cpgf-2.3,cpgf-2.1,cpgf-1.2',
+        'due reviews first: most overdue, then most lapses, got: ' + fd.reviewIds.join(','));
+      assert(fd.newIds.join(',') === 'cpgf-1.1,cpgf-2.2,f0',
+        'new cards fill the rest in book (chapter) order, got: ' + fd.newIds.join(','));
+      assert(!!doc.getElementById('flip-btn'), 'Study starts on the auto-picked list');
+    });
+  }).then(function () {
+    console.log('\nformulas: composer — draft list, lazy groups, fill, clear, save');
+    var cp = autoPickEnv();
+    var P = cp.P;
     var savedIds = null;
-    P.srs.setFormulaDayPicks = function (deck, ids) { savedIds = ids; };
-    pk.location.hash = '#/formulas';
-    ensureView(pk, P.views.formulas.render());
+    var realSet = P.srs.setFormulaDayPicks;
+    P.srs.setFormulaDayPicks = function (deck, ids) {
+      savedIds = ids.slice();
+      return realSet.call(P.srs, deck, ids);
+    };
+    cp.env.location.hash = '#/formulas';
+    ensureView(cp.env, P.views.formulas.render());
     P.views.formulas.mount();
     return wait(0).then(function () {
-      var pick = pk.document.getElementById('landing-pick-btn') ||
-        pk.document.getElementById('pick-btn');
-      assert(!!pick, 'picker entry rendered');
-      pick.click();
+      var doc = cp.env.document;
+      doc.getElementById('pick-btn').click();
 
-      var chapters = pk.document.querySelectorAll('.picker-chapter');
-      assert(chapters.length === 2, 'two chapter groups (ch 2 + other), got ' + chapters.length);
-      var ch2 = null, other = null;
-      chapters.forEach(function (tp) {
-        if (tp.getAttribute('data-ch') === '2') ch2 = tp; else other = tp;
-      });
-      assert(!!ch2 && !!other, 'chapter 2 group and fallback group both present');
-      var bodies = pk.document.querySelectorAll('.picker-chapter-body');
-      var allHidden = true;
-      bodies.forEach(function (b) { if (!b.hidden) allHidden = false; });
-      assert(allHidden, 'chapter bodies start collapsed');
-      assert(pk.document.querySelectorAll('.picker-box').length === 0,
-        'no card rows in the DOM while collapsed');
+      function cartIds() {
+        var out = [];
+        doc.querySelectorAll('#picker-list .pick-cart-row').forEach(function (r) {
+          out.push(r.getAttribute('data-cardid'));
+        });
+        return out;
+      }
+      function text(id) { var el = doc.getElementById(id); return el ? el.textContent : null; }
+
+      assert(cartIds().join(',') === 'cpgf-2.3,cpgf-2.1,cpgf-1.2,cpgf-1.1,cpgf-2.2,f0',
+        'empty list opens pre-filled with the auto-pick, got: ' + cartIds().join(','));
+      assert(!doc.getElementById('picker-note').hidden, 'pre-filled draft says it is a suggestion');
+      assert(text('picker-count') === '6 / 6', 'count is list / target, got: ' + text('picker-count'));
+      assert(text('picker-mix') === '3 reviews · 3 new · 1 done today',
+        'mix line splits reviews, new, and done, got: ' + text('picker-mix'));
+      assert(text('picker-fill') === 'Add 6 more', 'full list offers another round, got: ' + text('picker-fill'));
+      assert(text('picker-study') === 'Study 6 cards', 'Study names the list size');
+      assert(savedIds === null && P.store.state.formulaDay.newIds.length === 0,
+        'opening the composer persists nothing');
+
+      var groups = doc.querySelectorAll('#picker-groups .picker-topic');
+      assert(groups.length === 4 && groups[0].getAttribute('data-group') === 'due',
+        'Due now group leads three chapter groups, got ' + groups.length);
+      assert(groups[0].querySelector('.picker-ch-count').textContent === '3 cards',
+        'Due now meta counts the due cards, got: ' + groups[0].querySelector('.picker-ch-count').textContent);
+      var ch1 = doc.querySelector('.picker-topic[data-ch="1"]');
+      var ch2 = doc.querySelector('.picker-topic[data-ch="2"]');
+      var other = doc.querySelector('.picker-topic[data-ch="other"]');
+      assert(ch2.querySelector('.picker-ch-count').textContent === '2 due · 1 new · 4 cards',
+        'chapter meta shows due and new counts, got: ' + ch2.querySelector('.picker-ch-count').textContent);
+      assert(other.querySelector('.picker-ch-title').textContent === 'Supplements',
+        'un-numbered cards group as Supplements');
+      assert(doc.querySelectorAll('.picker-row').length === 0, 'groups start collapsed with no rows in the DOM');
 
       ch2.querySelector('.picker-ch-toggle').click();
-      var boxes = ch2.querySelectorAll('.picker-box');
-      assert(boxes.length === 3, 'expanding paints that chapter’s three rows');
-      var peek = ch2.querySelector('.picker-preview');
-      assert(!!peek && peek.textContent.indexOf('Phi') !== -1,
-        'row shows the rendered formula, not a bare id');
-      assert(boxes[0].getAttribute('data-locked') === '1' && boxes[0].checked,
-        'studied-today card is locked and stays picked');
-      assert(!boxes[1].checked, 'unseen card starts unchecked');
+      var rows = ch2.querySelectorAll('.picker-row');
+      assert(rows.length === 4, 'opening a chapter paints its rows');
+      function row(id) {
+        var sel = '.picker-row[data-cardid="' + id + '"]';
+        return ch1.querySelector(sel) || ch2.querySelector(sel) || other.querySelector(sel);
+      }
+      assert(row('cpgf-2.1').querySelector('.picker-box').checked && row('cpgf-2.1').classList.contains('is-picked'),
+        'a card in the list is ticked');
+      assert(!row('cpgf-2.4').querySelector('.picker-box').checked,
+        'a learned card outside the list is NOT ticked — one checkbox, one meaning');
+      assert(row('cpgf-2.4').querySelector('.picker-meta').textContent.indexOf('due in 5 d') !== -1,
+        'row meta carries the schedule status');
+      assert(ch2.querySelector('.picker-preview').hidden, 'formula stays hidden until asked for');
+      var fbtn = row('cpgf-2.1').querySelector('.picker-peek-btn');
+      fbtn.click();
+      var prev = ch2.querySelector('.picker-preview');
+      assert(!prev.hidden && prev.textContent.indexOf('Phi') !== -1, 'Formula reveals the answer face');
+      assert(!!prev.querySelector('.similar-problem-btn'), 'preview carries the similar-problem control');
+      assert(row('cpgf-2.1').querySelector('.picker-box').checked, 'Formula does not toggle the pick');
 
-      var gaussRow = ch2.querySelector('.picker-row[data-cardid="cpgf-2.1"]');
-      var ampereRow = ch2.querySelector('.picker-row[data-cardid="cpgf-2.2"]');
-      var faradayRow = ch2.querySelector('.picker-row[data-cardid="cpgf-2.3"]');
-      assert(!!gaussRow && gaussRow.classList.contains('picker-today'),
-        'locked studied-today row is marked today');
-      assert(!!ampereRow && !ampereRow.classList.contains('picker-learned-only') &&
-        !ampereRow.classList.contains('picker-today'),
-        'never-studied Ampere has an empty box');
-      assert(!!faradayRow && faradayRow.classList.contains('picker-learned-only') &&
-        boxes[2].checked && faradayRow.getAttribute('data-today') == null,
-        'ever-studied Faraday is filled but not in today');
+      ch1.querySelector('.picker-ch-toggle').click();
+      var lockBox = row('cpgf-1.3').querySelector('.picker-box');
+      assert(lockBox.disabled && lockBox.checked && row('cpgf-1.3').classList.contains('is-locked'),
+        'a card graded today is locked');
+      assert(cartIds().indexOf('cpgf-1.3') === -1, 'locked cards count as done, not as editable rows');
 
-      var chCount = ch2.querySelector('.picker-ch-count');
-      assert(chCount && chCount.textContent.indexOf('2/3') !== -1,
-        'chapter fraction is ever-studied / size, got: ' + (chCount && chCount.textContent));
-      var otherCount = other.querySelector('.picker-ch-count');
-      assert(otherCount && otherCount.textContent.indexOf('0/12') !== -1,
-        'unlearned chapter is 0/size, got: ' + (otherCount && otherCount.textContent));
+      doc.querySelector('#picker-list [data-rm="cpgf-2.1"]').click();
+      assert(cartIds().indexOf('cpgf-2.1') === -1 && !row('cpgf-2.1').querySelector('.picker-box').checked,
+        'removing from the list unticks the row');
+      assert(text('picker-count') === '5 / 6' && text('picker-fill') === 'Fill to 6',
+        'count drops and Fill offers to top up, got: ' + text('picker-count') + ' / ' + text('picker-fill'));
+      assert(doc.getElementById('picker-note').hidden, 'the suggestion note goes once the user edits');
 
-      var count = pk.document.getElementById('picker-count');
-      assert(count.textContent === 'today 1 · ever 2 · target 20',
-        'counter starts with locked today + deck ever, got: ' + count.textContent);
+      row('cpgf-2.4').querySelector('.picker-text').click();
+      assert(cartIds()[cartIds().length - 1] === 'cpgf-2.4', 'row click adds to the end of the list');
+      var box24 = row('cpgf-2.4').querySelector('.picker-box');
+      box24.checked = false;
+      fireChange(box24);
+      assert(cartIds().indexOf('cpgf-2.4') === -1, 'unticking the box removes it');
 
-      fireChange(boxes[2]);
-      assert(faradayRow.classList.contains('picker-today') &&
-        !faradayRow.classList.contains('picker-learned-only') &&
-        faradayRow.getAttribute('data-today') === '1',
-        'clicking a learned-only box adds it to today');
-      assert(count.textContent === 'today 2 · ever 2 · target 20',
-        'today count rises without changing ever, got: ' + count.textContent);
-      fireChange(boxes[2]);
-      assert(faradayRow.classList.contains('picker-learned-only') &&
-        boxes[2].checked && faradayRow.getAttribute('data-today') == null,
-        'second click removes Faraday from today but keeps the learned fill');
-      assert(count.textContent === 'today 1 · ever 2 · target 20',
-        'ever stays 2 after unpicking Faraday, got: ' + count.textContent);
-
-      boxes[1].checked = true;
-      fireChange(boxes[1]);
-      assert(count.textContent === 'today 2 · ever 2 · target 20',
-        'count tracks locked + manual pick, got: ' + count.textContent);
-      assert(chCount.textContent.indexOf('2/3') !== -1,
-        'chapter fraction ignores today picks, got: ' + chCount.textContent);
-
-      var fill = pk.document.getElementById('picker-fill');
-      assert(!!fill, 'fill-batch control rendered');
-      fill.click();
-      assert(count.textContent === 'today 14 · ever 2 · target 20',
-        'fill stages every unseen card up to target (12 f-cards + cpgf-2.2), got: ' + count.textContent);
-      assert(savedIds === null, 'fill does not persist — Save still owns the write');
-      assert(boxes[2].checked && faradayRow.classList.contains('picker-learned-only'),
-        'fill does not unlearn Faraday or add it to today');
+      doc.getElementById('picker-clear').click();
+      assert(cartIds().length === 0 && text('picker-count') === '0 / 6', 'Clear empties the list');
+      assert(doc.getElementById('picker-study').disabled, 'Study is disabled on an empty list');
+      doc.getElementById('picker-fill').click();
+      assert(cartIds().join(',') === 'cpgf-2.3,cpgf-2.1,cpgf-1.2,cpgf-1.1,cpgf-2.2,f0',
+        'Fill re-applies the auto-pick, got: ' + cartIds().join(','));
 
       var saOther = other.querySelector('.picker-selall-box');
       saOther.checked = true;
       fireChange(saOther);
-      assert(count.textContent === 'today 14 · ever 2 · target 20',
-        'chapter select-all picks its 12 cards without opening it, got: ' + count.textContent);
+      assert(text('picker-count') === '17 / 6', 'group All adds every card in the group, got: ' + text('picker-count'));
+      saOther.checked = false;
+      fireChange(saOther);
+      assert(text('picker-count') === '5 / 6', 'group All off removes them again, got: ' + text('picker-count'));
 
-      var filter = pk.document.getElementById('picker-filter');
+      var filter = doc.getElementById('picker-filter');
       filter.value = 'ampere';
       fireInput(filter);
-      assert(!!other.hidden, 'non-matching chapter hides under filter');
-      assert(!ch2.hidden, 'matching chapter stays visible');
+      assert(groups[0].hidden && ch1.hidden && other.hidden && !ch2.hidden,
+        'search keeps only matching groups and drops the Due repeat');
+      assert(ch2.querySelectorAll('.picker-row').length === 1, 'search shows only matching rows');
       filter.value = '';
       fireInput(filter);
-      assert(!other.hidden, 'clearing filter restores the chapter');
+      assert(!groups[0].hidden && !other.hidden && ch2.querySelectorAll('.picker-row').length === 4,
+        'clearing search restores groups and their open state');
 
-      ch2.querySelector('.picker-ch-toggle').click();
-      assert(ch2.querySelectorAll('.picker-box').length === 0,
-        'collapsing removes the rows from the DOM');
-
-      pk.document.getElementById('picker-save').click();
-      assert(Array.isArray(savedIds) && savedIds.length === 13,
-        'save persists picked minus locked (14 picked - 1 locked = 13), got ' +
-          (savedIds && savedIds.length));
-      assert(savedIds.indexOf('cpgf-2.1') === -1, 'locked card not written to the batch');
-      assert(savedIds.indexOf('cpgf-2.3') === -1, 'learned-only Faraday is not saved');
-      assert(savedIds.indexOf('cpgf-2.2') !== -1 && savedIds.indexOf('f0') !== -1,
-        'manual pick and filled ids both saved');
+      row('cpgf-2.4').querySelector('.picker-text').click();
+      doc.getElementById('picker-save').click();
+      assert(savedIds && savedIds.join(',') === 'cpgf-2.3,cpgf-2.1,cpgf-1.2,cpgf-1.1,cpgf-2.2,cpgf-2.4',
+        'Save writes the list in order, got: ' + (savedIds && savedIds.join(',')));
+      var fd = P.store.state.formulaDay;
+      assert(fd.softIds && fd.softIds.indexOf('cpgf-2.4') !== -1,
+        'a not-yet-due add is soft-pinned so Study still shows it');
+      assert(!!doc.querySelector('.fm-landing') && text('study-btn') === 'Study 6 cards',
+        'Save returns home with the saved list ready, got: ' + text('study-btn'));
+      assert(text('pick-btn') === 'Edit today’s list', 'home now offers to edit the list');
+    });
+  }).then(function () {
+    console.log('\nformulas: composer Cancel drops the draft; Study saves and starts');
+    var cx = autoPickEnv();
+    var P = cx.P;
+    cx.env.location.hash = '#/formulas';
+    ensureView(cx.env, P.views.formulas.render());
+    P.views.formulas.mount();
+    return wait(0).then(function () {
+      var doc = cx.env.document;
+      doc.getElementById('pick-btn').click();
+      doc.getElementById('picker-clear').click();
+      doc.getElementById('picker-cancel').click();
+      var fd = P.store.state.formulaDay;
+      assert(fd.reviewIds.length === 0 && fd.newIds.length === 0, 'Cancel persists nothing');
+      assert(!!doc.getElementById('study-btn'), 'Cancel returns to the Today card');
+      doc.getElementById('pick-btn').click();
+      doc.getElementById('picker-study').click();
+      fd = P.store.state.formulaDay;
+      assert(fd.reviewIds.length + fd.newIds.length === 6, 'Study saves the draft list');
+      assert(!!doc.getElementById('flip-btn'), 'Study starts the session straight from the composer');
+    });
+  }).then(function () {
+    console.log('\nformulas: composer keeps an Again-today card as a fixed row');
+    var ag = autoPickEnv();
+    var P = ag.P, t = P.srs.today();
+    ag.env.cardStates['cpgf-1.3'].due = t;   // graded today, Again: due again today
+    P.store.state.formulaDay = { date: t, reviewIds: ['cpgf-1.3'], newIds: [] };
+    ag.env.location.hash = '#/formulas';
+    ensureView(ag.env, P.views.formulas.render());
+    P.views.formulas.mount();
+    return wait(0).then(function () {
+      var doc = ag.env.document;
+      assert(doc.getElementById('study-btn').textContent === 'Study 1 card' &&
+        doc.getElementById('pick-btn').textContent === 'Edit today’s list',
+        'home studies the remaining Again card, no auto-pick on top');
+      doc.getElementById('pick-btn').click();
+      var rows = doc.querySelectorAll('#picker-list .pick-cart-row');
+      assert(rows.length === 1 && rows[0].classList.contains('is-locked') &&
+        !rows[0].querySelector('.pick-cart-rm'),
+        'the Again card is a fixed row with no remove control');
+      assert(rows[0].textContent.indexOf('again today') !== -1, 'fixed row says it is due again today');
+      assert(doc.getElementById('picker-note').hidden, 'a list with remaining cards is not pre-filled');
+      assert(doc.getElementById('picker-count').textContent === '1 / 6' &&
+        doc.getElementById('picker-study').textContent === 'Study 1 card',
+        'count and Study include the Again card');
+      doc.getElementById('picker-fill').click();
+      assert(doc.querySelectorAll('#picker-list .pick-cart-row').length === 6,
+        'Fill tops up around the fixed row to the target');
+      doc.getElementById('picker-clear').click();
+      assert(doc.querySelectorAll('#picker-list .pick-cart-row').length === 1,
+        'Clear leaves the fixed row in place');
     });
   });
+}
+
+/* A formulas env running the SHIPPED js/srs.js (auto-pick, setFormulaDayPicks)
+   over the harness store. Deck: f0-f11 (no chapter) + book cards in two
+   chapters. Target 6. Due: cpgf-2.3 (3 days late), cpgf-2.1 (today, 2
+   lapses), cpgf-1.2 (today). cpgf-2.4 due in 5 days. cpgf-1.3 graded today. */
+function autoPickEnv() {
+  var env = loadShipped(true, { views: true });
+  vm.runInContext(fs.readFileSync(path.join(root, 'js/srs.js'), 'utf8'), env.sandbox,
+    { filename: 'js/srs.js' });
+  var P = env.sandbox.PGRE;
+  var srs = P.srs;
+  var t = srs.today();
+  function add(id, name, back) {
+    env.cards.push({ id: id, topic: 'cm', name: name, front: name + ' prompt', back: back, note: '', aliases: [] });
+  }
+  add('cpgf-2.1', 'Gauss', '$$\\Phi = Q/\\epsilon_0$$');
+  add('cpgf-2.2', 'Ampere', '$$\\oint B = \\mu_0 I$$');
+  add('cpgf-2.3', 'Faraday', '$$\\mathcal{E} = -d\\Phi/dt$$');
+  add('cpgf-2.4', 'Lenz', '$$\\mathcal{E} = -L\\,dI/dt$$');
+  add('cpgf-1.1', 'Newton', '$$F = ma$$');
+  add('cpgf-1.2', 'Kinematics', '$$v = v_0 + at$$');
+  add('cpgf-1.3', 'Energy', '$$K = mv^2/2$$');
+  var old = srs.addDays(-5);
+  env.cardStates['cpgf-2.3'] = { due: srs.addDays(-3), interval: 4, ease: 2.5, reps: 2, lapses: 0, lastReviewedDay: old };
+  env.cardStates['cpgf-2.1'] = { due: t, interval: 2, ease: 2.2, reps: 3, lapses: 2, lastReviewedDay: old };
+  env.cardStates['cpgf-1.2'] = { due: t, interval: 2, ease: 2.5, reps: 2, lapses: 0, lastReviewedDay: old };
+  env.cardStates['cpgf-2.4'] = { due: srs.addDays(5), interval: 6, ease: 2.5, reps: 2, lapses: 0, lastReviewedDay: old };
+  env.cardStates['cpgf-1.3'] = { due: srs.addDays(1), interval: 1, ease: 2.5, reps: 1, lapses: 0, lastReviewedDay: t };
+  P.store.state.settings.formulaDailyTarget = 6;
+  P.store.state.formulaDay = null;
+  P.srs.buildMemHistory = function () { return null; };
+  return { env: env, P: P };
 }
 
 runAsync().then(function () {
