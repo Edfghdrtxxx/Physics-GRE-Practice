@@ -2651,6 +2651,24 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .pick-cart-rm:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pick-cart-empty { padding: 12px 0; font-size: 13px; }
 
+/* ——— Picker SRS tooltip (js/view-formulas.js pickTip) ———
+   Rides on .chart-tip chrome (fixed popover, fade transition). Wider and
+   padded like a mini card; content is the app's own pill vocabulary. */
+.srs-tip { max-width: 340px; padding: 10px 12px; font-weight: 400; white-space: normal; }
+.srs-tip-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.srs-tip-row + .srs-tip-row { margin-top: 6px; }
+.srs-tip-pill {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-2);
+  background: var(--ivory);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.srs-tip-note { margin-top: 7px; font-size: 12px; line-height: 1.35; color: var(--ink-2); }
+
 @container picker (min-width: 740px) {
   .picker-grid { grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; }
   .pick-cart {
