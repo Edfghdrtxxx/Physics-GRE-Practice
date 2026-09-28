@@ -192,4 +192,14 @@ PGRE.FORMULAS = [
     back: "$$r \\sim 1\\ \\mathrm{fm} = 10^{-15}\\ \\mathrm{m}$$\nThe strong force is short-ranged (pion exchange gives an exponentially decaying potential), so beyond $\\sim 1$ fm the nuclear attraction dies out and Coulomb repulsion wins. Comparison anchors: atomic scale $\\sim 10^{-10}$ m (Angstrom), nuclear scale $\\sim 10^{-15}$ m (fermi).",
     note: "Supplemental — not a numbered CPG equation. Kahn states this as a fact to know cold (ch. 8 solutions, problem 8.5-10). Useful companion scale: $\\hbar c \\approx 200\\ \\mathrm{MeV\\cdot fm}$."
   },
+  {
+    id: "supp-qm-length-scales",
+    eq: "supp",
+    topic: "qm",
+    tag: "Dimensional analysis",
+    name: "QM characteristic length scales (supplemental)",
+    front: "What characteristic length does dimensional analysis assign to each QM system — harmonic oscillator, hydrogen atom, and massive particle?",
+    back: "Each QM problem's constants combine into exactly one length:\n- **Oscillator ground-state width**: $\\sqrt{\\hbar/(m\\omega)}$ — the only length from $\\hbar$, $m$, $\\omega$.\n- **Bohr radius**: $a_0 = \\dfrac{4\\pi\\epsilon_0\\hbar^2}{\\mu e^2}$ — only length from $\\mu$, $\\hbar$, $e^2/4\\pi\\epsilon_0$ (eq. 5.44). Positronium has $\\mu = m_e/2$, so its Bohr radius is double hydrogen's.\n- **Compton wavelength**: $\\lambda_C = \\dfrac{h}{mc}$ — depends only on mass, not momentum (eq. 7.15).\n- **de Broglie wavelength**: $\\lambda = h/p$ — momentum-dependent (eq. 5.28, $p = \\hbar k$).",
+    note: "Supplemental — not a numbered CPG equation; Kahn derives the oscillator width, Bohr radius, and Compton wavelength by the same trick: the parameters admit exactly one combination with units of length. The Bohr radius, Compton, and de Broglie formulas already have their own cards (cpgf-5.44, 7.15, 5.28); this card drills the shared dimensional-analysis pattern."
+  },
 ];
