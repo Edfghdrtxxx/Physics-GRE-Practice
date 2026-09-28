@@ -248,6 +248,10 @@ function makeEl(tag, owner) {
     }
   });
   Object.defineProperty(el, 'offsetWidth', { get: function () { return 1; } });
+  Object.defineProperty(el, 'offsetHeight', { get: function () { return 1; } });
+  el.getBoundingClientRect = function () {
+    return { left: 0, right: 100, top: 0, bottom: 10, width: 100, height: 10 };
+  };
   Object.defineProperty(el, 'textContent', {
     get: function () {
       if (el.childNodes.length === 0) return el._text;
@@ -841,6 +845,21 @@ function fireInput(el) {
     preventDefault: function () {}, stopPropagation: function () {}
   };
   ((el.listeners && el.listeners.input) || []).slice().forEach(function (fn) { fn(ev); });
+}
+
+function fireDoc(env, type, extra) {
+  extra = extra || {};
+  var ev = {
+    type: type,
+    target: extra.target || null,
+    relatedTarget: extra.relatedTarget || null,
+    currentTarget: env.document,
+    preventDefault: function () {},
+    stopPropagation: function () {}
+  };
+  ((env.document.listeners && env.document.listeners[type]) || [])
+    .slice().forEach(function (fn) { fn(ev); });
+  return ev;
 }
 
 function boxesChecked(list) {
@@ -2007,13 +2026,46 @@ function runAsync() {
         'a learned card outside the list is NOT ticked — one checkbox, one meaning');
       assert(row('cpgf-2.4').querySelector('.picker-meta').textContent.indexOf('due in 5 d') !== -1,
         'row meta carries the schedule status');
-      var tip24 = row('cpgf-2.4').getAttribute('title');
-      assert(tip24.indexOf('due ' + P.srs.addDays(5)) !== -1 && tip24.indexOf('ease 2.50') !== -1 &&
-        tip24.indexOf('lapses 0') !== -1 && tip24.indexOf('reps 2') !== -1,
-        'row tooltip carries the SRS fields, got: ' + tip24);
-      var tip21 = row('cpgf-2.1').getAttribute('title');
-      assert(tip21.indexOf('due today') !== -1 && tip21.indexOf('lapses 2') !== -1,
-        'due-now tooltip names due today and lapses, got: ' + tip21);
+      var r24 = row('cpgf-2.4');
+      assert(r24.classList.contains('is-scheduled'),
+        'a card in the queue with a future due date is marked scheduled');
+      assert(r24.querySelector('.picker-status').classList.contains('is-scheduled'),
+        'the due-in status reads as a scheduled pill');
+      assert(!row('cpgf-2.1').classList.contains('is-scheduled') &&
+        !row('cpgf-2.2').classList.contains('is-scheduled'),
+        'due-now and new cards are not marked scheduled');
+      assert(!r24.hasAttribute('title'), 'picker row no longer carries a native title tooltip');
+      // Styled tooltip: delegated document mouseover + delay before paint.
+      fireDoc(cp.env, 'mouseover', { target: r24.querySelector('.picker-text') });
+      var tipEl = doc.querySelector('.srs-tip');
+      assert(!tipEl || !tipEl.classList.contains('is-on'),
+        'hover does not flash the tip before the delay');
+      cp.env.flushTimeouts(230);
+      tipEl = doc.querySelector('.srs-tip');
+      assert(tipEl && tipEl.classList.contains('is-on'), 'hover delay shows the styled tip');
+      assert(tipEl.textContent.indexOf('due ' + P.srs.addDays(5)) !== -1 &&
+        tipEl.textContent.indexOf('ease 2.50') !== -1 &&
+        tipEl.textContent.indexOf('lapses 0') !== -1 &&
+        tipEl.textContent.indexOf('reps 2') !== -1,
+        'tip pills carry the SRS fields, got: ' + tipEl.textContent);
+      assert(!!tipEl.querySelector('.srs-tip-pill'), 'stats render as pills, not flat text');
+      var r21 = row('cpgf-2.1');
+      fireDoc(cp.env, 'mouseover', { target: r21.querySelector('.picker-text') });
+      fireDoc(cp.env, 'mouseout', { target: r21, relatedTarget: r24 });
+      cp.env.flushTimeouts(0);
+      assert(tipEl.textContent.indexOf('due today') !== -1 &&
+        tipEl.textContent.indexOf('lapses 2') !== -1 &&
+        tipEl.classList.contains('is-on'),
+        'sliding to a neighbouring row re-aims the tip, got: ' + tipEl.textContent);
+      fireDoc(cp.env, 'mouseout', { target: r24, relatedTarget: doc.body });
+      assert(!tipEl.classList.contains('is-on'), 'leaving the rows dismisses the tip');
+      // Keyboard focus shows it without the delay.
+      fireDoc(cp.env, 'focusin', { target: r21.querySelector('.picker-peek-btn') });
+      assert(tipEl.classList.contains('is-on') &&
+        tipEl.textContent.indexOf('due today') !== -1,
+        'focus inside a row shows the tip at once');
+      fireDoc(cp.env, 'focusout', { target: r21, relatedTarget: doc.body });
+      assert(!tipEl.classList.contains('is-on'), 'focus leaving the row hides the tip');
 
       assert(ch2.querySelector('.picker-preview').hidden, 'formula stays hidden until asked for');
       var fbtn = row('cpgf-2.1').querySelector('.picker-peek-btn');
@@ -2028,10 +2080,20 @@ function runAsync() {
       assert(lockBox.disabled && lockBox.checked && row('cpgf-1.3').classList.contains('is-locked'),
         'a card graded today is locked');
       assert(cartIds().indexOf('cpgf-1.3') === -1, 'locked cards count as done, not as editable rows');
-      assert(row('cpgf-1.1').getAttribute('title').indexOf('New card') !== -1,
-        'new card tooltip says it has no grades');
-      assert(row('cpgf-1.3').getAttribute('title').indexOf('Done today') !== -1,
-        'locked card tooltip explains the lock');
+      var r11 = row('cpgf-1.1'), r13 = row('cpgf-1.3');
+      assert(!r11.hasAttribute('title') && !r13.hasAttribute('title'),
+        'no row carries a native title tooltip');
+      fireDoc(cp.env, 'focusin', { target: r11.querySelector('.picker-box') });
+      assert(tipEl.classList.contains('is-on') &&
+        tipEl.textContent.indexOf('No grades yet') !== -1,
+        'new card tip says it has no grades, got: ' + tipEl.textContent);
+      fireDoc(cp.env, 'focusout', { target: r11, relatedTarget: doc.body });
+      fireDoc(cp.env, 'focusin', { target: r13.querySelector('.picker-box') });
+      assert(tipEl.classList.contains('is-on') &&
+        tipEl.textContent.indexOf('done today') !== -1 &&
+        tipEl.textContent.indexOf('Already graded today') !== -1,
+        'locked card tip explains the lock, got: ' + tipEl.textContent);
+      fireDoc(cp.env, 'focusout', { target: r13, relatedTarget: doc.body });
 
       doc.querySelector('#picker-list [data-rm="cpgf-2.1"]').click();
       assert(cartIds().indexOf('cpgf-2.1') === -1 && !row('cpgf-2.1').querySelector('.picker-box').checked,
@@ -2125,6 +2187,14 @@ function runAsync() {
         !rows[0].querySelector('.pick-cart-rm'),
         'the Again card is a fixed row with no remove control');
       assert(rows[0].textContent.indexOf('again today') !== -1, 'fixed row says it is due again today');
+      // The same styled tip serves the right-pane list rows.
+      fireDoc(ag.env, 'mouseover', { target: rows[0].querySelector('.pick-cart-text') });
+      ag.env.flushTimeouts(230);
+      var cartTip = doc.querySelector('.srs-tip');
+      assert(cartTip && cartTip.classList.contains('is-on') &&
+        cartTip.textContent.indexOf('again today') !== -1,
+        'today’s-list row shows the same styled tip, got: ' + (cartTip && cartTip.textContent));
+      fireDoc(ag.env, 'mouseout', { target: rows[0], relatedTarget: doc.body });
       assert(doc.getElementById('picker-note').hidden, 'a list with remaining cards is not pre-filled');
       assert(doc.getElementById('picker-count').textContent === '1 / 6' &&
         doc.getElementById('picker-study').textContent === 'Study 1 card',

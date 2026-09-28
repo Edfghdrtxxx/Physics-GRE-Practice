@@ -1345,6 +1345,93 @@ PGRE.views.formulas = (function () {
   /* Escape a card id for a CSS attribute selector (ids are equation-numbered,
      but guard the quote/backslash cases regardless). */
   function cssAttr(s) { return String(s).replace(/["\\]/g, '\\$&'); }
+  /* ——— Picker SRS tooltip ———
+     One shared fixed popover for .picker-row / .pick-cart-row (reuses the
+     .chart-tip chrome with .srs-tip pill content). renderPicker() assigns
+     pickTipFor — a card → pill-rows HTML closure — each render; document
+     listeners are delegated so group re-paints and list reorders never need
+     rewiring. A short hover delay keeps a fast pass over the rows quiet;
+     focus shows it at once for keyboard users. pointer-events:none so it
+     can never steal hover or clicks from the row. */
+  var pickTipEl = null, pickTipRow = null, pickTipTimer = 0, pickTipFor = null;
+  var PICK_TIP_MS = 220;
+
+  function pickTipHost() {
+    if (pickTipEl && pickTipEl.isConnected) return pickTipEl;
+    pickTipEl = document.createElement('div');
+    pickTipEl.className = 'chart-tip srs-tip';
+    pickTipEl.setAttribute('role', 'tooltip');
+    pickTipEl.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(pickTipEl);
+    return pickTipEl;
+  }
+  function pickTipTarget(node) {
+    if (!node || node.nodeType !== 1) node = node && node.parentNode;
+    if (!node || typeof node.closest !== 'function') return null;
+    var row = node.closest('.picker-row') || node.closest('.pick-cart-row');
+    return row && row.getAttribute('data-cardid') ? row : null;
+  }
+  function hidePickTip() {
+    clearTimeout(pickTipTimer);
+    pickTipTimer = 0;
+    pickTipRow = null;
+    if (!pickTipEl) return;
+    pickTipEl.classList.remove('is-on');
+    pickTipEl.setAttribute('aria-hidden', 'true');
+  }
+  function showPickTip(row) {
+    var el = pickTipHost();
+    el.innerHTML = pickTipFor(row.getAttribute('data-cardid'));
+    pickTipRow = row;
+    var r = row.getBoundingClientRect();
+    var pad = 8, w = el.offsetWidth, h = el.offsetHeight;
+    var left = r.left + 12;
+    if (left + w > window.innerWidth - pad) left = window.innerWidth - w - pad;
+    if (left < pad) left = pad;
+    var top = r.bottom + 8;
+    if (top + h > window.innerHeight - pad) top = r.top - h - 8;
+    if (top < pad) top = pad;
+    el.style.left = Math.round(left) + 'px';
+    el.style.top = Math.round(top) + 'px';
+    el.classList.add('is-on');
+    el.setAttribute('aria-hidden', 'false');
+  }
+  function wantPickTip(row) {
+    if (!row) { hidePickTip(); return; }
+    clearTimeout(pickTipTimer);
+    if (pickTipRow === row) return;              // already showing for this row
+    // A tip already on-screen hops to the next row without the delay.
+    if (pickTipRow && pickTipRow.isConnected) { showPickTip(row); return; }
+    pickTipTimer = setTimeout(function () {
+      pickTipTimer = 0;
+      if (!row.isConnected) return;
+      showPickTip(row);
+    }, PICK_TIP_MS);
+  }
+  document.addEventListener('mouseover', function (e) {
+    if (!pickTipFor) return;
+    wantPickTip(pickTipTarget(e.target));
+  });
+  document.addEventListener('mouseout', function (e) {
+    if (!pickTipFor) return;
+    if (pickTipTarget(e.relatedTarget)) return;  // slid onto a neighbouring row
+    hidePickTip();
+  });
+  document.addEventListener('focusin', function (e) {
+    if (!pickTipFor) return;
+    var row = pickTipTarget(e.target);
+    if (!row) return;
+    clearTimeout(pickTipTimer);
+    pickTipTimer = 0;
+    showPickTip(row);
+  });
+  document.addEventListener('focusout', function (e) {
+    if (!pickTipFor) return;
+    if (pickTipTarget(e.relatedTarget)) return;
+    hidePickTip();
+  });
+  document.addEventListener('scroll', hidePickTip, true);
+  document.addEventListener('pointerdown', hidePickTip);
 
   /* ——— Today's list composer ("Choose cards" / "Edit today's list") ———
      Two panes over one draft list. Left: every card, grouped as Due now plus
@@ -1488,37 +1575,61 @@ PGRE.views.formulas = (function () {
     }
     function metaHTML(c) {
       var status = statusText(c);
+      var sched = status.slice(0, 6) === 'due in';
       return '<div class="picker-meta">' + ui.esc(cardLabel(c)) + ' · ' +
-        '<span class="picker-status' + (status === 'due now' ? ' is-due' : '') + '">' +
+        '<span class="picker-status' + (status === 'due now' ? ' is-due' : '') +
+          (sched ? ' is-scheduled' : '') + '">' +
         status + '</span></div>';
     }
-    /* Native title tooltip, same pattern as the mem-hist / leech chips: every
-       field shown below comes straight out of srs.cardState — no invention. */
-    function tipText(c) {
-      if (locked[c.id]) return locked[c.id] === 'again'
-        ? 'Again today — stays in today’s list'
-        : 'Done today — already graded';
-      if (srs.isSuspended(c.id)) return 'Put away — no scheduled reviews';
-      var st = srs.cardState(c.id);
-      if (!st) return 'New card — no grades yet';
-      var bits = ['due ' + st.due];
-      var du = srs.daysUntil(st.due);
-      if (du <= 0) bits.push(du === 0 ? 'due today' : -du + ' day' + (du === -1 ? '' : 's') + ' overdue');
-      bits.push('ease ' + (st.ease || 0).toFixed(2));
-      bits.push('interval ' + srs.ivlLabel(st.interval));
-      bits.push('lapses ' + (st.lapses || 0));
-      bits.push('reps ' + (st.reps || 0));
-      if (st.reviews) bits.push('reviews ' + st.reviews);
-      if (st.lastGrade) bits.push('last grade ' + st.lastGrade);
-      return bits.join(' · ');
+    /* Styled popover content (pickTip component above): the same
+       srs.cardState fields the title= tooltip carried, laid out as the
+       app's pill rows — status chip first, then stat pills. */
+    function tipHTML(id) {
+      var c = byId[id];
+      if (!c) return '';
+      var chips, note = '';
+      if (locked[id]) {
+        chips = '<span class="grade-chip grade-' + locked[id] + '">' +
+          (locked[id] === 'again' ? 'again today' : 'done today') + '</span>';
+        note = locked[id] === 'again'
+          ? 'Due again today — stays in today’s list'
+          : 'Already graded today';
+      } else if (srs.isSuspended(id)) {
+        chips = '<span class="due-chip suspended-chip">put away</span>';
+        note = 'No scheduled reviews';
+      } else {
+        var st = srs.cardState(id);
+        if (!st) {
+          chips = '<span class="due-chip">new</span>';
+          note = 'No grades yet';
+        } else {
+          var du = srs.daysUntil(st.due);
+          chips = '<span class="due-chip' + (du <= 0 ? ' due-now' : '') + '">' +
+            (du < 0 ? 'overdue ' + (-du) + 'd' : du === 0 ? 'due today' : 'due ' + ui.esc(st.due)) +
+            '</span>' +
+            '<span class="srs-tip-pill">ease ' + (st.ease || 0).toFixed(2) + '</span>' +
+            '<span class="srs-tip-pill">interval ' + ui.esc(srs.ivlLabel(st.interval)) + '</span>' +
+            '<span class="srs-tip-pill">lapses ' + (st.lapses || 0) + '</span>' +
+            '<span class="srs-tip-pill">reps ' + (st.reps || 0) + '</span>';
+          if (st.reviews) chips += '<span class="srs-tip-pill">reviews ' + st.reviews + '</span>';
+          if (st.lastGrade) chips += '<span class="grade-chip grade-' + ui.esc(st.lastGrade) +
+            '">last ' + ui.esc(st.lastGrade) + '</span>';
+        }
+      }
+      return '<div class="srs-tip-row">' + chips + '</div>' +
+        (note ? '<div class="srs-tip-note">' + ui.esc(note) + '</div>' : '');
     }
+    pickTipFor = tipHTML;
 
     function rowHTML(c) {
       var id = ui.esc(c.id), on = !!inList[c.id], isLocked = !!locked[c.id];
       var label = ui.esc(cardLabel(c));
+      var st = srs.cardState(c.id);
+      var sched = !isLocked && st && srs.daysUntil(st.due) > 0;  // in the queue, not due yet
       return '<div class="picker-item">' +
         '<div class="picker-row' + (isLocked ? ' is-locked' : '') + (on ? ' is-picked' : '') +
-          '" data-cardid="' + id + '" title="' + ui.esc(tipText(c)) + '">' +
+          (sched ? ' is-scheduled' : '') +
+          '" data-cardid="' + id + '">' +
           '<label class="picker-check"><input type="checkbox" class="picker-box" value="' + id + '"' +
             ' aria-label="' + (isLocked ? label + ' — ' + statusText(c) : 'Today’s list: ' + label) + '"' +
             (on || isLocked ? ' checked' : '') + (isLocked ? ' disabled' : '') + '></label>' +
@@ -1545,6 +1656,7 @@ PGRE.views.formulas = (function () {
         '<div class="picker-chapter-body" hidden></div>' +
       '</div>';
     }
+
 
     var html = '<div class="card picker">' +
       '<h2>Today’s cards</h2>' +
