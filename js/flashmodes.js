@@ -55,7 +55,7 @@ PGRE.flashmodes = (function () {
      or a match tile would be flagging itself, since distractors are perturbed
      or borrowed LaTeX with no number of their own. Render-time only: the tag
      must never reach c.back, which is what acceptSet / the match dedupe key /
-     buildOptions / clozeParts all read. */
+     quizOptions / clozeParts all read. */
   function backHTML(c) {
     return formulaHTML(PGRE.formulaBackTagged ? PGRE.formulaBackTagged(c.back, c.eq) : c.back);
   }
@@ -71,6 +71,11 @@ PGRE.flashmodes = (function () {
   function wireSimilar(root) {
     if (PGRE.wireSimilarProblemButtons) PGRE.wireSimilarProblemButtons(root);
   }
+
+  /* Book-list Recall cards (kind 'list', content/bank/cpg-lists.js): the back
+     is a bulleted list, not a formula. Type, Match and Cloze work on a single
+     formula, so they skip lists; Quiz offers list-versus-list choices. */
+  function isList(c) { return !!c && c.kind === 'list'; }
 
 
   /* Plain-text normalization for the type-to-recall auto-check: peel the common
@@ -335,16 +340,27 @@ PGRE.flashmodes = (function () {
 
   /* Type/Quiz: ONLY the picked batch's remaining cards — the system never
      selects cards on its own. An empty batch means an empty round; the intro
-     screen tells the user to pick today's cards. Capped. */
-  function pickQueue(deck) {
+     screen tells the user to pick today's cards. Capped. Type skips book-list
+     cards. Quiz keeps lists, and quizzes a list only against other lists,
+     unless fewer than two lists remain — a lone list would be a one-choice
+     quiz, so it stays in Study. */
+  function pickQueue(deck, mode) {
     var pool = PGRE.srs.formulaDayRemaining(deck);
+    if (mode === 'type') pool = pool.filter(function (c) { return !isList(c); });
+    // A list is only quizzed against other lists. One list in the batch would
+    // be a single choice that grades itself, so leave it for Study.
+    if (mode === 'quiz' && pool.filter(isList).length < 2) {
+      pool = pool.filter(function (c) { return !isList(c); });
+    }
     return shuffle(pool).slice(0, Math.min(SESSION_CAP, pool.length));
   }
 
   /* Match: up to 6 pairs drawn ONLY from the picked batch's remaining cards —
-     never a card the user did not pick. */
+     never a card the user did not pick. Book lists are not pair tiles. */
   function pickMatchCards(deck) {
-    var pool = shuffle(PGRE.srs.formulaDayRemaining(deck));
+    var pool = shuffle(PGRE.srs.formulaDayRemaining(deck).filter(function (c) {
+      return !isList(c);
+    }));
     // two equation numbers can share one formula text — identical tiles would
     // force a blind 50/50 pick, so keep only the first card per formula
     var seen = {};
@@ -712,6 +728,42 @@ PGRE.flashmodes = (function () {
     };
   }
 
+  /* F6: options are legend-stripped for display; grading stays index-based.
+     Correct formula + up to 3 near-miss perturbations of it; if fewer than 3
+     valid variants, fill with SAME-TOPIC other-card backs (legend-stripped),
+     then any-topic backs. De-duplicated by normalized text.
+     Book lists (kind 'list') skip the near-miss step. draw keeps only the same
+     kind, so a list is quizzed against lists and a formula never draws a list.
+     katexOK stays formula-only: it treats a string with no leading $ as display
+     math and would reject every list that contains math. */
+  function quizOptions(card, deck) {
+    var list = isList(card);
+    var correctDisp = stripLegend(card.back), used = {};
+    used[normText(correctDisp)] = 1;
+    var opts = [correctDisp];
+    if (!list) {
+      shuffle(perturbLatex(card.back)).forEach(function (v) {   // near-miss first
+        if (opts.length >= 4) return;
+        var n = normText(v);
+        if (!n || used[n]) return;
+        used[n] = 1; opts.push(v);
+      });
+    }
+    function draw(pool) {                                     // fall back to real backs
+      shuffle(pool).forEach(function (o) {
+        if (opts.length >= 4 || o.id === card.id) return;
+        if (isList(o) !== list) return;
+        var disp = stripLegend(o.back), n = normText(disp);
+        if (!n || used[n] || (!list && !katexOK(disp))) return;
+        used[n] = 1; opts.push(disp);
+      });
+    }
+    if (opts.length < 4) draw(deck.filter(function (o) { return o.topic === card.topic; }));
+    if (opts.length < 4) draw(deck);
+    var shuffled = shuffle(opts);
+    return { opts: shuffled, correctIdx: shuffled.indexOf(correctDisp) };
+  }
+
   /* ——— Auto-quiz: multiple choice from the deck ——— */
   function startQuiz(ctx) {
     var el = ctx.el;
@@ -721,38 +773,10 @@ PGRE.flashmodes = (function () {
                streak: 0, best: 0, answered: false, built: null, undo: null,
                settled: false };
 
-    /* F6: options are legend-stripped for display; grading stays index-based.
-       Correct formula + up to 3 near-miss perturbations of it; if fewer than 3
-       valid variants, fill with SAME-TOPIC other-card backs (legend-stripped),
-       then any-topic backs. De-duplicated by normalized text. */
-    function buildOptions(card) {
-      var correctDisp = stripLegend(card.back), used = {};
-      used[normText(correctDisp)] = 1;
-      var opts = [correctDisp];
-      shuffle(perturbLatex(card.back)).forEach(function (v) {   // near-miss first
-        if (opts.length >= 4) return;
-        var n = normText(v);
-        if (!n || used[n]) return;
-        used[n] = 1; opts.push(v);
-      });
-      function draw(list) {                                     // fall back to real backs
-        shuffle(list).forEach(function (o) {
-          if (opts.length >= 4 || o.id === card.id) return;
-          var disp = stripLegend(o.back), n = normText(disp);
-          if (!n || used[n] || !katexOK(disp)) return;
-          used[n] = 1; opts.push(disp);
-        });
-      }
-      if (opts.length < 4) draw(deck.filter(function (o) { return o.topic === card.topic; }));
-      if (opts.length < 4) draw(deck);
-      var shuffled = shuffle(opts);
-      return { opts: shuffled, correctIdx: shuffled.indexOf(correctDisp) };
-    }
-
     function render() {
       var c = st.queue[st.i];
       var nm = cardName(c);
-      st.built = buildOptions(c);
+      st.built = quizOptions(c, deck);
       var html = '<div class="card">' +
         '<div class="flash-hud"><span class="flash-title">Auto-quiz</span>' +
           '<span class="chip">' + (st.i + 1) + ' / ' + st.queue.length + '</span>' +
@@ -1052,6 +1076,7 @@ PGRE.flashmodes = (function () {
     var h = { coef: [], frac: [], exp: [], pi: [], func: [], sign: [] };
     var seen = { coef: {}, frac: {}, exp: {}, pi: {}, func: {}, sign: {} };
     deck.forEach(function (c) {
+      if (isList(c)) return;
       var parts = clozeParts(c.back);
       if (!parts) return;
       parts.cands.forEach(function (cd) {
@@ -1099,7 +1124,7 @@ PGRE.flashmodes = (function () {
      not pick), filtered to cloze-able cards, capped at 12. Filtering stops
      once 12 are found, bounding the KaTeX probing. */
   function clozePool(deck) {
-    var pool = PGRE.srs.formulaDayRemaining(deck);
+    var pool = PGRE.srs.formulaDayRemaining(deck).filter(function (c) { return !isList(c); });
     var harvest = clozeHarvest(deck);
     pool = shuffle(pool);
     var out = [];
@@ -1252,6 +1277,7 @@ PGRE.flashmodes = (function () {
     matchBest: matchBest,
     pickQueue: pickQueue,
     pickMatchCards: pickMatchCards,
+    quizOptions: quizOptions,
     clozePool: clozePool,
     startMatch: startMatch,
     startType: startType,

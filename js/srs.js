@@ -508,10 +508,10 @@ PGRE.srs = {
     return batch;
   },
 
-  /* Book chapter of a card id (cpgf-<ch>.<eq>); Infinity for supplements and
-     anything else, so they sort after the numbered chapters. */
+  /* Book chapter of a card id (cpgf-<ch>.<eq> or cpgl-<ch>.<NN>); Infinity
+     for supplements and anything else, so they sort after the numbered chapters. */
   formulaChapter: function (id) {
-    var m = String(id || '').match(/^cpgf-(\d+)\./);
+    var m = String(id || '').match(/^cpg[fl]-(\d+)\./);
     return m ? parseInt(m[1], 10) : Infinity;
   },
 

@@ -15,7 +15,7 @@ PGRE.ACH_CATEGORIES = [
   { id: 'mastery',    name: 'Mastery'       },
   { id: 'plan',       name: 'Study Plan'    },
   { id: 'exam',       name: 'Mock Exams'    },
-  { id: 'formulas',   name: 'Formula Recall'},
+  { id: 'formulas',   name: 'Recall'},
   { id: 'focus',      name: 'Focus & Time'  },
   { id: 'review',     name: 'Review Lab'    },
   { id: 'secret',     name: 'Secret'        }

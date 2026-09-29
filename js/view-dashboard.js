@@ -500,7 +500,7 @@ PGRE.views.dashboard = (function () {
         '<span class="rq-count">' + (dueM ? dueM + ' due now' : 'nothing due') + '</span></div>' +
         '<a class="btn ' + (dueM ? 'btn-primary' : 'btn-ghost') + ' btn-sm" href="#/mistakes">' +
           (dueM ? 'Drill →' : 'Open →') + '</a></div>' +
-      '<div class="rq-row"><div class="rq-row-copy"><span class="rq-label">Formula review</span>' +
+      '<div class="rq-row"><div class="rq-row-copy"><span class="rq-label">Recall review</span>' +
         '<span class="rq-count" id="today-formulas">…</span></div>' +
         '<button type="button" class="btn btn-ghost btn-sm" id="today-formulas-btn">Study →</button></div>';
     if (mock) {

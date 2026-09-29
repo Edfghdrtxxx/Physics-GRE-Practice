@@ -660,7 +660,7 @@ PGRE.nav = (function () {
   var LABELS = {
     plan: 'Study plan', history: 'History', analytics: 'Analytics',
     build: 'Custom quiz', search: 'Search', notes: 'Notes & bookmarks',
-    mistakes: 'Mistake book', formulas: 'Formula recall',
+    mistakes: 'Mistake book', formulas: 'Recall',
     concepts: 'Concept visualization',
     focus: 'Focus timer',
     studytime: 'Study time', achievements: 'Achievements', library: 'Library',
@@ -892,7 +892,7 @@ PGRE.buildNav = function () {
       { href: '#/notes', key: 'notes', label: 'Notes &amp; bookmarks', icon: 'note' },
       { href: '#/mistakes', key: 'mistakes', label: 'Mistake book', icon: 'task',
         badge: 'nav-mist-due' },
-      { href: '#/formulas', key: 'formulas', label: 'Formula recall', icon: 'book',
+      { href: '#/formulas', key: 'formulas', label: 'Recall', icon: 'book',
         badge: 'nav-form-due' }
     ],
     explore: [
