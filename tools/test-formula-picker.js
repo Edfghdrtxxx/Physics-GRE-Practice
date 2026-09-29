@@ -157,6 +157,19 @@ assert(ids(again.reviewIds) + '|' + ids(again.newIds) === 'late,lapsed,plain|cpg
   'a full list is left alone');
 assert(srs.formulaChapter('cpgf-12.3') === 12 && srs.formulaChapter('supp-x') === Infinity,
   'formulaChapter reads the book chapter from the id');
+assert(srs.formulaChapter('cpgl-5.03') === 5,
+  'formulaChapter reads a book-list id (cpgl-) as its chapter');
+
+console.log('\nlist cards join their chapter, after that chapter’s formulas');
+resetStore();
+storeState.settings.formulaDailyTarget = 10;
+storeState.settings.examDate = '';
+var chapterDeck = ['cpgf-1.1', 'cpgf-2.1', 'supp-a', 'cpgl-1.01', 'cpgl-2.01'].map(card);
+sug = srs.suggestFormulaDay(chapterDeck, { have: {}, room: 10 });
+assert(ids(sug.newIds) === 'cpgf-1.1,cpgl-1.01,cpgf-2.1,cpgl-2.01,supp-a',
+  'new cards: chapter, then deck order, so lists follow that chapter’s formulas (got ' +
+    ids(sug.newIds) + ')');
+assert(!sug.reviewIds.length, 'no card state means the pick is all new cards');
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

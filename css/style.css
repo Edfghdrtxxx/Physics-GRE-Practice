@@ -1396,6 +1396,21 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
   padding-top: 10px;
 }
 .fcard-note { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; }
+/* Book-list Recall cards (kind: 'list'): the back is a <ul class="recall-list">.
+   Left-aligned bullets inside the centered card face, on every surface. */
+.recall-list {
+  display: inline-block;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding-left: 1.3em;
+  text-align: left;
+  font-size: 16px;
+  line-height: 1.55;
+}
+.recall-list li + li { margin-top: 6px; }
+/* As a Quiz choice, a block list keeps the choice number on its first point. */
+.choice .recall-list { display: block; }
 /* In-card action row & button hierarchy */
 #fcard-actions {
   display: flex;

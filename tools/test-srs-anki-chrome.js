@@ -239,6 +239,7 @@ async function main() {
 
   var seeded = await evaluate(`(async function () {
     PGRE.BOOK_FORMULAS = [];
+    PGRE.BOOK_LISTS = [];
     PGRE.FORMULAS = [];
     await PGRE.contentDB.put({
       id: 'formula-deck', kind: 'formula-deck',

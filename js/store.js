@@ -848,17 +848,18 @@ PGRE.contentDB = {
   }
 };
 
-/* The formula deck, merged from its three sources (first occurrence of an id
+/* The formula deck, merged from its four sources (first occurrence of an id
    wins): book-derived cards in content/bank/cpg-formulas.js
    (PGRE.BOOK_FORMULAS — gitignored, may be absent), hand-appended literals in
-   PGRE.FORMULAS (js/data-formulas.js), and the { id: 'formula-deck',
-   cards: [...] } record in the IndexedDB content store. Async because of the
-   last one. */
+   PGRE.FORMULAS (js/data-formulas.js), book lists in content/bank/cpg-lists.js
+   (PGRE.BOOK_LISTS — gitignored, may be absent, kind: 'list' cards), and the
+   { id: 'formula-deck', cards: [...] } record in the IndexedDB content store.
+   Async because of the last one. */
 PGRE.formulaDeck = function () {
   return PGRE.contentDB.get('formula-deck').then(function (rec) {
     var seen = {};
     return (PGRE.BOOK_FORMULAS || [])
-      .concat(PGRE.FORMULAS, (rec && rec.cards) || [])
+      .concat(PGRE.FORMULAS, PGRE.BOOK_LISTS || [], (rec && rec.cards) || [])
       .filter(function (c) {
         if (!c || !c.id || seen[c.id]) return false;
         seen[c.id] = true;

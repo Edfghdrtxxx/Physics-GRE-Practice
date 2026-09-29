@@ -202,7 +202,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20260922b';
+      s.src = 'js/flashmodes.js?v=20260930a';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -218,7 +218,7 @@ PGRE.views.formulas = (function () {
     if (searchLoad) return searchLoad;
     searchLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/formula-search.js?v=20260918b';
+      s.src = 'js/formula-search.js?v=20260929b';
       s.onload = function () { resolve(); };
       s.onerror = function () { searchLoad = null; searchFailed = true; resolve(); };
       document.head.appendChild(s);
@@ -2097,8 +2097,9 @@ PGRE.views.formulas = (function () {
       '<div class="btn-row" id="fcard-actions">' +
         '<button class="btn btn-primary" id="flip-btn">Show answer <span class="key-hint">space</span></button>' +
         // F8 scaffold prompts reconstruct a formula, so they only fit the
-        // forward face — suppress in reverse (F5) where the formula IS the prompt.
-        (reverse ? '' : '<button class="btn btn-ghost" id="rebuild-btn">Rebuild hints</button>') +
+        // forward face of a formula card — suppress in reverse (F5), where the
+        // formula IS the prompt, and on book-list cards (kind 'list').
+        (reverse || c.kind === 'list' ? '' : '<button class="btn btn-ghost" id="rebuild-btn">Rebuild hints</button>') +
         '<button class="btn btn-ghost" id="skip-btn">Skip</button>' +
         '<button class="btn btn-ghost" id="putaway-btn">Put away</button>' +
         similarButton(c, 'btn-sm') +
@@ -2283,8 +2284,10 @@ PGRE.views.formulas = (function () {
         delete study.steps[id];
         study.queue.shift();
         study.done++;
-      } else if (g === 'again') {               // reset to step 0 — no commit, no lapse
-        study.steps[id] = 0;
+      } else if (g === 'again') {               // no commit, no lapse
+        // Formula cards go back to step 0. A book list's next Hard/Good is
+        // the say-it-back pass and commits gradeCard, so that Good stores due.
+        study.steps[id] = (c.kind === 'list') ? 1 : 0;
         study.again++;
         recycled = true;
         reinsertCard();
@@ -2413,14 +2416,18 @@ PGRE.views.formulas = (function () {
     else renderCheckpoint();
   }
 
-  /* F8 post-Again interstitial: the formula + the same 5 prompts, then Continue. */
+  /* F8 post-Again interstitial: the formula + the same 5 prompts, then Continue.
+     A book list has no formula to rebuild: show the list and ask for each point. */
   function renderScaffold(c) {
     study.overlay = 'scaffold';
+    var list = c && c.kind === 'list';
     body().innerHTML = '<div class="card practice-card scaffold-card">' +
-      '<h2>Reconstruct it</h2>' +
-      '<p class="muted">Missed — rebuild this one from the ground up before moving on.</p>' +
+      '<h2>' + (list ? 'Say it back' : 'Reconstruct it') + '</h2>' +
+      '<p class="muted">' + (list
+        ? 'Missed. Read the list, then say each point back before moving on.'
+        : 'Missed — rebuild this one from the ground up before moving on.') + '</p>' +
       '<div class="fcard-back scaffold-back">' + backHTML(c) + '</div>' +
-      scaffoldPromptsHTML() +
+      (list ? '' : scaffoldPromptsHTML()) +
       '<div class="btn-row"><button class="btn btn-primary" id="scaffold-continue">' +
       'Continue <span class="key-hint">space</span></button>' +
       similarButton(c, 'btn-sm') + '</div></div>';
@@ -3170,8 +3177,10 @@ PGRE.views.formulas = (function () {
     }
     var ui = PGRE.ui, m = INTRO[kind];
     var remaining = PGRE.srs.formulaDayRemaining(deck).length;
-    var metNote = 'Today’s list is empty — start Study or choose cards in Formula recall ' +
+    var metNote = 'Today’s list is empty — start Study or choose cards in Recall ' +
       'first; games drill only today’s list.';
+    var listOnly = 'Today’s remaining cards are all book lists. ' +
+      'Study and Quiz drill lists; Match, Type and Cloze drill formulas only.';
     var html = '<div class="card"><h2>' + m.title + '</h2><p class="muted">' + m.desc + '</p>';
 
     if (kind === 'match') {
@@ -3184,7 +3193,7 @@ PGRE.views.formulas = (function () {
         ui.statTile('Best · ' + pairs + ' pairs', best != null ? PGRE.flashmodes.fmtTime(best) : '—') +
       '</div>';
       if (!pairs) {
-        html += '<p class="muted">' + metNote + '</p></div>';
+        html += '<p class="muted">' + (remaining ? listOnly : metNote) + '</p></div>';
         body().innerHTML = html; return;
       }
       if (pairs < 2) {
@@ -3204,12 +3213,12 @@ PGRE.views.formulas = (function () {
       }
       html += '<div class="btn-row"><button class="btn btn-primary" id="game-start">Start</button></div>';
     } else {
-      var q = PGRE.flashmodes.pickQueue(deck);
+      var q = PGRE.flashmodes.pickQueue(deck, kind);
       html += '<div class="stat-row stat-row-4">' +
         ui.statTile('Today remaining', ui.fmt(remaining)) +
         ui.statTile('This round', ui.fmt(q.length)) +
       '</div>' +
-      '<p class="muted">' + (q.length ? 'Drawn from today’s picked batch.' : metNote) + '</p>';
+      '<p class="muted">' + (q.length ? 'Drawn from today’s picked batch.' : (remaining ? listOnly : metNote)) + '</p>';
       if (kind === 'quiz' && deck.length < 2) {
         html += '<p class="muted">Quiz needs at least two cards to build choices.</p></div>';
         body().innerHTML = html; return;
@@ -3238,14 +3247,14 @@ PGRE.views.formulas = (function () {
       base.cards = PGRE.flashmodes.pickMatchCards(deck);
       activeGame = PGRE.flashmodes.startMatch(base);
     } else if (kind === 'type') {
-      base.cards = PGRE.flashmodes.pickQueue(deck);
+      base.cards = PGRE.flashmodes.pickQueue(deck, 'type');
       activeGame = PGRE.flashmodes.startType(base);
     } else if (kind === 'cloze') {
       base.cards = PGRE.flashmodes.clozePool(deck);
       base.deck = deck;
       activeGame = PGRE.flashmodes.startCloze(base);
     } else {
-      base.cards = PGRE.flashmodes.pickQueue(deck);
+      base.cards = PGRE.flashmodes.pickQueue(deck, 'quiz');
       base.deck = deck;
       activeGame = PGRE.flashmodes.startQuiz(base);
     }

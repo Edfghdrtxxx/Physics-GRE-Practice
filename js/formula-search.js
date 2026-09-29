@@ -661,7 +661,7 @@ PGRE.formulaSearch = (function () {
       if (saved) {
         saved.reviewIds.concat(saved.newIds).forEach(function (id) { batchSet[id] = 1; });
       } else {
-        notice = 'No cards picked yet — pick today’s batch in Formula recall.';
+        notice = 'No cards picked yet — pick today’s batch in Recall.';
       }
     }
 
