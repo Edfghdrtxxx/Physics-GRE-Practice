@@ -341,17 +341,12 @@ PGRE.flashmodes = (function () {
   /* Type/Quiz: ONLY the picked batch's remaining cards — the system never
      selects cards on its own. An empty batch means an empty round; the intro
      screen tells the user to pick today's cards. Capped. Type skips book-list
-     cards. Quiz keeps lists, and quizzes a list only against other lists,
-     unless fewer than two lists remain — a lone list would be a one-choice
-     quiz, so it stays in Study. */
+     cards. Quiz keeps every remaining list. quizOptions draws same-kind
+     distractors from the full deck, not from this pool, so one list in
+     today's batch is still a list-versus-list quiz. */
   function pickQueue(deck, mode) {
     var pool = PGRE.srs.formulaDayRemaining(deck);
     if (mode === 'type') pool = pool.filter(function (c) { return !isList(c); });
-    // A list is only quizzed against other lists. One list in the batch would
-    // be a single choice that grades itself, so leave it for Study.
-    if (mode === 'quiz' && pool.filter(isList).length < 2) {
-      pool = pool.filter(function (c) { return !isList(c); });
-    }
     return shuffle(pool).slice(0, Math.min(SESSION_CAP, pool.length));
   }
 

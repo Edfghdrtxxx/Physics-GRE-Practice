@@ -139,6 +139,19 @@ var quizzed = fm.pickQueue(mixed, 'quiz');
 assert(listCount(quizzed) === lists.length,
   'pickQueue(deck, quiz) keeps the lists (got ' + listCount(quizzed) + ' of ' + lists.length + ')');
 
+// Distractors come from the full deck in quizOptions, not from today's pool.
+// One list left in the batch must still be quizzed.
+flashBox.PGRE.srs.formulaDayRemaining = function () {
+  return [formulas[0], lists[0]];
+};
+var loneRound = fm.pickQueue(mixed, 'quiz');
+assert(loneRound.some(function (c) { return c.id === lists[0].id; }),
+  'pickQueue quiz keeps a single remaining list (got ' +
+    loneRound.map(function (c) { return c.id; }).join(',') + ')');
+assert(loneRound.some(function (c) { return c.id === formulas[0].id; }),
+  'pickQueue quiz keeps the formula beside that single list');
+flashBox.PGRE.srs.formulaDayRemaining = function () { return mixed.slice(); };
+
 var cloze = fm.clozePool(mixed);
 assert(listCount(cloze) === 0, 'clozePool has no list (got ' + listCount(cloze) + ')');
 

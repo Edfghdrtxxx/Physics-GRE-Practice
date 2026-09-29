@@ -202,7 +202,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20260929b';
+      s.src = 'js/flashmodes.js?v=20260930a';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -2284,8 +2284,10 @@ PGRE.views.formulas = (function () {
         delete study.steps[id];
         study.queue.shift();
         study.done++;
-      } else if (g === 'again') {               // reset to step 0 — no commit, no lapse
-        study.steps[id] = 0;
+      } else if (g === 'again') {               // no commit, no lapse
+        // Formula cards go back to step 0. A book list's next Hard/Good is
+        // the say-it-back pass and commits gradeCard, so that Good stores due.
+        study.steps[id] = (c.kind === 'list') ? 1 : 0;
         study.again++;
         recycled = true;
         reinsertCard();
