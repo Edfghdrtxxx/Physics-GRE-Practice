@@ -5220,6 +5220,10 @@ button.btn-ok {
     grid-template-columns: minmax(0, 1fr) 188px;
     column-gap: 28px;
     align-content: start;
+    /* An auto row's minimum is 0 for an overflow-x:auto item. Once the
+       answered solution makes the grid taller than the card, that minimum
+       collapses .q-text to a 0-height box the scrollport cannot reveal. */
+    grid-auto-rows: max-content;
   }
   .practice-card.practice-live .practice-scroll > .practice-meta,
   .practice-card.practice-live .practice-scroll > .meter-chrome,
