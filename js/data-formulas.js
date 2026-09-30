@@ -232,4 +232,24 @@ PGRE.FORMULAS = [
     back: "**Proportional**\n$$\\hat{p} \\propto a^{\\dagger} - a$$\n$$a \\propto \\hat{x} + \\frac{i\\hat{p}}{m\\omega}$$\n$$a^{\\dagger} \\propto \\hat{x} - \\frac{i\\hat{p}}{m\\omega}$$\n\n**Precise**\n$$a = \\sqrt{\\frac{m\\omega}{2\\hbar}}\\left(\\hat{x} + \\frac{i\\hat{p}}{m\\omega}\\right)$$\n$$a^{\\dagger} = \\sqrt{\\frac{m\\omega}{2\\hbar}}\\left(\\hat{x} - \\frac{i\\hat{p}}{m\\omega}\\right)$$\n$$\\hat{p} = i\\sqrt{\\frac{\\hbar m\\omega}{2}}\\left(a^{\\dagger} - a\\right)$$\n\nThe proportional $\\hat{p}$ line hides the leading $i$; $a^{\\dagger}-a$ is anti-Hermitian, and that $i$ is what makes $\\hat{p}$ Hermitian. Swapping the $\\pm i\\hat{p}$ signs conjugates the wrong way.",
     note: "Supplemental — not a numbered CPG equation."
   },
+  {
+    id: "supp-ho-moments",
+    eq: "supp",
+    topic: "qm",
+    tag: "Harmonic oscillator",
+    name: "Harmonic-oscillator energy shares (supplemental)",
+    front: "For a one-dimensional harmonic-oscillator energy eigenstate $|n\\rangle$ of energy $E_n = \\hbar\\omega\\left(n+\\frac{1}{2}\\right)$, what are $\\langle T\\rangle_n$, $\\langle V\\rangle_n$, $\\langle p^2\\rangle_n$, and $\\langle x^2\\rangle_n$?",
+    back: "$$\\langle T\\rangle_n = \\langle V\\rangle_n = \\frac{1}{2} E_n$$\nKinetic energy is $T = p^2/(2m)$, so\n$$\\langle p^2\\rangle_n = 2m\\langle T\\rangle_n = m E_n = m\\left(n+\\frac{1}{2}\\right)\\hbar\\omega$$\nThe same split gives\n$$\\langle x^2\\rangle_n = \\frac{E_n}{m\\omega^2}$$\n\n**Trap.** $m E_n$ is $\\langle n|\\hat{p}^2|n\\rangle$; $\\hat{p}^2|n\\rangle$ also contains $|n\\pm 2\\rangle$, so this is not an eigenvalue.",
+    note: "Supplemental — not a numbered CPG equation."
+  },
+  {
+    id: "supp-virial",
+    eq: "supp",
+    topic: "qm",
+    tag: "Virial theorem",
+    name: "Virial theorem (supplemental)",
+    front: "For a stationary bound state in a potential $V \\propto r^k$, how do $\\langle T\\rangle$ and $\\langle V\\rangle$ share the energy $E$?",
+    back: "$$2\\langle T\\rangle = k\\langle V\\rangle$$\nWith $E = \\langle T\\rangle + \\langle V\\rangle$,\n$$\\langle T\\rangle = \\frac{k}{k+2}E, \\qquad \\langle V\\rangle = \\frac{2}{k+2}E$$\nOscillator, $k = 2$: half and half. Coulomb or gravity, $k = -1$: $\\langle T\\rangle = -E$, $\\langle V\\rangle = 2E$.\n\nThe same rule holds for $V \\propto x^k$ in one dimension, and these are expectation values in a stationary state, or a long time average, not an operator identity.",
+    note: "Supplemental — not a numbered CPG equation."
+  },
 ];
