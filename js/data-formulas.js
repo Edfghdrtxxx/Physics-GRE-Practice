@@ -212,4 +212,14 @@ PGRE.FORMULAS = [
     back: "$$\\frac{e^2}{4\\pi\\epsilon_0} = \\alpha \\hbar c \\approx \\frac{197\\ \\mathrm{MeV\\cdot fm}}{137} \\approx 1.44\\ \\mathrm{MeV\\cdot fm}$$\n- **Fine-structure constant**: $$\\alpha = \\frac{e^2}{4\\pi\\epsilon_0 \\hbar c} = \\frac{1}{137}$$\n- **Reduced Planck $\\times$ $c$**: $\\hbar c \\approx 197\\ \\mathrm{MeV\\cdot fm}$ (often quoted as $\\approx 200\\ \\mathrm{MeV\\cdot fm}$).\n- **Use**: the Coulomb energy of two elementary charges separated by $r$ is $U = \\dfrac{e^2}{4\\pi\\epsilon_0}\\dfrac{1}{r} \\approx \\dfrac{1.44\\ \\mathrm{MeV\\cdot fm}}{r}$ — e.g., two protons $1$ fm apart repel with $\\sim 1.4$ MeV.",
     note: "Supplemental — not a numbered CPG equation. Transcribed from the captain's handwritten note: combining $\\alpha = 1/137$ with $\\hbar c \\approx 197\\ \\mathrm{MeV\\cdot fm}$ yields the Coulomb scale $e^2/4\\pi\\epsilon_0 \\approx 1.44\\ \\mathrm{MeV\\cdot fm}$, the fast route to electrostatic energies at atomic and nuclear scales."
   },
+  {
+    id: "supp-energy-phase",
+    eq: "supp",
+    topic: "qm",
+    tag: "Schrodinger equation",
+    name: "Energy-eigenstate time phase (supplemental)",
+    front: "For a time-independent Hamiltonian, how does an energy eigenstate of energy $E_n$ evolve in time, and what stays constant about the probability of measuring that energy?",
+    back: "$$\\psi_n(t) = \\psi_n\\, e^{-i E_n t/\\hbar}$$\nEach energy eigenstate picks up only this phase. In a superposition the weights stay $|c_n|^2$, so $P(E_n) = |c_n|^2$ does not change with time. Relative phases between different energies do change, so an observable that is not the energy can oscillate.\n\n**Origin of the sign.** Put $\\Psi = \\psi(x)\\, T(t)$ into $i\\hbar\\,\\partial_t\\Psi = \\hat{H}\\Psi$ with $\\hat{H}\\psi = E\\psi$. Then $i\\hbar\\, T' = ET$, so\n$$T = e^{-i Et/\\hbar}$$\n\n**Not the Boltzmann factor.** $e^{-E/k_B T}$ is real: an occupation weight (how likely a level is occupied). $e^{-i Et/\\hbar}$ is imaginary and has modulus 1: a pure phase, and it changes no probability. Same shape, different job.",
+    note: "Supplemental — not a numbered CPG equation. The time-dependent equation is cpgf-5.12 and the definite-energy form is cpgf-5.14. This card is the solution of that ODE, kept with the one-line origin so the sign stays put, and kept apart from $e^{-E/k_B T}$."
+  },
 ];
