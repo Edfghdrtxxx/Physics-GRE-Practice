@@ -252,4 +252,14 @@ PGRE.FORMULAS = [
     back: "$$2\\langle T\\rangle = k\\langle V\\rangle$$\nWith $E = \\langle T\\rangle + \\langle V\\rangle$,\n$$\\langle T\\rangle = \\frac{k}{k+2}E, \\qquad \\langle V\\rangle = \\frac{2}{k+2}E$$\nOscillator, $k = 2$: half and half. Coulomb or gravity, $k = -1$: $\\langle T\\rangle = -E$, $\\langle V\\rangle = 2E$.\n\nThe same rule holds for $V \\propto x^k$ in one dimension, and these are expectation values in a stationary state, or a long time average, not an operator identity.",
     note: "Supplemental — not a numbered CPG equation."
   },
+  {
+    id: "cpgl-1.02",
+    kind: "list",
+    topic: "cm",
+    tag: "Classification of Orbits",
+    name: "Orbit classification by total energy (list)",
+    front: "For an attractive potential $U(r) = k/r$ ($k \\lt 0$), how does total energy $E$ classify the orbit shape? (4)",
+    back: "<ul class=\"recall-list\"><li>$E \\gt 0$: hyperbolic orbit.</li><li>$E = 0$: parabolic orbit.</li><li>$E \\lt 0$: elliptical orbit. It is bound, since $U(r)$ falls off at large $r$; for an attractive $1/r$ potential ($k \\lt 0$) the shape happens to be elliptical.</li><li>$E = V_{\\min}$: circular orbit, the special case of lowest possible energy, where $V_{\\min}$ is the minimum of the effective potential.</li></ul>",
+    note: "Kahn §1.6.2. These shapes require an attractive potential $U(r) = k/r$ with $k \\lt 0$ (such as Newtonian gravity $k = -GMm$). If $k \\gt 0$, the potential is repulsive and only hyperbolic scattering orbits occur; no bound states exist."
+  },
 ];
