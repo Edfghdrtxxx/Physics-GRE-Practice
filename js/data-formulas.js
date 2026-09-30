@@ -222,4 +222,14 @@ PGRE.FORMULAS = [
     back: "$$\\psi_n(t) = \\psi_n\\, e^{-i E_n t/\\hbar}$$\nEach energy eigenstate picks up only this phase. In a superposition the weights stay $|c_n|^2$, so $P(E_n) = |c_n|^2$ does not change with time. Relative phases between different energies do change, so an observable that is not the energy can oscillate.\n\n**Origin of the sign.** Put $\\Psi = \\psi(x)\\, T(t)$ into $i\\hbar\\,\\partial_t\\Psi = \\hat{H}\\Psi$ with $\\hat{H}\\psi = E\\psi$. Then $i\\hbar\\, T' = ET$, so\n$$T = e^{-i Et/\\hbar}$$\n\n**Not the Boltzmann factor.** $e^{-E/k_B T}$ is real: an occupation weight (how likely a level is occupied). $e^{-i Et/\\hbar}$ is imaginary and has modulus 1: a pure phase, and it changes no probability. Same shape, different job.",
     note: "Supplemental — not a numbered CPG equation. The time-dependent equation is cpgf-5.12 and the definite-energy form is cpgf-5.14. This card is the solution of that ODE, kept with the one-line origin so the sign stays put, and kept apart from $e^{-E/k_B T}$."
   },
+  {
+    id: "supp-sho-ladder",
+    eq: "supp",
+    topic: "qm",
+    tag: "Harmonic oscillator",
+    name: "Harmonic-oscillator ladder operators (supplemental)",
+    front: "How are the ladder operators $a$ and $a^{\\dagger}$ built from $\\hat{x}$ and $\\hat{p}$, and how is $\\hat{p}$ built from $a$ and $a^{\\dagger}$? Give both the proportional sign pattern and the exact formulas with prefactors.",
+    back: "**Proportional**\n$$\\hat{p} \\propto a^{\\dagger} - a$$\n$$a \\propto \\hat{x} + \\frac{i\\hat{p}}{m\\omega}$$\n$$a^{\\dagger} \\propto \\hat{x} - \\frac{i\\hat{p}}{m\\omega}$$\n\n**Precise**\n$$a = \\sqrt{\\frac{m\\omega}{2\\hbar}}\\left(\\hat{x} + \\frac{i\\hat{p}}{m\\omega}\\right)$$\n$$a^{\\dagger} = \\sqrt{\\frac{m\\omega}{2\\hbar}}\\left(\\hat{x} - \\frac{i\\hat{p}}{m\\omega}\\right)$$\n$$\\hat{p} = i\\sqrt{\\frac{\\hbar m\\omega}{2}}\\left(a^{\\dagger} - a\\right)$$\n\nThe proportional $\\hat{p}$ line hides the leading $i$; $a^{\\dagger}-a$ is anti-Hermitian, and that $i$ is what makes $\\hat{p}$ Hermitian. Swapping the $\\pm i\\hat{p}$ signs conjugates the wrong way.",
+    note: "Supplemental — not a numbered CPG equation."
+  },
 ];
