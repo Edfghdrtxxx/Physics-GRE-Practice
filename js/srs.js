@@ -356,22 +356,43 @@ PGRE.srs = {
     if (st && st.softHold) delete st.softHold;
   },
 
+  /* One door for an id leaving today. wasIn is true only when this call is
+     the removal and the id was in reviewIds, newIds, or softIds. A restored
+     pin then gets a consumed fact. opts.pin is the grade path: a soft pin
+     that had no fact yet is still consumed, on opts.op, so undo can
+     overwrite that same op. Already consumed, or never in the batch, records
+     nothing. Clears softHold. Does not stamp formulaDay. */
+  _noteLeftToday: function (id, wasIn, opts) {
+    opts = opts || {};
+    if (!id) return false;
+    var wrote = false;
+    if (wasIn && (opts.pin || this._latestPinAction(id) === 'restored')) {
+      this._recordPinFact(id, opts.op || null, 'consumed');
+      wrote = true;
+    }
+    this._clearSoftHold(id);
+    return wrote;
+  },
+
   /* Drop this id from today's soft pins in the same state update as the
      grade. Returns true when a pin was removed. A refused grade must not
-     call this. Does not restamp the batch. */
+     call this. The fact and the hold clear go through _noteLeftToday.
+     Does not restamp the batch. */
   _consumeSoftPin: function (id, op) {
     var batch = PGRE.store.state && PGRE.store.state.formulaDay;
-    if (!batch || !Array.isArray(batch.softIds) || !batch.softIds.length) return false;
     var next = [], removed = false, i;
-    for (i = 0; i < batch.softIds.length; i++) {
-      if (batch.softIds[i] === id) { removed = true; continue; }
-      next.push(batch.softIds[i]);
+    if (batch && Array.isArray(batch.softIds) && batch.softIds.length) {
+      for (i = 0; i < batch.softIds.length; i++) {
+        if (batch.softIds[i] === id) { removed = true; continue; }
+        next.push(batch.softIds[i]);
+      }
     }
-    if (!removed) return false;
-    if (next.length) batch.softIds = next;
-    else delete batch.softIds;
-    this._recordPinFact(id, op, 'consumed');
-    return true;
+    if (removed) {
+      if (next.length) batch.softIds = next;
+      else delete batch.softIds;
+    }
+    this._noteLeftToday(id, removed, { pin: true, op: op });
+    return removed;
   },
 
   _restoreSoftPin: function (id, op) {
@@ -434,9 +455,8 @@ PGRE.srs = {
     st.lastReviewedAt = new Date().toISOString();
     st.lastReviewedDay = this.today();   // LOCAL date — the studiedToday source of truth
     st.scheme = 'current';
-    // The pre-grade clone still carries softHold. Clear it only on the
-    // card this grade commits, so a snapshot undo keeps the pin's hold.
-    delete st.softHold;
+    // The pre-grade clone still carries softHold. _consumeSoftPin clears it
+    // only on the card this grade commits, so a snapshot undo keeps the pin.
     var op = this._newReviewOpId();
     st.lastReviewOpId = op;
     s.cards[id] = st;
@@ -626,6 +646,11 @@ PGRE.srs = {
       return !!(susp && Object.prototype.hasOwnProperty.call(susp, id) && susp[id]);
     }
 
+    var beforeIds = Object.create(null);
+    (batch.reviewIds || []).concat(batch.newIds || [], batch.softIds || []).forEach(function (id) {
+      if (id) beforeIds[id] = 1;
+    });
+
     // (a) soft pins that no longer mean anything: card left the deck, is
     // suspended, or was already studied today (the pin's one job — keeping a
     // not-yet-due add review-eligible — is done once today's grade is in).
@@ -676,6 +701,18 @@ PGRE.srs = {
     batch.reviewIds = batch.reviewIds.filter(function (id) { return !drop(id); });
     batch.newIds = batch.newIds.filter(function (id) { return !drop(id); });
     if (batch.reviewIds.length !== beforeR || batch.newIds.length !== beforeN) changed = true;
+
+    // Ids this prune actually removed. An id the batch already omitted is
+    // not in beforeIds, so a sibling drop does not become a consumed fact.
+    // The fact does not set changed and does not stamp the batch.
+    var afterIds = Object.create(null);
+    batch.reviewIds.concat(batch.newIds, batch.softIds || []).forEach(function (id) {
+      if (id) afterIds[id] = 1;
+    });
+    for (var leftId in beforeIds) {
+      if (!Object.prototype.hasOwnProperty.call(beforeIds, leftId) || afterIds[leftId]) continue;
+      self._noteLeftToday(leftId, true);
+    }
 
     // Put a held id back into softIds without stamping the batch. The fact
     // is newer than the grade's consume, so a stale copy cannot drop it.
@@ -975,10 +1012,7 @@ PGRE.srs = {
       if (batch.softIds && batch.softIds.indexOf(id) !== -1) return;
       // A restored fact would soft-pin this id again once final pass puts
       // it back in the batch. Consume only when the id actually leaves.
-      if (wasIn[id] && self._latestPinAction(id) === 'restored') {
-        self._recordPinFact(id, null, 'consumed');
-      }
-      self._clearSoftHold(id);
+      self._noteLeftToday(id, !!wasIn[id]);
     });
     if (changed) self._markFormulaDayMutation(batch, 'remove');
     PGRE.store.state.formulaDay = batch;
@@ -1113,19 +1147,19 @@ PGRE.srs = {
     }
     var staying = Object.create(null);
     reviewIds.concat(newIds, softIds).forEach(function (id) { staying[id] = 1; });
+    var noted = Object.create(null);
+    function noteLeft(id) {
+      if (!id || noted[id] || staying[id]) return;
+      noted[id] = 1;
+      self._noteLeftToday(id, !!wasIn[id]);
+    }
     for (var droppedId in wasIn) {
-      if (!Object.prototype.hasOwnProperty.call(wasIn, droppedId) || staying[droppedId]) continue;
-      if (this._latestPinAction(droppedId) === 'restored') {
-        this._recordPinFact(droppedId, null, 'consumed');
-      }
+      if (Object.prototype.hasOwnProperty.call(wasIn, droppedId)) noteLeft(droppedId);
     }
     var heldCards = PGRE.store.state.cards;
     if (heldCards && typeof heldCards === 'object') {
       for (var hid in heldCards) {
-        if (!Object.prototype.hasOwnProperty.call(heldCards, hid)) continue;
-        var heldRec = heldCards[hid];
-        if (!heldRec || !heldRec.softHold || staying[hid]) continue;
-        delete heldRec.softHold;
+        if (Object.prototype.hasOwnProperty.call(heldCards, hid)) noteLeft(hid);
       }
     }
     batch.date = this.today();
@@ -1141,14 +1175,27 @@ PGRE.srs = {
     s.formulaSuspended[id] = new Date().toISOString(); // ISO so tombstone ts can compare
     PGRE.store.untombstone('formulaSuspended', id);
     var batch = s.formulaDay;
-    if (batch) {
-      batch.reviewIds = batch.reviewIds.filter(function (x) { return x !== id; });
-      batch.newIds = batch.newIds.filter(function (x) { return x !== id; });
-      if (batch.softIds) {
-        batch.softIds = batch.softIds.filter(function (x) { return x !== id; });
-        if (!batch.softIds.length) delete batch.softIds;
-      }
+    if (!batch || !id) return;
+    function listed(list) {
+      if (!Array.isArray(list)) return false;
+      for (var i = 0; i < list.length; i++) if (list[i] === id) return true;
+      return false;
     }
+    var wasIn = listed(batch.reviewIds) || listed(batch.newIds) || listed(batch.softIds);
+    if (Array.isArray(batch.reviewIds)) {
+      batch.reviewIds = batch.reviewIds.filter(function (x) { return x !== id; });
+    }
+    if (Array.isArray(batch.newIds)) {
+      batch.newIds = batch.newIds.filter(function (x) { return x !== id; });
+    }
+    if (Array.isArray(batch.softIds)) {
+      batch.softIds = batch.softIds.filter(function (x) { return x !== id; });
+      if (!batch.softIds.length) delete batch.softIds;
+    }
+    // Put away is a real drop. The fact must land here: reconcile cannot
+    // tell this removal from a sibling batch that simply omitted the id.
+    // Do not stamp the batch.
+    if (wasIn) this._noteLeftToday(id, true);
   },
 
   unsuspendCard: function (id) {

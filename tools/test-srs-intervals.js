@@ -906,5 +906,145 @@ var transitions = [
 ];
 for (var ti = 0; ti < transitions.length; ti++) transitions[ti]();
 
+console.log('\nS put away consumes a restored pin across a merge');
+function armPin(deck) {
+  futureCard('pin');
+  store.state.formulaDay = {
+    date: srs.today(), reviewIds: ['pin'], newIds: [], softIds: ['pin'],
+    _opAt: 1000, _opId: 's-arm', _opKind: 'add'
+  };
+  srs.gradeCard('pin', 'good');
+  store.state.cards.pin.lastReviewedDay = '2020-01-01';
+  srs.setFormulaDayPicks(deck, ['pin']);
+}
+resetStore();
+stampMigrations();
+completeDeck();
+futureCard('keep');
+var deckS = [{ id: 'pin' }, { id: 'keep' }];
+armPin(deckS);
+assert(latestPin('pin') === 'restored', 'the suspend sequence starts from a restored pin');
+assert(store.state.cards.pin.softHold === true, 'the suspend sequence starts with a hold');
+var suspendOpAt = store.state.formulaDay._opAt;
+var suspendOpId = store.state.formulaDay._opId;
+srs.suspendCard('pin');
+assert(latestPin('pin') === 'consumed', 'suspendCard records consumed for a restored pin');
+assert(!store.state.cards.pin.softHold, 'suspendCard clears the hold');
+assert(!listed(store.state.formulaDay, 'pin'), 'suspendCard takes the pin off the batch');
+assert(!softListed(store.state.formulaDay, 'pin'), 'suspendCard takes the pin out of softIds');
+assert(store.state.formulaDay._opAt === suspendOpAt && store.state.formulaDay._opId === suspendOpId,
+  'suspendCard does not stamp the batch');
+assert(srs.isSuspended('pin'), 'suspendCard still marks the card suspended');
+srs.unsuspendCard('pin');
+assert(!srs.isSuspended('pin'), 'unsuspendCard clears the suspended flag');
+assert(latestPin('pin') === 'consumed', 'unsuspend does not restore the pin fact');
+assert(!listed(store.state.formulaDay, 'pin'), 'unsuspend does not put the card back on today');
+store.state.settings.examDate = daysFromNow(3);
+assert(srs.finalPassActive(), 'the suspend merge starts with final pass on');
+srs.fillFormulaDayFinalPass(deckS);
+cMerge(deckS);
+
+resetStore();
+stampMigrations();
+completeDeck();
+futureCard('pin');
+var deckFirst = [{ id: 'pin' }];
+srs.setFormulaDayPicks(deckFirst, ['pin']);
+assert(latestPin('pin') === null, 'a first pin still has no fact before suspend');
+srs.suspendCard('pin');
+assert(latestPin('pin') === null, 'suspend of a first pin records no fact');
+assert(!store.state.cards.pin.softHold, 'suspend of a first pin still clears the hold');
+srs.unsuspendCard('pin');
+store.state.settings.examDate = daysFromNow(3);
+srs.fillFormulaDayFinalPass(deckFirst);
+assert(owedHas(deckFirst, 'pin'), 'final pass still owes the unsuspended first pin while the week is on');
+assert(!softListed(store.state.formulaDay, 'pin'), 'a first pin is not soft-pinned by final pass');
+var firstCopy = JSON.parse(JSON.stringify(store.state));
+firstCopy._rev = (store.state._rev || 0) + 1;
+store._mergeFromDisk(firstCopy);
+assert(!softListed(store.state.formulaDay, 'pin'), 'a merge does not soft-pin a first pin');
+store.state.settings.examDate = '2027-06-01';
+assert(!owedHas(deckFirst, 'pin'), 'after the week a suspended first pin is not owed');
+assert(!softListed(store.state.formulaDay, 'pin'), 'after the week a suspended first pin is not soft-pinned');
+assert(latestPin('pin') === null, 'the first pin still has no fact after the merge');
+
+resetStore();
+stampMigrations();
+completeDeck();
+futureCard('pin');
+store.state.formulaDay = {
+  date: srs.today(), reviewIds: ['pin'], newIds: [], softIds: ['pin'],
+  _opAt: 1000, _opId: 's-consumed', _opKind: 'add'
+};
+srs.gradeCard('pin', 'good');
+var consumedAt = pinFactAt('pin', 'consumed');
+srs.suspendCard('pin');
+assert(pinFactAt('pin', 'consumed') === consumedAt,
+  'suspend of an already consumed pin does not record another fact');
+srs.suspendCard('pin');
+assert(pinFactAt('pin', 'consumed') === consumedAt,
+  'suspend of an id that is not in the batch records no fact');
+
+resetStore();
+stampMigrations();
+completeDeck();
+armPin([{ id: 'pin' }]);
+store.state.formulaDay.reviewIds = [];
+store.state.formulaDay.newIds = [];
+delete store.state.formulaDay.softIds;
+srs.suspendCard('pin');
+assert(latestPin('pin') === 'restored',
+  'suspend does not consume a restored pin that was already off the batch');
+
+console.log('\nU each drop path records consumed through one helper');
+function armRow() {
+  resetStore();
+  stampMigrations();
+  completeDeck();
+  futureCard('pin');
+  futureCard('stay');
+  var deck = [{ id: 'pin' }, { id: 'stay' }];
+  store.state.formulaDay = {
+    date: srs.today(), reviewIds: ['pin', 'stay'], newIds: [], softIds: ['pin', 'stay'],
+    _opAt: 1000, _opId: 'u-arm', _opKind: 'add'
+  };
+  srs.gradeCard('pin', 'good');
+  store.state.cards.pin.lastReviewedDay = '2020-01-01';
+  srs.setFormulaDayPicks(deck, ['pin', 'stay']);
+  return deck;
+}
+var deckU = armRow();
+srs.setFormulaDayPicks(deckU, ['stay']);
+tRow('picker uncheck consumes the restored pin', deckU, 'pin', '0 0 0 consumed 0');
+tRow('picker uncheck leaves the pin that stays', deckU, 'stay', '1 1 1 - 1');
+
+deckU = armRow();
+srs.removeFormulaDaySoft(deckU, ['pin']);
+tRow('removeFormulaDaySoft consumes the restored pin', deckU, 'pin', '0 0 0 consumed 0');
+tRow('removeFormulaDaySoft leaves the pin that stays', deckU, 'stay', '1 1 1 - 1');
+
+deckU = armRow();
+srs.suspendCard('pin');
+tRow('suspendCard consumes the restored pin', deckU, 'pin', '0 0 0 consumed 0');
+tRow('suspendCard leaves the pin that stays', deckU, 'stay', '1 1 1 - 1');
+
+deckU = armRow();
+srs.gradeCard('pin', 'good');
+tRow('grade consumes the restored pin', deckU, 'pin', '1 0 0 consumed 0');
+tRow('grade leaves the other pin', deckU, 'stay', '1 1 1 - 1');
+
+deckU = armRow();
+delete store.state.cards.pin.softHold;
+store.state.formulaDay.softIds = ['stay'];
+tRow('reconcile prunes a restored id that lost its pin', deckU, 'pin', '0 0 0 consumed 0');
+tRow('reconcile keeps the pin that is still soft', deckU, 'stay', '1 1 1 - 1');
+
+deckU = armRow();
+store.state.formulaDay.reviewIds = ['stay'];
+store.state.formulaDay.newIds = [];
+store.state.formulaDay.softIds = ['stay'];
+tRow('reconcile does not consume a restored id the batch already omitted', deckU, 'pin', '0 0 0 restored 0');
+tRow('the pin that stayed in that batch is unchanged', deckU, 'stay', '1 1 1 - 1');
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);
