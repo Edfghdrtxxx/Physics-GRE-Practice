@@ -95,8 +95,10 @@ sandbox.window.PGRE = {
     liveStreak: function () { return 5; }
   },
   BOOK_FORMULAS: [{ id: 'f1' }, { id: 'f2' }],
-  FORMULAS: [{ id: 'f2' }, { id: 'f3' }]
+  FORMULAS: [{ id: 'f2' }, { id: 'f3' }],
+  BOOK_LISTS: [{ id: 'cpgl-1.02' }, { id: 'cpgl-2.01' }]
 };
+state.cards['cpgl-2.01'] = { due: today };
 sandbox.PGRE = sandbox.window.PGRE;
 vm.createContext(sandbox);
 vm.runInContext(statusSrc, sandbox);
@@ -120,9 +122,18 @@ assert(!('xp' in summary.sessions[0]), 'sessions omit fields outside the compact
 assert(summary.exams.length === 1 && summary.exams[0].id === 'exam-today',
   'exams include submitted-today records only');
 assert(!('answers' in summary.exams[0]), 'exams omit full answer payloads');
-assert(summary.formulaCards.reviewed === 2 && summary.formulaCards.due === 2,
-  'formula counts include today reviews and unsuspended due cards');
-assert(summary.mistakesAdded === 1, 'mistakes count local-day first additions');
+assert(summary.formulaCards.reviewed === 2,
+  'formula counts include today reviews');
+assert(summary.formulaCards.total === 5 &&
+  summary.formulaCards.suspended === 1 && summary.formulaCards.unseen === 1 &&
+  summary.formulaCards.due === 2 && summary.formulaCards.scheduled === 1,
+  'formula counts partition the deck once and include cpgl- list cards');
+assert(summary.formulaCards.total ===
+  summary.formulaCards.unseen + summary.formulaCards.due +
+  summary.formulaCards.scheduled + summary.formulaCards.suspended,
+  'formula buckets sum to the deck total');
+assert(summary.formulaCards.orphaned === 1,
+  'card records with no deck card count as orphaned, not due');
 assert(summary.recentLog.length === 10 && summary.recentLog[0] === 'activity-0' &&
   summary.recentLog[9] === 'activity-9', 'recent activity stays newest-first and capped at ten');
 assert(JSON.stringify(state) === before, 'building a summary does not mutate study state');

@@ -29,27 +29,36 @@ window.PGRE = window.PGRE || {};
     return out;
   }
 
-  function formulaDueCount(state, date) {
+  /* Counts every deck card exactly once: suspended first, then unseen
+     (no card record), due (record due by today), scheduled (record due
+     later or without a usable due). The static pools mirror
+     PGRE.formulaDeck()'s committed sources (js/store.js); the IndexedDB
+     deck can't be awaited from this sync summary, so records whose ids
+     are in no listed pool land in `orphaned` instead. */
+  function formulaCardCounts(state, date) {
     var cards = state.cards || {};
     var suspended = state.formulaSuspended || {};
     var seen = {};
-    var due = 0;
-    var deck = (PGRE.BOOK_FORMULAS || []).concat(PGRE.FORMULAS || []);
+    var counts = { total: 0, unseen: 0, due: 0, scheduled: 0, suspended: 0, orphaned: 0 };
+    var deck = (PGRE.BOOK_FORMULAS || [])
+      .concat(PGRE.FORMULAS || [], PGRE.BOOK_LISTS || []);
 
     deck.forEach(function (card) {
       if (!card || !card.id || seen[card.id]) return;
       seen[card.id] = true;
-      if (suspended[card.id]) return;
+      counts.total++;
+      if (suspended[card.id]) { counts.suspended++; return; }
       var cardState = cards[card.id];
-      if (!cardState || !cardState.due || cardState.due <= date) due++;
+      if (!cardState) counts.unseen++;
+      else if (cardState.due && cardState.due <= date) counts.due++;
+      else counts.scheduled++;
     });
 
     Object.keys(cards).forEach(function (id) {
-      if (seen[id] || suspended[id]) return;
-      var cardState = cards[id];
-      if (cardState && cardState.due && cardState.due <= date) due++;
+      if (seen[id]) return;
+      counts.orphaned++;
     });
-    return due;
+    return counts;
   }
 
   PGRE.buildStatusSummary = function () {
@@ -109,10 +118,11 @@ window.PGRE = window.PGRE || {};
       },
       sessions: sessions,
       exams: exams,
-      formulaCards: {
-        reviewed: reviewed,
-        due: formulaDueCount(state, date)
-      },
+      formulaCards: (function () {
+        var counts = formulaCardCounts(state, date);
+        counts.reviewed = reviewed;
+        return counts;
+      })(),
       mistakesAdded: mistakesAdded,
       recentLog: recentLog
     };
