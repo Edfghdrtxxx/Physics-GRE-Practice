@@ -53,6 +53,14 @@
         </div>
         <nav id="breadcrumbs" class="breadcrumbs" aria-label="Breadcrumb"></nav>
         <span id="origin-line" class="origin-line" title="Progress is stored separately for each browser origin"></span>
+        <!-- parked-session count + drawer — the empty centre of the bar between
+             the origin line and the focus timer; painted by js/session-park.js -->
+        <div id="session-park" class="session-park" hidden>
+          <button id="parked-btn" class="parked-btn" type="button"
+                  aria-expanded="false" aria-controls="parked-panel">1 unfinished</button>
+          <div id="parked-panel" class="parked-panel" role="menu" hidden></div>
+        </div>
+
         <!-- focus timer quick control — lives in the top bar (not the sidebar)
              so folding the sidebar never hides it -->
         <div id="focus-timer" class="focus-timer">
@@ -151,15 +159,15 @@
   <script src="js/formula-checkin.js?v=20260916f" defer></script>  <!-- formula-recall daily check-in -->
   <script src="js/chart-tip.js?v=20260916f" defer></script>  <!-- delegated [data-tip] chart popover -->
 
-  <script src="js/view-dashboard.js?v=20261001g" defer></script>
+  <script src="js/view-dashboard.js?v=20261001k" defer></script>
   <script src="js/view-topic.js?v=20260925a" defer></script>
-  <script src="js/view-practice.js?v=20261001j" defer></script>
+  <script src="js/view-practice.js?v=20261001k" defer></script>
   <script src="js/view-history.js?v=20260925a" defer></script>
   <script src="js/view-analytics.js?v=20260925a" defer></script>
   <script src="js/view-build.js?v=20260925a" defer></script>
   <script src="js/view-search.js?v=20260925a" defer></script>
   <script src="js/view-notes.js?v=20260925a" defer></script>
-  <script src="js/view-mistakes.js?v=20261001j" defer></script>
+  <script src="js/view-mistakes.js?v=20261001k" defer></script>
   <script src="js/view-formulas.js?v=20261001i" defer></script>
   <script src="js/view-focus.js?v=20260921a" defer></script>        <!-- F5 focus page -->
   <script src="js/view-study-time.js?v=20260925a" defer></script>   <!-- dedicated study-time page -->
@@ -187,7 +195,8 @@
 
   <!-- shell -->
   <script src="js/sidebar-icons.js?v=20260921a" defer></script>
-  <script src="js/app.js?v=20261001j" defer></script>
+  <script src="js/session-park.js?v=20261001k" defer></script>
+  <script src="js/app.js?v=20261001k" defer></script>
   <!-- motion effects: runs after app.js and before DOMContentLoaded, so PGRE.motion exists before PGRE.boot runs -->
   <script src="js/motion.js?v=20260925a" defer></script>
 </body>

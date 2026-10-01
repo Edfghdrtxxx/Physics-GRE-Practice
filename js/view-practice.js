@@ -23,6 +23,7 @@ PGRE.views.practice = (function () {
   // { topicId, qs, i, correct, xpEarned, answers[], qStart, sid, label, custom,
   //   criteria, stage: 'question'|'feedback'|'summary', tagged }
   var session = null;
+  var autoResume = false;   // parked-session drawer armed a one-shot direct resume
   var paceTimer = null;   // module-scoped so it survives a session reset
   var keyBound = false;   // the document keydown listener is installed once
   var noteTimers = {};    // qid -> debounce timeout id for the feedback note field
@@ -410,6 +411,10 @@ PGRE.views.practice = (function () {
      already in the saved profile, so nothing is double-counted on resume. */
   var SAVE_KEY = 'pgre-practice-session';
 
+  function paintPark() {
+    if (PGRE.sessionPark && PGRE.sessionPark.paint) PGRE.sessionPark.paint();
+  }
+
   function saveSession() {
     if (!session || session.stage === 'summary' || session.stage === 'review') return;
     var snap = {
@@ -423,23 +428,31 @@ PGRE.views.practice = (function () {
       difficulty: session.difficulty == null ? null : session.difficulty,
       criteria: session.criteria,
       sid: session.sid,
+      stage: session.stage,   // 'question' | 'feedback' — resume must not skip a read solution
       ids: session.qs.map(function (q) { return q.id; }),
       // cursor is session.i; answers[n] matches qs[n] (null holes if skipped)
       i: session.i, correct: session.correct, xpEarned: session.xpEarned,
       answers: session.qs.map(function (q, n) {
         var a = session.answers[n];
         if (!a) return null;
-        return { qid: a.q.id, picked: a.picked, correct: a.correct, xp: a.xp, ms: a.ms };
+        return { qid: a.q.id, picked: a.picked, correct: a.correct, xp: a.xp,
+                 ms: a.ms, assess: a.assess || null };
       }),
       savedAt: Date.now()
     };
     try { sessionStorage.setItem(SAVE_KEY, JSON.stringify(snap)); } catch (e) { /* storage blocked */ }
+    paintPark();
   }
 
   function clearSaved() {
     try { sessionStorage.removeItem(SAVE_KEY); } catch (e) { /* storage blocked */ }
+    paintPark();
   }
 
+  /* A snapshot stays parked until the summary is painted — even when every
+     question is answered. Deleting an all-answered set here is what used to
+     lose the timed-pack tick and the endSession close when the captain stepped
+     away after the last question. */
   function loadSaved(topicId, filter) {
     var raw = null;
     try { raw = sessionStorage.getItem(SAVE_KEY); } catch (e) { return null; }
@@ -448,29 +461,35 @@ PGRE.views.practice = (function () {
     try { snap = JSON.parse(raw); } catch (e2) { return null; }
     if (!snap || !snap.ids || !snap.ids.length) return null;
     if (snap.topicId !== topicId || (snap.filter || null) !== (filter || null)) return null;
-    if (snapAnsweredCount(snap) >= snap.ids.length) { clearSaved(); return null; }
     return snap;
   }
 
   function resumeSaved(snap) {
+    // Zip by qid, not position: a question dropped from the bank mid-session
+    // leaves a hole, and index-matching would slide every later answer onto
+    // the wrong question and mis-aim the cursor.
     var qs = [];
     snap.ids.forEach(function (id) { var q = PGRE.questionById(id); if (q) qs.push(q); });
-    var answers = [];
-    (snap.answers || []).forEach(function (a, n) {
-      if (!a || a.qid == null) return;
-      var q = PGRE.questionById(a.qid);
-      if (q) answers[n] = { q: q, picked: a.picked, correct: a.correct, xp: a.xp, ms: a.ms };
-    });
     if (!qs.length) { clearSaved(); return false; }  // bank changed under us
-    var i = Math.max(0, Math.min(snap.i, qs.length - 1));
-    if (answers[i]) {
-      var nextU = -1;
-      for (var k = 0; k < qs.length; k++) {
-        if (!answers[k]) { nextU = k; break; }
-      }
-      if (nextU < 0) { clearSaved(); return false; }
-      i = nextU;
-    }
+    var byQid = {};
+    (snap.answers || []).forEach(function (a) {
+      if (a && a.qid != null && !byQid[a.qid]) byQid[a.qid] = a;
+    });
+    var answers = qs.map(function (q) {
+      var a = byQid[q.id];
+      return a ? { q: q, picked: a.picked, correct: a.correct, xp: a.xp,
+                   ms: a.ms, assess: a.assess || null } : null;
+    });
+    // Realign the cursor by its question id (snap.i indexes the old ids list,
+    // so a dropped id would otherwise point at the next question).
+    var i = 0;
+    var cursorId = snap.ids[snap.i];
+    for (var k = 0; k < qs.length; k++) { if (qs[k].id === cursorId) { i = k; break; } }
+    var allDone = qs.every(function (q, n) { return !!answers[n]; });
+    // Restore the stage he left on: feedback repaints the solution he was
+    // reading (even on the last question); all-answered with no feedback goes
+    // straight to the summary, where clearSaved/endSession/the set-NN tick run.
+    var stage = snap.stage === 'feedback' && answers[i] ? 'feedback' : 'question';
     session = { topicId: snap.topicId, qs: qs, i: i, correct: snap.correct || 0,
                 xpEarned: snap.xpEarned || 0, answers: answers, qStart: Date.now(),
                 custom: !!snap.custom, learnDrill: !!snap.learnDrill,
@@ -483,7 +502,9 @@ PGRE.views.practice = (function () {
                 criteria: snap.criteria || null,
                 filter: snap.filter || null, stage: 'question', assess: null,
                 done: false, reviewing: false, sid: snap.sid };
-    renderQuestion();
+    if (stage === 'feedback') renderAnsweredLive();
+    else if (allDone) renderSummary();   // clearSaved + endSession + the set-NN tick live there
+    else renderQuestion();
     return true;
   }
 
@@ -533,6 +554,9 @@ PGRE.views.practice = (function () {
     var name = (t ? t.name : 'All topics (mixed)') +
       (filter === 'new' ? ' · not yet done' : filter === 'done' ? ' · done before' : '');
     var saved = ignoreSaved ? null : loadSaved(topicId, filter);
+    // The parked-session drawer armed a one-shot resume: open on the question
+    // (or the read solution) directly, not on this "left part-way" card.
+    if (saved && autoResume) { autoResume = false; if (resumeSaved(saved)) return; }
     if (saved) {
       resumeCard(saved, name, function () { renderConfig(topicId, filter, true); });
       return;
@@ -620,6 +644,14 @@ PGRE.views.practice = (function () {
     // a custom set left part-way through resumes too, as long as the builder's
     // handoff still describes the same questions
     var saved = (resample || ignoreSaved) ? null : loadSaved('custom', null);
+    // The parked-session drawer armed a one-shot resume: open on the question
+    // (or the read solution) directly, not on this "left part-way" card.
+    if (saved && autoResume && sameIds(saved.ids, cfg.ids) &&
+        (!!saved.learnDrill === !!cfg.learnDrill) &&
+        (saved.purpose || null) === (cfg.purpose || (cfg.learnDrill ? 'learn-drill' : null))) {
+      autoResume = false;
+      if (resumeSaved(saved)) return;
+    }
     if (saved && sameIds(saved.ids, cfg.ids) &&
         (!!saved.learnDrill === !!cfg.learnDrill) &&
         (saved.purpose || null) === (cfg.purpose || (cfg.learnDrill ? 'learn-drill' : null))) {
@@ -1359,6 +1391,13 @@ PGRE.views.practice = (function () {
     mount: function (params) {
       clearPace();
       session = null;
+      // one-shot flag the parked-session drawer sets before navigating here
+      try {
+        autoResume = !!sessionStorage.getItem(
+          (PGRE.sessionPark && PGRE.sessionPark.RESUME_KEY) || 'pgre-practice-resume');
+        sessionStorage.removeItem(
+          (PGRE.sessionPark && PGRE.sessionPark.RESUME_KEY) || 'pgre-practice-resume');
+      } catch (e) { autoResume = false; }
       if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
       var id = params.id || 'all';
       if (id === 'custom') startCustom();
