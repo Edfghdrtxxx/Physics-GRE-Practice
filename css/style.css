@@ -428,6 +428,91 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
   font-size: 10px;
 }
 
+/* ——— Parked sessions ———
+   "N unfinished" count button in the top bar's empty centre, with a drop-down
+   that rolls down under it (one band per parked session). margin-left:auto on
+   the wrapper only matters while it is visible — hidden, the focus timer's own
+   margin-left:auto keeps the timer pinned right as before. Exam fullscreen and
+   focus zen hide the whole #topbar, so the button needs no extra hiding. */
+.session-park { position: relative; margin-left: auto; flex: none; }
+.parked-btn {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: var(--ctl-r);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.parked-btn:hover { border-color: var(--ink-3); background: var(--ivory); color: var(--ink); }
+.parked-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent-deep); }
+.parked-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  min-width: 232px;
+  max-width: min(300px, calc(100vw - 24px));
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+.parked-panel-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-3);
+  padding: 4px 8px 6px;
+}
+.parked-band {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--sans);
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--ctl-r);
+  background: transparent;
+  cursor: pointer;
+}
+.parked-band:hover, .parked-band:focus-visible { background: var(--ivory); }
+.parked-band-label { display: block; font-size: 13px; font-weight: 600; color: var(--ink); }
+.parked-band-detail { display: block; font-size: 11.5px; color: var(--ink-3); margin-top: 1px; }
+
+/* One gentle, dismissible line at the top of Home while sessions are parked. */
+.parked-reminder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--accent-tint);
+  font-size: 13px;
+  color: var(--ink);
+}
+.parked-reminder-text { flex: 1 1 auto; min-width: 0; }
+.parked-dismiss {
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--ink-3);
+  background: transparent;
+  border: 0;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+.parked-dismiss:hover { color: var(--ink); text-decoration: underline; }
+
 /* ——— Cards ——— */
 .card {
   background: var(--surface);

@@ -626,7 +626,7 @@ PGRE.views.dashboard = (function () {
     for (var id in s.questions) { totalAttempts += s.questions[id].attempts; totalCorrect += s.questions[id].correct; }
     if (totalAttempts > 0) accuracy = Math.round(100 * totalCorrect / totalAttempts) + '%';
 
-    var html = todayAgendaHTML();
+    var html = (PGRE.sessionPark ? PGRE.sessionPark.reminderHTML() : '') + todayAgendaHTML();
 
     var cw = PGRE.currentWeek();
     var weekTasks = PGRE.weekTasks(cw.week);
@@ -832,6 +832,7 @@ PGRE.views.dashboard = (function () {
 
   function mount() {
     if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
+    if (PGRE.sessionPark) PGRE.sessionPark.wireDashboard();
     // #7 QOTD: typeset the math and wire up the one-tap choices
     bindQotd();
     // Views-A: entry motion — numbers count up, meters fill, challenges cascade

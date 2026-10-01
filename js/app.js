@@ -768,6 +768,7 @@ PGRE.nav = (function () {
         trail.push({ label: LABELS[view], href: HREF[view] });
         if (view === 'exam' && params.sub === 'run') trail.push({ label: 'Run' });
         else if (view === 'exam' && params.sub === 'review') trail.push({ label: 'Review' });
+        else if (view === 'mistakes' && params.sub === 'drill') trail.push({ label: 'Drill' });
         else if (view === 'concepts' && params.sub === 'search') trail.push({ label: 'Search' });
         else if (view === 'concepts' && params.sub === 'visualizers') trail.push({ label: 'Visualizers' });
         else if (view === 'concepts' && (params.sub === 'spherical' || params.sub === 'azimuth')) {
@@ -844,6 +845,7 @@ PGRE.route = function () {
 
 
   PGRE.refreshNavBadges();
+  if (PGRE.sessionPark) PGRE.sessionPark.paint();
 
   // Exam and formulas paint a placeholder/skeleton first; they call viewEnter
   // after the real content mounts so we don't animate the loading stand-in.

@@ -1,0 +1,494 @@
+#!/usr/bin/env node
+/* Parked-session parking: the mistake-drill snapshot + #/mistakes/drill hash,
+   the practice snapshot corrections (stage restore, all-answered kept, zip by
+   qid), and the top-bar "N unfinished" drawer. Bank-free — PGRE.questionById
+   resolves fixture questions. Run: node tools/test-session-park.js */
+'use strict';
+
+var fs = require('fs');
+var path = require('path');
+var vm = require('vm');
+
+var root = path.resolve(__dirname, '..');
+
+var passed = 0;
+var failed = 0;
+
+function assert(cond, msg) {
+  if (cond) {
+    passed++;
+    console.log('  ok  — ' + msg);
+  } else {
+    failed++;
+    console.log('  FAIL — ' + msg);
+  }
+}
+
+var disk = {};
+var sessionDisk = {};
+
+function storageFor(map) {
+  return {
+    getItem: function (k) {
+      return Object.prototype.hasOwnProperty.call(map, k) ? map[k] : null;
+    },
+    setItem: function (k, v) { map[k] = String(v); },
+    removeItem: function (k) { delete map[k]; }
+  };
+}
+
+var localStorage = storageFor(disk);
+var sessionStorage = storageFor(sessionDisk);
+
+/* Minimal element: innerHTML sink, no-op listeners, recordable click wiring. */
+function fakeEl(id) {
+  var el = {
+    id: id || '',
+    innerHTML: '',
+    textContent: '',
+    hidden: false,
+    disabled: false,
+    listeners: {},
+    parentNode: { removeChild: function () {} },
+    appendChild: function () {},
+    setAttribute: function () {},
+    getAttribute: function () { return null; },
+    addEventListener: function (ev, fn) { el.listeners[ev] = fn; },
+    removeEventListener: function () {},
+    querySelector: function () { return null; },
+    querySelectorAll: function () { return []; },
+    closest: function () { return null; },
+    contains: function () { return false; },
+    focus: function () {},
+    click: function () { if (el.listeners.click) el.listeners.click({ target: el }); }
+  };
+  return el;
+}
+
+var docEls = {};
+function elFor(id) {
+  if (!docEls[id]) docEls[id] = fakeEl(id);
+  return docEls[id];
+}
+
+var docClickHandlers = [];
+var docKeyHandlers = [];
+
+var locationStub = { href: 'file:///tmp/index.html', hash: '#/' };
+
+var sandbox = {
+  console: console,
+  Date: Date,
+  JSON: JSON,
+  Math: Math,
+  Object: Object,
+  Array: Array,
+  String: String,
+  Number: Number,
+  parseInt: parseInt,
+  parseFloat: parseFloat,
+  isFinite: isFinite,
+  isNaN: isNaN,
+  setTimeout: setTimeout,
+  clearTimeout: clearTimeout,
+  setInterval: setInterval,
+  clearInterval: clearInterval,
+  location: locationStub
+};
+sandbox.window = sandbox;
+sandbox.document = {
+  addEventListener: function (ev, fn) {
+    if (ev === 'click') docClickHandlers.push(fn);
+    if (ev === 'keydown') docKeyHandlers.push(fn);
+  },
+  getElementById: function (id) { return elFor(id); },
+  querySelector: function () { return null; },
+  querySelectorAll: function () { return []; },
+  activeElement: null
+};
+sandbox.localStorage = localStorage;
+sandbox.sessionStorage = sessionStorage;
+sandbox.addEventListener = function () {};
+sandbox.scrollTo = function () {};
+sandbox.requestAnimationFrame = function (fn) { return 0; };
+sandbox.PGRE = {};
+vm.createContext(sandbox);
+
+vm.runInContext(fs.readFileSync(path.join(root, 'js', 'store.js'), 'utf8'), sandbox);
+vm.runInContext(fs.readFileSync(path.join(root, 'js', 'gamify.js'), 'utf8'), sandbox);
+vm.runInContext(fs.readFileSync(path.join(root, 'js', 'session-park.js'), 'utf8'), sandbox);
+vm.runInContext(fs.readFileSync(path.join(root, 'js', 'view-practice.js'), 'utf8'), sandbox);
+vm.runInContext(fs.readFileSync(path.join(root, 'js', 'view-mistakes.js'), 'utf8'), sandbox);
+
+var PGRE = sandbox.PGRE;
+var mistakes = PGRE.views.mistakes;
+var practice = PGRE.views.practice;
+var park = PGRE.sessionPark;
+
+/* ——— Fixture bank + PGRE stubs ——— */
+var BANK = {};
+function mkQ(id, answer) {
+  BANK[id] = { id: id, topic: 'mech', answer: answer == null ? 1 : answer,
+               q: '<p>q ' + id + '</p>',
+               choices: ['a', 'b', 'c', 'd', 'e'], sol: '<p>sol ' + id + '</p>' };
+}
+['m1', 'm2', 'm3', 'p1', 'p2', 'p3'].forEach(function (id, n) { mkQ(id, n % 5); });
+
+PGRE.questionById = function (id) { return BANK[id] || null; };
+PGRE.questionsForTopic = function () { return Object.keys(BANK).map(function (k) { return BANK[k]; }); };
+PGRE.topicById = function () { return { id: 'mech', short: 'ME', name: 'Mechanics' }; };
+PGRE.TOPICS = [];
+PGRE.toast = function () {};
+PGRE.persistWarning = function () {};
+PGRE.typesetMath = function () {};
+PGRE.refreshNavBadges = function () {};
+PGRE.route = function () {};
+PGRE.assess = {
+  bind: function () { return { toggle: function () {} }; },
+  html: function () { return ''; },
+  LABELS: {}
+};
+PGRE.notes = { isBookmarked: function () { return false; }, get: function () { return ''; },
+               set: function () {}, toggleBookmark: function () { return false; } };
+PGRE.ui = {
+  esc: function (s) { return String(s == null ? '' : s); },
+  meter: function () { return ''; },
+  diffDots: function () { return ''; },
+  bindChoiceCommit: function () {
+    return { select: function () {}, commit: function () {}, selected: function () { return null; } };
+  }
+};
+PGRE.nav = { setTrail: function () {} };
+PGRE.srs = {
+  today: function () { return '2026-10-01'; },
+  dayStr: function (d) { return '2026-10-01'; },
+  openMistakes: function () { return []; },
+  dueMistakes: function () { return []; },
+  archivedMistakes: function () { return []; },
+  filterByTopic: function (l) { return l; },
+  filterByConcern: function (l) { return l; },
+  mistakeMissed: function () {},
+  mistakeSolved: function () {},
+  clearLucky: function () {},
+  daysUntil: function () { return 0; },
+  ivlLabel: function () { return 'today'; },
+  MISTAKE_LADDER: [1, 3, 7]
+};
+PGRE.examEngine = {
+  active: function () {
+    var arr = (PGRE.store.state && PGRE.store.state.exams) || [];
+    for (var i = arr.length - 1; i >= 0; i--) if (!arr[i].submittedAt) return arr[i];
+    return null;
+  }
+};
+// keep the achievement/challenge churn out of the drill path; session rows,
+// revert and the attempt log are the real engine under test
+PGRE.gamify.checkChallenges = function () {};
+PGRE.gamify.checkAchievements = function () {};
+
+PGRE.store.load();
+
+function snap(key) {
+  var raw = sessionStorage.getItem(key);
+  return raw ? JSON.parse(raw) : null;
+}
+function put(key, obj) {
+  sessionStorage.setItem(key, JSON.stringify(obj));
+}
+function lastAttempt() {
+  var a = PGRE.store.state.attempts;
+  return a.length ? a[a.length - 1] : null;
+}
+function sessionRow(sid) {
+  return PGRE.store.state.sessions.filter(function (s) { return s.id === sid; })[0] || null;
+}
+
+/* ================= Mistake drill ================= */
+
+console.log('mistake drill parks a snapshot and resumes without re-recording');
+
+mistakes.mount({ sub: null });                        // book
+mistakes._test.startDrill([BANK.m1, BANK.m2, BANK.m3]);
+var d1 = mistakes._test.drill;
+assert(d1 && d1.qs.length === 3, 'drill started with 3 questions');
+assert(snap(park.DRILL_KEY) && snap(park.DRILL_KEY).ids.length === 3,
+  'snapshot written to sessionStorage');
+
+var id0 = d1.qs[0].id;
+var pick0 = (BANK[id0].answer + 1) % 5;               // a wrong pick
+mistakes._test.drillAnswer(pick0);
+assert(d1.st[0] && d1.st[0].correct === false, 'answer recorded in live drill');
+var attemptsBefore = PGRE.store.state.attempts.length;
+var sid1 = d1.sid;
+
+// navigate away and back — mount paints the book, then the drill route resumes
+mistakes.mount({ sub: null });
+assert(mistakes._test.drill === d1, 'renderBook keeps the parked drill alive (no drill = null)');
+mistakes.mount({ sub: 'drill' });
+assert(mistakes._test.drill === d1, 'same-tab resume keeps the live drill object');
+assert(mistakes._test.drill.st[0].row === lastAttempt(),
+  'live result still references the real attempt row');
+
+// simulate a reload: drop the live drill, rebuild from the snapshot only
+mistakes._test.dropLive();
+mistakes.mount({ sub: 'drill' });
+var d2 = mistakes._test.drill;
+assert(d2 && d2 !== d1, 'reload rebuilt the drill from the snapshot');
+assert(d2.st[0] && d2.st[0].picked === pick0 && d2.st[0].correct === false,
+  'stored result repainted (picked + verdict restored)');
+assert(d2.st[0].row === lastAttempt(), 'restored result found its real attempt row');
+assert(PGRE.store.state.attempts.length === attemptsBefore,
+  'resume did not call recordAnswer (no extra attempt row)');
+
+console.log('\nrestored answers can only re-answer while their row is locatable');
+
+// re-answering with the row present reverts exactly that answer and records once
+var attemptsPre = PGRE.store.state.attempts.length;
+mistakes._test.drillAnswer(BANK[id0].answer);         // new pick: correct this time
+assert(PGRE.store.state.attempts.length === attemptsPre, 're-answer replaced, not appended');
+assert(mistakes._test.drill.st[0].correct === true, 'replaced answer is the new one');
+assert(PGRE.store.state.attempts.some(function (a) { return a.sid === sid1 && a.qid === id0 && a.correct; }),
+  'the live attempt row is the replacement');
+
+// a snapshot whose row is gone locks the answer instead of double-counting
+var lockedSnap = snap(park.DRILL_KEY);
+lockedSnap.sid = 's-ghost';
+put(park.DRILL_KEY, lockedSnap);
+mistakes._test.dropLive();
+mistakes.mount({ sub: 'drill' });
+var d3 = mistakes._test.drill;
+assert(d3 && d3.st[0] && d3.st[0].row === null, 'ghost sid: no attempt row found');
+var attemptsGhost = PGRE.store.state.attempts.length;
+mistakes._test.drillAnswer((pick0 + 1) % 5);          // a DIFFERENT pick on the locked cell
+assert(PGRE.store.state.attempts.length === attemptsGhost,
+  'locked result cannot be replaced — nothing re-recorded');
+
+console.log('\nskip leaves the skipped id out of the stored queue');
+
+var waitUntil = Date.now() + 310;                     // skip guards on the render clock
+while (Date.now() < waitUntil) { /* let the 300 ms settle window pass */ }
+mistakes._test.drill.i = 1;                          // park the cursor on an unanswered cell
+var skipId = mistakes._test.drill.qs[1].id;
+mistakes._test.skipCurrent();
+var snap2 = snap(park.DRILL_KEY);
+assert(snap2.skipped === 1, 'skipped count recorded');
+assert(snap2.ids.length === 2 && snap2.ids.indexOf(skipId) === -1,
+  'the stored queue is the queue still in play — skipped id is out');
+
+console.log('\nhash split: the book parks, the drill route owns the drill');
+
+locationStub.hash = '#/mistakes';
+mistakes.mount({ sub: null });
+assert(/parked-drill-card/.test(elFor('mistakes-root').innerHTML),
+  'book shows Resume/Discard banner while a drill is parked');
+locationStub.hash = '#/mistakes/drill';
+mistakes._test.dropLive();
+mistakes.mount({ sub: 'drill' });                     // stale route, snapshot present → rebuild path
+assert(mistakes._test.drill !== null, 'drill route rebuilds from a live snapshot');
+
+console.log('\ndiscard closes only the session it owns');
+
+// a real owned sid: re-attach the drill's own session id to the snapshot
+var ownSnap = snap(park.DRILL_KEY);
+ownSnap.sid = sid1;
+put(park.DRILL_KEY, ownSnap);
+mistakes._test.dropLive();
+var openBefore = PGRE.store.state.sessions.filter(function (s) { return !s.endedAt; })
+  .map(function (s) { return s.id; });
+mistakes._test.discardParkedDrill();
+assert(snap(park.DRILL_KEY) === null, 'discard deletes the snapshot');
+assert(sessionRow(sid1) && sessionRow(sid1).endedAt, 'discard ended the owned sid');
+assert(PGRE.store.state.sessions.filter(function (s) { return !s.endedAt; }).length ===
+    openBefore.length - 1,
+  'no other open session row was closed');
+
+console.log('\n#/mistakes/drill with no snapshot does not invent a drill');
+
+locationStub.hash = '#/mistakes/drill';
+mistakes._test.dropLive();
+mistakes.mount({ sub: 'drill' });
+assert(mistakes._test.drill === null && locationStub.hash === '#/mistakes',
+  'empty drill route falls back to the book');
+
+console.log('\na finished drill is not painted as parked on the book');
+
+locationStub.hash = '#/';
+mistakes._test.startDrill([BANK.m1, BANK.m2, BANK.m3]);
+mistakes.mount({ sub: 'drill' });                     // paints the question, binds #drill-finish
+assert(mistakes._test.drill && !mistakes._test.drill.done,
+  'fresh drill is in flight');
+mistakes._test.drillAnswer((BANK[mistakes._test.drill.qs[0].id].answer + 1) % 5);
+var finishBtn = elFor('drill-finish');
+assert(typeof finishBtn.listeners.click === 'function', 'Finish drill button is wired');
+finishBtn.listeners.click({ target: finishBtn, detail: 0 });   // keyboard detail bypasses the settle guard
+assert(mistakes._test.drill.done === true, 'finish put the summary up');
+assert(snap(park.DRILL_KEY) === null, 'summary cleared the parked snapshot');
+locationStub.hash = '#/mistakes';
+mistakes.mount({ sub: null });                        // back to the book with the dead drill still live
+assert(!/parked-drill-card/.test(elFor('mistakes-root').innerHTML),
+  'finished drill does not offer Resume/Discard on the book');
+mistakes.mount({ sub: 'drill' });                     // the stale route reopens the summary, not a question
+assert(/Drill complete/.test(elFor('mistakes-root').innerHTML),
+  'stale drill route repaints the completion screen');
+mistakes._test.dropLive();
+
+/* ================= Practice corrections ================= */
+
+console.log('\npractice: a feedback-stage snapshot restores the read solution');
+
+var fbSnap = {
+  topicId: 'all', filter: null, label: null, custom: false, learnDrill: false,
+  sid: 's-p1', stage: 'feedback',
+  ids: ['p1', 'p2', 'p3'],
+  i: 0, correct: 1, xpEarned: 15,
+  answers: [{ qid: 'p1', picked: 1, correct: true, xp: 15, ms: 9000 }],
+  savedAt: Date.now()
+};
+put(park.PRACTICE_KEY, fbSnap);
+practice.mount({ id: 'all', sub2: null });
+assert(/You left a set part-way/.test(elFor('practice-root').innerHTML),
+  'plain mount still offers the resume card');
+sessionStorage.setItem(park.RESUME_KEY, '1');
+practice.mount({ id: 'all', sub2: null });
+assert(/Incorrect|Correct/.test(elFor('practice-root').innerHTML) &&
+       /Solution/.test(elFor('practice-root').innerHTML),
+  'armed resume opens on the stored feedback, not a blank question');
+assert(sessionStorage.getItem(park.RESUME_KEY) === null, 'resume flag is one-shot');
+
+console.log('\npractice: an all-answered snapshot survives until the summary');
+
+var sidP2 = PGRE.gamify.beginSession('all', 'practice', 2);
+var doneSnap = {
+  topicId: 'all', filter: null, label: null, custom: false, learnDrill: false,
+  sid: sidP2, stage: 'question',
+  ids: ['p1', 'p2'],
+  i: 1, correct: 2, xpEarned: 25,
+  answers: [{ qid: 'p1', picked: 1, correct: true, xp: 15, ms: 8000 },
+            { qid: 'p2', picked: 2, correct: true, xp: 10, ms: 9000 }],
+  savedAt: Date.now()
+};
+put(park.PRACTICE_KEY, doneSnap);
+sessionStorage.setItem(park.RESUME_KEY, '1');
+practice.mount({ id: 'all', sub2: null });
+assert(/Session complete/.test(elFor('practice-root').innerHTML),
+  'all-answered snapshot lands on the summary (endSession + tick run there)');
+assert(sessionStorage.getItem(park.PRACTICE_KEY) === null,
+  'summary cleared the parked snapshot');
+assert(sessionRow(sidP2) && sessionRow(sidP2).endedAt, 'resume closed the session row');
+
+console.log('\npractice: a missing bank id realigns answers and cursor by qid');
+
+var holeSnap = {
+  topicId: 'all', filter: null, label: null, custom: false, learnDrill: false,
+  sid: 's-p3', stage: 'question',
+  ids: ['p1', 'gone', 'p3'],
+  i: 2, correct: 1, xpEarned: 15,
+  answers: [{ qid: 'p1', picked: 1, correct: true, xp: 15, ms: 8000 },
+            null,
+            null],
+  savedAt: Date.now()
+};
+put(park.PRACTICE_KEY, holeSnap);
+sessionStorage.setItem(park.RESUME_KEY, '1');
+practice.mount({ id: 'all', sub2: null });
+var live = snap(park.PRACTICE_KEY);
+assert(live && live.ids.join(',') === 'p1,p3', 'dropped id left the queue');
+assert(live.i === 1 && live.ids[live.i] === 'p3', 'cursor realigned to the same question id');
+assert(live.answers[0] && live.answers[0].qid === 'p1' && live.answers[1] === null,
+  'answers stayed zipped to their question');
+
+/* ================= Top-bar drawer ================= */
+
+console.log('\nthe drawer lists only real parked slots and opens from the count');
+
+// the wrapper elements the module binds on
+var wrap = elFor('session-park'), btn = elFor('parked-btn'), panel = elFor('parked-panel');
+wrap.hidden = false; panel.hidden = true;
+
+function parkedNow() { return park.collect(); }
+
+// clear every slot
+sessionStorage.removeItem(park.PRACTICE_KEY);
+sessionStorage.removeItem(park.DRILL_KEY);
+PGRE.store.state.formulaStudy = null;
+PGRE.store.state.exams = [];
+
+var savesBefore = (function () {
+  var n = 0, orig = PGRE.store.save;
+  PGRE.store.save = function () { n++; return orig.apply(PGRE.store, arguments); };
+  park.paint();
+  var calls = n;
+  PGRE.store.save = orig;
+  return calls;
+})();
+assert(savesBefore === 0, 'painting the drawer never writes the store');
+assert(wrap.hidden === true, 'button hidden when nothing is parked');
+
+put(park.DRILL_KEY, { ids: ['m1', 'm2'], i: 1, skipped: 1, sid: 's-d',
+                      results: [{ qid: 'm1', picked: 0, correct: true, xp: 10, ms: 1 }] });
+put(park.PRACTICE_KEY, fbSnap);
+PGRE.store.state.formulaStudy = { id: 'fs1', date: '2026-10-01', queueIds: ['f1', 'f2'], dayBound: true };
+PGRE.store.state.exams = [{ id: 'ex-1', submittedAt: null, order: [1, 2, 3], answers: { a: 1 },
+                            paused: false }];
+// a stale (yesterday) Recall queue must not list
+var staleBands = (function () {
+  PGRE.store.state.formulaStudy.date = '2026-09-30';
+  var b = parkedNow();
+  PGRE.store.state.formulaStudy.date = '2026-10-01';
+  return b;
+})();
+assert(staleBands.length === 3, 'yesterday’s Recall queue stays off the list');
+
+var bands = parkedNow();
+assert(bands.length === 4, 'four real slots list four bands');
+assert(bands[0].kind === 'mistakes' && /1 of 2/.test(bands[0].detail),
+  'mistake band names kind and place');
+assert(bands[1].kind === 'practice' && bands[1].hash === '#/practice/all',
+  'practice band points at its topic route');
+assert(bands[2].kind === 'formulas' && bands[2].detail === '2 cards left',
+  'Recall band counts the saved queue');
+assert(bands[3].kind === 'exam' && bands[3].hash === '#/exam/run',
+  'mock band opens the exam room directly (same route as Resume exam)');
+
+park.paint();
+assert(wrap.hidden === false && btn.textContent === '4 unfinished',
+  'count button shows the parked total');
+assert(btn.listeners.click, 'count button is wired');
+btn.listeners.click({ target: btn });
+assert(panel.hidden === false, 'click rolls the drawer down');
+assert(/Mistake drill/.test(panel.innerHTML) && /Mock exam/.test(panel.innerHTML),
+  'the drawer lists the bands');
+
+// outside click + Escape close it
+docClickHandlers.forEach(function (fn) { fn({ target: { closest: function () { return null; } } }); });
+assert(panel.hidden === true, 'outside click closes the drawer');
+btn.listeners.click({ target: btn });
+docKeyHandlers.forEach(function (fn) { fn({ key: 'Escape' }); });
+assert(panel.hidden === true && btn.getAttribute && true, 'Escape closes the drawer');
+
+// clicking a band resumes that session
+btn.listeners.click({ target: btn });
+var bandBtns = panel.listeners && true;
+var clicked = panel.listeners.click;
+assert(typeof clicked === 'function', 'panel has a delegated band handler');
+var bandTarget = { closest: function (sel) {
+  return sel === '.parked-band' ? { getAttribute: function () { return 'mistakes'; } } : null;
+} };
+panel.contains = function () { return true; };
+clicked({ target: bandTarget });
+assert(locationStub.hash === '#/mistakes/drill', 'mistake band resumes on the drill route');
+assert(panel.hidden === true, 'drawer closes after choosing a band');
+
+btn.listeners.click({ target: btn });
+clicked({ target: { closest: function (sel) {
+  return sel === '.parked-band' ? { getAttribute: function () { return 'practice'; } } : null;
+} } });
+assert(sessionStorage.getItem(park.RESUME_KEY) === '1', 'practice band arms the one-shot resume');
+assert(locationStub.hash === '#/practice/all', 'practice band navigates to its route');
+clicked({ target: { closest: function (sel) {
+  return sel === '.parked-band' ? { getAttribute: function () { return 'exam'; } } : null;
+} } });
+assert(locationStub.hash === '#/exam/run', 'exam band opens the room directly');
+
+console.log('\n' + passed + ' passed, ' + failed + ' failed');
+process.exit(failed ? 1 : 0);

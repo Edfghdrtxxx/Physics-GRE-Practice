@@ -267,7 +267,9 @@ PGRE.views.mistakes = (function () {
 
   function renderBook() {
     clearPace();
-    drill = null;
+    // NOTE: the live `drill` is deliberately NOT nulled here — a parked drill
+    // (its sessionStorage snapshot still present) stays resumable; only
+    // finishing, discarding, or starting a new drill ends it.
     if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: book list is the base screen
     var openAll = PGRE.srs.openMistakes();
     var dueAll = PGRE.srs.dueMistakes();
@@ -297,6 +299,25 @@ PGRE.views.mistakes = (function () {
       // The size picker only means something once there is a pool to draw from.
       (open.length ? drillSizeHTML() : '') +
       '</div>';
+
+    // a finished drill keeps its object for the summary/review, but its parked
+    // slot is gone — the book card is only for a drill still in flight
+    var parked = (drill && !drill.done) ? drill : readDrillSaved();
+    if (parked) {
+      var parkedIds = parked.qs
+        ? parked.qs.length
+        : (parked.ids || []).length;
+      var parkedDone = 0;
+      (parked.st || parked.results || []).forEach(function (r) { if (r) parkedDone++; });
+      html += '<div class="card parked-drill-card">' +
+        '<strong>A mistake drill is parked</strong>' +
+        '<p class="muted">' + parkedDone + ' of ' + parkedIds + ' answered — it is waiting on ' +
+          'the question you left.</p>' +
+        '<div class="btn-row">' +
+          '<a class="btn btn-primary" href="#/mistakes/drill">Resume the drill</a>' +
+          '<button class="btn btn-ghost" id="drill-discard">Discard it</button>' +
+        '</div></div>';
+    }
 
     if (!open.length && !archived.length) {
       if (!hasBook) {
@@ -432,6 +453,8 @@ PGRE.views.mistakes = (function () {
     buildPrintSheet();
     var pb = document.getElementById('print-mistakes');
     if (pb) pb.addEventListener('click', printBook);
+    var disc = document.getElementById('drill-discard');
+    if (disc) disc.addEventListener('click', discardParkedDrill);
   }
 
   /* ——— Print / PDF (proposal #13) ———
@@ -511,6 +534,110 @@ PGRE.views.mistakes = (function () {
     document.body.classList.remove('pgre-printing');
   });
 
+  /* ——— Parked-drill snapshot ———
+     The drill used to live only in the `drill` closure, so leaving #/mistakes
+     (or clicking the "Mistake book" crumb) destroyed it. The in-flight drill is
+     mirrored to sessionStorage['pgre-mistake-drill']: the queue still in play
+     (ids after skips), the cursor, per-question results with their revert
+     records, the skipped count and the gamify session id. Written on every
+     render; deleted on finish, discard, or a fresh drill. Tab-scoped like the
+     practice snapshot: a reload resumes it, a second tab never sees it. */
+  function drillSaveKey() {
+    return (PGRE.sessionPark && PGRE.sessionPark.DRILL_KEY) || 'pgre-mistake-drill';
+  }
+
+  function paintPark() {
+    if (PGRE.sessionPark && PGRE.sessionPark.paint) PGRE.sessionPark.paint();
+  }
+
+  function saveDrill() {
+    if (!drill || drill.done) return;
+    var snap = {
+      v: 1,
+      sid: drill.sid,
+      i: drill.i,
+      skipped: drill.skipped,
+      ids: drill.qs.map(function (q) { return q.id; }),
+      results: drill.st.map(function (st) {
+        if (!st) return null;
+        return { qid: st.q.id, picked: st.picked, correct: st.correct,
+                 xp: st.xp, ms: st.ms, day: st.day,
+                 mkBefore: st.mkBefore, qRecBefore: st.qRecBefore };
+      }),
+      savedAt: Date.now()
+    };
+    try { sessionStorage.setItem(drillSaveKey(), JSON.stringify(snap)); }
+    catch (e) { /* storage blocked — the live drill still works */ }
+    paintPark();
+  }
+
+  function readDrillSaved() {
+    var raw = null;
+    try { raw = sessionStorage.getItem(drillSaveKey()); } catch (e) { return null; }
+    if (!raw) return null;
+    var snap = null;
+    try { snap = JSON.parse(raw); } catch (e2) { return null; }
+    if (!snap || !Array.isArray(snap.ids) || !snap.ids.length) return null;
+    return snap;
+  }
+
+  function clearDrillSaved() {
+    try { sessionStorage.removeItem(drillSaveKey()); } catch (e) { /* blocked */ }
+    paintPark();
+  }
+
+  /* The real attempt row a stored result recorded, found by sid+qid. Resume
+     can only offer a REPLACING answer while this row is locatable: without it
+     revertAnswer has nothing to splice and the re-answer would double-count.
+     mkBefore/qRecBefore ride the snapshot so the revert still restores the
+     exact pre-answer book/question state. */
+  function findDrillRow(sid, qid) {
+    var arr = (PGRE.store.state && PGRE.store.state.attempts) || [];
+    for (var i = arr.length - 1; i >= 0; i--) {
+      var a = arr[i];
+      if (a && a.sid === sid && a.qid === qid) return a;
+    }
+    return null;
+  }
+
+  /* Rebuild the live drill from a snapshot after a reload. Paints stored
+     results only — nothing here calls recordAnswer or gradeCard. */
+  function restoreDrill() {
+    var snap = readDrillSaved();
+    if (!snap) return false;
+    var qs = [];
+    snap.ids.forEach(function (id) {
+      var q = PGRE.questionById(id);
+      if (q) qs.push(q);
+    });
+    if (!qs.length) { clearDrillSaved(); return false; }   // bank changed under us
+    var st = qs.map(function () { return null; });
+    qs.forEach(function (q, n) {
+      var r = (snap.results || []).filter(function (x) { return x && x.qid === q.id; })[0];
+      if (!r) return;
+      var row = findDrillRow(snap.sid, q.id);   // null when the row is gone
+      st[n] = { q: q, picked: r.picked, correct: r.correct, xp: r.xp,
+                ms: r.ms, row: row, day: r.day, sid: snap.sid,
+                mkBefore: r.mkBefore || null, qRecBefore: r.qRecBefore || null };
+    });
+    var i = Math.max(0, Math.min(snap.i || 0, qs.length - 1));
+    drill = { qs: qs, st: st, i: i, skipped: snap.skipped || 0,
+              done: false, reviewing: false, sid: snap.sid };
+    return true;
+  }
+
+  /* Discard ends ONLY the session row this drill owns — older abandoned rows
+     have no queue and stay untouched. */
+  function discardParkedDrill() {
+    var sid = drill ? drill.sid : (readDrillSaved() || {}).sid;
+    if (sid) PGRE.gamify.endSession(sid);
+    drill = null;
+    clearDrillSaved();
+    PGRE.toast('Parked drill discarded — answered questions stay recorded.', 'info');
+    if (location.hash === '#/mistakes/drill') location.hash = '#/mistakes';
+    else if (root()) renderBook();
+  }
+
   /* ——— Re-drill: same answering pipeline as practice (mode: mistakes) ———
      The drill is browsable, not a one-way conveyor:
      - drill.qs holds the questions in play, drill.st the parallel per-question
@@ -523,14 +650,19 @@ PGRE.views.mistakes = (function () {
      - Re-answering REPLACES the earlier answer: gamify.revertAnswer() unwinds
        the first attempt (row, XP, tallies, mistake-book/SRS entry) before the
        new one is recorded, so one question never moves the ladder twice. */
+  /* A new drill replaces the one parked slot: any earlier snapshot is gone as
+     soon as this drill is mirrored below. */
   function startDrill(qs) {
     if (!qs.length) return;
-    if (PGRE.nav) PGRE.nav.setTrail(['Drill']);   // BUNDLE G: drill is live
     var order = shuffle(qs);
     drill = { qs: order, st: order.map(function () { return null; }), i: 0,
               skipped: 0, done: false, reviewing: false,
               sid: PGRE.gamify.beginSession('mistakes', 'mistakes', qs.length) };
-    renderDrillQuestion();
+    saveDrill();
+    // The drill has its own hash now; routing mounts it on the question. If we
+    // are already on #/mistakes/drill (resume → new drill) force the re-mount.
+    if (location.hash === '#/mistakes/drill') PGRE.route();
+    else location.hash = '#/mistakes/drill';
   }
 
   function answeredCount() {
@@ -665,6 +797,7 @@ PGRE.views.mistakes = (function () {
      explained in the feedback panel, where the result is already on screen. */
   function renderDrillQuestion(opts) {
     opts = opts || {};
+    if (PGRE.nav) PGRE.nav.setTrail([]);   // plain view resets the Review crumb
     lastRenderAt = Date.now();
     var q = drill.qs[drill.i];
     var st = drill.st[drill.i];
@@ -707,7 +840,7 @@ PGRE.views.mistakes = (function () {
         '<span class="key-hint">←</span> back · <span class="key-hint">→</span> next · ' +
         '<span class="key-hint">S</span> skip</div>';
     }
-    html += '<div id="feedback">' + (show ? feedbackHTML(q, st, !!opts.fresh) : '') + '</div>' +
+    html += '<div id="feedback">' + (show ? feedbackHTML(q, st, !!opts.fresh, !st.row) : '') + '</div>' +
       '<div class="btn-row drill-navrow">' +
         '<button class="btn btn-ghost" id="drill-prev"' + (drill.i === 0 ? ' disabled' : '') +
           '>← Back</button>' +
@@ -761,6 +894,7 @@ PGRE.views.mistakes = (function () {
     root().querySelectorAll('[data-goto]').forEach(function (b) {
       b.addEventListener('click', function () { goTo(parseInt(b.getAttribute('data-goto'), 10)); });
     });
+    saveDrill();   // cursor/results mirror — the parked snapshot stays live
     if (opts.fresh) {
       var nb = document.getElementById('drill-next');
       (nb && !nb.disabled ? nb : document.getElementById('drill-finish')).focus();
@@ -819,6 +953,14 @@ PGRE.views.mistakes = (function () {
     // the verdict and solution back on screen, which is the only way to re-read
     // them without replacing the answer.
     if (prev && prev.picked === idx) { renderDrillQuestion({ reveal: true }); return; }
+    // A result restored after a reload whose attempt row can no longer be found
+    // is read-only: replacing it would have no row to revert, so the re-answer
+    // would double-count. Reveal the stored result instead.
+    if (prev && !prev.row) {
+      renderDrillQuestion({ reveal: true });
+      PGRE.toast('This saved answer is locked — the row it recorded is no longer in the log.', 'info');
+      return;
+    }
     commitAnswer(idx);
     if (!drill.st[drill.i]) {
       renderDrillQuestion();
@@ -879,11 +1021,13 @@ PGRE.views.mistakes = (function () {
     });
     document.getElementById('review-summary').addEventListener('click', renderDrillSummary);
     bindReviewJumps();
+    saveDrill();
   }
 
   function renderDrillSummary() {
     clearPace();
     if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: drill over — back to base
+    clearDrillSaved();                     // the parked slot ends with the drill
     lastRenderAt = Date.now();
     var firstClose = !drill.done;
     drill.done = true;                     // the keys stop answering from here on
@@ -924,8 +1068,11 @@ PGRE.views.mistakes = (function () {
         '<a class="btn btn-ghost" href="#/">Dashboard</a>' +
       '</div></div>';
     document.getElementById('back-book').addEventListener('click', function () {
-      renderBook();
-      window.scrollTo(0, 0); // direct re-render, not a route change
+      // a real route change: the drill finished on #/mistakes/drill, the book
+      // lives at #/mistakes
+      if (location.hash === '#/mistakes') renderBook();
+      else location.hash = '#/mistakes';
+      window.scrollTo(0, 0);
     });
     bindReviewJumps();
   }
@@ -986,12 +1133,29 @@ PGRE.views.mistakes = (function () {
 
   return {
     render: function () { return '<div id="mistakes-root"></div>'; },
-    mount: function () {
+    mount: function (params) {
       clearPace();
       topicFilter = 'all';
       concernFilter = 'all';
       if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
+      if (params && params.sub === 'drill') {
+        // Same-tab resume keeps the LIVE drill (its st rows still reference the
+        // real attempt objects); only a reload rebuilds from the snapshot.
+        if (drill && !drill.done) { drill.reviewing = false; renderDrillQuestion(); return; }
+        if (drill && drill.done) { renderDrillSummary(); return; }
+        if (restoreDrill()) { renderDrillQuestion(); return; }
+        // #/mistakes/drill with no parked drill must not invent one.
+        if (location.hash === '#/mistakes/drill') location.hash = '#/mistakes';
+        else renderBook();
+        return;
+      }
       renderBook();
-    }
+    },
+    // opened up for tools/test-session-park.js (bank-free round-trip)
+    _test: { readDrillSaved: readDrillSaved, restoreDrill: restoreDrill,
+             discardParkedDrill: discardParkedDrill, drillAnswer: drillAnswer,
+             startDrill: startDrill, skipCurrent: skipCurrent,
+             dropLive: function () { drill = null; },
+             get drill() { return drill; }, saveDrill: saveDrill }
   };
 })();
