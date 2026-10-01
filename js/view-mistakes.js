@@ -12,6 +12,7 @@ PGRE.views.mistakes = (function () {
   var keyBound = false; // the document keydown listener is installed once
   var paceTimer = null; // live per-question chip; same contract as view-practice.js
   var topicFilter = 'all'; // additional book filter; 'all' or a PGRE.TOPICS id
+  var concernFilter = 'all'; // 'all' or 'stuck' (keep-failing entries only)
 
   function settings() { return PGRE.store.state.settings || {}; }
 
@@ -97,9 +98,12 @@ PGRE.views.mistakes = (function () {
   function filterByTopic(list) {
     return PGRE.srs.filterByTopic(list, topicFilter);
   }
+  function filterByConcern(list) {
+    return PGRE.srs.filterByConcern(list, concernFilter);
+  }
 
-  /* Topic dropdown — same hist-select control as History / Notes. Lives next
-     to the existing drill-size chips; does not replace them. */
+  /* Topic dropdown plus the Keep failing concern chip — same .filter-row
+     strip; either can narrow the book, independently. */
   function topicFilterHTML() {
     var opts = '<option value="all"' + (topicFilter === 'all' ? ' selected' : '') +
       '>All topics</option>';
@@ -109,7 +113,12 @@ PGRE.views.mistakes = (function () {
     });
     return '<div class="filter-row" id="miss-topic-row">' +
       '<select id="miss-topic" class="hist-select" aria-label="Filter by topic">' +
-        opts + '</select></div>';
+        opts + '</select>' +
+      '<button type="button" class="focus-chip miss-concern-chip' +
+        (concernFilter === 'stuck' ? ' active' : '') +
+        '" data-concern="stuck" aria-pressed="' + (concernFilter === 'stuck') +
+        '">Keep failing</button>' +
+      '</div>';
   }
 
   /* Preset chips (All / 5 / 10 / 15) + a custom number input, reusing the focus
@@ -144,6 +153,11 @@ PGRE.views.mistakes = (function () {
     return '<span class="due-chip">due in ' + PGRE.srs.ivlLabel(d) + '</span>';
   }
 
+  /* Keep-failing entries carry a mk.stuck flag — the strongest concern level,
+     so its chip gets the red danger treatment above the neutral lucky chip. */
+  function stuckChip(mk) {
+    return mk.stuck ? '<span class="due-chip stuck-chip">keep failing</span>' : '';
+  }
   /* Lucky-guess entries (correct-but-guessed) carry a mk.lucky flag. */
   function luckyChip(mk) {
     return mk.lucky ? '<span class="due-chip lucky-chip">⚑ lucky guess</span>' : '';
@@ -195,12 +209,17 @@ PGRE.views.mistakes = (function () {
     if (mk.misses > 0) metaBits.push('missed ×' + mk.misses);
     if (mk.solves) metaBits.push('re-solved ×' + mk.solves);
     if (mk.lucky && !(mk.misses > 0)) metaBits.push('correct but guessed');
-    var lastTs = mk.lastMissedAt || mk.lastSolvedAt || mk.lastLuckyAt;
+    var lastTs = mk.lastMissedAt || mk.lastSolvedAt || mk.lastLuckyAt || mk.lastStuckAt;
     if (lastTs) metaBits.push('last ' + ui.timeAgo(lastTs));
     var html = '<div class="card miss-card' + (mk.archivedAt ? ' is-archived' : '') + '">' +
-      '<div class="miss-head">' + ui.monogram(t) + dueChip(mk) + luckyChip(mk) +
+      '<div class="miss-head">' + ui.monogram(t) + dueChip(mk) + stuckChip(mk) + luckyChip(mk) +
         '<span class="muted">' + metaBits.join(' · ') + '</span>' +
         '<span class="miss-actions">' +
+          // the same Keep failing flag the answer screen's assess chip sets —
+          // settable on any existing entry right from the book
+          '<button class="btn btn-ghost btn-sm' + (mk.stuck ? ' stuck-on' : '') +
+            '" data-stuck="' + q.id + '" aria-pressed="' + (!!mk.stuck) + '">' +
+            (mk.stuck ? '✓ Keep failing' : 'Keep failing') + '</button>' +
           (mk.archivedAt
             ? '<button class="btn btn-ghost btn-sm" data-restore="' + q.id + '">Restore</button>'
             : '<button class="btn btn-ghost btn-sm" data-drill-one="' + q.id + '">Re-drill</button>' +
@@ -254,9 +273,9 @@ PGRE.views.mistakes = (function () {
     var dueAll = PGRE.srs.dueMistakes();
     var archivedAll = PGRE.srs.archivedMistakes();
     var hasBook = openAll.length || archivedAll.length;
-    var open = filterByTopic(openAll);
-    var due = filterByTopic(dueAll);
-    var archived = filterByTopic(archivedAll);
+    var open = filterByConcern(filterByTopic(openAll));
+    var due = filterByConcern(filterByTopic(dueAll));
+    var archived = filterByConcern(filterByTopic(archivedAll));
 
     // due first (oldest due date first), then upcoming by due date
     open.sort(function (a, b) {
@@ -285,6 +304,11 @@ PGRE.views.mistakes = (function () {
           '<p><strong>Nothing in the book yet.</strong></p>' +
           '<p class="muted">Miss a question in <a href="#/practice/all">practice</a> and it lands here — ' +
           'with your wrong pick, the solution, and a review schedule.</p></div>';
+      } else if (concernFilter === 'stuck') {
+        html += '<div class="card placeholder" id="miss-empty-topic">' +
+          '<p class="muted">Nothing flagged keep failing' +
+          (topicFilter !== 'all' ? ' in this topic' : '') +
+          ' — tap Keep failing on an entry or after an answer.</p></div>';
       } else {
         html += '<div class="card placeholder" id="miss-empty-topic">' +
           '<p class="muted">No mistakes in this topic.</p></div>';
@@ -307,15 +331,22 @@ PGRE.views.mistakes = (function () {
     var dd = document.getElementById('drill-due');
     var da = document.getElementById('drill-all');
     if (dd) dd.addEventListener('click', function () {
-      startDrill(sampleForDrill(filterByTopic(PGRE.srs.dueMistakes()).map(function (e) { return e.q; })));
+      startDrill(sampleForDrill(filterByConcern(filterByTopic(PGRE.srs.dueMistakes())).map(function (e) { return e.q; })));
     });
     if (da) da.addEventListener('click', function () {
-      startDrill(sampleForDrill(filterByTopic(PGRE.srs.openMistakes()).map(function (e) { return e.q; })));
+      startDrill(sampleForDrill(filterByConcern(filterByTopic(PGRE.srs.openMistakes())).map(function (e) { return e.q; })));
     });
     var topicSel = document.getElementById('miss-topic');
     if (topicSel) topicSel.addEventListener('change', function () {
       topicFilter = topicSel.value || 'all';
       renderBook();
+    });
+    root().querySelectorAll('[data-concern]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        concernFilter = concernFilter === b.getAttribute('data-concern')
+          ? 'all' : b.getAttribute('data-concern');
+        renderBook();
+      });
     });
 
     // ITEM 8 — drill-size control: preset chips + custom input, saved on change.
@@ -381,6 +412,23 @@ PGRE.views.mistakes = (function () {
       });
     });
 
+    // Keep failing toggle on every entry — same flag the post-answer assess
+    // chip sets; markStuck reopens an archived entry (fresh evidence).
+    root().querySelectorAll('[data-stuck]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var qid = b.getAttribute('data-stuck');
+        var mk = PGRE.store.state.mistakes[qid];
+        if (!mk || !mk.stuck) {
+          PGRE.srs.markStuck(qid);
+          PGRE.toast('Flagged keep failing — it shows under that filter and stays loud in drills.', 'info');
+        } else {
+          PGRE.srs.unmarkStuck(qid);
+          PGRE.toast('Removed the keep-failing flag.', 'info');
+        }
+        renderBook();
+      });
+    });
+
     buildPrintSheet();
     var pb = document.getElementById('print-mistakes');
     if (pb) pb.addEventListener('click', printBook);
@@ -432,7 +480,7 @@ PGRE.views.mistakes = (function () {
     if (!view) return;
     var old = document.getElementById('mistakes-print');
     if (old) old.parentNode.removeChild(old);
-    var open = filterByTopic(PGRE.srs.openMistakes());
+    var open = filterByConcern(filterByTopic(PGRE.srs.openMistakes()));
     if (!open.length) return;
     open.sort(function (a, b) {
       return (a.mk.srs ? a.mk.srs.due : '9999') < (b.mk.srs ? b.mk.srs.due : '9999') ? -1 : 1;
@@ -849,7 +897,7 @@ PGRE.views.mistakes = (function () {
       PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
       PGRE.store.save();
     }
-    var stillDue = filterByTopic(PGRE.srs.dueMistakes()).length;
+    var stillDue = filterByConcern(filterByTopic(PGRE.srs.dueMistakes())).length;
     var untouched = [];
     if (drill.skipped) untouched.push(drill.skipped + ' skipped');
     if (left) untouched.push(left + ' left unanswered');
@@ -884,7 +932,7 @@ PGRE.views.mistakes = (function () {
 
   /* ——— Keyboard (same opt-in setting as practice: settings.keyboard) ———
      A–E / 1–5 select, Enter confirms (or re-answers), ← / → browse, S skip,
-     Enter/Space/N advance when nothing is pending, K / G / T / F self-assess
+     Enter/Space/N advance when nothing is pending, K / G / T / F / R self-assess
      (only while a fresh result is on screen). */
   function onKey(e) {
     if (!drill || drill.done) return;                       // no drill, or its summary is up
@@ -926,12 +974,13 @@ PGRE.views.mistakes = (function () {
       else document.getElementById('drill-finish').click();
     } else if (drill.assess) {
       // self-assessment chips, same keys as practice: K knew it, G guessed,
-      // T too slow, F forgot something
+      // T too slow, F forgot something, R keep failing
       var a = k.toLowerCase();
       if (a === 'k') { e.preventDefault(); drill.assess.toggle('sure'); }
       else if (a === 'g') { e.preventDefault(); drill.assess.toggle('guess'); }
       else if (a === 't') { e.preventDefault(); drill.assess.toggle('slow'); }
       else if (a === 'f') { e.preventDefault(); drill.assess.toggle('forgot'); }
+      else if (a === 'r') { e.preventDefault(); drill.assess.toggle('stuck'); }
     }
   }
 
@@ -940,6 +989,7 @@ PGRE.views.mistakes = (function () {
     mount: function () {
       clearPace();
       topicFilter = 'all';
+      concernFilter = 'all';
       if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
       renderBook();
     }

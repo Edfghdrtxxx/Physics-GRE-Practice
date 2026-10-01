@@ -2233,9 +2233,14 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 
 /* Multi-select self-assessment chips (PGRE.assess, js/app.js) — practice
    feedback + mistake drills. Rides on the .focus-chip pill look; .active is
-   the picked state. The note echoes lucky-guess filings in neutral text. */
+   the picked state. The note echoes lucky-guess / keep-failing filings in
+   neutral text. Keep failing is the strongest concern level: its picked
+   state takes the danger tint instead of the neutral ivory. */
 .assess-chip { font-family: var(--sans); font-weight: 500; padding: 6px 12px; }
 .assess-chip .key-hint { margin-left: 2px; }
+.assess-chip.assess-stuck.active {
+  border-color: var(--bad); background: var(--bad-tint); color: var(--bad);
+}
 .assess-note { font-size: 12.5px; }
 
 /* ——— Keyboard hints ——— */
@@ -2263,9 +2268,12 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 /* ——— Config → builder link ——— */
 .build-link-note { margin-top: 14px; }
 
-/* ——— Mistake-book lucky-guess surfacing ———
-   .lucky-chip rides on the base .due-chip; .conf-note is the entry-detail line. */
+/* ——— Mistake-book lucky-guess / keep-failing surfacing ———
+   .lucky-chip and .stuck-chip ride on the base .due-chip; .conf-note is the
+   entry-detail line. Keep failing outranks a lucky guess: red tint + label. */
 .lucky-chip { color: var(--ink); background: var(--accent-track); }
+.stuck-chip { color: var(--bad); background: var(--bad-tint); }
+.miss-actions .stuck-on { border-color: var(--bad); color: var(--bad); }
 .conf-note { margin: 4px 0 8px; font-size: 12.5px; }
 .conf-note strong { color: var(--ink-2); }
 

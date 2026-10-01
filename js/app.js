@@ -547,17 +547,18 @@ PGRE.toast = function (html, kind, sticky) {
 
 /* ——— Post-answer self-assessment (practice sessions + mistake drills) ———
    A multi-select chip row in the feedback block after every answer:
-   Knew it / Guessed (mutually exclusive) plus Too slow / Forgot something
-   (combine freely with anything). Every tap re-stamps the newest attempt row
-   (srs.setLastAssess) and keeps the lucky-guess bookkeeping in sync, so the
-   chips stay editable until the next question and a mid-session exit loses
-   nothing. Tapping an active chip un-picks it. */
+   Knew it / Guessed (mutually exclusive) plus Too slow / Forgot something /
+   Keep failing (combine freely with anything). Every tap re-stamps the newest
+   attempt row (srs.setLastAssess) and keeps the lucky-guess and keep-failing
+   bookkeeping in sync, so the chips stay editable until the next question and
+   a mid-session exit loses nothing. Tapping an active chip un-picks it. */
 PGRE.assess = (function () {
   var OPTIONS = [
     { key: 'sure',   label: 'Knew it',          kbd: 'K' },
     { key: 'guess',  label: 'Guessed',          kbd: 'G' },
     { key: 'slow',   label: 'Too slow',         kbd: 'T' },
-    { key: 'forgot', label: 'Forgot something', kbd: 'F' }
+    { key: 'forgot', label: 'Forgot something', kbd: 'F' },
+    { key: 'stuck',  label: 'Keep failing',     kbd: 'R' }
   ];
   var LABELS = {};
   OPTIONS.forEach(function (o) { LABELS[o.key] = o.label; });
@@ -566,7 +567,8 @@ PGRE.assess = (function () {
     var h = '<div class="conf-row assess-row" id="assess-row">' +
       '<span class="conf-q">How did it go?</span>';
     OPTIONS.forEach(function (o) {
-      h += '<button type="button" class="focus-chip assess-chip" data-assess="' + o.key +
+      h += '<button type="button" class="focus-chip assess-chip' +
+        (o.key === 'stuck' ? ' assess-stuck' : '') + '" data-assess="' + o.key +
         '" aria-pressed="false">' + o.label +
         (showKeys ? ' <span class="key-hint">' + o.kbd + '</span>' : '') + '</button>';
     });
@@ -579,8 +581,8 @@ PGRE.assess = (function () {
   function bind(container, q, isCorrect) {
     var row = container.querySelector('#assess-row');
     if (!row) return { toggle: function () {} };
-    var on = { sure: false, guess: false, slow: false, forgot: false };
-    var luckyFiled = false;
+    var on = { sure: false, guess: false, slow: false, forgot: false, stuck: false };
+    var luckyFiled = false, stuckFiled = false;
 
     function paint() {
       row.querySelectorAll('[data-assess]').forEach(function (b) {
@@ -590,9 +592,10 @@ PGRE.assess = (function () {
       });
       var note = row.querySelector('#assess-note');
       if (note) {
-        note.textContent = luckyFiled
-          ? 'filed as a lucky guess in your mistake book'
-          : 'pick any that apply';
+        var parts = [];
+        if (luckyFiled) parts.push('filed as a lucky guess in your mistake book');
+        if (stuckFiled) parts.push('flagged keep failing in your mistake book');
+        note.textContent = parts.length ? parts.join(' · ') : 'pick any that apply';
       }
     }
 
@@ -601,6 +604,7 @@ PGRE.assess = (function () {
       var tags = [];
       if (on.slow) tags.push('slow');
       if (on.forgot) tags.push('forgot');
+      if (on.stuck) tags.push('stuck');
       PGRE.srs.setLastAssess(q.id, conf, tags);
     }
 
@@ -620,6 +624,15 @@ PGRE.assess = (function () {
         }
         if (on.sure) PGRE.srs.clearLucky(q.id); // knew it for real — retire stale flags
         if (luckyChanged) PGRE.refreshNavBadges();
+      }
+      // Keep failing applies to any answer — it flags the mistake-book entry
+      // itself (creating one when needed), the way Guessed files a lucky guess.
+      if (on.stuck && !stuckFiled) {
+        PGRE.srs.markStuck(q.id); stuckFiled = true;
+        PGRE.refreshNavBadges();
+      } else if (!on.stuck && stuckFiled) {
+        PGRE.srs.unmarkStuck(q.id); stuckFiled = false;
+        PGRE.refreshNavBadges();
       }
       commit();
       paint();

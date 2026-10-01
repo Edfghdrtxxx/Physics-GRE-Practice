@@ -11,9 +11,10 @@
      against the target pace (state.settings.paceTargetSec), with over/under-pace
      marking in the feedback block.
    - #6 Confidence tagging: after each answer, a one-tap "Knew it / Guessed"
-     (keyboard g / k) that stamps the just-written attempt row and files
-     correct-but-guessed answers as lucky guesses in the mistake book.
-   - #14 Keyboard-first: A–E / 1–5 select, Enter confirms, Enter/Space/N advance, g/k tag. */
+     (keyboard g / k, t / f / r for too slow, forgot, keep failing) that stamps
+     the just-written attempt row and files correct-but-guessed answers as
+     lucky guesses in the mistake book; keep-failing flags the entry directly.
+   - #14 Keyboard-first: A–E / 1–5 select, Enter confirms, Enter/Space/N advance, g/k/t/f/r tag. */
 window.PGRE = window.PGRE || {};
 PGRE.views = PGRE.views || {};
 
@@ -362,7 +363,7 @@ PGRE.views.practice = (function () {
 
   function assessFlags(ans) {
     if (ans.assess) return ans.assess;
-    var flags = { sure: false, guess: false, slow: false, forgot: false };
+    var flags = { sure: false, guess: false, slow: false, forgot: false, stuck: false };
     if (ans.row) {
       if (ans.row.confidence === 'sure') flags.sure = true;
       if (ans.row.confidence === 'guess') flags.guess = true;
@@ -373,7 +374,7 @@ PGRE.views.practice = (function () {
 
   function snapshotAssess(fb, ans) {
     if (!fb || !ans) return;
-    var flags = { sure: false, guess: false, slow: false, forgot: false };
+    var flags = { sure: false, guess: false, slow: false, forgot: false, stuck: false };
     fb.querySelectorAll('[data-assess]').forEach(function (b) {
       var k = b.getAttribute('data-assess');
       if (k in flags) flags[k] = b.getAttribute('aria-pressed') === 'true';
@@ -1336,6 +1337,8 @@ PGRE.views.practice = (function () {
         e.preventDefault(); session.assess.toggle('slow');
       } else if (session.assess && (k === 'f' || k === 'F')) {
         e.preventDefault(); session.assess.toggle('forgot');
+      } else if (session.assess && (k === 'r' || k === 'R')) {
+        e.preventDefault(); session.assess.toggle('stuck');
       }
     } else if (session.stage === 'review') {
       if (k === 'ArrowLeft') {

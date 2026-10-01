@@ -117,16 +117,53 @@ PGRE.srs = {
 
   /* Undo a markLucky from the same feedback screen (the user un-toggled
      "Guessed"). An entry that exists ONLY because of that lucky filing
-     (never missed, never re-solved) is removed outright so no ghost entry
-     lingers in the book; an older entry just loses the flag. */
+     (never missed, never re-solved, not keep-failing) is removed outright so
+     no ghost entry lingers in the book; an older entry just loses the flag. */
   unmarkLucky: function (qid) {
     var s = PGRE.store.state, mk = s.mistakes[qid];
     if (!mk || !mk.lucky) return;
-    if (!mk.misses && !mk.solves) {
+    if (!mk.misses && !mk.solves && !mk.stuck) {
       delete s.mistakes[qid];
     } else {
       delete mk.lucky;
       delete mk.lastLuckyAt;
+      mk.lastTouchedAt = new Date().toISOString();
+    }
+    PGRE.store.save();
+  },
+
+  /* Keep failing — the strongest concern level: the captain keeps missing
+     this one. Same filing mechanism as a lucky guess: flag (or create) the
+     mistake-book entry, reopen an archived one (fresh evidence), and if it
+     isn't already scheduled seed the normal ladder (bottom rung, due
+     tomorrow) so it resurfaces. Intervals are untouched. */
+  markStuck: function (qid) {
+    var s = PGRE.store.state, now = new Date().toISOString();
+    var mk = s.mistakes[qid];
+    if (!mk) {
+      mk = s.mistakes[qid] = { firstMissedAt: now, misses: 0, solves: 0,
+                               wrongPicks: [], archivedAt: null, srs: null };
+    }
+    mk.stuck = true;
+    mk.lastStuckAt = now;
+    mk.lastTouchedAt = now;
+    if (mk.archivedAt) mk.archivedAt = null;
+    if (!mk.srs) this.mistakeMissed(mk);
+    PGRE.store.save();
+    return mk;
+  },
+
+  /* Undo a markStuck (the un-toggled chip or the book's toggle). An entry
+     that exists ONLY because of that filing is removed outright so no ghost
+     entry lingers; an older entry just loses the flag. */
+  unmarkStuck: function (qid) {
+    var s = PGRE.store.state, mk = s.mistakes[qid];
+    if (!mk || !mk.stuck) return;
+    if (!mk.misses && !mk.solves && !mk.lucky) {
+      delete s.mistakes[qid];
+    } else {
+      delete mk.stuck;
+      delete mk.lastStuckAt;
       mk.lastTouchedAt = new Date().toISOString();
     }
     PGRE.store.save();
@@ -179,6 +216,14 @@ PGRE.srs = {
     if (!entries || !entries.length) return entries || [];
     if (!topicId || topicId === 'all') return entries;
     return entries.filter(function (e) { return e.q && e.q.topic === topicId; });
+  },
+
+  /* Narrow a joined mistake list ({qid, q, mk}) to keep-failing entries.
+     'all' / absent leaves the list unchanged; 'stuck' keeps mk.stuck only. */
+  filterByConcern: function (entries, concern) {
+    if (!entries || !entries.length) return entries || [];
+    if (!concern || concern === 'all') return entries;
+    return entries.filter(function (e) { return !!e.mk.stuck; });
   },
 
   /* ——— Formula cards (SM-2 style) ——— */
