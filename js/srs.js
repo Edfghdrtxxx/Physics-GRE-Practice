@@ -316,10 +316,50 @@ PGRE.srs = {
     return now.toString(36) + '-' + Math.random().toString(36).slice(2);
   },
 
+  /* Pin consume and restore are id-level facts. They must not stamp
+     formulaDay._opAt: that stamp makes the whole batch win a cross-tab
+     merge and drops a sibling's added ids, or puts a consumed pin back.
+     fact: { id, op, at, action: 'consumed' | 'restored' } keyed by op. */
+  _recordPinFact: function (id, op, action) {
+    var s = PGRE.store.state;
+    if (!s || !id) return null;
+    if (!s.formulaPinFacts || typeof s.formulaPinFacts !== 'object' || Array.isArray(s.formulaPinFacts)) {
+      s.formulaPinFacts = {};
+    }
+    var now = Date.now();
+    if (now <= (this._pinFactAt || 0)) now = this._pinFactAt + 1;
+    this._pinFactAt = now;
+    var opId = op || this._newReviewOpId();
+    s.formulaPinFacts[opId] = { id: id, op: opId, at: now, action: action };
+    return opId;
+  },
+
+  _latestPinAction: function (id) {
+    var facts = PGRE.store.state && PGRE.store.state.formulaPinFacts;
+    if (!facts || !id) return null;
+    var best = null, bestOp = '';
+    for (var op in facts) {
+      if (!Object.prototype.hasOwnProperty.call(facts, op)) continue;
+      var f = facts[op];
+      if (!f || f.id !== id) continue;
+      var at = Number(f.at) || 0;
+      if (!best || at > best.at || (at === best.at && String(op) > bestOp)) {
+        best = f;
+        bestOp = String(op);
+      }
+    }
+    return best ? best.action : null;
+  },
+
+  _clearSoftHold: function (id) {
+    var st = this.cardState(id);
+    if (st && st.softHold) delete st.softHold;
+  },
+
   /* Drop this id from today's soft pins in the same state update as the
      grade. Returns true when a pin was removed. A refused grade must not
-     call this. */
-  _consumeSoftPin: function (id) {
+     call this. Does not restamp the batch. */
+  _consumeSoftPin: function (id, op) {
     var batch = PGRE.store.state && PGRE.store.state.formulaDay;
     if (!batch || !Array.isArray(batch.softIds) || !batch.softIds.length) return false;
     var next = [], removed = false, i;
@@ -330,11 +370,11 @@ PGRE.srs = {
     if (!removed) return false;
     if (next.length) batch.softIds = next;
     else delete batch.softIds;
-    this._markFormulaDayMutation(batch, 'soft-consume');
+    this._recordPinFact(id, op, 'consumed');
     return true;
   },
 
-  _restoreSoftPin: function (id) {
+  _restoreSoftPin: function (id, op) {
     var batch = PGRE.store.state && PGRE.store.state.formulaDay;
     if (!batch || !id) return;
     var lists = [batch.reviewIds, batch.newIds], inBatch = false, li, i;
@@ -347,7 +387,7 @@ PGRE.srs = {
     if (!Array.isArray(batch.softIds)) batch.softIds = [];
     for (i = 0; i < batch.softIds.length; i++) if (batch.softIds[i] === id) return;
     batch.softIds.push(id);
-    this._markFormulaDayMutation(batch, 'soft-restore');
+    this._recordPinFact(id, op, 'restored');
   },
 
   /* Grade one formula card. Returns the updated card, or null when the
@@ -394,10 +434,13 @@ PGRE.srs = {
     st.lastReviewedAt = new Date().toISOString();
     st.lastReviewedDay = this.today();   // LOCAL date — the studiedToday source of truth
     st.scheme = 'current';
+    // The pre-grade clone still carries softHold. Clear it only on the
+    // card this grade commits, so a snapshot undo keeps the pin's hold.
+    delete st.softHold;
     var op = this._newReviewOpId();
     st.lastReviewOpId = op;
     s.cards[id] = st;
-    var consumedSoft = this._consumeSoftPin(id);
+    var consumedSoft = this._consumeSoftPin(id, op);
     // Append to the capped review log (bundle 2 — stats foundation). Guard: the
     // array may be absent on states saved before this key existed. op names
     // this grade for undoReview; prev is the card before this grade (null if
@@ -449,7 +492,7 @@ PGRE.srs = {
     log.splice(idx, 1);
     if (prev) s.cards[row.id] = prev;
     else delete s.cards[row.id];
-    if (row.soft) this._restoreSoftPin(row.id);
+    if (row.soft) this._restoreSoftPin(row.id, opId);
     return { ok: true, opId: opId, cardId: row.id, card: prev };
   },
 
@@ -475,6 +518,18 @@ PGRE.srs = {
       // scheme 'current' is written by gradeCard. Those intervals already
       // follow the 4-day / final-pass rules and must not be stretched to 10.
       if (!st || st.scheme === 'current' || st.lastGrade !== 'easy' || (st.interval || 0) >= 10) continue;
+      // b7f1d7b (2026-09-07) is the current scheduler: new Easy is 4 days
+      // and the review Easy floor is gone. A card reviewed on or after
+      // that day, even with no scheme field, must not be stretched to 10.
+      var reviewed = st.lastReviewedDay;
+      if (typeof reviewed !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(reviewed)) {
+        reviewed = '';
+        if (typeof st.lastReviewedAt === 'string') {
+          var reviewedAt = new Date(st.lastReviewedAt);
+          if (!isNaN(reviewedAt.getTime())) reviewed = this.dayStr(reviewedAt);
+        }
+      }
+      if (reviewed >= '2026-09-07') continue;
       st.interval = target;
       st.due = this.addDaysTo(st.lastReviewedDay || this.today(), target);
     }
@@ -577,12 +632,22 @@ PGRE.srs = {
     // A partial deck keeps pins whose cards are simply not in this read.
     if (batch.softIds && batch.softIds.length) {
       var beforeS = batch.softIds.length;
-      batch.softIds = batch.softIds.filter(function (id) {
-        if (partial && !inDeck(id)) return true;
-        return inDeck(id) && !isSusp(id) && !self.studiedToday(self.cardState(id));
-      });
-      if (batch.softIds.length !== beforeS) changed = true;
-      if (!batch.softIds.length) delete batch.softIds;
+      var keptSoft = [];
+      for (var si = 0; si < batch.softIds.length; si++) {
+        var sid = batch.softIds[si];
+        if (partial && !inDeck(sid)) { keptSoft.push(sid); continue; }
+        if (inDeck(sid) && !isSusp(sid) && !self.studiedToday(self.cardState(sid))) {
+          keptSoft.push(sid);
+          continue;
+        }
+        // A grade from before the hold existed can still sit in softIds.
+        // Dropping that pin must also drop the hold, or the card returns
+        // on a later queue.
+        if (self.studiedToday(self.cardState(sid))) self._clearSoftHold(sid);
+      }
+      if (keptSoft.length !== beforeS) changed = true;
+      if (keptSoft.length) batch.softIds = keptSoft;
+      else delete batch.softIds;
     }
     var softSet = Object.create(null);
     if (batch.softIds) batch.softIds.forEach(function (id) { softSet[id] = 1; });
@@ -592,6 +657,10 @@ PGRE.srs = {
     // has served its turn. Carry-over keeps never-studied picks, due/overdue
     // reviews, today's again-graded cards (due today) and soft-pinned adds.
     // When a deck source was missing, an id absent from this read is kept.
+    function held(id) {
+      var st = self.cardState(id);
+      return !!(st && st.softHold);
+    }
     function drop(id) {
       if (!inDeck(id)) return !partial;
       if (isSusp(id)) return true;
@@ -600,12 +669,25 @@ PGRE.srs = {
       // today; do not prune a deliberate pick before the allocator can merge in
       // the rest of the learned pool.
       if (self.finalPassActive() && st && !self.studiedToday(st)) return false;
-      return !!st && st.due > t && !softSet[id] && !self.studiedToday(st);
+      // A soft hold is the pin the shipped Undo snapshot still carries.
+      return !!st && st.due > t && !softSet[id] && !held(id) && !self.studiedToday(st);
     }
     var beforeR = batch.reviewIds.length, beforeN = batch.newIds.length;
     batch.reviewIds = batch.reviewIds.filter(function (id) { return !drop(id); });
     batch.newIds = batch.newIds.filter(function (id) { return !drop(id); });
     if (batch.reviewIds.length !== beforeR || batch.newIds.length !== beforeN) changed = true;
+
+    // Put a held id back into softIds without stamping the batch. The fact
+    // is newer than the grade's consume, so a stale copy cannot drop it.
+    function putHoldBack(id) {
+      if (!held(id) || self.studiedToday(self.cardState(id)) || softSet[id]) return;
+      if (!Array.isArray(batch.softIds)) batch.softIds = [];
+      batch.softIds.push(id);
+      softSet[id] = 1;
+      self._recordPinFact(id, null, 'restored');
+    }
+    batch.reviewIds.forEach(putHoldBack);
+    batch.newIds.forEach(putHoldBack);
 
     return changed;
   },
@@ -742,7 +824,7 @@ PGRE.srs = {
   fillFormulaDayFinalPass: function (deck) {
     deck = deck || [];
     if (!deck.length || !this.finalPassActive()) return this.formulaDay(deck);
-    var batch = this.formulaDay(deck), self = this, inBatch = {};
+    var batch = this.formulaDay(deck), self = this, inBatch = Object.create(null);
     batch.reviewIds.concat(batch.newIds).forEach(function (id) { inBatch[id] = 1; });
     var ids = [];
     deck.forEach(function (c) {
@@ -800,7 +882,19 @@ PGRE.srs = {
       seen[id] = 1;
       if (!byId[id]) { skipped.push(id); return; }
       if (self.isSuspended(id)) { self.unsuspendCard(id); changed = true; }
-      if (!softSet[id]) { batch.softIds.push(id); softSet[id] = 1; changed = true; }
+      var heldCard = self.cardState(id);
+      if (heldCard && !self.studiedToday(heldCard) && !heldCard.softHold) {
+        heldCard.softHold = true;
+        changed = true;
+      }
+      if (!softSet[id]) {
+        batch.softIds.push(id);
+        softSet[id] = 1;
+        changed = true;
+        // A later explicit pin beats an earlier consume fact. The first
+        // pin has no fact, so a plain batch remove still drops it.
+        if (self._latestPinAction(id) === 'consumed') self._recordPinFact(id, null, 'restored');
+      }
       if (inBatch[id]) { already.push(id); return; }
       if (self.cardState(id)) batch.reviewIds.push(id);
       else batch.newIds.push(id);
@@ -878,7 +972,7 @@ PGRE.srs = {
       var st = self.cardState(id);
       if (!st || st.due <= t ||
           (self.finalPassActive() && !self.studiedToday(st)) ||
-          (softSet[id] && !self.studiedToday(st))) out.push(c);
+          ((softSet[id] || st.softHold) && !self.studiedToday(st))) out.push(c);
     });
     return out;
   },

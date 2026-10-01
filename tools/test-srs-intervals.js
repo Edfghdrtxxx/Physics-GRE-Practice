@@ -380,6 +380,22 @@ delete store.state.migrations.easy10;
 srs.migrateEasy10();
 assert(store.state.cards.legacy.interval === 10, 'a legacy Easy without scheme is still migrated once');
 assert(store.state.cards.fresh.interval === 4, 'the current-scheme Easy stays 4 while a legacy card is migrated');
+store.state.cards.currentNoScheme = {
+  reps: 1, lapses: 0, interval: 4, ease: 2.5, reviews: 1, lastGrade: 'easy',
+  lastReviewedDay: '2026-10-01', due: '2026-10-05'
+};
+store.state.cards.finalNoScheme = {
+  reps: 1, lapses: 0, interval: 1, ease: 2.5, reviews: 1, lastGrade: 'easy',
+  lastReviewedDay: '2026-09-07', due: '2026-09-08'
+};
+delete store.state.migrations.easy10;
+srs.migrateEasy10();
+assert(store.state.cards.currentNoScheme.interval === 4 &&
+  store.state.cards.currentNoScheme.due === '2026-10-05',
+  'an Easy reviewed on 2026-10-01 is not stretched when scheme is missing');
+assert(store.state.cards.finalNoScheme.interval === 1 &&
+  store.state.cards.finalNoScheme.due === '2026-09-08',
+  'a final-pass Easy reviewed on 2026-09-07 is not stretched when scheme is missing');
 resetStore({ examDate: daysFromNow(1) });
 stampMigrations();
 var finalEasy = srs.gradeCard('final-easy', 'easy');
@@ -448,6 +464,135 @@ store.importJSON(JSON.stringify(shell));
 dayBatch = store.state.formulaDay;
 assert(idCount(dayBatch.reviewIds, 'same') === 0 && idCount(dayBatch.newIds, 'same') === 1,
   'a duplicated id with no card state is kept once on the new list');
+
+console.log('\nA1 a grade does not replace a sibling add, and the pin stays consumed');
+resetStore();
+stampMigrations();
+store.state.cards.pin = {
+  reps: 2, lapses: 0, interval: 10, ease: 2.5, due: srs.addDays(30), reviews: 4,
+  lastReviewedDay: '2020-01-01', lastGrade: 'good'
+};
+store.state.formulaDay = {
+  date: srs.today(), reviewIds: ['pin'], newIds: [], softIds: ['pin'],
+  _opAt: 1000, _opId: 'batch-a', _opKind: 'add'
+};
+store.save();
+var siblingAdd = JSON.parse(localStorage.getItem(store.KEY));
+siblingAdd.formulaDay = {
+  date: srs.today(), reviewIds: ['pin', 'extra'], newIds: ['fresh-add'], softIds: ['pin'],
+  _opAt: 2000, _opId: 'batch-b', _opKind: 'add'
+};
+siblingAdd._rev = (store.state._rev || 0) + 1;
+localStorage.setItem(store.KEY, JSON.stringify(siblingAdd));
+srs.gradeCard('pin', 'good');
+store.save();
+var mergedBatch = JSON.parse(localStorage.getItem(store.KEY)).formulaDay;
+assert(mergedBatch.reviewIds.indexOf('extra') !== -1, 'a missed-event add stays in the batch after the grade');
+assert(mergedBatch.newIds.indexOf('fresh-add') !== -1, 'a missed-event new id stays in the batch after the grade');
+assert(!mergedBatch.softIds || mergedBatch.softIds.indexOf('pin') === -1,
+  'the consumed pin does not come back from the stale batch');
+assert(mergedBatch._opKind !== 'soft-consume', 'the grade does not restamp the batch');
+store.state.cards.pin.lastReviewedDay = '2020-01-01';
+var repinned = srs.addFormulaDaySoft([{ id: 'pin' }, { id: 'extra' }, { id: 'fresh-add' }], ['pin']);
+assert(repinned.batch.softIds && repinned.batch.softIds.indexOf('pin') !== -1,
+  'addFormulaDaySoft can pin that id again after the grade');
+store.save();
+var repinDisk = JSON.parse(localStorage.getItem(store.KEY)).formulaDay;
+assert(repinDisk.softIds && repinDisk.softIds.indexOf('pin') !== -1,
+  'the later pin survives a merge against the consume fact');
+assert(repinDisk.reviewIds.indexOf('extra') !== -1, 'the re-pin keeps the sibling id');
+
+console.log('\nA2 shipped undo still shows a saved soft pin');
+resetStore();
+stampMigrations();
+store.state.cards.pin = {
+  reps: 2, lapses: 0, interval: 10, ease: 2.5, due: '2026-11-20', reviews: 4,
+  lastReviewedDay: '2020-01-01', lastGrade: 'good'
+};
+store.state.cards.studied = {
+  reps: 1, lapses: 0, interval: 5, ease: 2.5, due: srs.addDays(5), reviews: 1,
+  lastReviewedDay: srs.today(), lastGrade: 'good'
+};
+store.state.formulaDay = {
+  date: srs.today(), reviewIds: ['pin', 'studied'], newIds: [], softIds: ['pin', 'studied']
+};
+store.state.cardReviews = [];
+assert(!store.state.cards.pin.softHold, 'the saved pin starts with no hold field');
+assert(store.normalizeRecallState() === true, 'normalize stamps a hold for the saved pin');
+assert(store.state.cards.pin.softHold === true, 'the pin not studied today receives the hold');
+assert(!store.state.cards.studied.softHold, 'normalize does not stamp a card already studied today');
+var preGrade = JSON.parse(JSON.stringify(store.state.cards.pin));
+srs.gradeCard('pin', 'good');
+assert(!store.state.cards.pin.softHold, 'gradeCard clears the hold only on the card it commits');
+assert(preGrade.softHold === true, 'the pre-grade snapshot still has the hold');
+store.state.cards.pin = preGrade;
+var gradeDay = srs.today();
+var reviewLog = store.state.cardReviews;
+for (var ui = reviewLog.length - 1; ui >= 0; ui--) {
+  if (reviewLog[ui] && reviewLog[ui].id === 'pin' && reviewLog[ui].d === gradeDay) {
+    reviewLog.splice(ui, 1);
+    break;
+  }
+}
+store.save();
+sandbox.PGRE.formulaDeckStatus = {
+  partial: false, complete: true, missing: [],
+  sources: { bookFormulas: 'present', formulas: 'present', bookLists: 'present', indexedDB: 'empty' }
+};
+var owedAfterUndo = srs.formulaDayRemaining([{ id: 'pin' }]).map(function (c) { return c.id; });
+assert(owedAfterUndo.indexOf('pin') !== -1,
+  'restoring the snapshot and popping the log row keeps the pin in formulaDayRemaining');
+store.state.cards.studied.softHold = true;
+store.state.formulaDay = {
+  date: srs.today(), reviewIds: ['studied'], newIds: [], softIds: ['studied']
+};
+srs.formulaDay([{ id: 'studied' }]);
+assert(!store.state.cards.studied.softHold, 'the studied-today filter clears the hold');
+assert(!store.state.formulaDay.softIds || store.state.formulaDay.softIds.indexOf('studied') === -1,
+  'the studied-today filter drops that pin');
+
+console.log('\nA3 chained undos rewind a sibling that still has both grades');
+resetStore();
+stampMigrations();
+store.state.cards.chain = {
+  reps: 5, lapses: 0, interval: 10, ease: 2.5, reviews: 5, lastGrade: 'good',
+  due: '2026-10-11', lastReviewedAt: '2026-09-01T00:00:00.000Z'
+};
+var chainGood = srs.gradeCard('chain', 'good');
+var opChainGood = chainGood.lastReviewOpId;
+var chainAgain = srs.gradeCard('chain', 'again');
+var opChainAgain = chainAgain.lastReviewOpId;
+var siblingGrades = JSON.parse(JSON.stringify(store.state));
+var undoAgain = srs.undoReview(opChainAgain);
+var undoGood = srs.undoReview(opChainGood);
+assert(undoAgain && undoAgain.ok === true, 'undo of Again is accepted');
+assert(undoGood && undoGood.ok === true, 'undo of the earlier Good is accepted');
+assert(store.state.cards.chain.reviews === 5 && store.state.cards.chain.due === '2026-10-11',
+  'both undos restore the pre-grade card locally');
+store._mergeFromDisk(siblingGrades);
+assert(store.state.cards.chain && store.state.cards.chain.reviews === 5,
+  'the sibling copy rewinds past the intermediate Good');
+assert(store.state.cards.chain.due === '2026-10-11',
+  'the sibling copy keeps the pre-grade due');
+
+console.log('\nA5 final pass keeps a prototype-name id');
+resetStore({ examDate: daysFromNow(3) });
+stampMigrations();
+store.state.cards['constructor'] = {
+  reps: 1, lapses: 0, interval: 4, ease: 2.5, due: srs.today(), reviews: 1, lastGrade: 'good'
+};
+store.state.cards.keep = {
+  reps: 1, lapses: 0, interval: 4, ease: 2.5, due: srs.today(), reviews: 1, lastGrade: 'good'
+};
+store.state.formulaDay = { date: srs.today(), reviewIds: [], newIds: [] };
+sandbox.PGRE.formulaDeckStatus = {
+  partial: false, complete: true, missing: [],
+  sources: { bookFormulas: 'present', formulas: 'present', bookLists: 'present', indexedDB: 'empty' }
+};
+var finalBatch = srs.fillFormulaDayFinalPass([{ id: 'constructor' }, { id: 'keep' }]);
+assert(finalBatch.reviewIds.indexOf('keep') !== -1, 'final pass still appends an ordinary learned card');
+assert(finalBatch.reviewIds.indexOf('constructor') !== -1,
+  'final pass appends a learned card whose id is constructor');
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

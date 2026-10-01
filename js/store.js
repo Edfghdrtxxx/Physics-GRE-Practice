@@ -248,11 +248,20 @@ PGRE.store = {
     }
     function cardAfterUndo(card) {
       if (!card || !isObj(st.reviewUndos)) return card || null;
-      var op = card.lastReviewOpId;
-      if (!op || !Object.prototype.hasOwnProperty.call(st.reviewUndos, op)) return card;
-      var prev = st.reviewUndos[op] && st.reviewUndos[op].prev;
-      if (!prev) return null;
-      try { return JSON.parse(JSON.stringify(prev)); } catch (eUndo) { return prev; }
+      // Walk while the card's latest op is itself undone. One step leaves
+      // the intermediate grade, and that grade's higher review count then
+      // beats the fully undone card. Depth guard stops a cyclic prev.
+      var cur = card;
+      var guard = 0;
+      while (cur && guard < 16) {
+        var op = cur.lastReviewOpId;
+        if (!op || !Object.prototype.hasOwnProperty.call(st.reviewUndos, op)) return cur;
+        var prev = st.reviewUndos[op] && st.reviewUndos[op].prev;
+        if (!prev) return null;
+        try { cur = JSON.parse(JSON.stringify(prev)); } catch (eUndo) { cur = prev; }
+        guard++;
+      }
+      return cur;
     }
     function applyCardUndos(map) {
       if (!isObj(map)) return;
@@ -414,6 +423,15 @@ PGRE.store = {
     } else if (isObj(disk.formulaDay) && !st.formulaDay) {
       st.formulaDay = disk.formulaDay;
     }
+    // Pin consume/restore are id-level facts, applied after the batch
+    // winner. A sibling add stays. A consumed pin stays consumed when the
+    // winning batch is a stale copy that still lists it. A later restored
+    // fact (explicit re-pin or undo hold) puts that one id back.
+    if (isObj(disk.formulaPinFacts)) {
+      if (!isObj(st.formulaPinFacts)) st.formulaPinFacts = {};
+      this._unionPinFacts(st.formulaPinFacts, disk.formulaPinFacts);
+    }
+    if (isObj(st.formulaDay)) this._applyFormulaPinFacts(st.formulaDay);
     // formulaStudy.done is a count of cards finished, never a completion
     // flag. completed === true (and formulaStudyEnd after a clear) marks a
     // finished session so a stale done:0 snapshot cannot resurrect it.
@@ -576,6 +594,61 @@ PGRE.store = {
     return { changed: changed };
   },
 
+  /* Union pin facts by op id. A later `at` for the same op wins, so a
+     restore of that grade replaces its consume. */
+  _unionPinFacts: function (into, extra) {
+    if (!into || !extra) return;
+    for (var op in extra) {
+      if (!Object.prototype.hasOwnProperty.call(extra, op)) continue;
+      var inc = extra[op];
+      var have = into[op];
+      if (!have || (Number(inc && inc.at) || 0) >= (Number(have && have.at) || 0)) into[op] = inc;
+    }
+  },
+
+  /* Latest fact per card id overrides that id's soft pin on the winning
+     batch. Does not change _opAt. */
+  _applyFormulaPinFacts: function (batch) {
+    var facts = this.state && this.state.formulaPinFacts;
+    if (!batch || !facts) return;
+    var latest = Object.create(null);
+    var latestOp = Object.create(null);
+    for (var op in facts) {
+      if (!Object.prototype.hasOwnProperty.call(facts, op)) continue;
+      var f = facts[op];
+      if (!f || typeof f.id !== 'string' || !f.id) continue;
+      var at = Number(f.at) || 0;
+      var prevAt = latest[f.id] ? (Number(latest[f.id].at) || 0) : -1;
+      if (!latest[f.id] || at > prevAt || (at === prevAt && String(op) > latestOp[f.id])) {
+        latest[f.id] = f;
+        latestOp[f.id] = String(op);
+      }
+    }
+    var inBatch = Object.create(null);
+    var review = Array.isArray(batch.reviewIds) ? batch.reviewIds : [];
+    var fresh = Array.isArray(batch.newIds) ? batch.newIds : [];
+    var i;
+    for (i = 0; i < review.length; i++) inBatch[review[i]] = 1;
+    for (i = 0; i < fresh.length; i++) inBatch[fresh[i]] = 1;
+    var soft = Array.isArray(batch.softIds) ? batch.softIds.slice() : [];
+    var softSet = Object.create(null);
+    for (i = 0; i < soft.length; i++) softSet[soft[i]] = 1;
+    for (var id in latest) {
+      if (!Object.prototype.hasOwnProperty.call(latest, id)) continue;
+      var fact = latest[id];
+      if (fact.action === 'consumed') {
+        if (!softSet[id]) continue;
+        soft = soft.filter(function (x) { return x !== id; });
+        delete softSet[id];
+      } else if (fact.action === 'restored' && inBatch[id] && !softSet[id]) {
+        soft.push(id);
+        softSet[id] = 1;
+      }
+    }
+    if (soft.length) batch.softIds = soft;
+    else delete batch.softIds;
+  },
+
   /* Repair nested recall records in place. A card with no usable due is
      given one (from its own review day + interval when both exist, else
      today) and noted on formulaQuarantine. The card is not deleted.
@@ -638,6 +711,28 @@ PGRE.store = {
       changed = true;
     } else if (this._normalizeFormulaDayArrays(st.formulaDay, st.cards).changed) {
       changed = true;
+    }
+    // Pins saved before softHold existed get the hold here, so the study
+    // Undo snapshot (taken before gradeCard) still carries it. A card
+    // already studied today is left alone: stamping it would put the card
+    // back after the studied-today filter drops the pin.
+    if (st.formulaDay && Array.isArray(st.formulaDay.softIds)) {
+      for (var hi = 0; hi < st.formulaDay.softIds.length; hi++) {
+        var hid = st.formulaDay.softIds[hi];
+        if (!st.cards || !Object.prototype.hasOwnProperty.call(st.cards, hid)) continue;
+        var held = st.cards[hid];
+        if (!held || typeof held !== 'object' || Array.isArray(held)) continue;
+        if (held.softHold) continue;
+        var studied = false;
+        if (typeof held.lastReviewedDay === 'string' && held.lastReviewedDay) {
+          studied = held.lastReviewedDay === today;
+        } else if (PGRE.srs && typeof PGRE.srs.studiedToday === 'function') {
+          studied = PGRE.srs.studiedToday(held);
+        }
+        if (studied) continue;
+        held.softHold = true;
+        changed = true;
+      }
     }
     if (st.formulaStudy == null) {
       /* no session */
@@ -874,6 +969,7 @@ PGRE.store = {
     this.state.formulaStudyEnd = null;
     this.state.formulaSuspended = {};
     this.state.reviewUndos = {};
+    this.state.formulaPinFacts = {};
     this.state.formulaQuarantine = [];
     this.state.tombstones = {};
     this.state._epoch = this._maxEpoch() + 1; // deletions must not merge back
