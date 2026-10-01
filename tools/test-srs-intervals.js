@@ -711,5 +711,200 @@ var owedRemoved = srs.formulaDayRemaining(deckHold).map(function (c) { return c.
 assert(owedRemoved.indexOf('pin') === -1,
   'after the final pass ends a removed pin is not owed');
 
+function latestPin(id) {
+  var consumedAt = pinFactAt(id, 'consumed');
+  var restoredAt = pinFactAt(id, 'restored');
+  if (!consumedAt && !restoredAt) return null;
+  return restoredAt > consumedAt ? 'restored' : 'consumed';
+}
+function listed(batch, id) {
+  if (!batch) return false;
+  if (batch.reviewIds && batch.reviewIds.indexOf(id) !== -1) return true;
+  if (batch.newIds && batch.newIds.indexOf(id) !== -1) return true;
+  return false;
+}
+function softListed(batch, id) {
+  return !!(batch && batch.softIds && batch.softIds.indexOf(id) !== -1);
+}
+function owedHas(deck, id) {
+  return srs.formulaDayRemaining(deck).map(function (c) { return c.id; }).indexOf(id) !== -1;
+}
+function futureCard(id, due) {
+  store.state.cards[id] = {
+    reps: 2, lapses: 0, interval: 10, ease: 2.5, due: due || '2026-11-20', reviews: 4,
+    lastReviewedDay: '2020-01-01', lastGrade: 'good'
+  };
+}
+
+console.log('\nC unchecking a re-pinned card consumes the pin across a merge');
+function cMerge(deck) {
+  var copy = JSON.parse(JSON.stringify(store.state));
+  copy._rev = (store.state._rev || 0) + 1;
+  store._mergeFromDisk(copy);
+  assert(!softListed(store.state.formulaDay, 'pin'),
+    'the merge does not soft-pin the removed card during the final week');
+  assert(owedHas(deck, 'pin'), 'final pass still owes the removed card while the week is on');
+  store.state.settings.examDate = '2027-06-01';
+  assert(!srs.finalPassActive(), 'moving the exam to 2027-06-01 ends the final pass');
+  assert(!owedHas(deck, 'pin'), 'after the week the removed card is not owed');
+  assert(!softListed(store.state.formulaDay, 'pin'),
+    'after the week the removed card is not soft-pinned');
+}
+resetStore();
+stampMigrations();
+completeDeck();
+futureCard('pin');
+store.state.cards.other = {
+  reps: 1, lapses: 0, interval: 4, ease: 2.5, due: srs.today(), reviews: 1, lastGrade: 'good'
+};
+store.state.cards.keep = {
+  reps: 2, lapses: 0, interval: 10, ease: 2.5, due: '2026-11-20', reviews: 3,
+  lastReviewedDay: '2020-01-01', lastGrade: 'good'
+};
+var deckC = [{ id: 'pin' }, { id: 'other' }, { id: 'keep' }];
+store.state.formulaDay = {
+  date: srs.today(), reviewIds: ['pin'], newIds: [], softIds: ['pin'],
+  _opAt: 1000, _opId: 'c-grade', _opKind: 'add'
+};
+srs.gradeCard('pin', 'good');
+store.state.cards.pin.lastReviewedDay = '2020-01-01';
+srs.setFormulaDayPicks(deckC, ['pin', 'keep']);
+assert(latestPin('pin') === 'restored', 'picker Save of the graded card records restored');
+assert(store.state.cards.pin.softHold === true, 'picker Save stamps a hold on the pin it keeps');
+assert(latestPin('keep') === null, 'a first pin that stays has no pin fact');
+srs.setFormulaDayPicks(deckC, ['other', 'keep']);
+assert(latestPin('pin') === 'consumed', 'unchecking the restored pin records consumed');
+assert(latestPin('keep') === null, 'a pin that stays is not given a consumed fact');
+assert(store.state.cards.keep.softHold === true, 'a pin that stays keeps its hold');
+assert(!store.state.cards.pin.softHold, 'unchecking the restored pin clears its hold');
+assert(!listed(store.state.formulaDay, 'pin'), 'the unchecked pin leaves the batch');
+store.state.settings.examDate = daysFromNow(3);
+assert(srs.finalPassActive(), 'the merge sequence starts with final pass on');
+srs.fillFormulaDayFinalPass(deckC);
+cMerge(deckC);
+
+resetStore();
+stampMigrations();
+completeDeck();
+futureCard('pin');
+var deckRemove = [{ id: 'pin' }];
+store.state.formulaDay = {
+  date: srs.today(), reviewIds: ['pin'], newIds: [], softIds: ['pin'],
+  _opAt: 1000, _opId: 'c-remove', _opKind: 'add'
+};
+srs.gradeCard('pin', 'good');
+store.state.cards.pin.lastReviewedDay = '2020-01-01';
+srs.setFormulaDayPicks(deckRemove, ['pin']);
+srs.removeFormulaDaySoft(deckRemove, ['pin']);
+assert(latestPin('pin') === 'consumed', 'removeFormulaDaySoft records consumed for a restored pin');
+assert(!store.state.cards.pin.softHold, 'removeFormulaDaySoft still clears the hold');
+assert(!listed(store.state.formulaDay, 'pin'), 'removeFormulaDaySoft takes the restored pin off the batch');
+store.state.settings.examDate = daysFromNow(3);
+srs.fillFormulaDayFinalPass(deckRemove);
+cMerge(deckRemove);
+
+console.log('\nT soft pin, pin fact, and hold transitions');
+function tRow(name, deck, id, exp) {
+  srs.formulaDay(deck);
+  var batch = store.state.formulaDay;
+  var card = store.state.cards[id];
+  var got = [
+    listed(batch, id) ? 1 : 0,
+    softListed(batch, id) ? 1 : 0,
+    card && card.softHold ? 1 : 0,
+    latestPin(id) || '-',
+    owedHas(deck, id) ? 1 : 0
+  ].join(' ');
+  assert(got === exp, name + ' [' + got + ']');
+}
+resetStore();
+stampMigrations();
+completeDeck();
+futureCard('pin');
+futureCard('stay');
+var deckT = [{ id: 'pin' }, { id: 'stay' }];
+// batch soft hold fact owed
+var transitions = [
+  function () {
+    srs.addFormulaDaySoft(deckT, ['pin']);
+    tRow('add first pin', deckT, 'pin', '1 1 1 - 1');
+  },
+  function () {
+    srs.gradeCard('pin', 'good');
+    tRow('grade consumes the pin and clears the live hold', deckT, 'pin', '1 0 0 consumed 0');
+  },
+  function () {
+    var op = store.state.cards.pin.lastReviewOpId;
+    var undone = srs.undoReview(op);
+    assert(undone && undone.ok === true, 'undoReview of that grade is accepted');
+    tRow('undoReview restores the pin and the hold', deckT, 'pin', '1 1 1 restored 1');
+  },
+  function () {
+    srs.gradeCard('pin', 'good');
+    store.state.cards.pin.lastReviewedDay = '2020-01-01';
+    srs.addFormulaDaySoft(deckT, ['pin', 'stay']);
+    tRow('add after a consume records restored and a hold', deckT, 'pin', '1 1 1 restored 1');
+    tRow('a first pin added beside it has a hold and no fact', deckT, 'stay', '1 1 1 - 1');
+  },
+  function () {
+    srs.setFormulaDayPicks(deckT, ['pin', 'stay']);
+    tRow('picker keeps a restored pin', deckT, 'pin', '1 1 1 restored 1');
+    tRow('picker keeps the other pin', deckT, 'stay', '1 1 1 - 1');
+  },
+  function () {
+    srs.removeFormulaDaySoft(deckT, ['pin']);
+    tRow('remove of a restored pin consumes it', deckT, 'pin', '0 0 0 consumed 0');
+    tRow('remove of one pin leaves the other', deckT, 'stay', '1 1 1 - 1');
+  },
+  function () {
+    store.state.cards.pin.lastReviewedDay = '2020-01-01';
+    srs.setFormulaDayPicks(deckT, ['pin', 'stay']);
+    tRow('picker re-pin of a consumed id restores it and stamps a hold', deckT, 'pin', '1 1 1 restored 1');
+  },
+  function () {
+    var pre = JSON.parse(JSON.stringify(store.state.cards.pin));
+    srs.gradeCard('pin', 'good');
+    store.state.cards.pin = pre;
+    var log = store.state.cardReviews;
+    for (var i = log.length - 1; i >= 0; i--) {
+      if (log[i] && log[i].id === 'pin') { log.splice(i, 1); break; }
+    }
+    store.save();
+    tRow('shipped undo after a picker pin still owes the card', deckT, 'pin', '1 1 1 restored 1');
+  },
+  function () {
+    srs.setFormulaDayPicks(deckT, ['stay']);
+    tRow('picker uncheck consumes the restored pin', deckT, 'pin', '0 0 0 consumed 0');
+    tRow('picker uncheck does not consume the pin that stays', deckT, 'stay', '1 1 1 - 1');
+  },
+  function () {
+    store.state.settings.examDate = daysFromNow(3);
+    srs.fillFormulaDayFinalPass(deckT);
+    tRow('final pass appends the consumed card without soft-pinning it', deckT, 'pin', '1 0 0 consumed 1');
+  },
+  function () {
+    var stale = JSON.parse(JSON.stringify(store.state));
+    stale.formulaDay = {
+      date: srs.today(),
+      reviewIds: ['pin', 'later'],
+      newIds: [],
+      softIds: ['pin'],
+      _opAt: (Number(store.state.formulaDay._opAt) || 0) + 5000,
+      _opId: 't-stale-newer',
+      _opKind: 'add'
+    };
+    stale._rev = (store.state._rev || 0) + 1;
+    store._mergeFromDisk(stale);
+    assert(listed(store.state.formulaDay, 'later'), 'a newer stale batch keeps its extra id');
+    tRow('a newer stale batch does not restore a consumed pin', deckT, 'pin', '1 0 0 consumed 1');
+  },
+  function () {
+    store.state.settings.examDate = '2027-06-01';
+    tRow('after the week the consumed card is not owed', deckT, 'pin', '0 0 0 consumed 0');
+    tRow('a newer batch that dropped the other pin cleared its hold', deckT, 'stay', '0 0 0 - 0');
+  }
+];
+for (var ti = 0; ti < transitions.length; ti++) transitions[ti]();
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);
