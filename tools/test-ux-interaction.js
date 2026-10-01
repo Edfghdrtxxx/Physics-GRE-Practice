@@ -673,22 +673,23 @@ function loadShipped(reduced, opts) {
       unmarkLucky: function () {},
       clearLucky: function () {},
       /* Same filing contract as the shipped markStuck/unmarkStuck: flag or
-         create the entry, reopen an archived one; unmarking a flag-only entry
-         removes it so no ghost lingers. */
+         create the entry, reopen an archived one; unmarking removes a filing
+         whose schedule exists only because of this flag (stuckSole) while
+         misses, solves and lucky stay empty, so no ghost lingers. */
       markStuck: function (qid) {
         var mk = pgre.store.state.mistakes[qid] ||
           (pgre.store.state.mistakes[qid] = { firstMissedAt: 'now', misses: 0,
             solves: 0, wrongPicks: [], archivedAt: null, srs: null });
         mk.stuck = true;
         mk.archivedAt = null;
-        if (!mk.srs) mk.srs = { step: 0, due: '2026-09-08' };
+        if (!mk.srs) { mk.srs = { step: 0, due: '2026-09-08' }; mk.stuckSole = true; }
         return mk;
       },
       unmarkStuck: function (qid) {
         var mk = pgre.store.state.mistakes[qid];
         if (!mk || !mk.stuck) return;
-        if (!mk.misses && !mk.solves && !mk.lucky) delete pgre.store.state.mistakes[qid];
-        else { delete mk.stuck; delete mk.lastStuckAt; }
+        if (mk.stuckSole && !mk.misses && !mk.solves && !mk.lucky) delete pgre.store.state.mistakes[qid];
+        else { delete mk.stuck; delete mk.lastStuckAt; delete mk.stuckSole; }
       },
       MISTAKE_LADDER: [1, 3, 7, 14, 30, 60],
       setFormulaDayPicks: function () {},
@@ -1209,6 +1210,36 @@ assert(MP.store.state.mistakes['pq1'] && MP.store.state.mistakes['pq1'].stuck !=
   'un-toggling from the book clears the flag but keeps a real miss in the book');
 assert(mx.document.querySelectorAll('#mistakes-root .miss-card').length === 1,
   'the filter narrows the book as soon as a flag is cleared');
+
+/* Keep failing must never eat a ladder it did not create. */
+MP.store.state.mistakes['pq3'] = { firstMissedAt: '2026-09-01', misses: 0,
+  solves: 0, wrongPicks: [], archivedAt: null,
+  srs: { step: 3, due: '2026-11-01' } };
+MP.srs.markStuck('pq3');
+assert(MP.store.state.mistakes['pq3'].srs.step === 3 &&
+       MP.store.state.mistakes['pq3'].srs.due === '2026-11-01',
+  'markStuck leaves a pre-existing ladder alone');
+MP.srs.unmarkStuck('pq3');
+assert(MP.store.state.mistakes['pq3'] &&
+       MP.store.state.mistakes['pq3'].srs.step === 3 &&
+       MP.store.state.mistakes['pq3'].srs.due === '2026-11-01' &&
+       MP.store.state.mistakes['pq3'].stuck !== true,
+  'unmarkStuck keeps an entry that already had a ladder (step 3 intact, flag cleared)');
+
+MP.srs.markLucky('pq4');
+MP.srs.clearLucky('pq4');
+MP.srs.markStuck('pq4');
+MP.srs.unmarkStuck('pq4');
+assert(MP.store.state.mistakes['pq4'] &&
+       MP.store.state.mistakes['pq4'].srs &&
+       MP.store.state.mistakes['pq4'].srs.step === 0 &&
+       MP.store.state.mistakes['pq4'].stuck !== true,
+  'unmarkStuck keeps the step-0 ladder markLucky seeded (flag cleared)');
+
+MP.srs.markStuck('pq5');
+MP.srs.unmarkStuck('pq5');
+assert(!MP.store.state.mistakes['pq5'],
+  'unmarkStuck still removes an entry this flag created (no ghost)');
 
 console.log('\nPGRE.ui.bindChoiceCommit');
 var ui = env.window.PGRE.ui;

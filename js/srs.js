@@ -148,22 +148,32 @@ PGRE.srs = {
     mk.lastStuckAt = now;
     mk.lastTouchedAt = now;
     if (mk.archivedAt) mk.archivedAt = null;
-    if (!mk.srs) this.mistakeMissed(mk);
+    if (!mk.srs) {
+      this.mistakeMissed(mk);
+      /* This flag seeded the schedule — either on a fresh entry or on a
+         flag-only shell with no ladder. Remember it: unmarkStuck may delete
+         only such a filing, never an entry that had a ladder of its own. */
+      mk.stuckSole = true;
+    }
     PGRE.store.save();
     return mk;
   },
 
   /* Undo a markStuck (the un-toggled chip or the book's toggle). An entry
-     that exists ONLY because of that filing is removed outright so no ghost
-     entry lingers; an older entry just loses the flag. */
+     whose schedule exists ONLY because of that filing (stuckSole: markStuck
+     created the entry or seeded its ladder) is removed outright while
+     misses, solves and lucky stay empty, so no ghost entry lingers; an entry
+     with its own ladder — even a step-0 one, or one markLucky seeded — just
+     loses the flag and keeps its step and due date. */
   unmarkStuck: function (qid) {
     var s = PGRE.store.state, mk = s.mistakes[qid];
     if (!mk || !mk.stuck) return;
-    if (!mk.misses && !mk.solves && !mk.lucky) {
+    if (mk.stuckSole && !mk.misses && !mk.solves && !mk.lucky) {
       delete s.mistakes[qid];
     } else {
       delete mk.stuck;
       delete mk.lastStuckAt;
+      delete mk.stuckSole;
       mk.lastTouchedAt = new Date().toISOString();
     }
     PGRE.store.save();
