@@ -63,7 +63,8 @@ PGRE.store = {
       sessions: [],
       // mistake book: qid -> { firstMissedAt, lastMissedAt, lastPick, wrongPicks[],
       //   misses, solves, srs: { step, due }, archivedAt, lastTouchedAt } — permanent until
-      //   archived; a correct-but-guessed answer may add lucky: true
+      //   archived; a correct-but-guessed answer may add lucky: true, and the
+      //   keep-failing tag (assess chip or the book's own toggle) adds stuck: true
       mistakes: {},
       // mock-exam sessions (engine: js/exam-engine.js), newest last:
       // { id, startedAt, submittedAt, format: '70x120'|'100x170',

@@ -597,6 +597,8 @@ function loadShipped(reduced, opts) {
         cardReviews: [],
         cardNotes: {},
         questions: {},
+        attempts: [],
+        mistakes: {},
         flags: {},
         formulaStudy: null,
         formulaStudyEnd: null,
@@ -670,6 +672,26 @@ function loadShipped(reduced, opts) {
       markLucky: function () {},
       unmarkLucky: function () {},
       clearLucky: function () {},
+      /* Same filing contract as the shipped markStuck/unmarkStuck: flag or
+         create the entry, reopen an archived one; unmarking removes a filing
+         whose schedule exists only because of this flag (stuckSole) while
+         misses, solves and lucky stay empty, so no ghost lingers. */
+      markStuck: function (qid) {
+        var mk = pgre.store.state.mistakes[qid] ||
+          (pgre.store.state.mistakes[qid] = { firstMissedAt: 'now', misses: 0,
+            solves: 0, wrongPicks: [], archivedAt: null, srs: null });
+        mk.stuck = true;
+        mk.archivedAt = null;
+        if (!mk.srs) { mk.srs = { step: 0, due: '2026-09-08' }; mk.stuckSole = true; }
+        return mk;
+      },
+      unmarkStuck: function (qid) {
+        var mk = pgre.store.state.mistakes[qid];
+        if (!mk || !mk.stuck) return;
+        if (mk.stuckSole && !mk.misses && !mk.solves && !mk.lucky) delete pgre.store.state.mistakes[qid];
+        else { delete mk.stuck; delete mk.lastStuckAt; delete mk.stuckSole; }
+      },
+      MISTAKE_LADDER: [1, 3, 7, 14, 30, 60],
       setFormulaDayPicks: function () {},
       addFormulaDaySoft: function () {},
       removeFormulaDaySoft: function () {},
@@ -1097,6 +1119,10 @@ assert(assess && typeof assess.html === 'function' && typeof assess.bind === 'fu
 var assessHtml = assess.html(true);
 assert(/id="assess-row"/.test(assessHtml), 'assess.html() contains #assess-row');
 assert(/data-assess/.test(assessHtml), 'assess.html() contains data-assess chips');
+assert(assessHtml.indexOf('data-assess="stuck"') !== -1 &&
+       assessHtml.indexOf('Keep failing') !== -1 &&
+       assessHtml.indexOf('assess-stuck') !== -1,
+  'assess.html() renders a Keep failing chip');
 
 var box = env.document.createElement('div');
 box.innerHTML = assessHtml;
@@ -1111,6 +1137,109 @@ assert(sure.getAttribute('aria-pressed') === 'true' && sure.classList.contains('
 assert(guess.getAttribute('aria-pressed') === 'false', 'click leaves Guessed unpressed');
 ctrl.toggle('sure');
 assert(sure.getAttribute('aria-pressed') === 'false', 'bind().toggle still shares the click path');
+
+var stuckChipEl = box.querySelector('[data-assess="stuck"]');
+assert(!!stuckChipEl, 'bind() finds the Keep failing chip');
+stuckChipEl.click();
+assert(stuckChipEl.getAttribute('aria-pressed') === 'true' &&
+       stuckChipEl.classList.contains('active'),
+  'click on Keep failing sets aria-pressed/active like the other tags');
+assert(env.window.PGRE.store.state.mistakes['q-ux-1'] &&
+       env.window.PGRE.store.state.mistakes['q-ux-1'].stuck === true,
+  'selecting Keep failing files the question into state.mistakes');
+assert((box.querySelector('#assess-note') || {}).textContent.indexOf('keep failing') !== -1,
+  'the note confirms the keep-failing filing');
+stuckChipEl.click();
+assert(!env.window.PGRE.store.state.mistakes['q-ux-1'],
+  'un-picking Keep failing removes a flag-only entry (no ghost)');
+
+/* ——— Keep failing in the shipped mistake-book view ———
+   A fresh env running the shipped srs.js + view-mistakes.js: the assess chip
+   flags the record, the book renders its chip + per-entry toggle, and the
+   Keep failing filter narrows the list to flagged entries. */
+console.log('\nkeep failing in the mistake book (shipped view-mistakes.js)');
+var mx = loadShipped(true, { views: true });
+vm.runInContext(fs.readFileSync(path.join(root, 'js/srs.js'), 'utf8'), mx.sandbox,
+  { filename: 'js/srs.js' });
+vm.runInContext(fs.readFileSync(path.join(root, 'js/view-mistakes.js'), 'utf8'), mx.sandbox,
+  { filename: 'js/view-mistakes.js' });
+var MP = mx.sandbox.PGRE;
+var mbox = mx.document.createElement('div');
+mbox.innerHTML = MP.assess.html(false);
+mx.document.body.appendChild(mbox);
+var mctrl = MP.assess.bind(mbox, { id: 'pq1' }, false);
+MP.store.state.attempts.push({ qid: 'pq1', correct: false });   // the row setLastAssess re-stamps
+mctrl.toggle('stuck');
+assert(MP.store.state.mistakes['pq1'] && MP.store.state.mistakes['pq1'].stuck === true,
+  'shipped markStuck files the assess toggle into the mistake book');
+assert(MP.store.state.attempts[MP.store.state.attempts.length - 1].tags.indexOf('stuck') !== -1,
+  'the keep-failing tag is stamped on the attempt row with the other tags');
+MP.store.state.mistakes['pq2'] = { firstMissedAt: '2026-09-05', lastMissedAt: '2026-09-06',
+  misses: 1, solves: 0, wrongPicks: [0], lastPick: 0, archivedAt: null,
+  srs: { step: 0, due: '2026-09-08' } };
+var mview = ensureView(mx, MP.views.mistakes.render());
+MP.views.mistakes.mount();
+var mroot = mx.document.getElementById('mistakes-root');
+assert(!!mroot, 'mistake book mounted');
+assert(mroot.querySelectorAll('.miss-card').length === 2,
+  'both entries render before any concern filter');
+assert(mroot.querySelectorAll('.stuck-chip').length === 1,
+  'only the flagged entry shows the keep failing chip');
+assert(mroot.querySelectorAll('[data-stuck]').length === 2,
+  'every entry carries the Keep failing toggle');
+var concernChip = mroot.querySelector('[data-concern="stuck"]');
+assert(!!concernChip, 'the Keep failing filter chip renders');
+var toggles = mroot.querySelectorAll('[data-stuck]');
+for (var ti = 0; ti < toggles.length; ti++) {
+  if (toggles[ti].getAttribute('data-stuck') === 'pq2') { toggles[ti].click(); break; }
+}
+assert(MP.store.state.mistakes['pq2'].stuck === true,
+  'the per-entry Keep failing button flags the record');
+assert(mx.document.querySelectorAll('#mistakes-root .stuck-chip').length === 2,
+  'the book re-renders with both entries flagged');
+mx.document.querySelector('#mistakes-root [data-concern="stuck"]').click();
+assert(mx.document.querySelectorAll('#mistakes-root .miss-card').length === 2 &&
+       mx.document.querySelectorAll('#mistakes-root .stuck-chip').length === 2,
+  'the Keep failing filter keeps both flagged entries');
+MP.store.state.mistakes['pq1'].misses = 1;   // a real miss: un-flagging must keep the entry
+var pq1Toggle = mx.document.querySelectorAll('#mistakes-root [data-stuck]');
+for (var tj = 0; tj < pq1Toggle.length; tj++) {
+  if (pq1Toggle[tj].getAttribute('data-stuck') === 'pq1') { pq1Toggle[tj].click(); break; }
+}
+assert(MP.store.state.mistakes['pq1'] && MP.store.state.mistakes['pq1'].stuck !== true,
+  'un-toggling from the book clears the flag but keeps a real miss in the book');
+assert(mx.document.querySelectorAll('#mistakes-root .miss-card').length === 1,
+  'the filter narrows the book as soon as a flag is cleared');
+
+/* Keep failing must never eat a ladder it did not create. */
+MP.store.state.mistakes['pq3'] = { firstMissedAt: '2026-09-01', misses: 0,
+  solves: 0, wrongPicks: [], archivedAt: null,
+  srs: { step: 3, due: '2026-11-01' } };
+MP.srs.markStuck('pq3');
+assert(MP.store.state.mistakes['pq3'].srs.step === 3 &&
+       MP.store.state.mistakes['pq3'].srs.due === '2026-11-01',
+  'markStuck leaves a pre-existing ladder alone');
+MP.srs.unmarkStuck('pq3');
+assert(MP.store.state.mistakes['pq3'] &&
+       MP.store.state.mistakes['pq3'].srs.step === 3 &&
+       MP.store.state.mistakes['pq3'].srs.due === '2026-11-01' &&
+       MP.store.state.mistakes['pq3'].stuck !== true,
+  'unmarkStuck keeps an entry that already had a ladder (step 3 intact, flag cleared)');
+
+MP.srs.markLucky('pq4');
+MP.srs.clearLucky('pq4');
+MP.srs.markStuck('pq4');
+MP.srs.unmarkStuck('pq4');
+assert(MP.store.state.mistakes['pq4'] &&
+       MP.store.state.mistakes['pq4'].srs &&
+       MP.store.state.mistakes['pq4'].srs.step === 0 &&
+       MP.store.state.mistakes['pq4'].stuck !== true,
+  'unmarkStuck keeps the step-0 ladder markLucky seeded (flag cleared)');
+
+MP.srs.markStuck('pq5');
+MP.srs.unmarkStuck('pq5');
+assert(!MP.store.state.mistakes['pq5'],
+  'unmarkStuck still removes an entry this flag created (no ghost)');
 
 console.log('\nPGRE.ui.bindChoiceCommit');
 var ui = env.window.PGRE.ui;
