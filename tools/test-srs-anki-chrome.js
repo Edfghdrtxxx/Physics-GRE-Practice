@@ -303,7 +303,7 @@ async function main() {
     capOn: PGRE.store.state.settings.formulaExamCap
   })`);
   if (toggled.capOn !== false) throw new Error('toggle did not turn cap off');
-  if (toggled.toggle !== 'Classic Anki (uncapped)') {
+  if (toggled.toggle !== 'Uncapped outside final pass') {
     throw new Error('toggle off text: ' + JSON.stringify(toggled.toggle));
   }
   await evaluate("document.getElementById('exam-cap-toggle').click()");

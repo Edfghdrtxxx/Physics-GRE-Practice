@@ -47,7 +47,7 @@ PGRE.formulaSearch = (function () {
      weight says how trustworthy that kind of match is. One term's score is the
      product of the two, so an exact hit on the tag beats a fuzzy hit in the
      variable glossary by a wide margin. */
-  var FIELD_W = { name: 5, eq: 4.5, front: 3, back: 2.6, mnem: 2.2, topic: 2, note: 1.6 };
+  var FIELD_W = { name: 5, tag: 5, eq: 4.5, front: 3, back: 2.6, mnem: 2.2, topic: 2, note: 1.6 };
   var KIND_W = {
     exact: 1, acronym: 0.9, prefix: 0.8, stem: 0.72, substr: 0.6,
     synonym: 0.55, equation: 1.1, fuzzy: 0.34
@@ -313,6 +313,9 @@ PGRE.formulaSearch = (function () {
     var mnem = (notes && notes[c.id] && notes[c.id].text) || '';
     var f = {
       name: plain(cardName(c)).toLowerCase(),
+      // Section tag is its own field. cardName() prefers name, so a tag:
+      // query must not depend on the display name containing the section.
+      tag: plain(c && c.tag).toLowerCase(),
       eq: String(c.eq || '').toLowerCase(),
       front: plain(c.front).toLowerCase(),
       back: plain(c.back).toLowerCase(),
@@ -336,7 +339,7 @@ PGRE.formulaSearch = (function () {
     return {
       card: c, id: c.id, topic: c.topic || '', tag: cardName(c), eq: String(c.eq || ''),
       f: f, tok: tok, stems: stems, toks: list,
-      initials: initialsOf([cardName(c), t ? t.name : '']),
+      initials: initialsOf([cardName(c), c && c.tag, t ? t.name : '']),
       sig: sig, sigLoose: sig.replace(/[\^_]/g, ''),
       hay: f.name + ' ' + f.topic + ' ' + f.front + ' ' + f.back + ' ' + f.note + ' ' + f.mnem
     };
@@ -667,7 +670,10 @@ PGRE.formulaSearch = (function () {
 
     var pool = index.records.filter(function (r) {
       if (topic && r.topic !== topic) return false;
-      if (q.tag && r.f.name.indexOf(q.tag) === -1) return false;
+      // tag: matches the section tag. The display name stays a compatibility
+      // alias so older queries that named the card still hit.
+      if (q.tag && (r.f.tag || '').indexOf(q.tag) === -1 &&
+          (r.f.name || '').indexOf(q.tag) === -1) return false;
       // eq:1.3 means that equation; eq:1 means all of chapter 1
       if (q.eq) {
         var re = String(r.eq).toLowerCase();

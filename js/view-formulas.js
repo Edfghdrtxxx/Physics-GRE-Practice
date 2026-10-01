@@ -29,6 +29,9 @@ PGRE.views.formulas = (function () {
   var browseTab = 'learned'; // Browse sub-tab: 'learned' | 'upcoming'
   var memStatsOpen = false;  // F10: Memory stats card starts collapsed each mount
   var studyFromFill = false;  // one-shot: dashboard CTA starts Study, not picker
+  var studySeq = 0;
+  var sessionHeld = false;     // partial deck: do not shorten a saved session
+  var lastDeckStatus = null;   // formulaDeckStatus from the load that filled `deck`
   var ROUND_SIZE = 10;   // F11: grade presses per round (every press counts)
   // Classic Anki SM-2: four grades. (A legacy 'mastered' value may still
   // appear in cardReviews / lastGrade from older sessions; history chips
@@ -202,7 +205,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20260930a';
+      s.src = 'js/flashmodes.js?v=20261001g';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -218,7 +221,7 @@ PGRE.views.formulas = (function () {
     if (searchLoad) return searchLoad;
     searchLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/formula-search.js?v=20260929b';
+      s.src = 'js/formula-search.js?v=20261001g';
       s.onload = function () { resolve(); };
       s.onerror = function () { searchLoad = null; searchFailed = true; resolve(); };
       document.head.appendChild(s);
@@ -258,7 +261,8 @@ PGRE.views.formulas = (function () {
     var capOn = PGRE.store.state.settings.formulaExamCap !== false;
     html += '<div class="direction-row"><span class="exam-day-label">Intervals</span>' +
       '<button class="btn btn-ghost btn-sm" id="exam-cap-toggle">' +
-      (capOn ? 'Capped to exam day' : 'Classic Anki (uncapped)') + '</button></div>';
+      (capOn ? 'Capped to exam day' : 'Uncapped outside final pass') + '</button></div>' +
+      '<p class="muted">Final-pass week still uses 1-day intervals.</p>';
     // F5: Study direction. false = Prompt → Formula (recall the equation);
     // true = Formula → Prompt (name it / say when it applies).
     var reverse = !!PGRE.store.state.settings.formulaReverse;
@@ -680,14 +684,14 @@ PGRE.views.formulas = (function () {
     var pSel = pct(selected);
     var pSolid = pct(solid);
     var pYoung = pct(young);
-    var aria = selected + ' of ' + total + ' selected, ' + solid + ' solid enough';
+    var aria = selected + ' of ' + total + ' introduced, ' + solid + ' solid enough';
     var solidTip = 'Solid enough\\n' + solid + ' of ' + total + ' · interval ≥ 21 d';
     var youngTip = 'Learning\\n' + young + ' of ' + total + ' · introduced, not yet mature';
 
     var html = '<div class="card formula-recall-band" role="region" aria-label="' + ui.esc(aria) + '">';
     html += '<div class="fr-usage-head">' +
       '<h1 class="fr-usage-stat"><span class="fr-usage-pct">' + pSel + '%</span> ' +
-      '<span class="fr-usage-word">selected</span></h1>' +
+      '<span class="fr-usage-word">introduced</span></h1>' +
       '<div class="fr-usage-meta">' + (total
         ? ui.fmt(unseen) + ' not yet introduced'
         : 'No cards in the deck') + '</div>' +
@@ -710,7 +714,7 @@ PGRE.views.formulas = (function () {
     var srs = PGRE.srs;
     var batch = srs.formulaDay(deck);
     var remaining = srs.formulaDayRemaining(deck);
-    var done = 0, unseen = 0, left = {};
+    var done = 0, unseen = 0, left = Object.create(null);
     remaining.forEach(function (c) { left[c.id] = 1; });
     batch.reviewIds.concat(batch.newIds).forEach(function (id) {
       if (!left[id] && srs.studiedToday(srs.cardState(id))) done++;
@@ -728,8 +732,77 @@ PGRE.views.formulas = (function () {
       unseen: unseen,
       postponed: srs.formulaDayPostponed(deck),
       sug: remaining.length ? { reviewIds: [], newIds: [] } : srs.suggestFormulaDay(deck),
-      resume: rehydrateSavedStudy()
+      resume: rehydrateSavedStudy(),
+      adhoc: savedStudyIsAdhoc()
     };
+  }
+
+  /* A same-day ad-hoc round (search drill, leech drill) is not today's list.
+     Replacing it takes an explicit button. */
+  function savedStudyIsAdhoc() {
+    var saved = PGRE.store.state.formulaStudy;
+    return !!(saved && saved.dayBound === false && saved.date === PGRE.srs.today() &&
+      Array.isArray(saved.queueIds) && saved.queueIds.length);
+  }
+
+  /* Due reviews that are not in today's batch, oldest first. */
+  function postponedOverdue() {
+    var srs = PGRE.srs;
+    var batch = srs.formulaDay(deck);
+    var inB = Object.create(null);
+    (batch.reviewIds || []).concat(batch.newIds || []).forEach(function (id) { inB[id] = 1; });
+    var ids = [], age = 0;
+    deck.forEach(function (c) {
+      if (!c || inB[c.id] || srs.isSuspended(c.id)) return;
+      var st = srs.cardState(c.id);
+      if (!st || !st.due) return;
+      var du = srs.daysUntil(st.due);
+      if (du > 0) return;
+      ids.push(c.id);
+      if (-du > age) age = -du;
+    });
+    return { ids: ids, age: age };
+  }
+
+  /* Names a partial read. Does not touch the daily batch. */
+  function deckRecoveryNote(status) {
+    if (!status || !status.partial) return '';
+    var missing = [];
+    var raw = status.missing || [];
+    for (var i = 0; i < raw.length; i++) {
+      if (raw[i]) missing.push(PGRE.ui.esc(String(raw[i])));
+    }
+    var note = 'The deck read is incomplete';
+    if (missing.length) note += ' (' + missing.join(', ') + ')';
+    return note + ', so this count can be low.';
+  }
+
+  /* Read-only. Does not call suggestFormulaDay or autoFillFormulaDay, and
+     does not add or remove daily ids. A partial read warns even when every
+     loaded card has already been introduced. */
+  function formulaReadinessLine(list) {
+    var srs = PGRE.srs;
+    if (!srs) return '';
+    var note = deckRecoveryNote(lastDeckStatus);
+    var unseen = 0;
+    if (list && list.length) {
+      list.forEach(function (c) {
+        if (c && !srs.cardState(c.id) && !srs.isSuspended(c.id)) unseen++;
+      });
+    }
+    if (!unseen) return note;
+    var exam = PGRE.store.state.settings && PGRE.store.state.settings.examDate;
+    var days = exam ? srs.daysUntil(exam) : null;
+    var introDays = (typeof days === 'number' && days > 7) ? (days - 7) : 0;
+    var target = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
+    var postponed = typeof srs.formulaDayPostponed === 'function' ? srs.formulaDayPostponed(list) : 0;
+    var line = unseen + ' not yet introduced. ' +
+      introDays + ' day' + (introDays === 1 ? '' : 's') + ' before the final week. ' +
+      'Daily target ' + target + '. ' +
+      postponed + ' due review' + (postponed === 1 ? '' : 's') + ' waiting. ' +
+      'Choose cards yourself — this does not change today’s list.';
+    if (note) line += ' ' + note;
+    return line;
   }
 
   function mixText(reviews, fresh) {
@@ -758,7 +831,13 @@ PGRE.views.formulas = (function () {
     if (t.resume) {
       buttons = '<button class="btn btn-primary" id="resume-btn">' +
         'Resume session — ' + t.resume.length + ' left</button>' + edit;
-      line = 'A study session is in progress.';
+      if (t.adhoc) {
+        buttons += '<button class="btn btn-ghost" id="replace-daily-btn">' +
+          'Replace with today’s list</button>';
+      }
+      line = t.adhoc
+        ? 'A separate study session is in progress. It stays until you resume it or replace it.'
+        : 'A study session is in progress.';
     } else if (M) {
       buttons = study('Study ' + M + ' card' + (M === 1 ? '' : 's'), true) + edit;
       line = mixText(t.remReviews, t.remNew) + ' left in today’s list' +
@@ -766,6 +845,13 @@ PGRE.views.formulas = (function () {
       if (t.postponed) {
         line += ' ' + t.postponed + ' more due ' + (t.postponed === 1 ? 'is' : 'are') +
           ' not in the list.';
+        var late = postponedOverdue();
+        if (late.age > 0) {
+          line += ' Oldest overdue: ' + late.age + ' day' + (late.age === 1 ? '' : 's') + '.';
+        }
+        if (late.ids.length) {
+          buttons += '<button class="btn btn-ghost" id="add-overdue-btn">Add overdue</button>';
+        }
       }
     } else if (t.done) {
       title = 'Today’s list is done';
@@ -788,17 +874,39 @@ PGRE.views.formulas = (function () {
       '<div class="btn-row">' + buttons + '</div></div>';
   }
 
+  /* Same-day day-bound session resumes (steps, history, press count). An
+     ad-hoc session is left in place unless opts.replace is set. Returns true
+     when a session is on screen. */
+  function beginDailyStudy(opts) {
+    opts = opts || {};
+    var saved = PGRE.store.state.formulaStudy;
+    var today = PGRE.srs.today();
+    var live = !!(saved && saved.date === today && Array.isArray(saved.queueIds) &&
+      saved.queueIds.length);
+    if (live && saved.dayBound !== false) {
+      var resumed = rehydrateSavedStudy();
+      if (sessionHeld) return false;
+      if (resumed && resumed.length) { resumeStudy(resumed); return true; }
+    }
+    if (live && saved.dayBound === false && !opts.replace) return false;
+    if (sessionHeld) return false;
+    var cards = PGRE.srs.formulaDayRemaining(deck);
+    if (!cards.length && opts.fill && PGRE.srs.autoFillFormulaDay) {
+      PGRE.srs.autoFillFormulaDay(deck);
+      cards = PGRE.srs.formulaDayRemaining(deck);
+    }
+    if (!cards.length) return false;
+    startStudy(cards, true);
+    return true;
+  }
+
   /* ——— Study mode home — progressive daily batch, rendered into body ——— */
   function renderHome() {
     study = null;
     if (studyFromFill) {
       studyFromFill = false;
-      var remainingFromFill = PGRE.srs.formulaDayRemaining(deck);
-      if (remainingFromFill.length) {
-        if (PGRE.refreshNavBadges) PGRE.refreshNavBadges();
-        startStudy(remainingFromFill);
-        return;
-      }
+      if (PGRE.refreshNavBadges) PGRE.refreshNavBadges();
+      if (beginDailyStudy()) return;
     }
     if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: back to base (Home ▸ Formula recall)
     var ui = PGRE.ui, srs = PGRE.srs;
@@ -818,6 +926,10 @@ PGRE.views.formulas = (function () {
         ui.statTile('Reviewed today', ui.fmt(reviewedToday)) +
         ui.statTile('Not yet introduced', ui.fmt(0)) +
       '</div>';
+      var emptyReady = formulaReadinessLine(deck);
+      if (emptyReady) {
+        html += '<div class="card" id="formula-readiness"><p class="muted">' + emptyReady + '</p></div>';
+      }
       html += '<div class="card placeholder">' +
         '<p><strong>The deck is empty — by design.</strong></p>' +
         '<p class="muted">No hand-written starter cards: formulas arrive with the ' +
@@ -834,6 +946,17 @@ PGRE.views.formulas = (function () {
     if (srs.fillFormulaDayFinalPass) srs.fillFormulaDayFinalPass(deck);
     var today = todayState();
     html += todayCardHTML(today);
+    var readyLine = formulaReadinessLine(deck);
+    if (readyLine) {
+      html += '<div class="card" id="formula-readiness"><p class="muted">' + readyLine + '</p>' +
+        '<div class="btn-row"><button class="btn btn-ghost" id="readiness-choose">Choose cards</button></div></div>';
+    }
+    if (sessionHeld) {
+      var heldMissing = (lastDeckStatus && lastDeckStatus.missing) || [];
+      html += '<div class="card" id="deck-hold"><p>The deck read is incomplete' +
+        (heldMissing.length ? ' (' + PGRE.ui.esc(heldMissing.join(', ')) + ')' : '') +
+        '. This session is waiting so a missing card is not dropped.</p></div>';
+    }
 
     html += '<div class="stat-row stat-row-4">' +
       ui.statTile('Cards in the deck', ui.fmt(deck.length)) +
@@ -896,13 +1019,23 @@ PGRE.views.formulas = (function () {
     // auto-pick the button label promised (srs.suggestFormulaDay).
     var sb = document.getElementById('study-btn');
     if (sb) sb.addEventListener('click', function () {
-      var cards = PGRE.srs.formulaDayRemaining(deck);
-      if (!cards.length) {
-        PGRE.srs.autoFillFormulaDay(deck);
-        cards = PGRE.srs.formulaDayRemaining(deck);
-      }
-      startStudy(cards);
+      if (sessionHeld) return;
+      beginDailyStudy({ fill: true });
     });
+    var rep = document.getElementById('replace-daily-btn');
+    if (rep) rep.addEventListener('click', function () {
+      if (sessionHeld) return;
+      beginDailyStudy({ replace: true, fill: true });
+    });
+    var addLate = document.getElementById('add-overdue-btn');
+    if (addLate) addLate.addEventListener('click', function () {
+      var late = postponedOverdue();
+      if (!late.ids.length || !PGRE.srs.addFormulaDaySoft) return;
+      PGRE.srs.addFormulaDaySoft(deck, late.ids);
+      renderHome();
+    });
+    var readyBtn = document.getElementById('readiness-choose');
+    if (readyBtn) readyBtn.addEventListener('click', renderPicker);
     // ITEM 2: resume the persisted session (re-rehydrate at click time in case
     // the deck/session shifted; fall back to a home refresh if it vanished).
     var rsb = document.getElementById('resume-btn');
@@ -1050,7 +1183,7 @@ PGRE.views.formulas = (function () {
   /* ——— Browse sub-tabs (Learned / Upcoming) with expandable peek rows ——— */
   function browseBodyHTML() {
     var ui = PGRE.ui, srs = PGRE.srs;
-    var batch = srs.formulaDay(deck), inBatch = {};
+    var batch = srs.formulaDay(deck), inBatch = Object.create(null);
     batch.reviewIds.concat(batch.newIds).forEach(function (id) { inBatch[id] = 1; });
     var learned = browseTab === 'learned';
     var any = false, html = '';
@@ -1448,10 +1581,10 @@ PGRE.views.formulas = (function () {
     var ui = PGRE.ui, srs = PGRE.srs;
     var batch = srs.formulaDay(deck);
     var T = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
-    var byId = {};
+    var byId = Object.create(null);
     deck.forEach(function (c) { byId[c.id] = c; });
 
-    var list = [], inList = {}, locked = {};
+    var list = [], inList = Object.create(null), locked = Object.create(null);
     function addId(id) {
       if (!id || inList[id] || locked[id] || !byId[id]) return false;
       inList[id] = 1;
@@ -1464,14 +1597,17 @@ PGRE.views.formulas = (function () {
       list.splice(list.indexOf(id), 1);
       return true;
     }
-    // Graded today = locked (setFormulaDayPicks keeps them in the saved batch
-    // whatever the draft says). 'done' when the grade sent the card forward;
-    // 'again' when it is due again today — those still sit in today's list,
-    // shown as fixed rows.
+    // Lock only a card graded today that is already in the batch. An Again
+    // that is due today but was not in the list stays selectable, so it can
+    // be added and studied. In-list Again / Good stay fixed.
     var today = srs.today();
+    var batchIds = Object.create(null);
+    batch.reviewIds.concat(batch.newIds).forEach(function (id) { batchIds[id] = 1; });
     deck.forEach(function (c) {
       var st = srs.cardState(c.id);
-      if (srs.studiedToday(st)) locked[c.id] = st.due <= today ? 'again' : 'done';
+      if (batchIds[c.id] && srs.studiedToday(st)) {
+        locked[c.id] = st.due <= today ? 'again' : 'done';
+      }
     });
     var againIds = [], doneN = 0;
     batch.reviewIds.concat(batch.newIds).forEach(function (id) {
@@ -1550,9 +1686,9 @@ PGRE.views.formulas = (function () {
       return bits.join(' · ') + ' · ' + cards.length + ' cards';
     }
 
-    var hay = {};
+    var hay = Object.create(null);
     deck.forEach(function (c) {
-      hay[c.id] = (c.id + ' ' + cardName(c) + ' ' + (c.eq || '') + ' ' +
+      hay[c.id] = (c.id + ' ' + cardName(c) + ' ' + (c.tag || '') + ' ' + (c.eq || '') + ' ' +
         (c.front || '') + ' ' + (c.back || '')).toLowerCase();
     });
     var filterQ = '';
@@ -1685,6 +1821,7 @@ PGRE.views.formulas = (function () {
         '<p class="pick-cart-mix" id="picker-mix"></p>' +
         '<div class="pick-cart-tools">' +
           '<button type="button" class="btn btn-ghost btn-sm" id="picker-fill"></button>' +
+          '<button type="button" class="btn btn-ghost btn-sm" id="picker-add-overdue">Add overdue</button>' +
           '<button type="button" class="btn btn-ghost btn-sm" id="picker-clear">Clear</button>' +
         '</div>' +
         '<p class="pick-cart-note" id="picker-note"' + (prefilled ? '' : ' hidden') + '>' +
@@ -1900,6 +2037,17 @@ PGRE.views.formulas = (function () {
       var room = T - list.length - againIds.length;
       if (takeSuggestion(room > 0 ? room : T)) changed(true);
     });
+    var addOver = document.getElementById('picker-add-overdue');
+    if (addOver) addOver.addEventListener('click', function () {
+      var added = 0;
+      deck.forEach(function (c) {
+        if (inList[c.id] || locked[c.id] || srs.isSuspended(c.id)) return;
+        var st = srs.cardState(c.id);
+        if (!st || srs.daysUntil(st.due) > 0) return;
+        if (addId(c.id)) added++;
+      });
+      if (added) changed(true);
+    });
     document.getElementById('picker-clear').addEventListener('click', function () {
       list.slice().forEach(removeId);
       changed(false);
@@ -1914,9 +2062,9 @@ PGRE.views.formulas = (function () {
     });
     document.getElementById('picker-study').addEventListener('click', function () {
       save();
-      var cards = PGRE.srs.formulaDayRemaining(deck);
-      if (cards.length) startStudy(cards);
-      else renderHome();
+      // A same-day day-bound session resumes, steps included. An ad-hoc
+      // session is left in place; home already offers Resume and Replace.
+      if (!beginDailyStudy()) renderHome();
     });
 
     groups().forEach(syncHead);
@@ -1929,15 +2077,40 @@ PGRE.views.formulas = (function () {
   function startStudy(cards, dayBound) {
     if (!cards.length) return;
     if (PGRE.nav) PGRE.nav.setTrail(['Study']);   // BUNDLE G: session is live
-    study = { queue: interleaveByTopic(cards), total: cards.length, done: 0,
+    var queue = interleaveByTopic(cards);
+    var known = Object.create(null);
+    queue.forEach(function (c) { if (c && c.id) known[c.id] = 1; });
+    study = { id: newStudyId(), queue: queue, total: cards.length, done: 0,
               doneBase: 0, again: 0, againBase: 0, xp: 0, flipped: false,
               history: [], peek: null,
               overlay: null, steps: {}, undo: [], pressCount: 0,
               dayBound: dayBound !== false,
+              sessionDate: PGRE.srs.today(),
+              knownIds: known,
               pendingOverlays: [], settled: false };
     persistStudy();          // ITEM 2: snapshot the fresh order so a resume matches
     PGRE.store.save();
     renderCard();
+  }
+
+  function newStudyId() {
+    studySeq++;
+    return 'fs-' + Date.now().toString(36) + '-' + studySeq;
+  }
+
+  function endFormulaStudy(done) {
+    var prev = PGRE.store.state.formulaStudy;
+    var marker = {
+      id: (study && study.id) || (prev && prev.id) || null,
+      done: done != null ? done : (study ? study.done : (prev && prev.done)),
+      _opAt: Date.now(),
+      _opId: ((study && study.id) || 'end') + ':end'
+    };
+    if (typeof PGRE.store.clearFormulaStudy === 'function') {
+      PGRE.store.clearFormulaStudy(marker);
+    } else {
+      PGRE.store.state.formulaStudy = null;
+    }
   }
 
   /* ——— ITEM 2: in-session persistence ———
@@ -1951,17 +2124,34 @@ PGRE.views.formulas = (function () {
      whatever queue was mid-flight). */
   function persistStudy() {
     if (!study) return;
+    if (!study.id) study.id = newStudyId();
     var stepsCopy = {};
     for (var k in study.steps) stepsCopy[k] = study.steps[k];
+    var now = Date.now();
+    var end = PGRE.store.state.formulaStudyEnd;
+    var floor = end && end._opAt ? Number(end._opAt) : 0;
+    var prevAt = Number(study._opAt) || 0;
+    var at = now;
+    if (at <= floor) at = floor + 1;
+    if (at <= prevAt) at = prevAt + 1;
+    study._opAt = at;
+    studySeq++;
+    var opId = study.id + ':' + studySeq;
     PGRE.store.state.formulaStudy = {
-      date: PGRE.srs.today(),
+      id: study.id,
+      date: study.sessionDate || PGRE.srs.today(),
       dayBound: study.dayBound !== false,
       queueIds: study.queue.map(function (c) { return c.id; }),
-      done: study.done,
+      done: Number(study.done) || 0,
       again: study.again,
       steps: stepsCopy,
-      pressCount: study.pressCount,
-      history: study.history.map(function (h) { return { id: h.c.id, grade: h.grade }; })
+      pressCount: Number(study.pressCount) || 0,
+      history: study.history.map(function (h) {
+        return { id: h.c.id, grade: h.grade, day: h.day || '' };
+      }),
+      _opAt: at,
+      _opId: opId,
+      completed: false
     };
   }
 
@@ -1976,22 +2166,38 @@ PGRE.views.formulas = (function () {
      so "Resume session — N left" counts the same work "Today's list" does.
      Ad-hoc sessions (dayBound === false: leech drill, search "Study these N")
      keep their frozen queue — their cards may never have been on the list. */
+  function dropSavedStudy() {
+    endFormulaStudy();
+    PGRE.store.save();
+  }
+
   function rehydrateSavedStudy() {
     var saved = PGRE.store.state.formulaStudy;
     // Array.isArray (not a truthy check): a corrupt/hand-edited backup may carry a
     // same-day formulaStudy whose queueIds is a non-array (e.g. a string) — that has
     // a .length so a truthy guard would pass, then .forEach below throws and aborts
     // renderHome. Requiring a real array drops such a session as unresumable.
-    if (!saved || saved.date !== PGRE.srs.today() ||
-        !Array.isArray(saved.queueIds) || !saved.queueIds.length) {
-      if (saved) { PGRE.store.state.formulaStudy = null; PGRE.store.save(); }
+    var queueList = saved && Array.isArray(saved.queueIds) ? saved.queueIds : null;
+    var missing = [];
+    if (queueList) {
+      queueList.forEach(function (id) { if (!deckById(id)) missing.push(id); });
+    }
+    // A partial read must not drop ids this load never saw, and must not
+    // clear the session — the next complete read may still have them.
+    if (lastDeckStatus && lastDeckStatus.partial && missing.length) {
+      sessionHeld = true;
       return null;
     }
-    var queueIds = saved.queueIds;
+    sessionHeld = false;
+    if (!saved || saved.date !== PGRE.srs.today() || !queueList || !queueList.length) {
+      if (saved) dropSavedStudy();
+      return null;
+    }
+    var queueIds = queueList;
     if (saved.dayBound !== false) {
-      var remaining = PGRE.srs.formulaDayRemaining(deck), remIds = {};
+      var remaining = PGRE.srs.formulaDayRemaining(deck), remIds = Object.create(null);
       remaining.forEach(function (c) { remIds[c.id] = 1; });
-      var kept = {}, keptIds = [];
+      var kept = Object.create(null), keptIds = [];
       queueIds.forEach(function (id) {
         if (remIds[id]) { kept[id] = 1; keptIds.push(id); }
       });
@@ -2003,6 +2209,13 @@ PGRE.views.formulas = (function () {
       if (keptIds.join('') !== queueIds.join('')) {
         queueIds = keptIds;
         saved.queueIds = keptIds;
+        saved.completed = false;
+        if (typeof saved.done !== 'number') saved.done = 0;
+        if (typeof saved.pressCount !== 'number') saved.pressCount = 0;
+        var stamp = Date.now();
+        if (saved._opAt && stamp <= Number(saved._opAt)) stamp = Number(saved._opAt) + 1;
+        saved._opAt = stamp;
+        saved._opId = (saved.id || 'fs') + ':reconcile';
         PGRE.store.save();
       }
     }
@@ -2012,8 +2225,7 @@ PGRE.views.formulas = (function () {
       if (c) cards.push(c);
     });
     if (!cards.length) {
-      PGRE.store.state.formulaStudy = null;
-      PGRE.store.save();
+      dropSavedStudy();
       return null;
     }
     return cards;
@@ -2033,17 +2245,23 @@ PGRE.views.formulas = (function () {
     // would enumerate garbage. Both fall back to empty rather than aborting.
     (Array.isArray(saved.history) ? saved.history : []).forEach(function (h) {
       var c = deckById(h.id);
-      if (c) history.push({ c: c, grade: h.grade });
+      if (c) history.push({ c: c, grade: h.grade, day: h.day || '' });
     });
     var stepsCopy = {};
     var savedSteps = (saved.steps && typeof saved.steps === 'object') ? saved.steps : {};
     for (var k in savedSteps) stepsCopy[k] = savedSteps[k];
-    study = { queue: cards, total: (saved.done || 0) + cards.length,
+    var known = Object.create(null);
+    cards.forEach(function (c) { if (c && c.id) known[c.id] = 1; });
+    study = { id: saved.id || newStudyId(), queue: cards,
+              total: (saved.done || 0) + cards.length,
               done: saved.done || 0, doneBase: saved.done || 0,
               again: saved.again || 0, againBase: saved.again || 0, xp: 0,
               flipped: false, history: history, peek: null, overlay: null,
               steps: stepsCopy, undo: [], pressCount: saved.pressCount || 0,
               dayBound: saved.dayBound !== false,
+              sessionDate: saved.date || PGRE.srs.today(),
+              knownIds: known,
+              _opAt: Number(saved._opAt) || 0,
               pendingOverlays: [], settled: false };
     renderCard();
   }
@@ -2259,11 +2477,101 @@ PGRE.views.formulas = (function () {
     wireSimilar(box);
   }
 
+  /* Still owed by this session. Suspended cards are never graded.
+     Day-bound cards must still be in formulaDayRemaining. Ad-hoc keeps its
+     explicit queue aside from suspension. */
+  function cardEligible(id) {
+    if (!id || !study) return false;
+    if (PGRE.srs.isSuspended && PGRE.srs.isSuspended(id)) return false;
+    if (study.dayBound === false) return true;
+    if (!PGRE.srs.formulaDayRemaining) return true;
+    var rem = PGRE.srs.formulaDayRemaining(deck) || [];
+    for (var i = 0; i < rem.length; i++) {
+      if (rem[i] && rem[i].id === id) return true;
+    }
+    return false;
+  }
+
+  function reconcileLiveQueue(joinNew) {
+    if (!study) return;
+    if (!study.knownIds) study.knownIds = Object.create(null);
+    study.queue.forEach(function (c) { if (c && c.id) study.knownIds[c.id] = 1; });
+    var next = [];
+    study.queue.forEach(function (c) {
+      if (c && cardEligible(c.id)) next.push(c);
+    });
+    if (joinNew && study.dayBound !== false && PGRE.srs.formulaDayRemaining) {
+      PGRE.srs.formulaDayRemaining(deck).forEach(function (c) {
+        if (!c || !c.id || study.knownIds[c.id]) return;
+        study.knownIds[c.id] = 1;
+        next.push(c);
+      });
+    }
+    study.queue = next;
+  }
+
+  /* Midnight while a session is open: run the same allocator home would,
+     then let newly eligible cards join. A learning requeue that is still
+     remaining stays. */
+  function onLiveClock(joinNew) {
+    if (!study) return false;
+    var today = PGRE.srs.today();
+    if (!study.sessionDate) study.sessionDate = today;
+    var rolled = study.sessionDate !== today;
+    if (rolled) {
+      study.sessionDate = today;
+      if (study.dayBound !== false) {
+        if (PGRE.srs.fillFormulaDayFinalPass) PGRE.srs.fillFormulaDayFinalPass(deck);
+        if (PGRE.srs.autoFillFormulaDay) PGRE.srs.autoFillFormulaDay(deck);
+      }
+    }
+    var before = study.queue.map(function (c) { return c && c.id; }).join('\n');
+    reconcileLiveQueue(!!joinNew);
+    var after = study.queue.map(function (c) { return c && c.id; }).join('\n');
+    if (rolled || before !== after) {
+      persistStudy();
+      PGRE.store.save();
+    }
+    return rolled || before !== after;
+  }
+
+  function commitReview(id, g) {
+    var card = PGRE.srs.gradeCard(id, g);
+    if (card === null) return null;
+    var opId = (card && card.lastReviewOpId != null && card.lastReviewOpId !== '')
+      ? String(card.lastReviewOpId) : '';
+    return opId;
+  }
+
+  function clearChosenGrade() {
+    var nodes = document.querySelectorAll('#fcard-actions [data-grade]');
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].classList.remove('chosen');
+      nodes[i].setAttribute('aria-pressed', 'false');
+    }
+  }
+
   /* F7 learning steps live ONLY in Study mode. Match/Type/Quiz commit gradeCard
      directly (no steps) — see js/flashmodes.js. */
   function grade(g) {
-    if (study.overlay) return;                  // no grading while an overlay is up
+    if (!study || study.overlay) return;        // no grading while an overlay is up
+    // The press belongs to the card on screen. Reconcile may drop it when
+    // the list changed; that same click must not grade the card that slides up.
+    var shownId = study.queue[0] && study.queue[0].id;
+    var rolled = study.sessionDate && study.sessionDate !== PGRE.srs.today();
+    onLiveClock(rolled && study.dayBound !== false);
+    if (!study.queue.length) { renderStudySummary(); return; }
     var c = study.queue[0], id = c.id;
+    if (id !== shownId || !cardEligible(id)) {
+      if (id === shownId) {
+        study.queue.shift();
+        persistStudy();
+        PGRE.store.save();
+      }
+      if (study.queue.length) renderCard();
+      else renderStudySummary();
+      return;
+    }
     var stateless = !PGRE.srs.cardState(id);
     var pressed = document.querySelector('#fcard-actions [data-grade="' + g + '"]');
     if (pressed) {
@@ -2271,16 +2579,26 @@ PGRE.views.formulas = (function () {
       pressed.setAttribute('aria-pressed', 'true');
     }
     var step = study.steps[id] || 0;
+    var needsCommit = !stateless || g === 'easy' || (stateless && step !== 0 && g !== 'again');
+    var opId = '';
+    if (needsCommit) {
+      var committed = commitReview(id, g);
+      if (committed === null) {
+        clearChosenGrade();
+        return;
+      }
+      opId = committed;
+    }
 
-    // F1a: snapshot the whole session + card state BEFORE any mutation.
-    pushUndo(id);
+    // Snapshot the session BEFORE the queue moves. The op id was copied from
+    // the card gradeCard just returned. Undo names that string.
+    pushUndo(id, opId);
     study.pressCount++;                         // F11: every press counts toward a round
 
     var recycled = false;                       // an Again press → post-Again scaffold
 
     if (stateless) {
       if (g === 'easy') {                        // Anki: Easy graduates immediately
-        PGRE.srs.gradeCard(id, g);
         delete study.steps[id];
         study.queue.shift();
         study.done++;
@@ -2295,21 +2613,22 @@ PGRE.views.formulas = (function () {
         study.steps[id] = 1;
         reinsertCard();
       } else {                                  // Hard/Good step 1 → graduate
-        PGRE.srs.gradeCard(id, g);
         delete study.steps[id];
         study.queue.shift();
         study.done++;
       }
     } else {                                    // review card: commit directly
-      PGRE.srs.gradeCard(id, g);
       study.queue.shift();
       study.done++;
       if (g === 'again') { study.queue.push(c); study.again++; recycled = true; }
     }
+    // A second copy of a card that just graduated is no longer remaining.
+    // A learning requeue is still remaining, so it stays.
+    reconcileLiveQueue(false);
 
     PGRE.store.touchDay();          // reviewing formulas counts as a study day
     study.xp += 2;                  // every press rewards effort (unchanged from before)
-    study.history.push({ c: c, grade: g }); // every press (a card can recur)
+    study.history.push({ c: c, grade: g, day: PGRE.srs.today() });
     persistStudy();                 // ITEM 2: stage the resume snapshot into the same save
     PGRE.store.save();
 
@@ -2358,14 +2677,13 @@ PGRE.views.formulas = (function () {
 
   /* F1a: undo stack, max 10, dies with the session. Snapshot BEFORE the mutation
      so a pop restores the exact pre-press session + card state. */
-  function pushUndo(id) {
-    var prev = PGRE.store.state.cards[id];
+  function pushUndo(id, opId) {
     var stepsCopy = {};
     for (var k in study.steps) stepsCopy[k] = study.steps[k];
     study.undo.push({
       id: id,
-      day: PGRE.srs.today(),   // grade-time day, so an undo across midnight still pops its row
-      prevCardState: prev ? JSON.parse(JSON.stringify(prev)) : null,
+      day: PGRE.srs.today(),
+      opId: opId ? String(opId) : '',
       queueIds: study.queue.slice(),          // shallow copy of the queue (card refs)
       done: study.done, xp: study.xp, again: study.again,
       historyLen: study.history.length,
@@ -2375,18 +2693,17 @@ PGRE.views.formulas = (function () {
     if (study.undo.length > 10) study.undo.shift();
   }
 
-  /* F1a: pop the last snapshot, restore session + card state, and drop the
-     trailing cardReviews entry when it matches (bundle 2 — array may not exist). */
+  /* Undo the named review, then the session. A null undoReview leaves the
+     screen where it is. This does not pop cardReviews or write a card snapshot. */
   function undoGrade() {
     if (!study || study.overlay || !study.undo.length) return;
-    var e = study.undo.pop();
-    if (e.prevCardState) PGRE.store.state.cards[e.id] = e.prevCardState;
-    else delete PGRE.store.state.cards[e.id];
-    var revs = PGRE.store.state.cardReviews;
-    if (revs && revs.length) {
-      var last = revs[revs.length - 1];
-      if (last && last.id === e.id && last.d === e.day) revs.pop();
+    var e = study.undo[study.undo.length - 1];
+    if (e.opId) {
+      if (typeof PGRE.srs.undoReview !== 'function') return;
+      var res = PGRE.srs.undoReview(String(e.opId));
+      if (res == null) return;
     }
+    study.undo.pop();
     study.queue = e.queueIds.slice();
     study.done = e.done;
     study.xp = e.xp;
@@ -2397,7 +2714,7 @@ PGRE.views.formulas = (function () {
     study.pressCount = e.pressCount;
     study.overlay = null;
     study.pendingOverlays = [];
-    persistStudy();                 // ITEM 2: keep the resume snapshot in step with the undo
+    persistStudy();
     PGRE.store.save();
     renderCard();
   }
@@ -2478,9 +2795,15 @@ PGRE.views.formulas = (function () {
     var segAgain = study.again - (study.againBase || 0);
     PGRE.store.log('review', 'Formula review: ' + segDone + ' card' +
       (segDone === 1 ? '' : 's') + (segAgain ? ' (' + segAgain + ' repeated)' : ''), study.xp);
-    // Formula daily check-in (once per local day) — auto-claim on first settle.
+    // Claim each local day a press was accepted, not the later exit date.
     if (PGRE.formulaCheckIn && typeof PGRE.formulaCheckIn.record === 'function') {
-      study.checkInResult = PGRE.formulaCheckIn.record();
+      var pressDays = [];
+      (study.history || []).forEach(function (h) {
+        if (h && h.day && pressDays.indexOf(h.day) === -1) pressDays.push(h.day);
+      });
+      for (var di = 0; di < pressDays.length; di++) {
+        study.checkInResult = PGRE.formulaCheckIn.record(pressDays[di]);
+      }
     }
     if (study.done >= 20 && study.again === 0) PGRE.store.state.flags.cleanRecall = true;
     PGRE.gamify.checkAchievements();
@@ -2498,9 +2821,9 @@ PGRE.views.formulas = (function () {
         history: Array.isArray(study.history) ? study.history.slice() : []
       };
     }
-    // ITEM 2: the session is finished (queue drained or "Finish for now") — drop
-    // the resume snapshot so the home screen offers a fresh batch, not a resume.
-    PGRE.store.state.formulaStudy = null;
+    // The session is finished (queue drained or "Finish for now"). A finish
+    // marker keeps a stale snapshot from restoring it.
+    endFormulaStudy(study ? study.done : 0);
     PGRE.store.save();
     // study.done/again are cumulative across the whole logical session, but study.xp
     // resets to 0 on a resume (each segment settles its own XP on exit). Pairing the
@@ -2613,10 +2936,11 @@ PGRE.views.formulas = (function () {
     var recalledMap = {};
     var recalledList = [];
 
-    // Source A: current live study session history (included if today is in window)
-    if (inWindow(today) && study && Array.isArray(study.history) && study.history.length) {
+    // Source A: live session presses whose own day falls in the window.
+    // A missing day is not "today".
+    if (study && Array.isArray(study.history) && study.history.length) {
       study.history.forEach(function (h) {
-        if (!h || !h.c || !h.c.id) return;
+        if (!h || !h.c || !h.c.id || !inWindow(h.day)) return;
         var cid = h.c.id;
         if (!recalledMap[cid]) {
           var item = {
@@ -2640,10 +2964,10 @@ PGRE.views.formulas = (function () {
       });
     }
 
-    // Source B: last completed study session in this page lifecycle (included if today is in window)
-    if (inWindow(today) && lastCompletedStudy && Array.isArray(lastCompletedStudy.history) && lastCompletedStudy.history.length) {
+    // Source B: last completed session in this page, same day rule as source A.
+    if (lastCompletedStudy && Array.isArray(lastCompletedStudy.history) && lastCompletedStudy.history.length) {
       lastCompletedStudy.history.forEach(function (h) {
-        if (!h || !h.c || !h.c.id) return;
+        if (!h || !h.c || !h.c.id || !inWindow(h.day)) return;
         var cid = h.c.id;
         if (!recalledMap[cid]) {
           var item = {
@@ -3152,7 +3476,7 @@ PGRE.views.formulas = (function () {
   /* ——— Match / Type / Quiz intros ——— */
   var INTRO = {
     match: { title: 'Match',
-      desc: 'Pair each prompt with its formula against the clock — a wrong pair shakes and flips back. +2 XP per pair.' },
+      desc: 'Pair each prompt with its formula against the clock — a wrong pair shakes and flips back. Practice only: this round does not clear scheduled reviews and does not record a Good. +2 XP per pair.' },
     type: { title: 'Type-to-recall',
       desc: 'See the prompt, type the formula, then grade yourself Again / Hard / Good / Easy — an auto-check preselects the default. Your grade schedules the card just like flip mode.' },
     quiz: { title: 'Auto-quiz',
@@ -3223,7 +3547,25 @@ PGRE.views.formulas = (function () {
         html += '<p class="muted">Quiz needs at least two cards to build choices.</p></div>';
         body().innerHTML = html; return;
       }
-      if (!q.length) {
+      var quizable = q;
+      if (kind === 'quiz' && PGRE.flashmodes && PGRE.flashmodes.quizOptions) {
+        var unquizzable = q.filter(function (c) {
+          var built = PGRE.flashmodes.quizOptions(c, deck);
+          return !built || !built.opts || built.opts.length < 2;
+        });
+        if (unquizzable.length) {
+          html += '<p class="muted" id="quiz-unquizzable">' + unquizzable.length +
+            ' card' + (unquizzable.length === 1 ? '' : 's') +
+            ' cannot be quizzed until two same-kind choices exist. ' +
+            (unquizzable.length === 1 ? 'It stays' : 'They stay') +
+            ' in today’s list — use Study.</p>';
+        }
+        quizable = q.filter(function (c) {
+          var built = PGRE.flashmodes.quizOptions(c, deck);
+          return built && built.opts && built.opts.length >= 2;
+        });
+      }
+      if (!q.length || (kind === 'quiz' && !quizable.length)) {
         html += '</div>';
         body().innerHTML = html; return;
       }
@@ -3509,13 +3851,26 @@ PGRE.views.formulas = (function () {
   function renderSearchActions() {
     var box = document.getElementById('fs-actions');
     if (!box) return;
+    // Rehydrate before the zero-hit return. A partial read can hold the
+    // session, and that note must still show when the search has no hits.
+    var pending = rehydrateSavedStudy();
+    if (sessionHeld) {
+      var heldMissing = (lastDeckStatus && lastDeckStatus.missing) || [];
+      var heldNames = [];
+      for (var hi = 0; hi < heldMissing.length; hi++) {
+        if (heldMissing[hi]) heldNames.push(PGRE.ui.esc(String(heldMissing[hi])));
+      }
+      box.innerHTML = '<div class="card fs-actionbar"><p id="deck-hold">The deck read is incomplete' +
+        (heldNames.length ? ' (' + heldNames.join(', ') + ')' : '') +
+        '. Study is waiting so a missing card is not dropped.</p></div>';
+      return;
+    }
     var n = searchLast ? searchLast.total : 0;
     if (!n) { box.innerHTML = ''; return; }
     /* Starting a drill overwrites whatever session was saved mid-flight (the
        leech drill has always done the same). Search makes that one click away
        from a browse of the entire deck, so say it plainly BEFORE the click
        rather than letting a half-finished daily round vanish unannounced. */
-    var pending = rehydrateSavedStudy();
     var warn = pending ?
       '<span class="fs-actionwarn">Replaces the session you have in progress (' +
         pending.length + ' left).</span>' : '';
@@ -3571,6 +3926,7 @@ PGRE.views.formulas = (function () {
      the Study tab was already showing, so clicking it afterwards did nothing at
      all. switchMode renders the Study home first; startStudy then replaces it. */
   function drillSearchResults() {
+    if (sessionHeld) return;
     if (!searchLast || !searchLast.total) return;
     var cards = searchLast.hits.map(function (h) { return h.card; });
     switchMode('study');
@@ -3883,6 +4239,15 @@ PGRE.views.formulas = (function () {
      that gap; settleStudy is a no-op once a segment is settled or has no XP. */
   window.addEventListener('pagehide', function () { settleStudy(); });
 
+  document.addEventListener('visibilitychange', function () {
+    if (!study) return;
+    if (document.visibilityState && document.visibilityState !== 'visible') return;
+    var changed = onLiveClock(study.dayBound !== false);
+    if (!changed || study.overlay) return;
+    if (study.queue.length) renderCard();
+    else renderStudySummary();
+  });
+
   /* bfcache twist: a same-tab cross-document Back/Forward (or a mobile
      freeze/restore) fires pagehide — settling the live segment (settled=true,
      xp awarded) — then restores THIS document from memory with the graded card
@@ -3896,12 +4261,28 @@ PGRE.views.formulas = (function () {
      on their own and pressCount * 2 stays honest. The pagehide award stays
      awarded; only the new segment's XP is added on the next settle. */
   window.addEventListener('pageshow', function (e) {
-    if (!e.persisted || !study || !study.settled) return;
-    study.settled = false;
-    study.xp = 0;
-    study.doneBase = study.done;
-    study.againBase = study.again;
+    if (e.persisted && study && study.settled) {
+      study.settled = false;
+      study.xp = 0;
+      study.doneBase = study.done;
+      study.againBase = study.again;
+    }
+    if (!study) return;
+    var changed = onLiveClock(study.dayBound !== false);
+    if (!changed || study.overlay) return;
+    if (study.queue.length) renderCard();
+    else renderStudySummary();
   });
+
+  if (typeof PGRE.subscribeStateAdopted === 'function') {
+    PGRE.subscribeStateAdopted(function () {
+      if (!study || mode !== 'study') return;
+      var changed = onLiveClock(study.dayBound !== false);
+      if (!changed || study.overlay) return;
+      if (study.queue.length) renderCard();
+      else renderStudySummary();
+    });
+  }
 
   return {
     render: function () { return '<div id="formulas-root"></div>'; },
@@ -3933,6 +4314,8 @@ PGRE.views.formulas = (function () {
         deck = d;
         PGRE.deck = d;
         PGRE.getFormulaCard = deckById;
+        lastDeckStatus = (PGRE.formulaDeckStatus && typeof PGRE.formulaDeckStatus === 'object')
+          ? PGRE.formulaDeckStatus : null;
         if (PGRE.srs.fillFormulaDayFinalPass) PGRE.srs.fillFormulaDayFinalPass(deck);
         if (root()) { renderShell(); }
         if (window.PGRE && PGRE.motion && PGRE.motion.loader) PGRE.motion.loader.done();

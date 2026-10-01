@@ -599,6 +599,7 @@ function loadShipped(reduced, opts) {
         questions: {},
         flags: {},
         formulaStudy: null,
+        formulaStudyEnd: null,
         formulaCheckIn: { current: 0, best: 0, lastDay: null }
       },
       save: function () {},
@@ -606,6 +607,21 @@ function loadShipped(reduced, opts) {
       rollDay: function () {},
       touchDay: function () {},
       log: function () {},
+      canWrite: function () { return !pgre.store.state._persistFailed; },
+      clearFormulaStudy: function (marker) {
+        marker = marker || {};
+        var prev = this.state.formulaStudy;
+        var now = Date.now();
+        this.state.formulaStudyEnd = {
+          id: marker.id || (prev && prev.id) || null,
+          done: marker.done != null ? marker.done : (prev && prev.done) || 0,
+          completed: true,
+          _opAt: Number(marker._opAt) || now,
+          _opId: marker._opId || 'end'
+        };
+        this.state.formulaStudy = null;
+        return this.state.formulaStudyEnd;
+      },
       resetFormulaCards: function () { cardStates = {}; this.state.cards = cardStates; }
     },
     srs: {
@@ -625,9 +641,26 @@ function loadShipped(reduced, opts) {
       isSuspended: function () { return false; },
       cardState: function (id) { return cardStates[id] || null; },
       gradeCard: function (id, g) {
+        if (pgre.store.canWrite && !pgre.store.canWrite()) return null;
+        var op = 'op-' + (pgre.store.state.cardReviews.length + 1) + '-' + id;
         cardStates[id] = cardStates[id] || { interval: 1, reps: 1, due: '2026-09-08', lastGrade: g, lapses: 0 };
         cardStates[id].lastGrade = g;
-        pgre.store.state.cardReviews.push({ id: id, d: '2026-09-07', g: g });
+        cardStates[id].lastReviewOpId = op;
+        var row = { id: id, d: '2026-09-07', g: g, op: op };
+        pgre.store.state.cardReviews.push(row);
+        return cardStates[id];
+      },
+      undoReview: function (opId) {
+        if (!opId) return null;
+        if (pgre.store.canWrite && !pgre.store.canWrite()) return null;
+        var log = pgre.store.state.cardReviews || [];
+        for (var i = log.length - 1; i >= 0; i--) {
+          if (log[i] && log[i].op === opId) {
+            var row = log.splice(i, 1)[0];
+            return { ok: true, opId: opId, cardId: row.id, card: cardStates[row.id] || null };
+          }
+        }
+        return null;
       },
       nextIntervals: function () { return { again: 0, hard: 1, good: 3, easy: 7 }; },
       ivlLabel: function (n) { return n + 'd'; },
@@ -1992,8 +2025,8 @@ function runAsync() {
         'empty list opens pre-filled with the auto-pick, got: ' + cartIds().join(','));
       assert(!doc.getElementById('picker-note').hidden, 'pre-filled draft says it is a suggestion');
       assert(text('picker-count') === '6 / 6', 'count is list / target, got: ' + text('picker-count'));
-      assert(text('picker-mix') === '3 reviews · 3 new · 1 done today',
-        'mix line splits reviews, new, and done, got: ' + text('picker-mix'));
+      assert(text('picker-mix') === '3 reviews · 3 new',
+        'mix line splits reviews and new; an off-list card graded today is not a fixed done row, got: ' + text('picker-mix'));
       assert(text('picker-fill') === 'Add 6 more', 'full list offers another round, got: ' + text('picker-fill'));
       assert(text('picker-study') === 'Study 6 cards', 'Study names the list size');
       assert(savedIds === null && P.store.state.formulaDay.newIds.length === 0,
@@ -2077,9 +2110,9 @@ function runAsync() {
 
       ch1.querySelector('.picker-ch-toggle').click();
       var lockBox = row('cpgf-1.3').querySelector('.picker-box');
-      assert(lockBox.disabled && lockBox.checked && row('cpgf-1.3').classList.contains('is-locked'),
-        'a card graded today is locked');
-      assert(cartIds().indexOf('cpgf-1.3') === -1, 'locked cards count as done, not as editable rows');
+      assert(!lockBox.disabled && !lockBox.checked && !row('cpgf-1.3').classList.contains('is-locked'),
+        'an off-list card graded today is selectable; only an in-list grade stays locked');
+      assert(cartIds().indexOf('cpgf-1.3') === -1, 'an off-list done card is not inserted on its own');
       var r11 = row('cpgf-1.1'), r13 = row('cpgf-1.3');
       assert(!r11.hasAttribute('title') && !r13.hasAttribute('title'),
         'no row carries a native title tooltip');
@@ -2089,10 +2122,13 @@ function runAsync() {
         'new card tip says it has no grades, got: ' + tipEl.textContent);
       fireDoc(cp.env, 'focusout', { target: r11, relatedTarget: doc.body });
       fireDoc(cp.env, 'focusin', { target: r13.querySelector('.picker-box') });
+      var status13 = r13.querySelector('.picker-status');
       assert(tipEl.classList.contains('is-on') &&
-        tipEl.textContent.indexOf('done today') !== -1 &&
-        tipEl.textContent.indexOf('Already graded today') !== -1,
-        'locked card tip explains the lock, got: ' + tipEl.textContent);
+        status13 && status13.textContent.indexOf('due in') !== -1 &&
+        tipEl.textContent.indexOf('ease ') !== -1 &&
+        tipEl.textContent.indexOf('Already graded today') === -1,
+        'an off-list card graded today shows its schedule, got: ' +
+          (status13 && status13.textContent) + ' / ' + tipEl.textContent);
       fireDoc(cp.env, 'focusout', { target: r13, relatedTarget: doc.body });
 
       doc.querySelector('#picker-list [data-rm="cpgf-2.1"]').click();
@@ -2240,6 +2276,435 @@ function runAsync() {
           'composer header agrees with resume, got: ' +
             doc.getElementById('picker-count').textContent);
       });
+    });
+  }).then(function () { return consumerCases(); });
+}
+
+/* Lane 2 selection and session-contract checks. Each one fails on the
+   pre-fix consumers: a reset study, an off-list Again lock, a stale queue
+   grade, a one-choice quiz is covered in test-recall-lists.js. */
+function pinDate(box, y, m, d, hh, mm) {
+  var env = box && box.sandbox ? box : box.env;
+  var Real = env._realDate || env.sandbox.Date;
+  env._realDate = Real;
+  function D() {
+    if (!(this instanceof D)) return new D();
+    if (arguments.length === 0) return new Real(y, m - 1, d, hh || 0, mm || 0, 0);
+    var args = [null];
+    for (var i = 0; i < arguments.length; i++) args.push(arguments[i]);
+    return new (Function.prototype.bind.apply(Real, args));
+  }
+  D.now = function () { return new Real(y, m - 1, d, hh || 0, mm || 0, 0).getTime(); };
+  D.parse = Real.parse;
+  D.UTC = Real.UTC;
+  D.prototype = Real.prototype;
+  env.sandbox.Date = D;
+  if (env.sandbox.window) env.sandbox.window.Date = D;
+}
+
+function mountFormulas(box) {
+  box.env.location.hash = '#/formulas';
+  ensureView(box.env, box.P.views.formulas.render());
+  box.P.views.formulas.mount();
+  return wait(0);
+}
+
+function consumerCases() {
+  console.log('\nformulas: lane 2 consumers');
+  var introduced = autoPickEnv();
+  return mountFormulas(introduced).then(function () {
+    var doc = introduced.env.document;
+    var P = introduced.P;
+    var word = doc.querySelector('.fr-usage-word');
+    assert(word && word.textContent === 'introduced',
+      'recall band says introduced, got: ' + (word && word.textContent));
+    var band = doc.querySelector('.formula-recall-band');
+    assert(band && band.getAttribute('aria-label').indexOf('0 of ') !== -1 &&
+      band.getAttribute('aria-label').indexOf('introduced') !== -1,
+      'two-or-more new cards with no reviews read 0 introduced, got: ' +
+        (band && band.getAttribute('aria-label')));
+    P.store.state.cards['cpgf-1.1'] = P.store.state.cards['cpgf-1.1'] || {};
+    P.store.state.cards['cpgf-1.1'].reviews = 1;
+    P.views.formulas.mount();
+    return wait(0);
+  }).then(function () {
+    var band = introduced.env.document.querySelector('.formula-recall-band');
+    assert(band && /1 of \d+ introduced/.test(band.getAttribute('aria-label')),
+      'one reviewed card counts as 1 introduced, got: ' +
+        (band && band.getAttribute('aria-label')));
+    var toggle = introduced.env.document.getElementById('exam-cap-toggle');
+    toggle.click();
+    toggle = introduced.env.document.getElementById('exam-cap-toggle');
+    assert(toggle && toggle.textContent === 'Uncapped outside final pass',
+      'cap-off label, got: ' + (toggle && toggle.textContent));
+    assert(introduced.env.document.body.textContent.indexOf('1-day intervals') !== -1,
+      'final-pass week still describes 1-day intervals');
+
+    console.log('\nformulas: session stamps, refused grade, duplicate queue');
+    var sess = autoPickEnv();
+    var stepped = null;
+    var t = sess.P.srs.today();
+    sess.P.store.state.formulaDay = { date: t, reviewIds: [], newIds: ['f0', 'f1'] };
+    return mountFormulas(sess).then(function () {
+      var doc = sess.env.document;
+      doc.getElementById('study-btn').click();
+      var saved = sess.P.store.state.formulaStudy;
+      assert(saved && saved.id && saved._opAt && saved._opId &&
+        saved.completed === false && typeof saved.done === 'number' &&
+        typeof saved.pressCount === 'number',
+        'an open session stamps id, _opAt, _opId, done, pressCount, completed false');
+      stepped = saved.queueIds[0];
+      doc.getElementById('flip-btn').click();
+      doc.querySelector('#fcard-actions [data-grade="good"]').click();
+      saved = sess.P.store.state.formulaStudy;
+      assert(saved.history && saved.history[0] && saved.history[0].day === t,
+        'a press records its local day, got: ' + (saved.history && saved.history[0] && saved.history[0].day));
+      assert(saved.steps && saved.steps[stepped] === 1 && saved.pressCount === 1,
+        'a new card Good is a learning step, not a reset');
+      sess.P.views.formulas.armStudyFromFill();
+      sess.P.views.formulas.mount();
+      return wait(0);
+    }).then(function () {
+      var doc = sess.env.document;
+      var saved = sess.P.store.state.formulaStudy;
+      assert(saved && saved.pressCount === 1 && saved.steps && saved.steps[stepped] === 1,
+        'dashboard Study resumes the same-day session instead of resetting it');
+      var refused = autoPickEnv();
+      var rt = refused.P.srs.today();
+      refused.P.store.state.formulaDay = { date: rt, reviewIds: ['cpgf-1.2'], newIds: ['f0'] };
+      return mountFormulas(refused).then(function () {
+        var rdoc = refused.env.document;
+        rdoc.getElementById('study-btn').click();
+        var front = refused.P.store.state.formulaStudy.queueIds[0];
+        var before = refused.P.store.state.cardReviews.length;
+        refused.P.store.state._persistFailed = true;
+        rdoc.getElementById('flip-btn').click();
+        rdoc.querySelector('#fcard-actions [data-grade="easy"]').click();
+        assert(refused.P.store.state.cardReviews.length === before,
+          'a refused grade writes no review');
+        assert(refused.P.store.state.formulaStudy.queueIds[0] === front &&
+          refused.P.store.state.formulaStudy.done === 0,
+          'a refused grade leaves the queue and the done count');
+        var dup = autoPickEnv();
+        var dt = dup.P.srs.today();
+        dup.P.store.state.formulaDay = { date: dt, reviewIds: [], newIds: ['f0'] };
+        dup.P.store.state.formulaStudy = {
+          id: 'dup', date: dt, dayBound: true, queueIds: ['f0', 'f0'],
+          done: 0, pressCount: 0, steps: {}, history: [], completed: false,
+          _opAt: 1, _opId: 'dup'
+        };
+        return mountFormulas(dup).then(function () {
+          var ddoc = dup.env.document;
+          ddoc.getElementById('resume-btn').click();
+          ddoc.getElementById('flip-btn').click();
+          ddoc.querySelector('#fcard-actions [data-grade="easy"]').click();
+          var rows = dup.P.store.state.cardReviews.filter(function (r) { return r.id === 'f0'; });
+          assert(rows.length === 1, 'a duplicated queue id is graded once, got ' + rows.length);
+        });
+      });
+    });
+  }).then(function () {
+    console.log('\nformulas: off-list Again, stale queue, overdue add, readiness');
+    var ag = autoPickEnv();
+    var P = ag.P, t = P.srs.today();
+    P.store.state.cards['cpgf-2.4'].due = t;
+    P.store.state.cards['cpgf-2.4'].lastReviewedDay = t;
+    P.store.state.formulaDay = { date: t, reviewIds: ['cpgf-1.3'], newIds: [] };
+    return mountFormulas(ag).then(function () {
+      var doc = ag.env.document;
+      doc.getElementById('pick-btn').click();
+      doc.querySelector('.picker-topic[data-ch="2"] .picker-ch-toggle').click();
+      var box = doc.querySelector('.picker-row[data-cardid="cpgf-2.4"] .picker-box');
+      assert(box && !box.disabled, 'an off-list Again is selectable');
+      box.checked = true;
+      fireChange(box);
+      doc.getElementById('picker-save').click();
+      var ids = P.store.state.formulaDay.reviewIds;
+      assert(ids.indexOf('cpgf-2.4') !== -1, 'saving the draft adds the off-list Again');
+      assert(P.srs.formulaDayRemaining(ag.env.cards).some(function (c) { return c.id === 'cpgf-2.4'; }),
+        'that Again is studyable the same day');
+      doc.querySelector('.picker-topic[data-ch="1"]') || null;
+      var stale = autoPickEnv();
+      var st = stale.P.srs.today();
+      stale.P.store.state.formulaDay = { date: st, reviewIds: ['cpgf-1.2'], newIds: ['f0'] };
+      return mountFormulas(stale).then(function () {
+        var sdoc = stale.env.document;
+        sdoc.getElementById('study-btn').click();
+        var front = stale.P.store.state.formulaStudy.queueIds[0];
+        var keep = stale.P.store.state.formulaStudy.queueIds.filter(function (id) { return id !== front; });
+        stale.P.srs.setFormulaDayPicks(stale.env.cards, keep);
+        var before = stale.P.store.state.cardReviews.length;
+        sdoc.getElementById('flip-btn').click();
+        sdoc.querySelector('#fcard-actions [data-grade="easy"]').click();
+        assert(stale.P.store.state.cardReviews.length === before,
+          'a card removed from the list is not graded');
+        assert(stale.P.store.state.formulaStudy.queueIds[0] !== front,
+          'the live queue drops the card that left the list');
+        var late = autoPickEnv();
+        var lt = late.P.srs.today();
+        late.P.store.state.settings.formulaDailyTarget = 1;
+        late.P.store.state.settings.examDate = '2026-11-01';
+        late.P.store.state.formulaDay = { date: lt, reviewIds: [], newIds: ['f0'] };
+        return mountFormulas(late).then(function () {
+          var ldoc = late.env.document;
+          var ready = ldoc.getElementById('formula-readiness');
+          assert(ready && ready.textContent.indexOf('not yet introduced') !== -1 &&
+            ready.textContent.indexOf('before the final week') !== -1,
+            'home shows a read-only unseen-card warning, got: ' + (ready && ready.textContent));
+          ldoc.getElementById('readiness-choose').click();
+          assert(!!ldoc.getElementById('picker-study'), 'the warning opens the picker');
+          ldoc.getElementById('picker-cancel').click();
+          var add = ldoc.getElementById('add-overdue-btn');
+          assert(!!add && ldoc.body.textContent.indexOf('Oldest overdue:') !== -1,
+            'a full list of new picks shows the oldest overdue age and Add');
+          add.click();
+          var batch = late.P.store.state.formulaDay;
+          assert(batch.newIds.indexOf('f0') !== -1 && batch.reviewIds.indexOf('cpgf-2.3') !== -1,
+            'Add overdue appends the overdue card and keeps the new pick, got ' +
+              JSON.stringify(batch));
+        });
+      });
+    });
+  }).then(function () {
+    console.log('\nformulas: ad-hoc replace, partial hold, midnight, check-in day, match');
+    var ad = autoPickEnv();
+    var t = ad.P.srs.today();
+    ad.P.store.state.formulaStudy = {
+      id: 'adhoc-1', date: t, dayBound: false, queueIds: ['f0'],
+      done: 0, pressCount: 3, steps: { f0: 1 }, history: [],
+      completed: false, _opAt: Date.now(), _opId: 'adhoc'
+    };
+    ad.P.views.formulas.armStudyFromFill();
+    return mountFormulas(ad).then(function () {
+      var doc = ad.env.document;
+      assert(!!doc.getElementById('resume-btn') && !!doc.getElementById('replace-daily-btn'),
+        'an ad-hoc session offers resume and an explicit replace');
+      assert(ad.P.store.state.formulaStudy.id === 'adhoc-1',
+        'opening Study from the dashboard does not replace the ad-hoc session');
+      doc.getElementById('replace-daily-btn').click();
+      assert(ad.P.store.state.formulaStudy.id !== 'adhoc-1' &&
+        ad.P.store.state.formulaStudy.dayBound !== false,
+        'Replace starts a new day-bound session');
+      var hold = autoPickEnv();
+      var ht = hold.P.srs.today();
+      hold.P.store.state.formulaStudy = {
+        id: 'hold', date: ht, dayBound: true,
+        queueIds: ['cpgf-1.1', 'missing-card'], done: 2, pressCount: 2,
+        history: [], steps: {}, completed: false, _opAt: 5, _opId: 'hold'
+      };
+      var realDeck = hold.P.formulaDeck;
+      hold.P.formulaDeck = function () {
+        return realDeck().then(function (d) {
+          hold.P.formulaDeckStatus = {
+            sources: ['book'], missing: ['bookLists'], partial: true, complete: false
+          };
+          return d;
+        });
+      };
+      return mountFormulas(hold).then(function () {
+        var saved = hold.P.store.state.formulaStudy;
+        assert(saved && saved.queueIds.indexOf('missing-card') !== -1,
+          'a partial deck does not drop a saved queue id');
+        assert(hold.env.document.body.textContent.indexOf('incomplete') !== -1,
+          'a partial deck shows a waiting note');
+        var night = autoPickEnv();
+        pinDate(night, 2026, 10, 24, 23, 59);
+        var day = night.P.srs.today();
+        night.P.store.state.settings.examDate = '2026-11-01';
+        night.P.store.state.formulaDay = { date: day, reviewIds: [], newIds: ['f0'] };
+        return mountFormulas(night).then(function () {
+          var ndoc = night.env.document;
+          ndoc.getElementById('study-btn').click();
+          pinDate(night, 2026, 10, 25, 0, 1);
+          ndoc.getElementById('flip-btn').click();
+          ndoc.querySelector('#fcard-actions [data-grade="easy"]').click();
+          var batch = night.P.store.state.formulaDay;
+          var queued = (night.P.store.state.formulaStudy && night.P.store.state.formulaStudy.queueIds) || [];
+          assert(batch.reviewIds.indexOf('cpgf-2.4') !== -1,
+            'crossing into the final pass adds the learned card to the batch');
+          assert(queued.indexOf('cpgf-2.4') !== -1,
+            'the open session picks up that card, got ' + queued.join(','));
+          var seen = [];
+          var ck = autoPickEnv();
+          pinDate(ck, 2026, 10, 24, 12, 0);
+          var ct = ck.P.srs.today();
+          ck.P.store.state.formulaDay = { date: ct, reviewIds: ['cpgf-1.2', 'cpgf-2.1'], newIds: [] };
+          return mountFormulas(ck).then(function () {
+            var cdoc = ck.env.document;
+            cdoc.getElementById('study-btn').click();
+            var graded = ck.P.store.state.formulaStudy.queueIds[0];
+            cdoc.getElementById('flip-btn').click();
+            cdoc.querySelector('#fcard-actions [data-grade="good"]').click();
+            ck.P.formulaCheckIn.record = function (day) {
+              seen.push(day);
+              return { claimed: true, day: day };
+            };
+            pinDate(ck, 2026, 10, 25, 8, 0);
+            ck.env.location.hash = '#/';
+            (ck.env.window.listeners.hashchange || []).forEach(function (fn) { fn(); });
+            assert(seen.length === 1 && seen[0] === '2026-10-24',
+              'check-in uses the press day, got ' + JSON.stringify(seen));
+            var receipt = ck.P.views.formulas.buildFormulaReceipt('today');
+            var ids = (receipt.recalled || receipt.recalledToday || []).map(function (c) { return c.id; });
+            if (!ids.length && receipt.formulas) ids = receipt.formulas.map(function (c) { return c.id; });
+            assert(ids.indexOf(graded) === -1,
+              'a press from yesterday is not recalled today, got ' + JSON.stringify(receipt).slice(0, 240));
+            var match = autoPickEnv();
+            var mt = match.P.srs.today();
+            match.P.store.state.formulaDay = { date: mt, reviewIds: [], newIds: ['f0', 'f1'] };
+            var grades = 0;
+            var records = 0;
+            var orig = match.P.srs.gradeCard;
+            match.P.srs.gradeCard = function () { grades++; return orig.apply(match.P.srs, arguments); };
+            match.P.formulaCheckIn.record = function () { records++; return { claimed: true }; };
+            var reviewsBefore = match.P.store.state.cardReviews.length;
+            return mountFormulas(match).then(function () {
+              var mdoc = match.env.document;
+              mdoc.querySelector('.flash-tab[data-mode="match"]').click();
+              assert(mdoc.body.textContent.indexOf('does not record a Good') !== -1,
+                'Match intro says the round does not record a Good');
+              mdoc.getElementById('game-start').click();
+              assert(!!mdoc.getElementById('match-practice-note'), 'Match HUD says practice only');
+              function pair(promptText) {
+                var tiles = mdoc.querySelectorAll('.flash-tile');
+                var prompt = null, formula = null;
+                for (var i = 0; i < tiles.length; i++) {
+                  var body = tiles[i].textContent;
+                  if (body.indexOf(promptText) !== -1 && body.indexOf('Prompt') !== -1) prompt = tiles[i];
+                }
+                var num = promptText.replace('Prompt ', '');
+                var needle = 'F = ' + (Number(num) + 2);
+                for (var j = 0; j < tiles.length; j++) {
+                  if (tiles[j].textContent.indexOf(needle) !== -1) formula = tiles[j];
+                }
+                if (prompt) prompt.click();
+                if (formula) formula.click();
+              }
+              pair('Prompt 0');
+              pair('Prompt 1');
+              assert(grades === 0 && records === 0 &&
+                match.P.store.state.cardReviews.length === reviewsBefore,
+                'finishing Match does not grade or check in');
+              assert(mdoc.body.textContent.indexOf('does not record a Good') !== -1,
+                'Match finish repeats the practice-only line');
+              match.env.cards.push({
+                id: 'constructor', topic: 'cm', name: 'Ctor', tag: 'Dielectrics',
+                front: 'Polarization prompt', back: '$$P$$', note: '', aliases: []
+              });
+              var tag = autoPickEnv();
+              tag.env.cards.push({
+                id: 'die-1', topic: 'cm', name: 'Polarization', tag: 'Dielectrics',
+                front: 'A prompt', back: '$$P$$', eq: '2.56', note: '', aliases: []
+              });
+              return mountFormulas(tag).then(function () {
+                var tdoc = tag.env.document;
+                tdoc.querySelector('.browse-tab[data-btab="upcoming"]').click();
+                tag.env.cards.push({
+                  id: 'constructor', topic: 'cm', name: 'Ctor',
+                  front: 'ctor prompt', back: '$$C$$', note: '', aliases: []
+                });
+                tag.P.views.formulas.mount();
+                return wait(0).then(function () {
+                  tdoc.querySelector('.browse-tab[data-btab="upcoming"]').click();
+                  var btn = tdoc.querySelector('.browse-batch-btn[data-bid="constructor"]');
+                  assert(btn && btn.getAttribute('data-batch') === 'add',
+                    'id constructor is not treated as already in the batch, got ' +
+                      (btn && btn.getAttribute('data-batch')));
+                  tdoc.getElementById('pick-btn').click();
+                  var filter = tdoc.getElementById('picker-filter');
+                  filter.value = 'dielectrics';
+                  fireInput(filter);
+                  var row = tdoc.querySelector('.picker-row[data-cardid="die-1"]');
+                  assert(!!row, 'composer search finds a card by its section tag');
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+  }).then(function () {
+    console.log('\nformulas: composer Study keeps an ad-hoc session');
+    var comp = autoPickEnv();
+    var ct = comp.P.srs.today();
+    comp.P.store.state.formulaStudy = {
+      id: 'search-1', date: ct, dayBound: false, queueIds: ['f0'],
+      done: 0, pressCount: 1, steps: { f0: 1 }, history: [],
+      completed: false, _opAt: Date.now(), _opId: 'search'
+    };
+    return mountFormulas(comp).then(function () {
+      var doc = comp.env.document;
+      doc.getElementById('pick-btn').click();
+      doc.getElementById('picker-study').click();
+      var saved = comp.P.store.state.formulaStudy;
+      assert(saved && saved.id === 'search-1' && saved.dayBound === false &&
+        saved.steps && saved.steps.f0 === 1 &&
+        saved.queueIds && saved.queueIds[0] === 'f0',
+        'composer Study leaves the ad-hoc session and its learning step, got ' +
+          JSON.stringify(saved && { id: saved.id, dayBound: saved.dayBound, steps: saved.steps, queueIds: saved.queueIds }));
+      assert(!!doc.getElementById('resume-btn') && !!doc.getElementById('replace-daily-btn') &&
+        !doc.getElementById('flip-btn'),
+        'composer Study returns to Resume and Replace');
+      var bound = autoPickEnv();
+      var bt = bound.P.srs.today();
+      bound.P.store.state.formulaDay = { date: bt, reviewIds: ['cpgf-1.2'], newIds: [] };
+      bound.P.store.state.formulaStudy = {
+        id: 'day-1', date: bt, dayBound: true, queueIds: ['cpgf-1.2'],
+        done: 0, pressCount: 2, steps: { 'cpgf-1.2': 1 }, history: [],
+        completed: false, _opAt: 3, _opId: 'day'
+      };
+      return mountFormulas(bound).then(function () {
+        var bdoc = bound.env.document;
+        bdoc.getElementById('pick-btn').click();
+        bdoc.getElementById('picker-study').click();
+        var daySaved = bound.P.store.state.formulaStudy;
+        assert(daySaved && daySaved.id === 'day-1' &&
+          daySaved.steps && daySaved.steps['cpgf-1.2'] === 1,
+          'composer Study resumes a day-bound session with its step, got ' +
+            JSON.stringify(daySaved && { id: daySaved.id, steps: daySaved.steps }));
+        assert(!!bdoc.getElementById('flip-btn'),
+          'the resumed day-bound session stays on the card');
+      });
+    });
+  }).then(function () {
+    console.log('\nformulas: partial deck warns when every loaded card is introduced');
+    var part = autoPickEnv();
+    var pt = part.P.srs.today();
+    part.env.cards.forEach(function (c) {
+      if (!part.env.cardStates[c.id]) {
+        part.env.cardStates[c.id] = {
+          due: part.P.srs.addDays(4), interval: 4, ease: 2.5, reps: 2,
+          lapses: 0, reviews: 1, lastReviewedDay: part.P.srs.addDays(-4)
+        };
+      }
+    });
+    part.P.store.state.formulaDay = { date: pt, reviewIds: [], newIds: [] };
+    part.P.store.state.formulaStudy = null;
+    var fills = 0;
+    var origFill = part.P.srs.autoFillFormulaDay;
+    part.P.srs.autoFillFormulaDay = function () {
+      fills++;
+      return origFill.apply(part.P.srs, arguments);
+    };
+    var realDeck = part.P.formulaDeck;
+    part.P.formulaDeck = function () {
+      return realDeck().then(function (d) {
+        part.P.formulaDeckStatus = {
+          sources: ['book'], missing: ['bookLists'], partial: true, complete: false
+        };
+        return d;
+      });
+    };
+    return mountFormulas(part).then(function () {
+      var ready = part.env.document.getElementById('formula-readiness');
+      var batch = part.P.store.state.formulaDay;
+      assert(ready && ready.textContent.indexOf('incomplete') !== -1 &&
+        ready.textContent.indexOf('bookLists') !== -1,
+        'a partial deck warns when unseen is 0, got: ' + (ready && ready.textContent));
+      assert(!part.env.document.getElementById('deck-hold'),
+        'the warning shows when no session is held');
+      assert(batch.reviewIds.length === 0 && batch.newIds.length === 0 && fills === 0,
+        'the warning does not add daily cards, got ' + JSON.stringify(batch) + ' fills ' + fills);
     });
   });
 }
