@@ -685,8 +685,12 @@ PGRE.views.formulas = (function () {
     var pSolid = pct(solid);
     var pYoung = pct(young);
     var aria = selected + ' of ' + total + ' introduced, ' + solid + ' solid enough';
-    var solidTip = 'Solid enough\\n' + solid + ' of ' + total + ' · interval ≥ 21 d';
-    var youngTip = 'Learning\\n' + young + ' of ' + total + ' · introduced, not yet mature';
+    var solidTip = 'Solid enough\\n' + solid + ' of ' + total + ' · interval ≥ 21 d\\nDouble-click to browse these cards';
+    var youngTip = 'Learning\\n' + young + ' of ' + total + ' · introduced, not yet mature\\nDouble-click to browse these cards';
+    var unseenTip = 'Not yet introduced\\n' + unseen + ' of ' + total + ' · never studied\\nDouble-click to browse these cards';
+    function segAria(name, n) {
+      return name + ': ' + n + ' of ' + total + ' cards. Press Enter to browse them, or double-click with the mouse.';
+    }
 
     var html = '<div class="card formula-recall-band" role="region" aria-label="' + ui.esc(aria) + '">';
     html += '<div class="fr-usage-head">' +
@@ -698,10 +702,14 @@ PGRE.views.formulas = (function () {
     '</div>';
 
     html += ui.segmentedMeter([
-      { value: solid, className: 'fr-seg fr-seg-solid', label: solid ? 'Solid enough' : '', tip: solidTip, dotClass: 'fr-dot-solid', percent: pSolid },
-      { value: young, className: 'fr-seg fr-seg-young', label: young ? 'Learning' : '', tip: youngTip, dotClass: 'fr-dot-young', percent: pYoung },
-      { value: unseen || (!solid && !young ? 1 : 0), className: 'fr-seg fr-seg-rest', label: '', dotClass: 'fr-dot-rest' }
+      { value: solid, className: 'fr-seg fr-seg-solid', label: solid ? 'Solid enough' : '', tip: solidTip, dotClass: 'fr-dot-solid', percent: pSolid,
+        action: 'mature', aria: segAria('Solid enough', solid) },
+      { value: young, className: 'fr-seg fr-seg-young', label: young ? 'Learning' : '', tip: youngTip, dotClass: 'fr-dot-young', percent: pYoung,
+        action: 'young', aria: segAria('Learning', young) },
+      { value: unseen || (!solid && !young ? 1 : 0), className: 'fr-seg fr-seg-rest', label: '', tip: unseenTip, dotClass: 'fr-dot-rest',
+        action: 'new', aria: segAria('Not yet introduced', unseen) }
     ], 'fr-usage-bar', { layout: 'grow', total: total || 1, value: selected, legendClass: 'fr-usage-legend' });
+    html += '<div class="fr-seg-hint" id="fr-seg-hint" role="status" hidden></div>';
     html += '</div>';
     return html;
   }
@@ -1071,6 +1079,36 @@ PGRE.views.formulas = (function () {
       }
     });
     wireBrowse();
+    wireRecallBand();
+  }
+
+  /* ——— Recall band segments: single click teaches the gesture (a one-line
+     hint under the bar); double-click — or Enter/Space on a focused segment —
+     opens the Search tab filtered to that status. The filter is the existing
+     formulaSearch status: dropdown; no new list machinery. ——— */
+  var SEG_STATUS_NAME = { mature: 'Solid enough', young: 'Learning', 'new': 'Not yet introduced' };
+  function browseStatus(status) {
+    searchQ = { q: '', topic: '', status: status, sort: 'order' };
+    switchMode('search');
+  }
+  function wireRecallBand() {
+    var hint = document.getElementById('fr-seg-hint');
+    root().querySelectorAll('.fr-seg[data-seg-act]').forEach(function (seg) {
+      var status = seg.getAttribute('data-seg-act');
+      var name = SEG_STATUS_NAME[status] || status;
+      seg.addEventListener('click', function () {
+        if (!hint) return;
+        hint.hidden = false;
+        hint.textContent = name + ' — double-click to browse these cards.';
+      });
+      seg.addEventListener('dblclick', function () { browseStatus(status); });
+      seg.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          browseStatus(status);
+        }
+      });
+    });
   }
 
   /* ——— F10 Memory stats: maturity mix, 30-day retention, 14-day forecast ——— */

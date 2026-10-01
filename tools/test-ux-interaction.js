@@ -2667,6 +2667,54 @@ function consumerCases() {
       });
     });
   }).then(function () {
+    console.log('\nformulas: recall band segments hint and navigate');
+    var band = autoPickEnv();
+    var BP = band.P, t0 = BP.srs.today();
+    // recallMix: selected = reviews > 0; solid = interval >= 21.
+    band.env.cardStates['cpgf-2.3'] = { due: BP.srs.addDays(30), interval: 30, reps: 5, reviews: 5, lapses: 0, lastReviewedDay: t0 };
+    band.env.cardStates['cpgf-1.2'] = { due: t0, interval: 2, reps: 2, reviews: 2, lapses: 0, lastReviewedDay: t0 };
+    vm.runInContext(fs.readFileSync(path.join(root, 'js/formula-search.js'), 'utf8'),
+      band.env.sandbox, { filename: 'js/formula-search.js' });
+    BP.store.state.formulaDay = { date: t0, reviewIds: [], newIds: [] };
+    return mountFormulas(band).then(function () {
+      var doc = band.env.document;
+      var solidSeg = doc.querySelector('.fr-seg-solid');
+      var youngSeg = doc.querySelector('.fr-seg-young');
+      var restSeg = doc.querySelector('.fr-seg-rest');
+      assert(!!solidSeg && !!youngSeg && !!restSeg,
+        'recall band renders its three segments');
+      assert(solidSeg.getAttribute('tabindex') === '0' && restSeg.getAttribute('tabindex') === '0',
+        'labelled and unlabelled segments are focusable');
+      assert(solidSeg.getAttribute('role') === 'button' &&
+        (solidSeg.getAttribute('aria-label') || '').indexOf('Solid enough') === 0 &&
+        (restSeg.getAttribute('aria-label') || '').indexOf('Not yet introduced') === 0,
+        'segments carry button role and aria-labels');
+      var hint = doc.getElementById('fr-seg-hint');
+      assert(!!hint && hint.hidden === true, 'click hint starts hidden');
+      solidSeg.click();
+      assert(hint.hidden === false && hint.textContent.indexOf('double-click') !== -1,
+        'single click shows the double-click hint, got: ' + hint.textContent);
+      assert(!!doc.getElementById('study-btn'), 'a single click does not navigate');
+      dispatchEl(solidSeg, 'dblclick');
+      assert(doc.querySelector('.flash-tab[data-mode="search"]').classList.contains('active') &&
+        !!doc.getElementById('fs-input'),
+        'double-click switches to the Search tab');
+      var matureOpt = doc.querySelector('#fs-status-sel option[value="mature"]');
+      assert(!!matureOpt && matureOpt.getAttribute('selected') !== null,
+        'double-click on Solid enough filters status:mature');
+      assert(doc.getElementById('fs-status').textContent.indexOf('1') !== -1,
+        'the mature filter lists the one solid card, status line: ' +
+          (doc.getElementById('fs-status') || {}).textContent);
+      doc.querySelector('.flash-tab[data-mode="study"]').click();
+      var rest2 = doc.querySelector('.fr-seg-rest');
+      assert(!!rest2, 'back on Study the band rest segment is there');
+      dispatchKeydown(band.env, { key: 'Enter', target: rest2 });
+      var newOpt = doc.querySelector('#fs-status-sel option[value="new"]');
+      assert(doc.querySelector('.flash-tab[data-mode="search"]').classList.contains('active') &&
+        !!newOpt && newOpt.getAttribute('selected') !== null,
+        'Enter on the rest segment opens Search filtered to not-yet-introduced');
+    });
+  }).then(function () {
     console.log('\nformulas: partial deck warns when every loaded card is introduced');
     var part = autoPickEnv();
     var pt = part.P.srs.today();

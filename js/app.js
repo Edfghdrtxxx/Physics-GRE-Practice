@@ -26,7 +26,9 @@ PGRE.ui = {
         className: seg.className || (i === 0 ? 'meter-fill' : 'meter-segment'),
         label: seg.label || '',
         tip: seg.tip || '',
-        dotClass: seg.dotClass || ''
+        dotClass: seg.dotClass || '',
+        action: seg.action || '',
+        aria: seg.aria || ''
       });
     });
     if (!total) total = 1;
@@ -51,7 +53,13 @@ PGRE.ui = {
       var size = (100 * seg.value / total).toFixed(4) + '%';
       var cls = 'meter-segment ' + seg.className;
       var attrs = ' style="' + (layout === 'grow' ? 'flex-grow:' + seg.value : 'width:' + size) + '"';
-      if (seg.label) attrs += ' tabindex="0" data-tip="' + PGRE.ui.esc(seg.tip || seg.label) + '"';
+      if (seg.label || seg.action) {
+        attrs += ' tabindex="0" data-tip="' + PGRE.ui.esc(seg.tip || seg.label || seg.action) + '"';
+      }
+      if (seg.action) {
+        attrs += ' role="button" data-seg-act="' + PGRE.ui.esc(seg.action) + '"' +
+          ' aria-label="' + PGRE.ui.esc(seg.aria || seg.label || seg.action) + '"';
+      }
       html += '<div class="' + cls + '"' + attrs + '></div>';
     });
     html += '</div>';
