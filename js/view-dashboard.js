@@ -556,26 +556,46 @@ PGRE.views.dashboard = (function () {
       dueN: dueN, newN: newN, target: T };
   }
 
-  /* Read-only. Does not change due-first allocation or the batch. */
-  function formulaReadinessLine(deck) {
+  /* Names a partial read. Does not touch the daily batch. */
+  function deckRecoveryNote(status) {
+    if (!status || !status.partial) return '';
+    var missing = [];
+    var raw = status.missing || [];
+    for (var i = 0; i < raw.length; i++) {
+      if (raw[i]) missing.push(String(raw[i]));
+    }
+    var note = 'The deck read is incomplete';
+    if (missing.length) note += ' (' + missing.join(', ') + ')';
+    return note + ', so this count can be low.';
+  }
+
+  /* Read-only. Does not call suggestFormulaDay or autoFillFormulaDay, and
+     does not add or remove daily ids. A partial read warns even when every
+     loaded card has already been introduced. */
+  function formulaReadinessLine(deck, status) {
     var srs = PGRE.srs;
-    if (!deck || !deck.length || !srs) return '';
+    if (!srs) return '';
+    var note = deckRecoveryNote(status);
     var unseen = 0;
-    deck.forEach(function (c) {
-      if (c && !srs.cardState(c.id) && !srs.isSuspended(c.id)) unseen++;
-    });
-    if (!unseen) return '';
+    if (deck && deck.length) {
+      deck.forEach(function (c) {
+        if (c && !srs.cardState(c.id) && !srs.isSuspended(c.id)) unseen++;
+      });
+    }
+    if (!unseen) return note;
     var settings = PGRE.store.state.settings || {};
     var exam = settings.examDate || '';
     var days = exam && srs.daysUntil ? srs.daysUntil(exam) : null;
     var introDays = (typeof days === 'number' && days > 7) ? (days - 7) : 0;
     var target = srs.clampTarget(settings.formulaDailyTarget);
     var postponed = typeof srs.formulaDayPostponed === 'function' ? srs.formulaDayPostponed(deck) : 0;
-    return unseen + ' not yet introduced. ' +
+    var line = unseen + ' not yet introduced. ' +
       introDays + ' day' + (introDays === 1 ? '' : 's') + ' before the final week. ' +
       'Daily target ' + target + '. ' +
       postponed + ' due review' + (postponed === 1 ? '' : 's') + ' waiting. ' +
       'Choose them in Recall — this does not change today’s list.';
+    if (note) line += ' ' + note;
+    return line;
   }
 
   function startFormulaFromToday(ev) {
@@ -874,10 +894,7 @@ PGRE.views.dashboard = (function () {
       var todayEl = document.getElementById('today-formulas');
       var readyEl = document.getElementById('formula-readiness');
       if (readyEl) {
-        var readyLine = formulaReadinessLine(deck);
-        if (deckStatus && deckStatus.partial && readyLine) {
-          readyLine += ' The deck read is incomplete, so this count can be low.';
-        }
+        var readyLine = formulaReadinessLine(deck, deckStatus);
         if (readyLine) {
           readyEl.hidden = false;
           readyEl.textContent = readyLine + ' ';

@@ -2623,6 +2623,89 @@ function consumerCases() {
         });
       });
     });
+  }).then(function () {
+    console.log('\nformulas: composer Study keeps an ad-hoc session');
+    var comp = autoPickEnv();
+    var ct = comp.P.srs.today();
+    comp.P.store.state.formulaStudy = {
+      id: 'search-1', date: ct, dayBound: false, queueIds: ['f0'],
+      done: 0, pressCount: 1, steps: { f0: 1 }, history: [],
+      completed: false, _opAt: Date.now(), _opId: 'search'
+    };
+    return mountFormulas(comp).then(function () {
+      var doc = comp.env.document;
+      doc.getElementById('pick-btn').click();
+      doc.getElementById('picker-study').click();
+      var saved = comp.P.store.state.formulaStudy;
+      assert(saved && saved.id === 'search-1' && saved.dayBound === false &&
+        saved.steps && saved.steps.f0 === 1 &&
+        saved.queueIds && saved.queueIds[0] === 'f0',
+        'composer Study leaves the ad-hoc session and its learning step, got ' +
+          JSON.stringify(saved && { id: saved.id, dayBound: saved.dayBound, steps: saved.steps, queueIds: saved.queueIds }));
+      assert(!!doc.getElementById('resume-btn') && !!doc.getElementById('replace-daily-btn') &&
+        !doc.getElementById('flip-btn'),
+        'composer Study returns to Resume and Replace');
+      var bound = autoPickEnv();
+      var bt = bound.P.srs.today();
+      bound.P.store.state.formulaDay = { date: bt, reviewIds: ['cpgf-1.2'], newIds: [] };
+      bound.P.store.state.formulaStudy = {
+        id: 'day-1', date: bt, dayBound: true, queueIds: ['cpgf-1.2'],
+        done: 0, pressCount: 2, steps: { 'cpgf-1.2': 1 }, history: [],
+        completed: false, _opAt: 3, _opId: 'day'
+      };
+      return mountFormulas(bound).then(function () {
+        var bdoc = bound.env.document;
+        bdoc.getElementById('pick-btn').click();
+        bdoc.getElementById('picker-study').click();
+        var daySaved = bound.P.store.state.formulaStudy;
+        assert(daySaved && daySaved.id === 'day-1' &&
+          daySaved.steps && daySaved.steps['cpgf-1.2'] === 1,
+          'composer Study resumes a day-bound session with its step, got ' +
+            JSON.stringify(daySaved && { id: daySaved.id, steps: daySaved.steps }));
+        assert(!!bdoc.getElementById('flip-btn'),
+          'the resumed day-bound session stays on the card');
+      });
+    });
+  }).then(function () {
+    console.log('\nformulas: partial deck warns when every loaded card is introduced');
+    var part = autoPickEnv();
+    var pt = part.P.srs.today();
+    part.env.cards.forEach(function (c) {
+      if (!part.env.cardStates[c.id]) {
+        part.env.cardStates[c.id] = {
+          due: part.P.srs.addDays(4), interval: 4, ease: 2.5, reps: 2,
+          lapses: 0, reviews: 1, lastReviewedDay: part.P.srs.addDays(-4)
+        };
+      }
+    });
+    part.P.store.state.formulaDay = { date: pt, reviewIds: [], newIds: [] };
+    part.P.store.state.formulaStudy = null;
+    var fills = 0;
+    var origFill = part.P.srs.autoFillFormulaDay;
+    part.P.srs.autoFillFormulaDay = function () {
+      fills++;
+      return origFill.apply(part.P.srs, arguments);
+    };
+    var realDeck = part.P.formulaDeck;
+    part.P.formulaDeck = function () {
+      return realDeck().then(function (d) {
+        part.P.formulaDeckStatus = {
+          sources: ['book'], missing: ['bookLists'], partial: true, complete: false
+        };
+        return d;
+      });
+    };
+    return mountFormulas(part).then(function () {
+      var ready = part.env.document.getElementById('formula-readiness');
+      var batch = part.P.store.state.formulaDay;
+      assert(ready && ready.textContent.indexOf('incomplete') !== -1 &&
+        ready.textContent.indexOf('bookLists') !== -1,
+        'a partial deck warns when unseen is 0, got: ' + (ready && ready.textContent));
+      assert(!part.env.document.getElementById('deck-hold'),
+        'the warning shows when no session is held');
+      assert(batch.reviewIds.length === 0 && batch.newIds.length === 0 && fills === 0,
+        'the warning does not add daily cards, got ' + JSON.stringify(batch) + ' fills ' + fills);
+    });
   });
 }
 

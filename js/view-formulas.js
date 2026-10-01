@@ -205,7 +205,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20261001f';
+      s.src = 'js/flashmodes.js?v=20261001g';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -221,7 +221,7 @@ PGRE.views.formulas = (function () {
     if (searchLoad) return searchLoad;
     searchLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/formula-search.js?v=20261001f';
+      s.src = 'js/formula-search.js?v=20261001g';
       s.onload = function () { resolve(); };
       s.onerror = function () { searchLoad = null; searchFailed = true; resolve(); };
       document.head.appendChild(s);
@@ -764,15 +764,33 @@ PGRE.views.formulas = (function () {
     return { ids: ids, age: age };
   }
 
-  /* Read-only. Does not call suggestFormulaDay or change the batch. */
+  /* Names a partial read. Does not touch the daily batch. */
+  function deckRecoveryNote(status) {
+    if (!status || !status.partial) return '';
+    var missing = [];
+    var raw = status.missing || [];
+    for (var i = 0; i < raw.length; i++) {
+      if (raw[i]) missing.push(PGRE.ui.esc(String(raw[i])));
+    }
+    var note = 'The deck read is incomplete';
+    if (missing.length) note += ' (' + missing.join(', ') + ')';
+    return note + ', so this count can be low.';
+  }
+
+  /* Read-only. Does not call suggestFormulaDay or autoFillFormulaDay, and
+     does not add or remove daily ids. A partial read warns even when every
+     loaded card has already been introduced. */
   function formulaReadinessLine(list) {
     var srs = PGRE.srs;
-    if (!list || !list.length || !srs) return '';
+    if (!srs) return '';
+    var note = deckRecoveryNote(lastDeckStatus);
     var unseen = 0;
-    list.forEach(function (c) {
-      if (c && !srs.cardState(c.id) && !srs.isSuspended(c.id)) unseen++;
-    });
-    if (!unseen) return '';
+    if (list && list.length) {
+      list.forEach(function (c) {
+        if (c && !srs.cardState(c.id) && !srs.isSuspended(c.id)) unseen++;
+      });
+    }
+    if (!unseen) return note;
     var exam = PGRE.store.state.settings && PGRE.store.state.settings.examDate;
     var days = exam ? srs.daysUntil(exam) : null;
     var introDays = (typeof days === 'number' && days > 7) ? (days - 7) : 0;
@@ -783,9 +801,7 @@ PGRE.views.formulas = (function () {
       'Daily target ' + target + '. ' +
       postponed + ' due review' + (postponed === 1 ? '' : 's') + ' waiting. ' +
       'Choose cards yourself — this does not change today’s list.';
-    if (lastDeckStatus && lastDeckStatus.partial) {
-      line += ' The deck read is incomplete, so this count can be low.';
-    }
+    if (note) line += ' ' + note;
     return line;
   }
 
@@ -910,6 +926,10 @@ PGRE.views.formulas = (function () {
         ui.statTile('Reviewed today', ui.fmt(reviewedToday)) +
         ui.statTile('Not yet introduced', ui.fmt(0)) +
       '</div>';
+      var emptyReady = formulaReadinessLine(deck);
+      if (emptyReady) {
+        html += '<div class="card" id="formula-readiness"><p class="muted">' + emptyReady + '</p></div>';
+      }
       html += '<div class="card placeholder">' +
         '<p><strong>The deck is empty — by design.</strong></p>' +
         '<p class="muted">No hand-written starter cards: formulas arrive with the ' +
@@ -2042,7 +2062,9 @@ PGRE.views.formulas = (function () {
     });
     document.getElementById('picker-study').addEventListener('click', function () {
       save();
-      if (!beginDailyStudy({ replace: true })) renderHome();
+      // A same-day day-bound session resumes, steps included. An ad-hoc
+      // session is left in place; home already offers Resume and Replace.
+      if (!beginDailyStudy()) renderHome();
     });
 
     groups().forEach(syncHead);
@@ -3829,18 +3851,26 @@ PGRE.views.formulas = (function () {
   function renderSearchActions() {
     var box = document.getElementById('fs-actions');
     if (!box) return;
+    // Rehydrate before the zero-hit return. A partial read can hold the
+    // session, and that note must still show when the search has no hits.
+    var pending = rehydrateSavedStudy();
+    if (sessionHeld) {
+      var heldMissing = (lastDeckStatus && lastDeckStatus.missing) || [];
+      var heldNames = [];
+      for (var hi = 0; hi < heldMissing.length; hi++) {
+        if (heldMissing[hi]) heldNames.push(PGRE.ui.esc(String(heldMissing[hi])));
+      }
+      box.innerHTML = '<div class="card fs-actionbar"><p id="deck-hold">The deck read is incomplete' +
+        (heldNames.length ? ' (' + heldNames.join(', ') + ')' : '') +
+        '. Study is waiting so a missing card is not dropped.</p></div>';
+      return;
+    }
     var n = searchLast ? searchLast.total : 0;
     if (!n) { box.innerHTML = ''; return; }
     /* Starting a drill overwrites whatever session was saved mid-flight (the
        leech drill has always done the same). Search makes that one click away
        from a browse of the entire deck, so say it plainly BEFORE the click
        rather than letting a half-finished daily round vanish unannounced. */
-    var pending = rehydrateSavedStudy();
-    if (sessionHeld) {
-      box.innerHTML = '<div class="card fs-actionbar"><p id="deck-hold">The deck read is incomplete. ' +
-        'Study is waiting so a missing card is not dropped.</p></div>';
-      return;
-    }
     var warn = pending ?
       '<span class="fs-actionwarn">Replaces the session you have in progress (' +
         pending.length + ' left).</span>' : '';
