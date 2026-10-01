@@ -171,5 +171,52 @@ assert(ids(sug.newIds) === 'cpgf-1.1,cpgl-1.01,cpgf-2.1,cpgl-2.01,supp-a',
     ids(sug.newIds) + ')');
 assert(!sug.reviewIds.length, 'no card state means the pick is all new cards');
 
+console.log('\nF4 a nonempty partial deck does not durably prune saved ids');
+resetStore();
+storeState.formulaDay = { date: srs.today(), reviewIds: ['book', 'supp'], newIds: [] };
+store.save();
+var revBefore = store.state._rev;
+sandbox.PGRE.formulaDeckStatus = {
+  partial: true, complete: false, missing: ['bookFormulas'],
+  sources: { bookFormulas: 'missing', formulas: 'present', bookLists: 'present', indexedDB: 'empty' }
+};
+var kept = srs.formulaDay([{ id: 'supp' }]);
+assert(kept.reviewIds.indexOf('book') !== -1, 'partial read keeps a saved id that is absent from the deck');
+assert(kept.reviewIds.indexOf('supp') !== -1, 'partial read keeps an id that is present');
+assert(store.state._rev === revBefore, 'partial read does not save a prune');
+var picked = srs.setFormulaDayPicks([{ id: 'supp' }], ['supp']);
+assert(picked.reviewIds.indexOf('book') !== -1 || picked.newIds.indexOf('book') !== -1,
+  'an explicit save during a partial read keeps the unresolved id');
+sandbox.PGRE.formulaDeckStatus = {
+  partial: false, complete: true, missing: [],
+  sources: { bookFormulas: 'present', formulas: 'present', bookLists: 'present', indexedDB: 'empty' }
+};
+var pruned = srs.formulaDay([{ id: 'supp' }]);
+assert(pruned.reviewIds.indexOf('book') === -1 && pruned.newIds.indexOf('book') === -1,
+  'a complete deck still drops an id that has left the deck');
+assert(pruned.reviewIds.indexOf('supp') !== -1 || pruned.newIds.indexOf('supp') !== -1,
+  'a complete deck keeps the id that is still there');
+
+console.log('\nI3 prototype-name ids stay schedulable');
+resetStore();
+assert(srs.cardState('constructor') === null, 'constructor is not a card until it is stored');
+assert(srs.isSuspended('constructor') === false, 'constructor is not suspended by the map prototype');
+assert(srs.isSuspended('toString') === false, 'toString is not suspended by the map prototype');
+var protoDeck = [{ id: 'constructor' }, { id: 'toString' }, { id: '__proto__' }, { id: 'keep' }];
+sandbox.PGRE.formulaDeckStatus = {
+  partial: false, complete: true, missing: [],
+  sources: { bookFormulas: 'present', formulas: 'present', bookLists: 'present', indexedDB: 'empty' }
+};
+var protoSug = srs.suggestFormulaDay(protoDeck, { have: {}, room: 10 });
+assert(ids(protoSug.newIds) === 'constructor,toString,__proto__,keep',
+  'prototype-name ids are offered as new cards (got ' + ids(protoSug.newIds) + ')');
+storeState.formulaDay = {
+  date: srs.today(), reviewIds: ['constructor', 'keep'], newIds: [], softIds: ['constructor']
+};
+var protoBatch = srs.removeFormulaDaySoft(protoDeck, ['keep']);
+assert(protoBatch.reviewIds.indexOf('constructor') !== -1,
+  'removing another id does not drop a prototype-name pick');
+assert(protoBatch.reviewIds.indexOf('keep') === -1, 'the named id is still removed');
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

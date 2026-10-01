@@ -191,7 +191,9 @@ PGRE.store = {
     // append-only logs: union by identity, keep live order then unseen disk
     // entries appended after (chronological-ish).
     function unionArr(live, inc, keyFn, cap) {
-      var seen = {}, out = [], i, k;
+      // Null prototype: an id of "constructor" / "toString" / "__proto__"
+      // must not look already-seen.
+      var seen = Object.create(null), out = [], i, k;
       for (i = 0; i < live.length; i++) { k = keyFn(live[i]); seen[k] = 1; out.push(live[i]); }
       for (i = 0; i < inc.length; i++) { k = keyFn(inc[i]); if (!seen[k]) { seen[k] = 1; out.push(inc[i]); } }
       if (cap && out.length > cap) out = out.slice(out.length - cap);
@@ -232,6 +234,42 @@ PGRE.store = {
         }
       }
     }
+    // Review undos name a grade. Apply them before card comparison so a
+    // lower review count from Undo is not discarded in favor of the grade
+    // it cancelled, and so a sibling log row for that op cannot return.
+    if (isObj(disk.reviewUndos)) {
+      if (!isObj(st.reviewUndos)) st.reviewUndos = {};
+      for (var uop in disk.reviewUndos) {
+        if (!Object.prototype.hasOwnProperty.call(disk.reviewUndos, uop)) continue;
+        if (!Object.prototype.hasOwnProperty.call(st.reviewUndos, uop)) {
+          st.reviewUndos[uop] = disk.reviewUndos[uop];
+        }
+      }
+    }
+    function cardAfterUndo(card) {
+      if (!card || !isObj(st.reviewUndos)) return card || null;
+      var op = card.lastReviewOpId;
+      if (!op || !Object.prototype.hasOwnProperty.call(st.reviewUndos, op)) return card;
+      var prev = st.reviewUndos[op] && st.reviewUndos[op].prev;
+      if (!prev) return null;
+      try { return JSON.parse(JSON.stringify(prev)); } catch (eUndo) { return prev; }
+    }
+    function applyCardUndos(map) {
+      if (!isObj(map)) return;
+      for (var cid in map) {
+        if (!Object.prototype.hasOwnProperty.call(map, cid)) continue;
+        var eff = cardAfterUndo(map[cid]);
+        if (!eff) delete map[cid];
+        else map[cid] = eff;
+      }
+    }
+    applyCardUndos(st.cards);
+    applyCardUndos(disk.cards);
+    if (isObj(st.reviewUndos) && Array.isArray(st.cardReviews)) {
+      st.cardReviews = st.cardReviews.filter(function (row) {
+        return !(row && row.op && Object.prototype.hasOwnProperty.call(st.reviewUndos, row.op));
+      });
+    }
     // keyed records: union missing keys; on collision cards prefer higher
     // reviews then later lastReviewedAt then later due, mistakes higher
     // misses+solves then later lastTouchedAt, notes/cardNotes later
@@ -245,6 +283,11 @@ PGRE.store = {
         var dAt = (diskVal && diskVal.lastReviewedAt) || '', lAt = (liveVal && liveVal.lastReviewedAt) || '';
         if (dAt > lAt) return true;
         if (dAt < lAt) return false;
+        // Same count and the same millisecond: Again beats a longer Good.
+        // Any other tie still prefers the later due (easy10 stretch).
+        var dAgain = !!(diskVal && diskVal.lastGrade === 'again');
+        var lAgain = !!(liveVal && liveVal.lastGrade === 'again');
+        if (dAgain !== lAgain) return dAgain;
         return ((diskVal && diskVal.due) || '') > ((liveVal && liveVal.due) || '');
       }
       if (map === 'mistakes') {
@@ -331,6 +374,8 @@ PGRE.store = {
     // writes carry a mutation timestamp/kind so a newer replace/remove from a
     // sibling cannot be undone by a stale heap. Legacy batches without the
     // marker retain the old disjoint-add union behavior.
+    if (isObj(disk.formulaDay)) this._normalizeFormulaDayArrays(disk.formulaDay, disk.cards);
+    if (isObj(st.formulaDay)) this._normalizeFormulaDayArrays(st.formulaDay, st.cards);
     if (isObj(disk.formulaDay) && isObj(st.formulaDay)) {
       var df = disk.formulaDay, lf = st.formulaDay;
       var dd = String(df.date || ''), ld = String(lf.date || '');
@@ -358,8 +403,10 @@ PGRE.store = {
         });
       }
       // a soft pin only makes sense for a card still in the batch
-      if (st.formulaDay.softIds) {
-        var inBatch = {};
+      if (!Array.isArray(st.formulaDay.reviewIds)) st.formulaDay.reviewIds = [];
+      if (!Array.isArray(st.formulaDay.newIds)) st.formulaDay.newIds = [];
+      if (Array.isArray(st.formulaDay.softIds)) {
+        var inBatch = Object.create(null);
         st.formulaDay.reviewIds.concat(st.formulaDay.newIds).forEach(function (id) { inBatch[id] = 1; });
         st.formulaDay.softIds = st.formulaDay.softIds.filter(function (id) { return inBatch[id]; });
         if (!st.formulaDay.softIds.length) delete st.formulaDay.softIds;
@@ -367,14 +414,52 @@ PGRE.store = {
     } else if (isObj(disk.formulaDay) && !st.formulaDay) {
       st.formulaDay = disk.formulaDay;
     }
-    // in-flight formula Study: an unfinished session beats a finished one;
-    // same done-ness → the more-advanced session wins
-    if (isObj(disk.formulaStudy)) {
-      var ls = st.formulaStudy, ds = disk.formulaStudy;
-      if (!isObj(ls) || (!!ls.done && !ds.done) ||
-          (!!ls.done === !!ds.done && (ds.pressCount || 0) > (ls.pressCount || 0))) {
-        st.formulaStudy = ds;
+    // formulaStudy.done is a count of cards finished, never a completion
+    // flag. completed === true (and formulaStudyEnd after a clear) marks a
+    // finished session so a stale done:0 snapshot cannot resurrect it.
+    // _opAt orders snapshots, including an undo that lowers the count.
+    if (isObj(disk.formulaStudyEnd)) {
+      var liveEnd = st.formulaStudyEnd;
+      if (!isObj(liveEnd) || (Number(disk.formulaStudyEnd._opAt) || 0) >= (Number(liveEnd._opAt) || 0)) {
+        st.formulaStudyEnd = disk.formulaStudyEnd;
       }
+    }
+    function studyOpAt(sess) { return sess ? (Number(sess._opAt) || 0) : 0; }
+    function studyOpId(sess) { return sess ? String(sess._opId || '') : ''; }
+    function studyBlocked(sess, endMark) {
+      if (!sess || !endMark) return false;
+      var endAt = studyOpAt(endMark), sAt = studyOpAt(sess);
+      var different = !!(endMark.id && sess.id && endMark.id !== sess.id);
+      // A different session replaces a finished one only when it is strictly newer.
+      if (different && sAt && endAt && sAt > endAt) return false;
+      if (sAt && endAt) return sAt <= endAt;
+      return true;
+    }
+    function preferStudy(live, inc) {
+      if (!inc) return false;
+      if (!live) return true;
+      var lAt = studyOpAt(live), dAt = studyOpAt(inc);
+      if (lAt && dAt && lAt !== dAt) return dAt > lAt;
+      if (dAt && !lAt) return true;
+      if (lAt && !dAt) return false;
+      if (lAt && dAt && lAt === dAt) {
+        var lId = studyOpId(live), dId = studyOpId(inc);
+        if (lId && dId && lId !== dId) return dId > lId;
+      }
+      var liveDone = live.completed === true, diskDone = inc.completed === true;
+      if (diskDone !== liveDone) return diskDone;
+      var dp = Number(inc.pressCount) || 0, lp = Number(live.pressCount) || 0;
+      if (dp !== lp) return dp > lp;
+      return (Number(inc.done) || 0) > (Number(live.done) || 0);
+    }
+    var studyEnd = isObj(st.formulaStudyEnd) ? st.formulaStudyEnd : null;
+    var liveStudy = isObj(st.formulaStudy) ? st.formulaStudy : null;
+    var diskStudy = isObj(disk.formulaStudy) ? disk.formulaStudy : null;
+    if (studyEnd || diskStudy) {
+      if (studyBlocked(liveStudy, studyEnd)) liveStudy = null;
+      if (studyBlocked(diskStudy, studyEnd)) diskStudy = null;
+      if (preferStudy(liveStudy, diskStudy)) st.formulaStudy = diskStudy;
+      else st.formulaStudy = liveStudy;
     }
     // focus timer: a running timer wins; else merge monotonic fields
     if (isObj(disk.timer) && isObj(st.timer)) {
@@ -411,6 +496,7 @@ PGRE.store = {
     }
     // settings: prefer live — the storage listener keeps idle heaps current,
     // so a live value differing from disk is this tab's own fresh change.
+    try { this.normalizeRecallState(); } catch (eNorm) { /* nested repair must not break the merge */ }
   },
 
   /* Mark a user deletion so a stale sibling heap can't resurrect the key on a
@@ -423,6 +509,167 @@ PGRE.store = {
   untombstone: function (map, key) {
     var t = this.state.tombstones && this.state.tombstones[map];
     if (t) delete t[key];
+  },
+
+  /* String ids only, first occurrence wins, prototype-name safe. */
+  _idList: function (v) {
+    var seen = Object.create(null);
+    var out = [];
+    var arr = Array.isArray(v) ? v : [];
+    for (var i = 0; i < arr.length; i++) {
+      var id = arr[i];
+      if (typeof id !== 'string' || !id) continue;
+      if (Object.prototype.hasOwnProperty.call(seen, id)) continue;
+      seen[id] = 1;
+      out.push(id);
+    }
+    return out;
+  },
+
+  /* Dedupe formulaDay id arrays in place. An id that appears in both
+     reviewIds and newIds is kept once: on the review list when that card
+     has state, otherwise on the new list. An id that appears in only one
+     list stays there. softIds keep pins that are still in the batch.
+     Returns { changed }. Does not throw. */
+  _normalizeFormulaDayArrays: function (batch, cards) {
+    if (!batch || typeof batch !== 'object' || Array.isArray(batch)) return { changed: false };
+    var beforeR = batch.reviewIds, beforeN = batch.newIds, beforeS = batch.softIds;
+    var review = this._idList(batch.reviewIds);
+    var fresh = this._idList(batch.newIds);
+    var freshSet = Object.create(null);
+    var reviewSet = Object.create(null);
+    var i;
+    for (i = 0; i < review.length; i++) reviewSet[review[i]] = 1;
+    for (i = 0; i < fresh.length; i++) freshSet[fresh[i]] = 1;
+    function hasCard(id) {
+      return !!(cards && Object.prototype.hasOwnProperty.call(cards, id) && cards[id]);
+    }
+    var reviewOut = [], newOut = [];
+    for (i = 0; i < review.length; i++) {
+      var id = review[i];
+      if (freshSet[id]) { if (hasCard(id)) reviewOut.push(id); }
+      else reviewOut.push(id);
+    }
+    for (i = 0; i < fresh.length; i++) {
+      var id2 = fresh[i];
+      if (reviewSet[id2]) { if (!hasCard(id2)) newOut.push(id2); }
+      else newOut.push(id2);
+    }
+    var inBatch = Object.create(null);
+    for (i = 0; i < reviewOut.length; i++) inBatch[reviewOut[i]] = 1;
+    for (i = 0; i < newOut.length; i++) inBatch[newOut[i]] = 1;
+    var soft = this._idList(batch.softIds).filter(function (id) { return inBatch[id]; });
+    batch.reviewIds = reviewOut;
+    batch.newIds = newOut;
+    if (soft.length) batch.softIds = soft;
+    else delete batch.softIds;
+    function asList(v) { return Array.isArray(v) ? v : []; }
+    function differ(a, b) {
+      if (a.length !== b.length) return true;
+      for (var k = 0; k < a.length; k++) if (a[k] !== b[k]) return true;
+      return false;
+    }
+    var changed = !Array.isArray(beforeR) || !Array.isArray(beforeN) ||
+      (beforeS != null && !Array.isArray(beforeS)) ||
+      differ(asList(beforeR), reviewOut) || differ(asList(beforeN), newOut) ||
+      differ(asList(beforeS), soft);
+    return { changed: changed };
+  },
+
+  /* Repair nested recall records in place. A card with no usable due is
+     given one (from its own review day + interval when both exist, else
+     today) and noted on formulaQuarantine. The card is not deleted.
+     Returns true when the state changed. Does not throw and does not save. */
+  normalizeRecallState: function () {
+    var st = this.state;
+    if (!st || typeof st !== 'object') return false;
+    var changed = false;
+    if (!st.cards || typeof st.cards !== 'object' || Array.isArray(st.cards)) {
+      st.cards = {};
+      changed = true;
+    }
+    if (st.formulaQuarantine != null && !Array.isArray(st.formulaQuarantine)) {
+      st.formulaQuarantine = [];
+      changed = true;
+    }
+    function note(id, reason) {
+      if (!Array.isArray(st.formulaQuarantine)) st.formulaQuarantine = [];
+      st.formulaQuarantine.push({ id: id, reason: reason, at: new Date().toISOString() });
+    }
+    var today = this.today();
+    for (var id in st.cards) {
+      if (!Object.prototype.hasOwnProperty.call(st.cards, id)) continue;
+      var rec = st.cards[id];
+      if (!rec || typeof rec !== 'object' || Array.isArray(rec)) {
+        note(id, 'unusable-record');
+        st.cards[id] = {
+          reps: 0, lapses: 0, interval: 0,
+          ease: (PGRE.srs && PGRE.srs.EASE_START) || 2.5,
+          due: today, reviews: 0, _quarantined: 'unusable-record'
+        };
+        changed = true;
+        continue;
+      }
+      if (typeof rec.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rec.due)) continue;
+      var day = null;
+      if (typeof rec.lastReviewedDay === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rec.lastReviewedDay)) {
+        day = rec.lastReviewedDay;
+      } else if (typeof rec.lastReviewedAt === 'string' && PGRE.srs && typeof PGRE.srs.dayStr === 'function') {
+        var parsed = new Date(rec.lastReviewedAt);
+        if (!isNaN(parsed.getTime())) day = PGRE.srs.dayStr(parsed);
+      }
+      var ivl = Number(rec.interval);
+      if (day && isFinite(ivl) && PGRE.srs && typeof PGRE.srs.addDaysTo === 'function') {
+        rec.due = PGRE.srs.addDaysTo(day, ivl);
+        rec._dueRepaired = 'from-review';
+        note(id, 'due-repaired');
+      } else {
+        rec.due = today;
+        rec._dueRepaired = 'due-today';
+        note(id, 'due-missing');
+      }
+      changed = true;
+    }
+    if (st.formulaDay == null) {
+      /* absent batch is valid */
+    } else if (typeof st.formulaDay !== 'object' || Array.isArray(st.formulaDay)) {
+      note(null, 'formula-day-unusable');
+      st.formulaDay = null;
+      changed = true;
+    } else if (this._normalizeFormulaDayArrays(st.formulaDay, st.cards).changed) {
+      changed = true;
+    }
+    if (st.formulaStudy == null) {
+      /* no session */
+    } else if (typeof st.formulaStudy !== 'object' || Array.isArray(st.formulaStudy)) {
+      st.formulaStudy = null;
+      changed = true;
+    } else if (typeof st.formulaStudy.done !== 'number' || !isFinite(st.formulaStudy.done)) {
+      st.formulaStudy.done = 0;
+      changed = true;
+    }
+    return changed;
+  },
+
+  /* Clear the in-flight formula session and record a finish marker so a
+     stale sibling snapshot cannot restore it. Does not save.
+     marker: { id, done, _opAt, _opId } — all optional.
+     Returns the formulaStudyEnd record. */
+  clearFormulaStudy: function (marker) {
+    if (!this.state) return null;
+    marker = marker || {};
+    var prev = this.state.formulaStudy;
+    var now = Date.now();
+    var end = {
+      id: marker.id || (prev && prev.id) || null,
+      done: marker.done != null ? marker.done : (prev && typeof prev.done === 'number' ? prev.done : 0),
+      completed: true,
+      _opAt: Number(marker._opAt) || now,
+      _opId: marker._opId || (now.toString(36) + '-' + Math.random().toString(36).slice(2))
+    };
+    this.state.formulaStudyEnd = end;
+    this.state.formulaStudy = null;
+    return end;
   },
 
   /* Adopt a sibling tab's write into the live heap (storage event / pre-save
@@ -440,8 +687,17 @@ PGRE.store = {
       return; // our epoch is ahead; disk is pre-reset leftovers
     }
     this.state._rev = Math.max(this.state._rev || 0, disk._rev || 0);
+    try { this.normalizeRecallState(); } catch (eNorm) { /* nested repair must not break adopt */ }
+    // timer.js owns PGRE.onStateAdopted (single assignment). Subscribers
+    // coexist with that hook; neither replaces the other.
     if (typeof PGRE.onStateAdopted === 'function') {
       try { PGRE.onStateAdopted(); } catch (e) { /* repaint hook must not break persist */ }
+    }
+    var subs = PGRE._stateAdoptedSubs;
+    if (subs && subs.length) {
+      for (var si = 0; si < subs.length; si++) {
+        try { if (typeof subs[si] === 'function') subs[si](); } catch (eSub) { /* one listener must not block the rest */ }
+      }
     }
   },
 
@@ -496,6 +752,12 @@ PGRE.store = {
       this.state.migrations.planRebuild2026 = new Date().toISOString();
       this.save();
     }
+    // Nested recall records (card due, daily id arrays) are repaired after
+    // the one-shot wipes and before easy10, so a missing due cannot hide a
+    // card and a bad batch cannot throw on the next read.
+    try {
+      if (this.normalizeRecallState()) this.save();
+    } catch (eNorm) { console.warn('Recall state normalize skipped', eNorm); }
     // ITEM 5 — one-time Easy-interval recompute. Runs AFTER the try/catch so it
     // never trips the corruption-recovery path, and after migrate() has
     // backfilled settings.examDate. PGRE.srs is fully loaded before boot calls
@@ -609,10 +871,19 @@ PGRE.store = {
     this.state.cardReviews = [];
     this.state.formulaDay = null;
     this.state.formulaStudy = null;
+    this.state.formulaStudyEnd = null;
     this.state.formulaSuspended = {};
+    this.state.reviewUndos = {};
+    this.state.formulaQuarantine = [];
     this.state.tombstones = {};
     this.state._epoch = this._maxEpoch() + 1; // deletions must not merge back
-    if (this.state.migrations) delete this.state.migrations.easy10;
+    if (!this.state.migrations || typeof this.state.migrations !== 'object' || Array.isArray(this.state.migrations)) {
+      this.state.migrations = {};
+    }
+    // Leave easy10 satisfied. Deleting it re-armed the one-shot stretch on
+    // the next load and turned a current-scheme Easy (4 days, or 1 in the
+    // final week) into 10 days.
+    if (!this.state.migrations.easy10) this.state.migrations.easy10 = new Date().toISOString();
     this.save();
   },
 
@@ -723,6 +994,7 @@ PGRE.store = {
       this.state.migrations.ankiReset2026 = new Date().toISOString();
       this.save();
     }
+    try { this.normalizeRecallState(); } catch (eNorm) { console.warn('Recall state normalize skipped', eNorm); }
     // ITEM 5 — run the one-time Easy-interval recompute on the imported state too,
     // mirroring load(). A restored pre-build backup may still carry stale Easy
     // 3-day due dates and no migrations.easy10 flag; the Library restore handler
@@ -822,10 +1094,13 @@ PGRE.contentDB = {
     var self = this;
     return self.open().then(function () {
       return new Promise(function (resolve) {
-        if (!self.db) { resolve(null); return; }
+        if (!self.db) { self._lastGetStatus = 'unavailable'; resolve(null); return; }
         var req = self.db.transaction('files', 'readonly').objectStore('files').get(id);
-        req.onsuccess = function () { resolve(req.result || null); };
-        req.onerror = function () { resolve(null); };
+        req.onsuccess = function () {
+          self._lastGetStatus = req.result ? 'present' : 'empty';
+          resolve(req.result || null);
+        };
+        req.onerror = function () { self._lastGetStatus = 'error'; resolve(null); };
       });
     });
   },
@@ -848,21 +1123,76 @@ PGRE.contentDB = {
   }
 };
 
+/* Subscribe to sibling-tab adopts without replacing PGRE.onStateAdopted
+   (timer.js owns that single assignment). Returns an unsubscribe function. */
+PGRE.subscribeStateAdopted = function (fn) {
+  if (typeof fn !== 'function') return function () {};
+  if (!PGRE._stateAdoptedSubs) PGRE._stateAdoptedSubs = [];
+  PGRE._stateAdoptedSubs.push(fn);
+  return function () {
+    var list = PGRE._stateAdoptedSubs || [];
+    var at = list.indexOf(fn);
+    if (at !== -1) list.splice(at, 1);
+  };
+};
+
 /* The formula deck, merged from its four sources (first occurrence of an id
    wins): book-derived cards in content/bank/cpg-formulas.js
    (PGRE.BOOK_FORMULAS — gitignored, may be absent), hand-appended literals in
    PGRE.FORMULAS (js/data-formulas.js), book lists in content/bank/cpg-lists.js
    (PGRE.BOOK_LISTS — gitignored, may be absent, kind: 'list' cards), and the
    { id: 'formula-deck', cards: [...] } record in the IndexedDB content store.
-   Async because of the last one. */
+   Always resolves to an array. PGRE.formulaDeckStatus is set in the same
+   turn and reports which sources were present. A missing script or a failed
+   IndexedDB read sets partial: true. An empty IndexedDB record (no imported
+   deck) is sources.indexedDB 'empty' and is not partial. Prototype-name ids
+   (constructor, toString, __proto__) are kept. */
 PGRE.formulaDeck = function () {
-  return PGRE.contentDB.get('formula-deck').then(function (rec) {
-    var seen = {};
-    return (PGRE.BOOK_FORMULAS || [])
-      .concat(PGRE.FORMULAS, PGRE.BOOK_LISTS || [], (rec && rec.cards) || [])
+  var pending;
+  try {
+    pending = PGRE.contentDB.get('formula-deck');
+  } catch (eGet) {
+    if (PGRE.contentDB) PGRE.contentDB._lastGetStatus = 'error';
+    pending = Promise.resolve(null);
+  }
+  return Promise.resolve(pending).then(function (rec) {
+    return rec || null;
+  }, function () {
+    if (PGRE.contentDB) PGRE.contentDB._lastGetStatus = 'error';
+    return null;
+  }).then(function (rec) {
+    var idbStatus = PGRE.contentDB && PGRE.contentDB._lastGetStatus;
+    var indexedDB;
+    if (rec) indexedDB = 'present';
+    else if (idbStatus === 'unavailable' || idbStatus === 'error') indexedDB = idbStatus;
+    else indexedDB = 'empty';
+    function sourceState(v) { return Array.isArray(v) ? 'present' : 'missing'; }
+    var sources = {
+      bookFormulas: sourceState(PGRE.BOOK_FORMULAS),
+      formulas: sourceState(PGRE.FORMULAS),
+      bookLists: sourceState(PGRE.BOOK_LISTS),
+      indexedDB: indexedDB
+    };
+    var missing = [];
+    if (sources.bookFormulas !== 'present') missing.push('bookFormulas');
+    if (sources.formulas !== 'present') missing.push('formulas');
+    if (sources.bookLists !== 'present') missing.push('bookLists');
+    if (indexedDB === 'unavailable' || indexedDB === 'error') missing.push('indexedDB');
+    PGRE.formulaDeckStatus = {
+      sources: sources,
+      missing: missing,
+      partial: missing.length > 0,
+      complete: missing.length === 0
+    };
+    var seen = new Map();
+    return (Array.isArray(PGRE.BOOK_FORMULAS) ? PGRE.BOOK_FORMULAS : [])
+      .concat(Array.isArray(PGRE.FORMULAS) ? PGRE.FORMULAS : [],
+              Array.isArray(PGRE.BOOK_LISTS) ? PGRE.BOOK_LISTS : [],
+              (rec && rec.cards) || [])
       .filter(function (c) {
-        if (!c || !c.id || seen[c.id]) return false;
-        seen[c.id] = true;
+        if (!c || c.id == null || c.id === '') return false;
+        if (seen.has(c.id)) return false;
+        seen.set(c.id, 1);
         return true;
       });
   });

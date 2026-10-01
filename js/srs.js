@@ -187,7 +187,12 @@ PGRE.srs = {
   EASE_MAX: 3.0,
 
   cardState: function (id) {
-    return PGRE.store.state.cards[id] || null;
+    var cards = PGRE.store.state && PGRE.store.state.cards;
+    // Own keys only. A plain object answers cards['constructor'] with a
+    // function, which would hide a real card of that id as if it had state.
+    if (!cards || !Object.prototype.hasOwnProperty.call(cards, id)) return null;
+    var st = cards[id];
+    return st && typeof st === 'object' ? st : null;
   },
   getMnemonic: function (id) {
     if (!id || !PGRE.store || !PGRE.store.state || !PGRE.store.state.cardNotes) return '';
@@ -304,17 +309,68 @@ PGRE.srs = {
     return cap != null ? Math.min(raw, cap) : raw;
   },
 
+  _newReviewOpId: function () {
+    var now = Date.now();
+    if (now <= (this._reviewOpAt || 0)) now = this._reviewOpAt + 1;
+    this._reviewOpAt = now;
+    return now.toString(36) + '-' + Math.random().toString(36).slice(2);
+  },
+
+  /* Drop this id from today's soft pins in the same state update as the
+     grade. Returns true when a pin was removed. A refused grade must not
+     call this. */
+  _consumeSoftPin: function (id) {
+    var batch = PGRE.store.state && PGRE.store.state.formulaDay;
+    if (!batch || !Array.isArray(batch.softIds) || !batch.softIds.length) return false;
+    var next = [], removed = false, i;
+    for (i = 0; i < batch.softIds.length; i++) {
+      if (batch.softIds[i] === id) { removed = true; continue; }
+      next.push(batch.softIds[i]);
+    }
+    if (!removed) return false;
+    if (next.length) batch.softIds = next;
+    else delete batch.softIds;
+    this._markFormulaDayMutation(batch, 'soft-consume');
+    return true;
+  },
+
+  _restoreSoftPin: function (id) {
+    var batch = PGRE.store.state && PGRE.store.state.formulaDay;
+    if (!batch || !id) return;
+    var lists = [batch.reviewIds, batch.newIds], inBatch = false, li, i;
+    for (li = 0; li < lists.length; li++) {
+      var list = lists[li];
+      if (!Array.isArray(list)) continue;
+      for (i = 0; i < list.length; i++) if (list[i] === id) inBatch = true;
+    }
+    if (!inBatch) return;
+    if (!Array.isArray(batch.softIds)) batch.softIds = [];
+    for (i = 0; i < batch.softIds.length; i++) if (batch.softIds[i] === id) return;
+    batch.softIds.push(id);
+    this._markFormulaDayMutation(batch, 'soft-restore');
+  },
+
+  /* Grade one formula card. Returns the updated card, or null when the
+     write is refused. A null return leaves cards, cardReviews and softIds
+     unchanged — callers must not advance a queue, counter or history.
+     On success the card's lastReviewOpId and the log row's op name this
+     review, and that id is removed from formulaDay.softIds. scheme is
+     'current' so the legacy easy10 migration will not stretch this card. */
   gradeCard: function (id, grade) {
     if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
-      PGRE.persistWarning(true);
-      return PGRE.store.state.cards[id];
+      if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
+      return null;
     }
     var s = PGRE.store.state;
     // Review-log capture (bundle 2) — read BEFORE the default-object creation:
     // hadState (n) separates a real review from a card's first-ever grade;
     // prevIvl / m record whether the card was mature (>= 21 d) going in.
-    var hadState = !!s.cards[id];
-    var st = s.cards[id] || { reps: 0, lapses: 0, interval: 0,
+    var hadState = !!(s.cards && Object.prototype.hasOwnProperty.call(s.cards, id));
+    var prev = null;
+    if (hadState) {
+      try { prev = JSON.parse(JSON.stringify(s.cards[id])); } catch (ePrev) { prev = null; }
+    }
+    var st = hadState ? s.cards[id] : { reps: 0, lapses: 0, interval: 0,
                               ease: this.EASE_START, due: this.today(), reviews: 0 };
     var prevIvl = st.interval || 0;
     // ITEM 3: 'mastered' isn't an SM-2 grade — nextIntervals has no entry for it,
@@ -337,15 +393,64 @@ PGRE.srs = {
     st.lastGrade = grade;
     st.lastReviewedAt = new Date().toISOString();
     st.lastReviewedDay = this.today();   // LOCAL date — the studiedToday source of truth
+    st.scheme = 'current';
+    var op = this._newReviewOpId();
+    st.lastReviewOpId = op;
     s.cards[id] = st;
+    var consumedSoft = this._consumeSoftPin(id);
     // Append to the capped review log (bundle 2 — stats foundation). Guard: the
-    // array may be absent on states saved before this key existed. Bundle 1's
-    // undo pops a matching trailing entry (same id + today's d field).
+    // array may be absent on states saved before this key existed. op names
+    // this grade for undoReview; prev is the card before this grade (null if
+    // it had no state). soft: 1 means this grade consumed a soft pin.
     var log = s.cardReviews || (s.cardReviews = []);
-    log.push({ d: this.today(), id: id, g: grade, ivl: prevIvl,
-               m: prevIvl >= 21 ? 1 : 0, n: hadState ? 1 : 0 });
+    var row = { d: this.today(), id: id, g: grade, ivl: prevIvl,
+                m: prevIvl >= 21 ? 1 : 0, n: hadState ? 1 : 0, op: op, prev: prev };
+    if (consumedSoft) row.soft = 1;
+    log.push(row);
     if (log.length > 8000) log.shift();
     return st;
+  },
+
+  /* Undo the named review and no other. Returns { ok, opId, cardId, card }
+     when that op is still the card's latest review. Returns null, and
+     leaves cards, the log and softIds unchanged, when the write is refused,
+     the op is unknown, it was already undone, or a newer review (this tab
+     or a sibling) has superseded it. Does not save — the caller saves.
+     card is the restored record, or null when the grade had created the card. */
+  undoReview: function (opId) {
+    if (!opId) return null;
+    if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
+      if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
+      return null;
+    }
+    var s = PGRE.store.state;
+    if (s.reviewUndos && Object.prototype.hasOwnProperty.call(s.reviewUndos, opId)) return null;
+    var log = s.cardReviews || [];
+    var idx = -1, i;
+    for (i = log.length - 1; i >= 0; i--) {
+      if (log[i] && log[i].op === opId) { idx = i; break; }
+    }
+    if (idx < 0) return null;
+    var row = log[idx];
+    var card = s.cards && Object.prototype.hasOwnProperty.call(s.cards, row.id) ? s.cards[row.id] : null;
+    if (card && card.lastReviewOpId && card.lastReviewOpId !== opId) return null;
+    var prev = null;
+    if (row.prev) {
+      try { prev = JSON.parse(JSON.stringify(row.prev)); } catch (ePrev) { prev = null; }
+    }
+    if (!s.reviewUndos || typeof s.reviewUndos !== 'object' || Array.isArray(s.reviewUndos)) {
+      s.reviewUndos = {};
+    }
+    var tombPrev = null;
+    if (prev) {
+      try { tombPrev = JSON.parse(JSON.stringify(prev)); } catch (eTomb) { tombPrev = prev; }
+    }
+    s.reviewUndos[opId] = { at: new Date().toISOString(), cardId: row.id, prev: tombPrev };
+    log.splice(idx, 1);
+    if (prev) s.cards[row.id] = prev;
+    else delete s.cards[row.id];
+    if (row.soft) this._restoreSoftPin(row.id);
+    return { ok: true, opId: opId, cardId: row.id, card: prev };
   },
 
   /* ITEM 5 — one-time recompute (the user chose "recompute now" over "apply on
@@ -367,7 +472,9 @@ PGRE.srs = {
     var cards = s.cards || {};
     for (var id in cards) {
       var st = cards[id];
-      if (!st || st.lastGrade !== 'easy' || (st.interval || 0) >= 10) continue;
+      // scheme 'current' is written by gradeCard. Those intervals already
+      // follow the 4-day / final-pass rules and must not be stretched to 10.
+      if (!st || st.scheme === 'current' || st.lastGrade !== 'easy' || (st.interval || 0) >= 10) continue;
       st.interval = target;
       st.due = this.addDaysTo(st.lastReviewedDay || this.today(), target);
     }
@@ -436,33 +543,58 @@ PGRE.srs = {
     batch._opKind = kind || 'replace';
   },
 
+  /* True when the last formulaDeck() read was missing a source. Absent
+     status means the caller passed its own deck and pruning is allowed. */
+  _deckPartial: function () {
+    var status = PGRE.formulaDeckStatus;
+    return !!(status && status.partial);
+  },
+
   /* In-place reconcile of the persistent batch; returns whether anything
      changed (so the caller only persists on a real edit). The batch is fully
      user-curated: reconcile only prunes — it never adds or re-fills. */
   _reconcileFormulaDay: function (batch, deck, byId, t) {
     var self = this, changed = false;
     var susp = PGRE.store.state.formulaSuspended || {};
+    var partial = this._deckPartial();
+    if (!Array.isArray(batch.reviewIds)) { batch.reviewIds = []; changed = true; }
+    if (!Array.isArray(batch.newIds)) { batch.newIds = []; changed = true; }
+    if (batch.softIds && !Array.isArray(batch.softIds)) {
+      delete batch.softIds;
+      changed = true;
+    }
+
+    function inDeck(id) {
+      return Object.prototype.hasOwnProperty.call(byId, id);
+    }
+    function isSusp(id) {
+      return !!(susp && Object.prototype.hasOwnProperty.call(susp, id) && susp[id]);
+    }
 
     // (a) soft pins that no longer mean anything: card left the deck, is
     // suspended, or was already studied today (the pin's one job — keeping a
     // not-yet-due add review-eligible — is done once today's grade is in).
+    // A partial deck keeps pins whose cards are simply not in this read.
     if (batch.softIds && batch.softIds.length) {
       var beforeS = batch.softIds.length;
       batch.softIds = batch.softIds.filter(function (id) {
-        return byId[id] && !susp[id] && !self.studiedToday(self.cardState(id));
+        if (partial && !inDeck(id)) return true;
+        return inDeck(id) && !isSusp(id) && !self.studiedToday(self.cardState(id));
       });
       if (batch.softIds.length !== beforeS) changed = true;
       if (!batch.softIds.length) delete batch.softIds;
     }
-    var softSet = {};
+    var softSet = Object.create(null);
     if (batch.softIds) batch.softIds.forEach(function (id) { softSet[id] = 1; });
 
     // (b) drop ids that left the deck or are suspended, and retire completed
     // picks: a card graded on an EARLIER day whose due is now in the future
     // has served its turn. Carry-over keeps never-studied picks, due/overdue
     // reviews, today's again-graded cards (due today) and soft-pinned adds.
+    // When a deck source was missing, an id absent from this read is kept.
     function drop(id) {
-      if (!byId[id] || susp[id]) return true;
+      if (!inDeck(id)) return !partial;
+      if (isSusp(id)) return true;
       var st = self.cardState(id);
       // During final pass, future-due learned picks are intentionally eligible
       // today; do not prune a deliberate pick before the allocator can merge in
@@ -490,16 +622,25 @@ PGRE.srs = {
     var s = PGRE.store.state, t = this.today();
     if (!deck.length) return { date: t, reviewIds: [], newIds: [] };
 
-    var byId = {};
-    deck.forEach(function (c) { byId[c.id] = c; });
+    var byId = Object.create(null);
+    deck.forEach(function (c) {
+      if (c && c.id != null && c.id !== '') byId[c.id] = c;
+    });
 
     var batch = s.formulaDay, changed = false;
+    if (batch && (typeof batch !== 'object' || Array.isArray(batch))) {
+      batch = null;
+      s.formulaDay = null;
+      changed = true;
+    }
     if (!batch) {
       batch = { date: t, reviewIds: [], newIds: [] };
       s.formulaDay = batch;
       changed = true;
     } else {
-      changed = this._reconcileFormulaDay(batch, deck, byId, t);
+      if (PGRE.store._normalizeFormulaDayArrays &&
+          PGRE.store._normalizeFormulaDayArrays(batch, s.cards).changed) changed = true;
+      if (this._reconcileFormulaDay(batch, deck, byId, t)) changed = true;
     }
     if (changed) {
       this._markFormulaDayMutation(batch, 'remove');
@@ -533,7 +674,7 @@ PGRE.srs = {
     if (!deck.length) return out;
     var have = opts.have, room = opts.room;
     if (!have) {
-      have = {};
+      have = Object.create(null);
       var batch = this.formulaDay(deck);
       batch.reviewIds.concat(batch.newIds).forEach(function (id) { have[id] = 1; });
     }
@@ -545,7 +686,9 @@ PGRE.srs = {
     if (!(room > 0)) return out;
     var due = [], fresh = [];
     deck.forEach(function (c, index) {
-      if (!c || !c.id || have[c.id] || self.isSuspended(c.id)) return;
+      if (!c || !c.id ||
+          (have && Object.prototype.hasOwnProperty.call(have, c.id) && have[c.id]) ||
+          self.isSuspended(c.id)) return;
       var st = self.cardState(c.id);
       if (!st) fresh.push({ id: c.id, ch: self.formulaChapter(c.id), index: index });
       else if (st.due <= t && !self.studiedToday(st)) due.push({ id: c.id, st: st, index: index });
@@ -641,15 +784,17 @@ PGRE.srs = {
         added: added, already: already, skipped: skipped };
     }
     var batch = this.formulaDay(deck);
-    var byId = {};
-    deck.forEach(function (c) { byId[c.id] = c; });
+    var byId = Object.create(null);
+    deck.forEach(function (c) {
+      if (c && c.id != null && c.id !== '') byId[c.id] = c;
+    });
     if (!batch.softIds) batch.softIds = [];
-    var softSet = {}, inBatch = {};
+    var softSet = Object.create(null), inBatch = Object.create(null);
     batch.softIds.forEach(function (id) { softSet[id] = 1; });
     batch.reviewIds.concat(batch.newIds).forEach(function (id) { inBatch[id] = 1; });
 
     var changed = false;
-    var seen = {};
+    var seen = Object.create(null);
     ids.forEach(function (id) {
       if (!id || seen[id]) return;
       seen[id] = 1;
@@ -687,7 +832,7 @@ PGRE.srs = {
       return this.formulaDay(deck);
     }
     var batch = this.formulaDay(deck);
-    var drop = {};
+    var drop = Object.create(null);
     var changed = false;
     ids.forEach(function (id) { if (id) drop[id] = 1; });
     if (batch.softIds && batch.softIds.length) {
@@ -722,9 +867,9 @@ PGRE.srs = {
   formulaDayRemaining: function (deck) {
     var self = this, t = this.today();
     var batch = this.formulaDay(deck);
-    var softSet = {};
+    var softSet = Object.create(null);
     if (batch.softIds) batch.softIds.forEach(function (id) { softSet[id] = 1; });
-    var byId = {};
+    var byId = Object.create(null);
     (deck || []).forEach(function (c) { byId[c.id] = c; });
     var out = [];
     batch.reviewIds.concat(batch.newIds).forEach(function (id) {
@@ -742,12 +887,15 @@ PGRE.srs = {
   formulaDayPostponed: function (deck) {
     var self = this, t = this.today();
     var batch = this.formulaDay(deck);
-    var byId = {};
-    (deck || []).forEach(function (c) { byId[c.id] = c; });
+    var byId = Object.create(null);
+    (deck || []).forEach(function (c) {
+      if (c && c.id != null && c.id !== '') byId[c.id] = c;
+    });
     var susp = PGRE.store.state.formulaSuspended || {};
     var allDue = (deck || []).filter(function (c) {
       var st = self.cardState(c.id);
-      return st && !susp[c.id] && st.due <= t;
+      var held = !!(susp && Object.prototype.hasOwnProperty.call(susp, c.id) && susp[c.id]);
+      return st && !held && st.due <= t;
     }).length;
     var inBatchDue = 0;
     batch.reviewIds.concat(batch.newIds).forEach(function (id) {
@@ -768,13 +916,27 @@ PGRE.srs = {
   setFormulaDayPicks: function (deck, ids) {
     var self = this;
     var batch = this.formulaDay(deck);
-    var byId = {};
-    (deck || []).forEach(function (c) { byId[c.id] = c; });
-    var keep = {};
+    var byId = Object.create(null);
+    (deck || []).forEach(function (c) {
+      if (c && c.id != null && c.id !== '') byId[c.id] = c;
+    });
+    var unresolvedReview = [], unresolvedNew = [], unresolvedSoft = [];
+    if (this._deckPartial()) {
+      (batch.reviewIds || []).forEach(function (id) {
+        if (typeof id === 'string' && id && !Object.prototype.hasOwnProperty.call(byId, id)) unresolvedReview.push(id);
+      });
+      (batch.newIds || []).forEach(function (id) {
+        if (typeof id === 'string' && id && !Object.prototype.hasOwnProperty.call(byId, id)) unresolvedNew.push(id);
+      });
+      (batch.softIds || []).forEach(function (id) {
+        if (typeof id === 'string' && id && !Object.prototype.hasOwnProperty.call(byId, id)) unresolvedSoft.push(id);
+      });
+    }
+    var keep = Object.create(null);
     batch.reviewIds.concat(batch.newIds).forEach(function (id) {
       if (byId[id] && self.studiedToday(self.cardState(id))) keep[id] = 1;
     });
-    var reviewIds = [], newIds = [], softIds = [], seen = {};
+    var reviewIds = [], newIds = [], softIds = [], seen = Object.create(null);
     function add(id) {
       if (!id || seen[id] || !byId[id]) return;
       seen[id] = 1;
@@ -789,6 +951,19 @@ PGRE.srs = {
     }
     Object.keys(keep).forEach(add);
     (ids || []).forEach(add);
+    unresolvedReview.forEach(function (id) {
+      if (seen[id]) return;
+      seen[id] = 1;
+      reviewIds.push(id);
+    });
+    unresolvedNew.forEach(function (id) {
+      if (seen[id]) return;
+      seen[id] = 1;
+      newIds.push(id);
+    });
+    unresolvedSoft.forEach(function (id) {
+      if (softIds.indexOf(id) === -1) softIds.push(id);
+    });
     batch.reviewIds = reviewIds;
     batch.newIds = newIds;
     if (softIds.length) batch.softIds = softIds;
@@ -824,7 +999,7 @@ PGRE.srs = {
 
   isSuspended: function (id) {
     var susp = PGRE.store.state.formulaSuspended;
-    return !!(susp && susp[id]);
+    return !!(susp && Object.prototype.hasOwnProperty.call(susp, id) && susp[id]);
   },
 
   /* ——— Per-card memorizing history (browse peek strip) ———

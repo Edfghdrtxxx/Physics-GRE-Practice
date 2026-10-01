@@ -303,5 +303,171 @@ assert(d.mistakes['q-arch'].lastTouchedAt === '2026-09-15T12:00:00Z',
   'disk kept the newer lastTouchedAt');
 deliverEvents = true;
 
-console.log('\n' + passed + ' passed, ' + failed + ' failed');
-process.exit(failed ? 1 : 0);
+console.log('\nS5 same-millisecond Again beats a longer Good');
+deliverEvents = false;
+var raceStamp = '2026-10-01T12:00:00.000Z';
+tab1.store.state.cards.race = {
+  reviews: 6, due: '2026-10-01', lastReviewedAt: raceStamp, lastGrade: 'again', lapses: 1
+};
+tab1.store.save();
+tab2.store.state.cards.race = {
+  reviews: 6, due: '2026-10-26', lastReviewedAt: raceStamp, lastGrade: 'good', lapses: 0
+};
+tab2.store.save();
+d = diskState();
+assert(d.cards.race.lastGrade === 'again', 'merge keeps Again when the Good due is later');
+assert(d.cards.race.due === '2026-10-01', 'merge keeps the Again due, not the longer Good due');
+deliverEvents = true;
+
+console.log('\nS3 formulaStudy treats done as a count');
+deliverEvents = false;
+tab1.store.state.formulaStudy = {
+  done: 1, pressCount: 1, queueIds: ['toy-b'], date: todayStr(), completed: false
+};
+tab1.store.save();
+tab2.store.state.formulaStudy = {
+  done: 0, pressCount: 0, queueIds: ['toy-a', 'toy-b'], date: todayStr(), completed: false
+};
+tab2.store.save();
+d = diskState();
+assert(d.formulaStudy && d.formulaStudy.done === 1,
+  'a stale done:0 snapshot does not beat a session with done 1');
+assert(d.formulaStudy.queueIds.join(',') === 'toy-b',
+  'the more advanced queue is the one that persists');
+tab1.store.clearFormulaStudy({ id: 'sess-1', done: 1, _opAt: 5000 });
+tab1.store.save();
+tab2.store.state.formulaStudy = {
+  id: 'sess-1', done: 0, pressCount: 0, queueIds: ['toy-a', 'toy-b'],
+  date: todayStr(), _opAt: 1000, completed: false
+};
+tab2.store.save();
+assert(diskState().formulaStudy == null, 'a cleared session is not resurrected by a stale snapshot');
+tab1.store.state.formulaStudy = {
+  id: 'sess-2', done: 0, pressCount: 0, queueIds: ['n'], _opAt: 9000, completed: false
+};
+tab1.store.save();
+assert(diskState().formulaStudy && diskState().formulaStudy.id === 'sess-2',
+  'a newer session after a clear is kept');
+deliverEvents = false;
+tab1.store.state.formulaStudy = null;
+tab1.store.state.formulaStudyEnd = {
+  id: 'done-1', done: 3, completed: true, _opAt: 50, _opId: 'end'
+};
+tab1.store.save();
+tab2.store.state.formulaStudyEnd = null;
+tab2.store.state.formulaStudy = {
+  id: 'other', done: 8, pressCount: 8, queueIds: ['z']
+};
+tab2.store.save();
+assert(diskState().formulaStudy == null,
+  'a different session with no timestamp does not resurrect a finished one');
+tab1.store.state.formulaStudyEnd = null;
+tab1.store.state.formulaStudy = {
+  id: 'tie', done: 1, pressCount: 1, queueIds: ['a'],
+  _opAt: 80, _opId: 'm', completed: true
+};
+tab1.store.save();
+tab2.store.state.formulaStudyEnd = null;
+tab2.store.state.formulaStudy = {
+  id: 'tie', done: 0, pressCount: 9, queueIds: ['b'],
+  _opAt: 80, _opId: 'm', completed: false
+};
+tab2.store.save();
+assert(diskState().formulaStudy && diskState().formulaStudy.completed === true,
+  'a finished snapshot beats a higher press count at the same time');
+tab1.store.state.formulaStudy = {
+  id: 'tie', done: 1, pressCount: 1, queueIds: ['a'], _opAt: 90, _opId: 'a'
+};
+tab1.store.save();
+tab2.store.state.formulaStudy = {
+  id: 'tie', done: 2, pressCount: 1, queueIds: ['b'], _opAt: 90, _opId: 'z'
+};
+tab2.store.save();
+assert(diskState().formulaStudy && diskState().formulaStudy._opId === 'z',
+  'equal _opAt keeps the greater _opId');
+deliverEvents = true;
+
+console.log('\nS4 an undo tombstone beats a sibling copy of the grade');
+deliverEvents = false;
+tab1.store.state.cards['undo-card'] = {
+  reviews: 6, due: '2026-10-26', lastReviewedAt: '2026-10-01T00:00:00.000Z',
+  lastGrade: 'good', lastReviewOpId: 'op-good'
+};
+tab1.store.state.cardReviews = tab1.store.state.cardReviews || [];
+tab1.store.state.cardReviews.push({
+  op: 'op-good', id: 'undo-card', d: '2026-10-01', g: 'good'
+});
+tab1.store.save();
+tab2.store.state.reviewUndos = {
+  'op-good': {
+    at: '2026-10-01T00:00:01.000Z', cardId: 'undo-card',
+    prev: {
+      reviews: 5, due: '2026-10-11', lastReviewedAt: '2026-09-01T00:00:00.000Z', lastGrade: 'good'
+    }
+  }
+};
+tab2.store.state.cards['undo-card'] = {
+  reviews: 5, due: '2026-10-11', lastReviewedAt: '2026-09-01T00:00:00.000Z', lastGrade: 'good'
+};
+tab2.store.save();
+d = diskState();
+assert(d.cards['undo-card'] && d.cards['undo-card'].reviews === 5,
+  'undo keeps the pre-grade card when a sibling still has the grade');
+assert(!(d.cardReviews || []).some(function (r) { return r && r.op === 'op-good'; }),
+  'the undone review row stays out of the merged log');
+deliverEvents = true;
+
+console.log('\nsubscribeStateAdopted runs beside onStateAdopted');
+var hookN = 0, subN = 0;
+tab2.PGRE.onStateAdopted = function () { hookN++; };
+var unsub = tab2.PGRE.subscribeStateAdopted(function () { subN++; });
+tab1.store.state.xp = (tab1.store.state.xp || 0) + 1;
+tab1.store.save();
+assert(hookN === 1 && subN === 1, 'the timer hook and a subscriber both see one adopt');
+unsub();
+tab1.store.state.xp = (tab1.store.state.xp || 0) + 1;
+tab1.store.save();
+assert(hookN === 2 && subN === 1, 'unsubscribe removes only the subscriber');
+
+console.log('\nI2 and I3 formulaDeck reports missing sources and keeps prototype ids');
+var deckPGRE = tab1.PGRE;
+deckPGRE.BOOK_FORMULAS = undefined;
+deckPGRE.FORMULAS = [{ id: 'pub' }];
+deckPGRE.BOOK_LISTS = [{ id: 'list' }];
+deckPGRE.formulaDeck().then(function (missingDeck) {
+  assert(Array.isArray(missingDeck), 'formulaDeck still resolves to an array when a private source is missing');
+  assert(missingDeck.map(function (c) { return c.id; }).indexOf('pub') !== -1,
+    'the public cards are still in the partial deck');
+  var st = deckPGRE.formulaDeckStatus;
+  assert(st && st.partial === true, 'a missing private source sets formulaDeckStatus.partial');
+  assert(st.missing.indexOf('bookFormulas') !== -1, 'formulaDeckStatus.missing names bookFormulas');
+  assert(st.sources.bookFormulas === 'missing', 'sources.bookFormulas is missing');
+  assert(st.sources.indexedDB === 'unavailable', 'a missing IndexedDB is reported as unavailable');
+  assert(st.missing.indexOf('indexedDB') !== -1, 'formulaDeckStatus.missing names indexedDB');
+  deckPGRE.BOOK_FORMULAS = [];
+  deckPGRE.FORMULAS = [{ id: 'pub' }];
+  deckPGRE.BOOK_LISTS = [];
+  var realGet = deckPGRE.contentDB.get;
+  deckPGRE.contentDB.get = function () {
+    return Promise.resolve({
+      cards: [
+        { id: 'constructor' }, { id: 'toString' }, { id: '__proto__' }, { id: 'audit-safe' }
+      ]
+    });
+  };
+  return deckPGRE.formulaDeck().then(function (protoDeck) {
+    deckPGRE.contentDB.get = realGet;
+    var ids = protoDeck.map(function (c) { return c.id; });
+    assert(ids.indexOf('constructor') !== -1, 'constructor survives dedupe');
+    assert(ids.indexOf('toString') !== -1, 'toString survives dedupe');
+    assert(ids.indexOf('__proto__') !== -1, '__proto__ survives dedupe');
+    assert(ids.indexOf('audit-safe') !== -1, 'an ordinary id still survives beside prototype names');
+    assert(ids.indexOf('pub') !== -1, 'script cards stay in front of the IndexedDB cards');
+  });
+}).then(function () {
+  console.log('\n' + passed + ' passed, ' + failed + ' failed');
+  process.exit(failed ? 1 : 0);
+}).catch(function (err) {
+  console.error('FAIL: formulaDeck checks rejected', err);
+  process.exit(1);
+});
