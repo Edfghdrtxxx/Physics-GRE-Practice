@@ -418,14 +418,15 @@ PGRE.formulaSearch = (function () {
     status = STATUS_ALIAS[status] || status;
     var srs = PGRE.srs, st = srs.cardState(rec.id);
     switch (status) {
-      case 'new': return !st;
-      case 'learned': return !!st;
+      case 'new': return !(st && st.reviews > 0);
+      case 'learned': return !!(st && st.reviews > 0);
       case 'due': return !!st && srs.daysUntil(st.due) <= 0;
       case 'today': return !!batchSet && !!batchSet[rec.id];
       case 'mature': return !!st && (st.interval || 0) >= 21;
-      // No `reps > 0` requirement: pairing it with mature's plain interval test
-      // left a card with state but reps === 0 matching neither bucket.
-      case 'young': return !!st && (st.interval || 0) < 21;
+      // Learning = introduced (reviews > 0) minus solid, matching the recall
+      // band's recallMix: a saved state with reviews 0 (a normalizeRecallState
+      // repair) is not introduced, so it lists under new, not young.
+      case 'young': return !!st && st.reviews > 0 && (st.interval || 0) < 21;
       case 'leech': return srs.isLeech(st);
       case 'away': return srs.isSuspended(rec.id);
       case 'mnemonic': return !!rec.f.mnem;

@@ -2667,6 +2667,86 @@ function consumerCases() {
       });
     });
   }).then(function () {
+    console.log('\nformulas: recall band segments hint and navigate');
+    var band = autoPickEnv();
+    var BP = band.P, t0 = BP.srs.today();
+    // recallMix: selected = reviews > 0; solid = interval >= 21.
+    band.env.cardStates['cpgf-2.3'] = { due: BP.srs.addDays(30), interval: 30, reps: 5, reviews: 5, lapses: 0, lastReviewedDay: t0 };
+    band.env.cardStates['cpgf-1.2'] = { due: t0, interval: 2, reps: 2, reviews: 2, lapses: 0, lastReviewedDay: t0 };
+    // A saved state with reviews 0 (the normalizeRecallState repair shape):
+    // introduced means reviews > 0, so this counts in the rest segment only.
+    band.env.cardStates['cpgf-2.2'] = { due: t0, interval: 0, reps: 0, reviews: 0, lapses: 0, lastReviewedDay: t0 };
+    vm.runInContext(fs.readFileSync(path.join(root, 'js/formula-search.js'), 'utf8'),
+      band.env.sandbox, { filename: 'js/formula-search.js' });
+    BP.store.state.formulaDay = { date: t0, reviewIds: [], newIds: [] };
+    return mountFormulas(band).then(function () {
+      var doc = band.env.document;
+      var solidSeg = doc.querySelector('.fr-seg-solid');
+      var youngSeg = doc.querySelector('.fr-seg-young');
+      var restSeg = doc.querySelector('.fr-seg-rest');
+      assert(!!solidSeg && !!youngSeg && !!restSeg,
+        'recall band renders its three segments');
+      assert(solidSeg.getAttribute('tabindex') === '0' && restSeg.getAttribute('tabindex') === '0',
+        'labelled and unlabelled segments are focusable');
+      assert(solidSeg.getAttribute('role') === 'button' &&
+        (solidSeg.getAttribute('aria-label') || '').indexOf('Solid enough') === 0 &&
+        (restSeg.getAttribute('aria-label') || '').indexOf('Not yet introduced') === 0,
+        'segments carry button role and aria-labels');
+      var hint = doc.getElementById('fr-seg-hint');
+      assert(!!hint && hint.hidden === true, 'click hint starts hidden');
+      solidSeg.click();
+      assert(hint.hidden === false && hint.textContent.indexOf('double-click') !== -1,
+        'single click shows the double-click hint, got: ' + hint.textContent);
+      assert(!!doc.getElementById('study-btn'), 'a single click does not navigate');
+      dispatchEl(solidSeg, 'dblclick');
+      assert(doc.querySelector('.flash-tab[data-mode="search"]').classList.contains('active') &&
+        !!doc.getElementById('fs-input'),
+        'double-click switches to the Search tab');
+      var matureOpt = doc.querySelector('#fs-status-sel option[value="mature"]');
+      assert(!!matureOpt && matureOpt.getAttribute('selected') !== null,
+        'double-click on Solid enough filters status:mature');
+      assert(doc.getElementById('fs-status').textContent.indexOf('1') !== -1,
+        'the mature filter lists the one solid card, status line: ' +
+          (doc.getElementById('fs-status') || {}).textContent);
+      doc.querySelector('.flash-tab[data-mode="study"]').click();
+      var rest2 = doc.querySelector('.fr-seg-rest');
+      assert(!!rest2, 'back on Study the band rest segment is there');
+      dispatchKeydown(band.env, { key: 'Enter', target: rest2 });
+      var newOpt = doc.querySelector('#fs-status-sel option[value="new"]');
+      assert(doc.querySelector('.flash-tab[data-mode="search"]').classList.contains('active') &&
+        !!newOpt && newOpt.getAttribute('selected') !== null,
+        'Enter on the rest segment opens Search filtered to not-yet-introduced');
+      function listedIds() {
+        return [].map.call(doc.querySelectorAll('.fs-card[data-fsid]'),
+          function (el) { return el.getAttribute('data-fsid'); });
+      }
+      var newIds = listedIds();
+      var restN = parseInt(/:\s*(\d+)\s*of/.exec(
+        rest2.getAttribute('aria-label'))[1], 10);
+      assert(newIds.indexOf('cpgf-2.2') !== -1,
+        'a saved state with reviews 0 lists under not-yet-introduced, got: ' + newIds.join(','));
+      assert(newIds.length === restN,
+        'the not-yet-introduced list length equals the rest segment count, list ' +
+          newIds.length + ' vs segment ' + restN);
+      doc.querySelector('.flash-tab[data-mode="study"]').click();
+      var young2 = doc.querySelector('.fr-seg-young');
+      assert(!!young2, 'back on Study the band Learning segment is there');
+      var youngN = parseInt(/:\s*(\d+)\s*of/.exec(
+        young2.getAttribute('aria-label'))[1], 10);
+      dispatchEl(young2, 'dblclick');
+      var youngOpt = doc.querySelector('#fs-status-sel option[value="young"]');
+      assert(doc.querySelector('.flash-tab[data-mode="search"]').classList.contains('active') &&
+        !!youngOpt && youngOpt.getAttribute('selected') !== null,
+        'double-click on Learning opens Search filtered to status:young');
+      var youngIds = listedIds();
+      assert(youngIds.indexOf('cpgf-2.2') === -1,
+        'a saved state with reviews 0 is absent from the Learning list, got: ' +
+          youngIds.join(','));
+      assert(youngIds.length === youngN,
+        'the Learning list length equals the Learning segment count, list ' +
+          youngIds.length + ' vs segment ' + youngN);
+    });
+  }).then(function () {
     console.log('\nformulas: partial deck warns when every loaded card is introduced');
     var part = autoPickEnv();
     var pt = part.P.srs.today();
