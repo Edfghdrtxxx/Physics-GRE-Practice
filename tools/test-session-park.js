@@ -309,6 +309,28 @@ mistakes.mount({ sub: 'drill' });
 assert(mistakes._test.drill === null && locationStub.hash === '#/mistakes',
   'empty drill route falls back to the book');
 
+console.log('\na finished drill is not painted as parked on the book');
+
+locationStub.hash = '#/';
+mistakes._test.startDrill([BANK.m1, BANK.m2, BANK.m3]);
+mistakes.mount({ sub: 'drill' });                     // paints the question, binds #drill-finish
+assert(mistakes._test.drill && !mistakes._test.drill.done,
+  'fresh drill is in flight');
+mistakes._test.drillAnswer((BANK[mistakes._test.drill.qs[0].id].answer + 1) % 5);
+var finishBtn = elFor('drill-finish');
+assert(typeof finishBtn.listeners.click === 'function', 'Finish drill button is wired');
+finishBtn.listeners.click({ target: finishBtn, detail: 0 });   // keyboard detail bypasses the settle guard
+assert(mistakes._test.drill.done === true, 'finish put the summary up');
+assert(snap(park.DRILL_KEY) === null, 'summary cleared the parked snapshot');
+locationStub.hash = '#/mistakes';
+mistakes.mount({ sub: null });                        // back to the book with the dead drill still live
+assert(!/parked-drill-card/.test(elFor('mistakes-root').innerHTML),
+  'finished drill does not offer Resume/Discard on the book');
+mistakes.mount({ sub: 'drill' });                     // the stale route reopens the summary, not a question
+assert(/Drill complete/.test(elFor('mistakes-root').innerHTML),
+  'stale drill route repaints the completion screen');
+mistakes._test.dropLive();
+
 /* ================= Practice corrections ================= */
 
 console.log('\npractice: a feedback-stage snapshot restores the read solution');

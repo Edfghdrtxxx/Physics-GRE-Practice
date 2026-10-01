@@ -300,7 +300,9 @@ PGRE.views.mistakes = (function () {
       (open.length ? drillSizeHTML() : '') +
       '</div>';
 
-    var parked = drill || readDrillSaved();
+    // a finished drill keeps its object for the summary/review, but its parked
+    // slot is gone — the book card is only for a drill still in flight
+    var parked = (drill && !drill.done) ? drill : readDrillSaved();
     if (parked) {
       var parkedIds = parked.qs
         ? parked.qs.length
