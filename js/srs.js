@@ -946,6 +946,14 @@ PGRE.srs = {
       return self.studiedToday(self.cardState(id));
     });
     changed = changed || batch.reviewIds.length !== beforeReview || batch.newIds.length !== beforeNew;
+    // A hold left on a removed card survives final pass and puts the card
+    // back after the week. Leave the hold when the id stays in the batch.
+    ids.forEach(function (id) {
+      if (!id || !drop[id]) return;
+      if (batch.reviewIds.indexOf(id) !== -1 || batch.newIds.indexOf(id) !== -1) return;
+      if (batch.softIds && batch.softIds.indexOf(id) !== -1) return;
+      self._clearSoftHold(id);
+    });
     if (changed) self._markFormulaDayMutation(batch, 'remove');
     PGRE.store.state.formulaDay = batch;
     PGRE.store.save();
@@ -1063,6 +1071,24 @@ PGRE.srs = {
     if (softIds.length) batch.softIds = softIds;
     else delete batch.softIds;
     delete batch.skipNew;
+    // Re-pinning a consumed id has to outrank that consume. The fact does
+    // not stamp the batch; the replace stamp below still does.
+    for (var spi = 0; spi < softIds.length; spi++) {
+      if (this._latestPinAction(softIds[spi]) === 'consumed') {
+        this._recordPinFact(softIds[spi], null, 'restored');
+      }
+    }
+    var staying = Object.create(null);
+    reviewIds.concat(newIds, softIds).forEach(function (id) { staying[id] = 1; });
+    var heldCards = PGRE.store.state.cards;
+    if (heldCards && typeof heldCards === 'object') {
+      for (var hid in heldCards) {
+        if (!Object.prototype.hasOwnProperty.call(heldCards, hid)) continue;
+        var heldRec = heldCards[hid];
+        if (!heldRec || !heldRec.softHold || staying[hid]) continue;
+        delete heldRec.softHold;
+      }
+    }
     batch.date = this.today();
     this._markFormulaDayMutation(batch, 'replace');
     PGRE.store.state.formulaDay = batch;

@@ -594,5 +594,122 @@ assert(finalBatch.reviewIds.indexOf('keep') !== -1, 'final pass still appends an
 assert(finalBatch.reviewIds.indexOf('constructor') !== -1,
   'final pass appends a learned card whose id is constructor');
 
+function completeDeck() {
+  sandbox.PGRE.formulaDeckStatus = {
+    partial: false, complete: true, missing: [],
+    sources: { bookFormulas: 'present', formulas: 'present', bookLists: 'present', indexedDB: 'empty' }
+  };
+}
+function pinFactAt(id, action) {
+  var facts = store.state.formulaPinFacts || {};
+  var best = 0;
+  for (var op in facts) {
+    if (!Object.prototype.hasOwnProperty.call(facts, op)) continue;
+    var fact = facts[op];
+    if (!fact || fact.id !== id || fact.action !== action) continue;
+    var at = Number(fact.at) || 0;
+    if (at >= best) best = at;
+  }
+  return best;
+}
+
+console.log('\nB1 picker Save re-pins a consumed id, and a later stale batch does not');
+resetStore();
+stampMigrations();
+completeDeck();
+store.state.cards.pin = {
+  reps: 2, lapses: 0, interval: 10, ease: 2.5, due: srs.addDays(30), reviews: 4,
+  lastReviewedDay: '2020-01-01', lastGrade: 'good'
+};
+store.state.formulaDay = {
+  date: srs.today(), reviewIds: ['pin'], newIds: [], softIds: ['pin'],
+  _opAt: 1000, _opId: 'b1-a', _opKind: 'add'
+};
+store.save();
+srs.gradeCard('pin', 'good');
+store.save();
+var staleLater = JSON.parse(localStorage.getItem(store.KEY));
+staleLater.formulaDay = {
+  date: srs.today(), reviewIds: ['pin', 'later'], newIds: [], softIds: ['pin'],
+  _opAt: 9000, _opId: 'stale-later', _opKind: 'add'
+};
+staleLater._rev = (store.state._rev || 0) + 1;
+localStorage.setItem(store.KEY, JSON.stringify(staleLater));
+store.save();
+assert(store.state.formulaDay.reviewIds.indexOf('later') !== -1,
+  'a later stale batch keeps its new id');
+assert(!store.state.formulaDay.softIds || store.state.formulaDay.softIds.indexOf('pin') === -1,
+  'a later stale batch does not resurrect the consumed pin');
+
+resetStore();
+stampMigrations();
+completeDeck();
+store.state.cards.pin = {
+  reps: 2, lapses: 0, interval: 10, ease: 2.5, due: srs.addDays(30), reviews: 4,
+  lastReviewedDay: '2020-01-01', lastGrade: 'good'
+};
+store.state.formulaDay = {
+  date: srs.today(), reviewIds: ['pin'], newIds: [], softIds: ['pin'],
+  _opAt: 1000, _opId: 'b1-b', _opKind: 'add'
+};
+store.save();
+srs.gradeCard('pin', 'good');
+var gradedSnap = JSON.parse(JSON.stringify(store.state));
+store.state.cards.pin.lastReviewedDay = '2020-01-01';
+var pickedPin = srs.setFormulaDayPicks([{ id: 'pin' }], ['pin']);
+assert(pickedPin.softIds && pickedPin.softIds.indexOf('pin') !== -1,
+  'picker Save puts the consumed id back in softIds');
+assert(pinFactAt('pin', 'restored') > pinFactAt('pin', 'consumed'),
+  'picker Save records a restored fact later than the consume');
+gradedSnap._rev = (store.state._rev || 0) + 1;
+localStorage.setItem(store.KEY, JSON.stringify(gradedSnap));
+store.save();
+var owedPick = srs.formulaDayRemaining([{ id: 'pin' }]).map(function (c) { return c.id; });
+assert(owedPick.indexOf('pin') !== -1,
+  'a merge of the pre-pick snapshot still owes the re-pinned card');
+
+console.log('\nB2 taking a card off today clears its soft hold');
+function b2Pin() {
+  resetStore({ examDate: daysFromNow(3) });
+  stampMigrations();
+  completeDeck();
+  store.state.cards.pin = {
+    reps: 2, lapses: 0, interval: 10, ease: 2.5, due: '2026-11-20', reviews: 4,
+    lastReviewedDay: '2020-01-01', lastGrade: 'good'
+  };
+  store.state.cards.other = {
+    reps: 1, lapses: 0, interval: 4, ease: 2.5, due: srs.today(), reviews: 1,
+    lastGrade: 'good'
+  };
+  return [{ id: 'pin' }, { id: 'other' }];
+}
+var deckHold = b2Pin();
+srs.addFormulaDaySoft(deckHold, ['pin']);
+assert(store.state.cards.pin.softHold === true, 'the pinned card starts with a hold');
+srs.setFormulaDayPicks(deckHold, ['pin', 'other']);
+assert(store.state.cards.pin.softHold === true, 'a pin that stays in the batch keeps its hold');
+
+deckHold = b2Pin();
+srs.addFormulaDaySoft(deckHold, ['pin']);
+srs.setFormulaDayPicks(deckHold, ['other']);
+assert(!store.state.cards.pin.softHold, 'unchecking the pin clears its hold');
+assert(srs.finalPassActive(), 'an exam three days out is the final pass');
+srs.fillFormulaDayFinalPass(deckHold);
+store.state.settings.examDate = '2027-06-01';
+assert(!srs.finalPassActive(), 'a far exam turns the final pass off');
+var owedUnchecked = srs.formulaDayRemaining(deckHold).map(function (c) { return c.id; });
+assert(owedUnchecked.indexOf('pin') === -1,
+  'after the final pass ends the unchecked pin is not owed');
+
+deckHold = b2Pin();
+srs.addFormulaDaySoft(deckHold, ['pin']);
+srs.removeFormulaDaySoft(deckHold, ['pin']);
+assert(!store.state.cards.pin.softHold, 'removeFormulaDaySoft clears the hold on the id it drops');
+srs.fillFormulaDayFinalPass(deckHold);
+store.state.settings.examDate = '2027-06-01';
+var owedRemoved = srs.formulaDayRemaining(deckHold).map(function (c) { return c.id; });
+assert(owedRemoved.indexOf('pin') === -1,
+  'after the final pass ends a removed pin is not owed');
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);
