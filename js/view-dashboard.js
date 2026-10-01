@@ -834,6 +834,7 @@ PGRE.views.dashboard = (function () {
     if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
     if (PGRE.sessionPark) PGRE.sessionPark.wireDashboard();
     // #7 QOTD: typeset the math and wire up the one-tap choices
+    bindQotd();
     // Views-A: entry motion — numbers count up, meters fill, challenges cascade
     if (PGRE.motion && !PGRE.motion.reduced) {
       countUpText(document.querySelector('.hero-level-num'), 700);

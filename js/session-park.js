@@ -100,7 +100,7 @@ PGRE.sessionPark = (function () {
         kind: 'exam',
         label: 'Mock exam',
         detail: eDone + ' of ' + act.order.length + ' answered' + (act.paused ? ' · paused' : ''),
-        hash: '#/exam',
+        hash: '#/exam/run',
         id: act.id || ''
       });
     }

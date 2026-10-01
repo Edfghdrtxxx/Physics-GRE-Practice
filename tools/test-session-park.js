@@ -424,8 +424,8 @@ assert(bands[1].kind === 'practice' && bands[1].hash === '#/practice/all',
   'practice band points at its topic route');
 assert(bands[2].kind === 'formulas' && bands[2].detail === '2 cards left',
   'Recall band counts the saved queue');
-assert(bands[3].kind === 'exam' && bands[3].hash === '#/exam',
-  'mock band goes to the exam page');
+assert(bands[3].kind === 'exam' && bands[3].hash === '#/exam/run',
+  'mock band opens the exam room directly (same route as Resume exam)');
 
 park.paint();
 assert(wrap.hidden === false && btn.textContent === '4 unfinished',
@@ -462,6 +462,10 @@ clicked({ target: { closest: function (sel) {
 } } });
 assert(sessionStorage.getItem(park.RESUME_KEY) === '1', 'practice band arms the one-shot resume');
 assert(locationStub.hash === '#/practice/all', 'practice band navigates to its route');
+clicked({ target: { closest: function (sel) {
+  return sel === '.parked-band' ? { getAttribute: function () { return 'exam'; } } : null;
+} } });
+assert(locationStub.hash === '#/exam/run', 'exam band opens the room directly');
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);
