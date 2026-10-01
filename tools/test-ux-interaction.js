@@ -2673,6 +2673,9 @@ function consumerCases() {
     // recallMix: selected = reviews > 0; solid = interval >= 21.
     band.env.cardStates['cpgf-2.3'] = { due: BP.srs.addDays(30), interval: 30, reps: 5, reviews: 5, lapses: 0, lastReviewedDay: t0 };
     band.env.cardStates['cpgf-1.2'] = { due: t0, interval: 2, reps: 2, reviews: 2, lapses: 0, lastReviewedDay: t0 };
+    // A saved state with reviews 0 (the normalizeRecallState repair shape):
+    // introduced means reviews > 0, so this counts in the rest segment only.
+    band.env.cardStates['cpgf-2.2'] = { due: t0, interval: 0, reps: 0, reviews: 0, lapses: 0, lastReviewedDay: t0 };
     vm.runInContext(fs.readFileSync(path.join(root, 'js/formula-search.js'), 'utf8'),
       band.env.sandbox, { filename: 'js/formula-search.js' });
     BP.store.state.formulaDay = { date: t0, reviewIds: [], newIds: [] };
@@ -2713,6 +2716,35 @@ function consumerCases() {
       assert(doc.querySelector('.flash-tab[data-mode="search"]').classList.contains('active') &&
         !!newOpt && newOpt.getAttribute('selected') !== null,
         'Enter on the rest segment opens Search filtered to not-yet-introduced');
+      function listedIds() {
+        return [].map.call(doc.querySelectorAll('.fs-card[data-fsid]'),
+          function (el) { return el.getAttribute('data-fsid'); });
+      }
+      var newIds = listedIds();
+      var restN = parseInt(/:\s*(\d+)\s*of/.exec(
+        rest2.getAttribute('aria-label'))[1], 10);
+      assert(newIds.indexOf('cpgf-2.2') !== -1,
+        'a saved state with reviews 0 lists under not-yet-introduced, got: ' + newIds.join(','));
+      assert(newIds.length === restN,
+        'the not-yet-introduced list length equals the rest segment count, list ' +
+          newIds.length + ' vs segment ' + restN);
+      doc.querySelector('.flash-tab[data-mode="study"]').click();
+      var young2 = doc.querySelector('.fr-seg-young');
+      assert(!!young2, 'back on Study the band Learning segment is there');
+      var youngN = parseInt(/:\s*(\d+)\s*of/.exec(
+        young2.getAttribute('aria-label'))[1], 10);
+      dispatchEl(young2, 'dblclick');
+      var youngOpt = doc.querySelector('#fs-status-sel option[value="young"]');
+      assert(doc.querySelector('.flash-tab[data-mode="search"]').classList.contains('active') &&
+        !!youngOpt && youngOpt.getAttribute('selected') !== null,
+        'double-click on Learning opens Search filtered to status:young');
+      var youngIds = listedIds();
+      assert(youngIds.indexOf('cpgf-2.2') === -1,
+        'a saved state with reviews 0 is absent from the Learning list, got: ' +
+          youngIds.join(','));
+      assert(youngIds.length === youngN,
+        'the Learning list length equals the Learning segment count, list ' +
+          youngIds.length + ' vs segment ' + youngN);
     });
   }).then(function () {
     console.log('\nformulas: partial deck warns when every loaded card is introduced');
