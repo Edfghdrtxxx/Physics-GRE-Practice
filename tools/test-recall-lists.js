@@ -175,6 +175,11 @@ for (var n = 0; n < 50; n++) {
 }
 assert(!leaked, 'quizOptions on a formula card never offers a recall-list, across 50 draws');
 
+var loneChoices = fm.quizOptions(lists[0], [lists[0], formulas[0]]);
+assert(loneChoices === null,
+  'one list plus one formula is not a one-choice quiz (got ' +
+    (loneChoices && loneChoices.opts ? loneChoices.opts.length : loneChoices) + ')');
+
 deckChecks.then(function () {
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
   process.exit(failed ? 1 : 0);

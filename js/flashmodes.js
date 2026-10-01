@@ -304,27 +304,81 @@ PGRE.flashmodes = (function () {
   /* ——— Shared card/XP hooks (mirror the flip mode) ——— */
 
   /* One graded review → the same SM-2 scheduler the flip mode calls, plus the
-     study-day/streak touch. Save is left to the caller's flow. */
+     study-day/streak touch. Save is left to the caller's flow.
+     Returns null when gradeCard refuses the write. Callers must not advance
+     a queue, a done count, or history on null. On success returns the
+     operation id copied now — undo names that string, not a later read. */
   function reviewCard(id, grade) {
-    PGRE.srs.gradeCard(id, grade);
+    var card = PGRE.srs.gradeCard(id, grade);
+    if (card === null) return null;
     PGRE.store.touchDay();
     PGRE.store.save();
+    var opId = (card && card.lastReviewOpId != null && card.lastReviewOpId !== '')
+      ? String(card.lastReviewOpId) : '';
+    return { opId: opId };
+  }
+
+  /* Still on today's list and not suspended. A captured game queue can
+     outlive a sibling edit; the next grade has to notice. */
+  function stillOwed(deck, id) {
+    if (!id || !PGRE.srs) return false;
+    if (typeof PGRE.srs.isSuspended === 'function' && PGRE.srs.isSuspended(id)) return false;
+    if (typeof PGRE.srs.formulaDayRemaining !== 'function') return true;
+    var rem = PGRE.srs.formulaDayRemaining(deck || PGRE.deck || []);
+    for (var i = 0; i < rem.length; i++) {
+      if (rem[i] && rem[i].id === id) return true;
+    }
+    return false;
+  }
+
+  /* A round that stays open across midnight runs the same allocator home
+     would, then the next grade sees the new day. */
+  function noteGameDay(st, deck) {
+    var today = PGRE.srs.today();
+    if (!st.sessionDate) { st.sessionDate = today; return; }
+    if (st.sessionDate === today) return;
+    st.sessionDate = today;
+    if (PGRE.srs.fillFormulaDayFinalPass) PGRE.srs.fillFormulaDayFinalPass(deck || []);
+    if (PGRE.srs.autoFillFormulaDay) PGRE.srs.autoFillFormulaDay(deck || []);
+  }
+
+  function rememberGradeDay(st) {
+    var d = PGRE.srs.today();
+    if (!st.gradeDays) st.gradeDays = [];
+    if (st.gradeDays.indexOf(d) === -1) st.gradeDays.push(d);
   }
 
   /* Quiet, session-end XP through the formula-review hook (+2 per card/pair),
      logged into the activity feed just like a flip session. Also records the
-     once-per-day formula check-in on first qualifying settle of the day.
+     once-per-day formula check-in on the days a grade was actually accepted.
+     days, when passed, are those local days — not the later exit date.
      Returns the check-in result (or null) so finish UIs can celebrate. */
-  function awardReviewXP(xp, detail) {
+  function awardReviewXP(xp, detail, days) {
     if (xp > 0) PGRE.gamify.addXP(xp, '· formula review', true);
     PGRE.store.log('review', detail, xp);
     var ci = null;
     if (xp > 0 && PGRE.formulaCheckIn && typeof PGRE.formulaCheckIn.record === 'function') {
-      ci = PGRE.formulaCheckIn.record();
+      var list = (days && days.length) ? days : [null];
+      for (var di = 0; di < list.length; di++) {
+        ci = list[di] ? PGRE.formulaCheckIn.record(list[di]) : PGRE.formulaCheckIn.record();
+      }
     }
     PGRE.gamify.checkAchievements();
     PGRE.store.save();
     return ci;
+  }
+
+  /* Match is practice. XP is recorded; the scheduler and the formula
+     check-in are not. */
+  function awardPracticeXP(xp, detail) {
+    if (xp > 0 && PGRE.gamify && typeof PGRE.gamify.addXP === 'function') {
+      PGRE.gamify.addXP(xp, '· formula practice', true);
+    }
+    if (PGRE.store && typeof PGRE.store.log === 'function') PGRE.store.log('review', detail, xp);
+    if (PGRE.gamify && typeof PGRE.gamify.checkAchievements === 'function') {
+      PGRE.gamify.checkAchievements();
+    }
+    if (PGRE.store && typeof PGRE.store.save === 'function') PGRE.store.save();
   }
 
   /* Optional check-in celebrate / already-checked strip under a game summary. */
@@ -390,8 +444,10 @@ PGRE.flashmodes = (function () {
     function settle(elapsed) {
       if (st.settled || st.cleared === 0) return;
       st.settled = true;
-      st.checkInResult = awardReviewXP(2 * st.cleared, 'Match: ' + st.cleared + ' pair' +
+      // Practice only: no gradeCard, no formula check-in.
+      awardPracticeXP(2 * st.cleared, 'Match practice: ' + st.cleared + ' pair' +
         (st.cleared === 1 ? '' : 's') + ' in ' + fmtTime(elapsed));
+      st.checkInResult = null;
     }
 
     function stop() {
@@ -425,6 +481,7 @@ PGRE.flashmodes = (function () {
         '<div class="flash-hud"><span class="flash-title">Match · ' + st.total + ' pairs</span>' +
           '<span class="chip" id="flash-cleared">0 / ' + st.total + ' paired</span>' +
           '<span class="flash-timer" id="flash-timer">0 s</span></div>' +
+        '<p class="muted" id="match-practice-note">Practice only. A cleared board does not clear scheduled reviews and does not record a Good grade.</p>' +
         '<div class="flash-grid" id="flash-grid">' + grid + '</div>' +
         '<div class="btn-row"><button class="btn btn-ghost" id="flash-exit">Back to deck</button></div>' +
         '</div>';
@@ -513,8 +570,8 @@ PGRE.flashmodes = (function () {
         '<h2>Cleared</h2>' +
         '<div class="summary-score">' + fmtTime(elapsed) +
           '<span class="summary-pct">+' + xp + ' XP</span></div>' +
-        '<p class="muted">' + st.total + ' pair' + (st.total === 1 ? '' : 's') + tail + '.</p></div>' +
-        checkInSummaryHTML(st.checkInResult) +
+        '<p class="muted">' + st.total + ' pair' + (st.total === 1 ? '' : 's') + tail + '.</p>' +
+        '<p class="muted" id="match-practice-note">Practice only. This round does not clear scheduled reviews and does not record a Good grade.</p></div>' +
         '<div class="card"><div class="btn-row">' +
         '<button class="btn btn-primary" id="flash-replay">Play again</button>' +
         '<button class="btn btn-ghost" id="flash-exit">Back to deck</button></div></div>';
@@ -644,11 +701,30 @@ PGRE.flashmodes = (function () {
         pressed.setAttribute('aria-pressed', 'true');
       }
       var c = st.queue[st.i], id = c.id;
-      var prev = PGRE.store.state.cards[id];
-      st.undo = { id: id, day: PGRE.srs.today(),
-                  prevState: prev ? JSON.parse(JSON.stringify(prev)) : null,
+      noteGameDay(st, ctx.deck || PGRE.deck || []);
+      if (!stillOwed(ctx.deck || PGRE.deck || [], id)) {
+        if (pressed) {
+          pressed.classList.remove('chosen');
+          pressed.setAttribute('aria-pressed', 'false');
+        }
+        st.submitted = false;
+        st.i++;
+        if (st.i < st.queue.length) renderPrompt();
+        else finish();
+        return;
+      }
+      var accepted = reviewCard(id, g);
+      if (accepted === null) {
+        if (pressed) {
+          pressed.classList.remove('chosen');
+          pressed.setAttribute('aria-pressed', 'false');
+        }
+        return;
+      }
+      var opId = accepted && accepted.opId ? String(accepted.opId) : '';
+      st.undo = { id: id, day: PGRE.srs.today(), opId: opId,
                   prevDone: st.done, prevAgain: st.again };
-      reviewCard(id, g);
+      rememberGradeDay(st);
       st.done++;
       if (g === 'again') st.again++;
       st.i++;
@@ -657,19 +733,14 @@ PGRE.flashmodes = (function () {
       else finish();
     }
 
-    /* F1b: revert the last committed grade — restore the card's SRS state, pop the
-       matching trailing cardReviews entry, roll back the counters. One level; the
-       undone question is not replayed. */
+    /* Undo the named review. A null undoReview leaves the round where it is.
+       The button does not restore a hand-copied card or pop the log itself. */
     function undoLast() {
       var u = st.undo;
       if (!u) return;
-      if (u.prevState) PGRE.store.state.cards[u.id] = u.prevState;
-      else delete PGRE.store.state.cards[u.id];
-      var revs = PGRE.store.state.cardReviews;
-      if (revs && revs.length) {
-        var last = revs[revs.length - 1];
-        if (last && last.id === u.id && last.d === u.day) revs.pop();
-      }
+      if (!u.opId || typeof PGRE.srs.undoReview !== 'function') return;
+      var res = PGRE.srs.undoReview(String(u.opId));
+      if (!res) return;
       st.done = u.prevDone;
       st.again = u.prevAgain;
       st.undo = null;
@@ -684,7 +755,7 @@ PGRE.flashmodes = (function () {
     function settle() {
       if (st.settled || st.done === 0) return;
       st.settled = true;
-      st.checkInResult = awardReviewXP(2 * st.done, 'Type-to-recall: ' + st.done + ' card' + (st.done === 1 ? '' : 's'));
+      st.checkInResult = awardReviewXP(2 * st.done, 'Type-to-recall: ' + st.done + ' card' + (st.done === 1 ? '' : 's'), st.gradeDays);
     }
 
     function finish() {
@@ -755,6 +826,9 @@ PGRE.flashmodes = (function () {
     }
     if (opts.length < 4) draw(deck.filter(function (o) { return o.topic === card.topic; }));
     if (opts.length < 4) draw(deck);
+    // One button is the answer itself. Do not offer a round that grades Good
+    // for tapping the only choice. Two distinct same-kind choices is the minimum.
+    if (opts.length < 2) return null;
     var shuffled = shuffle(opts);
     return { opts: shuffled, correctIdx: shuffled.indexOf(correctDisp) };
   }
@@ -769,9 +843,19 @@ PGRE.flashmodes = (function () {
                settled: false };
 
     function render() {
+      while (st.i < st.queue.length) {
+        var skip = st.queue[st.i];
+        noteGameDay(st, deck);
+        var built = quizOptions(skip, deck);
+        if (stillOwed(deck, skip.id) && built && built.opts && built.opts.length >= 2) {
+          st.built = built;
+          break;
+        }
+        st.i++;
+      }
+      if (st.i >= st.queue.length) return finish();
       var c = st.queue[st.i];
       var nm = cardName(c);
-      st.built = quizOptions(c, deck);
       var html = '<div class="card">' +
         '<div class="flash-hud"><span class="flash-title">Auto-quiz</span>' +
           '<span class="chip">' + (st.i + 1) + ' / ' + st.queue.length + '</span>' +
@@ -801,17 +885,26 @@ PGRE.flashmodes = (function () {
     /* Games commit gradeCard directly through reviewCard — no learning steps. */
     function pick(idx) {
       if (st.answered) return;
-      st.answered = true;
       var c = st.queue[st.i], correctIdx = st.built.correctIdx;
-      var prev = PGRE.store.state.cards[c.id];
-      st.undo = { id: c.id, day: PGRE.srs.today(),
-                  prevState: prev ? JSON.parse(JSON.stringify(prev)) : null,
+      noteGameDay(st, deck);
+      if (!stillOwed(deck, c.id)) {
+        st.i++;
+        st.answered = false;
+        if (st.i < st.queue.length) render();
+        else finish();
+        return;
+      }
+      var isCorrect = idx === correctIdx;
+      var accepted = reviewCard(c.id, isCorrect ? 'good' : 'again');
+      if (accepted === null) return;
+      st.answered = true;
+      var opId = accepted && accepted.opId ? String(accepted.opId) : '';
+      st.undo = { id: c.id, day: PGRE.srs.today(), opId: opId,
                   prevCorrect: st.correct, prevDone: st.done,
                   prevStreak: st.streak, prevBest: st.best };
-      var isCorrect = idx === correctIdx;
       if (isCorrect) { st.correct++; st.streak++; if (st.streak > st.best) st.best = st.streak; }
       else { st.streak = 0; }
-      reviewCard(c.id, isCorrect ? 'good' : 'again');
+      rememberGradeDay(st);
       st.done++;
 
       el.querySelectorAll('.choice').forEach(function (b) {
@@ -851,14 +944,9 @@ PGRE.flashmodes = (function () {
        level; the answered question stays on screen (it is not replayed). */
     function undoLast() {
       var u = st.undo;
-      if (!u) return;
-      if (u.prevState) PGRE.store.state.cards[u.id] = u.prevState;
-      else delete PGRE.store.state.cards[u.id];
-      var revs = PGRE.store.state.cardReviews;
-      if (revs && revs.length) {
-        var last = revs[revs.length - 1];
-        if (last && last.id === u.id && last.d === u.day) revs.pop();
-      }
+      if (!u || !u.opId || typeof PGRE.srs.undoReview !== 'function') return;
+      var res = PGRE.srs.undoReview(String(u.opId));
+      if (!res) return;
       st.correct = u.prevCorrect;
       st.done = u.prevDone;
       st.streak = u.prevStreak;
@@ -881,7 +969,7 @@ PGRE.flashmodes = (function () {
     function settle() {
       if (st.settled || st.done === 0) return;
       st.settled = true;
-      st.checkInResult = awardReviewXP(2 * st.done, 'Auto-quiz: ' + st.correct + '/' + st.done + ' correct');
+      st.checkInResult = awardReviewXP(2 * st.done, 'Auto-quiz: ' + st.correct + '/' + st.done + ' correct', st.gradeDays);
     }
 
     function finish() {
@@ -1176,11 +1264,18 @@ PGRE.flashmodes = (function () {
     /* Games commit gradeCard directly through reviewCard — no learning steps. */
     function pick(idx) {
       if (st.answered) return;
-      st.answered = true;
       var c = st.queue[st.i], correctIdx = st.spec.correctIdx;
       var isCorrect = idx === correctIdx;
+      noteGameDay(st, ctx.deck || PGRE.deck || []);
+      if (!stillOwed(ctx.deck || PGRE.deck || [], c.id)) {
+        next();
+        return;
+      }
+      var accepted = reviewCard(c.id, isCorrect ? 'good' : 'again');
+      if (accepted === null) return;
+      st.answered = true;
       if (isCorrect) st.correct++;
-      reviewCard(c.id, isCorrect ? 'good' : 'again');
+      rememberGradeDay(st);
       st.done++;
       el.querySelectorAll('.cloze-option').forEach(function (b) {
         var i = parseInt(b.getAttribute('data-idx'), 10);
@@ -1214,7 +1309,7 @@ PGRE.flashmodes = (function () {
     function settle() {
       if (st.settled || st.done === 0) return;
       st.settled = true;
-      st.checkInResult = awardReviewXP(2 * st.done, 'Cloze: ' + st.correct + '/' + st.done + ' correct');
+      st.checkInResult = awardReviewXP(2 * st.done, 'Cloze: ' + st.correct + '/' + st.done + ' correct', st.gradeDays);
     }
 
     function finish() {
