@@ -2319,10 +2319,22 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 /* Multi-select self-assessment chips (PGRE.assess, js/app.js) — practice
    feedback + mistake drills. Rides on the .focus-chip pill look; .active is
    the picked state. The note echoes lucky-guess / keep-failing filings in
-   neutral text. Keep failing is the strongest concern level: its picked
-   state takes the danger tint instead of the neutral ivory. */
+   neutral text. Keep failing is the strongest concern level: at rest it
+   keeps a danger border and label so it stands apart from the neutral
+   chips, and the picked state fills with the danger tint. Hover previews
+   that fill; it must beat .focus-chip:hover, which would paint the chip
+   back to ink. Tokens follow [data-theme="dark"]. */
 .assess-chip { font-family: var(--sans); font-weight: 500; padding: 6px 12px; }
 .assess-chip .key-hint { margin-left: 2px; }
+.assess-chip.assess-stuck {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+.assess-chip.assess-stuck:hover {
+  border-color: var(--bad);
+  background: var(--bad-tint);
+  color: var(--bad);
+}
 .assess-chip.assess-stuck.active {
   border-color: var(--bad); background: var(--bad-tint); color: var(--bad);
 }
