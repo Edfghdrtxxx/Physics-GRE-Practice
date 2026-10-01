@@ -71,12 +71,14 @@ The default practice pool is 366 questions (20 preview + 146 CPG chapter problem
 
 > **What shipped:** the book markdown was parsed offline (multi-agent extraction with
 > adversarial verification, one agent per problem section / exam chunk / index chapter)
-> into three **gitignored** generated files under `content/bank/`:
+> into four **gitignored** generated files under `content/bank/`:
 > `cpg-questions.js` (146 end-of-chapter problems, `PGRE.BOOK_QUESTIONS`, ids `cpg-<sec>-<n>`),
 > `cpg-exams.js` (Sample Exams 1–3, 100 questions each, `PGRE.BOOK_EXAMS`, ids `cpg-x<n>-<q>`),
-> `cpg-formulas.js` (334 formula cards, **strictly 1:1 with the book's numbered equations**
-> per the EQUATION INDEX — user rule: only labeled equations are memorization-worthy;
-> ids `cpgf-<eq>`). Referenced figures are copied to `content/book-assets/` (gitignored).
+> `cpg-formulas.js` (337 formula cards, one per numbered equation plus a few
+> split `cpgf-<eq><letter>` corrections — user rule: only labeled equations are
+> memorization-worthy; ids `cpgf-<eq>`) and `cpg-lists.js` (60 `kind: 'list'`
+> recall cards, ids `cpgl-<ch>.<NN>`, `PGRE.BOOK_LISTS`).
+> Referenced figures are copied to `content/book-assets/` (gitignored).
 > ~96% of questions also carry `choiceSols` — per-choice distractor explanations mined
 > from the worked solutions (see §8). `js/bank.js` merges preview + book + exam sources
 > (`PGRE.allQuestions`, `questionById`, `questionsForTopic`); mastery denominators use the
@@ -108,7 +110,7 @@ The default practice pool is 366 questions (20 preview + 146 CPG chapter problem
 
 The site is frame-first: **20 preview questions** (hand-written, GRE-style, 5 choices)
 spread across all 9 topics. Shipped: the CPG bank (146 chapter problems, 3×100 sample
-exams, 334 formula cards) and ETS drills + exams are merged in (see the SHIPPED callout
+exams, 337 formula cards, 60 recall lists) and ETS drills + exams are merged in (see the SHIPPED callout
 above); the preview set remains as `src: 'preview'`.
 
 **Math convention:** all formulas — in question statements, choices, and solutions — are
@@ -354,9 +356,12 @@ intro tile shows the round size, or "No cloze-able cards in today's pool yet." w
 Card ids are **equation-numbered and assumed stable** across re-imports; a re-import that
 renumbers ids resets card progress (known limitation).
 
-**The formula deck is 334 cards** from `PGRE.BOOK_FORMULAS` (`content/bank/cpg-formulas.js`).
-`PGRE.FORMULAS` itself is empty; `PGRE.formulaDeck()` in `js/store.js` returns the book
-cards. Keyboard: space flips, 1–4 grade, ← steps back.
+**The merged formula deck is 463 cards** — `PGRE.BOOK_FORMULAS` (337 book equation
+cards, `content/bank/cpg-formulas.js`), `PGRE.FORMULAS` (66 supplemental/correction
+cards after id-dedup, `js/data-formulas.js`), and `PGRE.BOOK_LISTS` (60 recall-list
+cards, `content/bank/cpg-lists.js`) — merged id-deduped by `PGRE.formulaDeck()`
+in `js/store.js` (an IndexedDB import is a fourth source). Keyboard: space flips,
+1–4 grade, ← steps back.
 
 ## 5. Review plan (generated: `js/data-plan.js`, resolved: `js/plan-engine.js`)
 

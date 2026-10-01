@@ -25,7 +25,7 @@ on `file://` pages — the local server is the reliable way.)
 | **Practice** | GRE-style 5-choice questions with instant feedback, worked solutions, and XP — all math written in LaTeX and typeset offline by KaTeX. Mixed pool of ~366 questions: 20 preview + 146 *Conquering the Physics GRE* chapter problems + 200 drills from the two oldest released ETS forms (GR8677/GR9277) |
 | **History** | Every answer ever given, kept for good: question, your pick vs. the correct one, time taken, and its session. Session list + filterable attempt log |
 | **Mistake book** | Every missed question with your wrong pick beside the solution. Re-drillable anytime; resurfaced on a spaced-repetition ladder (1→3→7→14→30→60 days). Solving never removes an entry — only your manual Archive does |
-| **Formula recall** | Flip cards: recall, flip, self-grade Again/Hard/Good/Easy → SM-2 intervals and a daily due queue. 334 cards extracted from the book. One Study button on landing; Match/Type/Cloze/Quiz drills, the daily check-in, and interval settings sit behind Options; agent learning status export in-progress and at checkout |
+| **Formula recall** | Flip cards: recall, flip, self-grade Again/Hard/Good/Easy → SM-2 intervals and a daily due queue. 463 cards: 337 extracted from the book, 66 supplemental, 60 book recall lists. One Study button on landing; Match/Type/Cloze/Quiz drills, the daily check-in, and interval settings sit behind Options; agent learning status export in-progress and at checkout |
 | **Study plan** | Sep 14 → Nov 1 · 7 live weeks · ~16 h/wk · generated from the vault syllabus via tools/build-plan.js · each timed set has a Start button and is ticked automatically when finished |
 | **Achievements** | 80 achievements across 10 categories, 7 secret |
 | **Library** | Import the *Conquering the Physics GRE* markdown (drag & drop), map its sections to topics, export/restore/reset all progress, restore the last automatic backup (written every 20th save) |
@@ -37,7 +37,9 @@ on `file://` pages — the local server is the reliable way.)
 ## Content
 
 The question bank is already in: `content/bank/` (gitignored, generated) holds the
-146 chapter problems, 3 sample exams, 334 formula cards, and the released ETS
+146 chapter problems, 3 sample exams, 397 book-derived recall cards (337 formula
+cards + 60 recall lists; the deck adds 66 supplemental cards from
+`js/data-formulas.js`), and the released ETS
 exams. `js/bank.js` merges the practice pool; intact exams stay out of it so they
 remain fresh for simulation.
 

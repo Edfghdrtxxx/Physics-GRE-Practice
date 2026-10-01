@@ -138,7 +138,36 @@ if (fs.existsSync(BANK)) {
   }
 }
 
+/* --- js/data-formulas.js (public formula deck) ------------------------- */
+/* PGRE.FORMULAS ships in the repo, so this block must scan even when the
+   gitignored bank is absent. Card fields: front/back/note may carry math;
+   list cards nest the math inside back's <li> items. */
+{
+  const FILE = path.join(ROOT, 'js', 'data-formulas.js');
+  const sandbox = { window: {} };
+  const vm = require('vm');
+  vm.createContext(sandbox);
+  vm.runInContext('this.window = this;', sandbox);
+  try {
+    vm.runInContext(fs.readFileSync(FILE, 'utf8'), sandbox);
+  } catch (e) {
+    failures.push({ where: 'js/data-formulas.js', tex: '(file load)', error: e.message });
+  }
+  const deck = (sandbox.window.PGRE && sandbox.window.PGRE.FORMULAS) || [];
+  for (const card of deck) {
+    const tag = 'js/data-formulas.js FORMULAS ' + (card.id || '?');
+    check(tag + ' front', card.front);
+    check(tag + ' back', card.back);
+    if (card.note) check(tag + ' note', card.note);
+    if (card.name) check(tag + ' name', card.name);
+  }
+}
+
 console.log('Checked ' + checked + ' math segment(s).');
+if (checked === 0 && !failures.length) {
+  console.log('\nNo math segments found — the scan reached no content.');
+  process.exit(1);
+}
 if (failures.length) {
   console.log('\n' + failures.length + ' KaTeX parse failure(s):');
   for (const f of failures) {
