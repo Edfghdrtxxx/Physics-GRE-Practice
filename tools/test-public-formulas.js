@@ -192,6 +192,18 @@ assert(adia && !/slow compared/i.test(adiaText) && !/\\hbar\s*\/\s*\(?\\Delta E/
 assert(adia && /\\partial H/.test(adiaText) && /\(E_n-E_m\)\^2/.test(adiaText),
   'the adiabatic card prints the nondegenerate condition');
 
+var film = byId['supp-thin-film'];
+var filmBack = film ? film.back : '';
+var filmItems = filmBack.match(/<li>/g);
+assert(film && filmItems && filmItems.length === 3 && /\(3\)/.test(film.front),
+  'supp-thin-film keeps three graded items');
+assert(film && /2nt = \\left\(m\+\\tfrac\{1\}\{2\}\\right\)\\lambda/.test(filmBack),
+  'supp-thin-film keeps the one-flip constructive condition');
+assert(film && filmBack.indexOf('2nt \\to 0') !== -1 && /2nt = m\\lambda/.test(filmBack),
+  'a very thin soap film is m = 0 of 2nt = m lambda');
+assert(film && filmBack.indexOf('one flip and $m = 0$, is dark') === -1,
+  'supp-thin-film does not call m = 0 of the half-integer condition dark');
+
 EXPECTED.forEach(function (id) {
   var c = byId[id];
   if (!c) return;
