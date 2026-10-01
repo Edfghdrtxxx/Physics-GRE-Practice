@@ -166,6 +166,7 @@ PGRE.srs = {
   dueMistakes: function () { return []; },
   archivedMistakes: function () { return []; },
   filterByTopic: function (l) { return l; },
+  filterByConcern: function (l) { return l; },
   mistakeMissed: function () {},
   mistakeSolved: function () {},
   clearLucky: function () {},
