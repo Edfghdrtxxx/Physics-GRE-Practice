@@ -209,7 +209,7 @@ var powerBack = power ? power.back : '';
 var powerItems = powerBack.match(/<li>/g);
 var powerResist = 'If $R_g > 0$ and the loop reactance is zero, $R_L = R_g$. ' +
   'If only $R_L$ can vary, the best value is $\\sqrt{R_g^2+(X_g+X_L)^2}$; ' +
-  'when $X_L = 0$ that is $|Z_g|$, not $R_g$.';
+  'when $X_L = 0$ that is $|Z_g|$, which is not $R_g$ unless $X_g = 0$.';
 assert(power && powerItems && powerItems.length === 3 && /\(3\)/.test(power.front),
   'supp-max-power-match keeps three graded items');
 assert(power && powerBack.indexOf(powerResist) !== -1,
