@@ -549,9 +549,13 @@ PGRE.toast = function (html, kind, sticky) {
    A multi-select chip row in the feedback block after every answer:
    Knew it / Guessed (mutually exclusive) plus Too slow / Forgot something /
    Keep failing (combine freely with anything). Every tap re-stamps the newest
-   attempt row (srs.setLastAssess) and keeps the lucky-guess and keep-failing
-   bookkeeping in sync, so the chips stay editable until the next question and
-   a mid-session exit loses nothing. Tapping an active chip un-picks it. */
+   attempt row (srs.setLastAssess), keeps the lucky-guess and keep-failing
+   bookkeeping in sync, and rewrites the review date from this answer's base
+   (srs.applyAssessSchedule). Knew it leaves that date.
+   Guessed and Too slow halve the remaining wait once (minimum tomorrow).
+   Forgot something and Keep failing bring a future review back to tomorrow.
+   Unpicking restores the base. No extra attempt, miss, or XP. Tapping an active chip
+   un-picks it. The chips stay editable until the next question. */
 PGRE.assess = (function () {
   var OPTIONS = [
     { key: 'sure',   label: 'Knew it',          kbd: 'K' },
@@ -652,6 +656,20 @@ PGRE.assess = (function () {
     return h;
   }
 
+  /* "Correct" plus the live review interval, when this answer has one.
+     The phrase starts hidden when nothing is scheduled yet; a later chip
+     that files a ladder (Guessed, Keep failing) reveals it. */
+  function reviewTitle(qid) {
+    var when = '';
+    var mk = PGRE.store.state.mistakes && PGRE.store.state.mistakes[qid];
+    if (mk && mk.srs && mk.srs.due && PGRE.srs && typeof PGRE.srs.ivlLabel === 'function') {
+      when = PGRE.srs.ivlLabel(PGRE.srs.daysUntil(mk.srs.due));
+    }
+    var hidden = when ? '' : ' hidden';
+    return 'Correct<span id="next-review-phrase"' + hidden +
+      '> — next review in <span id="next-review-label">' + when + '</span></span>';
+  }
+
   /* Wire a freshly rendered row for question q. requestToggle is the click
      and shortcut path (Keep failing asks first). hydrate paints a saved row
      and does not write; toggle is the only path that files or saves. */
@@ -696,6 +714,24 @@ PGRE.assess = (function () {
       PGRE.srs.setLastAssess(q.id, conf, tags);
     }
 
+    /* The banner is painted from storage. After a chip changes the due date,
+       rewrite the same phrase so the label cannot lag the schedule. */
+    function paintReviewLabel() {
+      var phrase = container.querySelector('#next-review-phrase');
+      var label = container.querySelector('#next-review-label');
+      if (!phrase || !label || !PGRE.srs || typeof PGRE.srs.ivlLabel !== 'function') return;
+      var mk = PGRE.store.state.mistakes && PGRE.store.state.mistakes[q.id];
+      var when = mk && mk.srs && mk.srs.due
+        ? PGRE.srs.ivlLabel(PGRE.srs.daysUntil(mk.srs.due)) : '';
+      if (!when) {
+        phrase.hidden = true;
+        label.textContent = '';
+        return;
+      }
+      label.textContent = when;
+      phrase.hidden = false;
+    }
+
     /* Saved chips only. Mirrors toggle's mutual exclusion and remembers which
        filings already exist so a later tap does not re-file them. */
     function hydrate(flags) {
@@ -738,8 +774,10 @@ PGRE.assess = (function () {
         PGRE.srs.unmarkStuck(q.id); stuckFiled = false;
         PGRE.refreshNavBadges();
       }
+      if (typeof PGRE.srs.applyAssessSchedule === 'function') PGRE.srs.applyAssessSchedule(q.id, on);
       commit();
       paint();
+      paintReviewLabel();
     }
 
     row.querySelectorAll('[data-assess]').forEach(function (b) {
@@ -749,7 +787,7 @@ PGRE.assess = (function () {
     return controller;
   }
 
-  return { OPTIONS: OPTIONS, LABELS: LABELS, html: html, bind: bind,
+  return { OPTIONS: OPTIONS, LABELS: LABELS, html: html, reviewTitle: reviewTitle, bind: bind,
     stuckButtonAttrs: stuckButtonAttrs, stuckConfirmHTML: stuckConfirmHTML, bindStuckConfirm: bindStuckConfirm };
 })();
 

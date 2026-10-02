@@ -143,8 +143,14 @@ PGRE.persistWarning = function () {};
 PGRE.typesetMath = function () {};
 PGRE.refreshNavBadges = function () {};
 PGRE.route = function () {};
+var hydratedFlags = null;
 PGRE.assess = {
-  bind: function () { return { toggle: function () {} }; },
+  bind: function () {
+    return {
+      toggle: function () {},
+      hydrate: function (flags) { hydratedFlags = JSON.parse(JSON.stringify(flags)); }
+    };
+  },
   html: function () { return ''; },
   stuckButtonAttrs: function () { return ''; },
   stuckConfirmHTML: function () { return ''; },
@@ -378,7 +384,7 @@ var rightHtml = elFor('mistakes-root').innerHTML;
 var rightChoice = choiceAttrs(rightHtml, rightPick);
 assert(rightChoice && rightChoice.pressed === 'true' && /is-answer/.test(rightChoice.cls),
   'resumed correct question shows the saved choice');
-assert(/feedback-good/.test(rightHtml) && /Correct —/.test(rightHtml),
+assert(/feedback-good/.test(rightHtml) && /<strong>Correct/.test(rightHtml),
   'resumed correct question shows the correct verdict');
 assert(rightHtml.indexOf(qRight.sol) !== -1, 'resumed question reuses the stored solution');
 assert(!/blank again|hidden for recall|View saved answer|Leave and come back/.test(rightHtml),
@@ -473,6 +479,72 @@ assert(live.i === 1 && live.ids[live.i] === 'p3', 'cursor realigned to the same 
 assert(live.answers[0] && live.answers[0].qid === 'p1' && live.answers[1] === null,
   'answers stayed zipped to their question');
 
+console.log('\npractice: a resumed answer paints the chips on the stored attempt');
+
+var dueBefore = '2026-10-04';
+var baseBefore = '2026-10-05';
+PGRE.store.state.mistakes.p1 = {
+  firstMissedAt: '2026-10-01T00:00:00.000Z', misses: 1, solves: 1,
+  wrongPicks: [], archivedAt: '2026-10-01T00:00:00.000Z',
+  lastTouchedAt: '2026-10-02T00:00:00.000Z',
+  srs: { step: 1, due: dueBefore, baseDue: baseBefore }
+};
+PGRE.store.state.attempts.push({
+  ts: '2026-10-02T00:00:00.000Z', qid: 'p1', topic: 'mech',
+  picked: 1, answer: 1, correct: true, ms: 9000,
+  sid: 's-chip', mode: 'practice', confidence: 'guess', tags: ['slow']
+});
+var attemptsBefore = PGRE.store.state.attempts.length;
+var xpBefore = PGRE.store.state.xp;
+var chipSnap = {
+  topicId: 'all', filter: null, label: null, custom: false, learnDrill: false,
+  sid: 's-chip', stage: 'feedback',
+  ids: ['p1'],
+  i: 0, correct: 1, xpEarned: 15,
+  answers: [{ qid: 'p1', picked: 1, correct: true, xp: 15, ms: 9000,
+              assess: { sure: false, guess: false, slow: false, forgot: false, stuck: false } }],
+  savedAt: Date.now()
+};
+put(park.PRACTICE_KEY, chipSnap);
+hydratedFlags = null;
+var resumeSaves = 0;
+var origSave = PGRE.store.save;
+PGRE.store.save = function () { resumeSaves++; return origSave.apply(PGRE.store, arguments); };
+sessionStorage.setItem(park.RESUME_KEY, '1');
+practice.mount({ id: 'all', sub2: null });
+PGRE.store.save = origSave;
+assert(hydratedFlags && hydratedFlags.guess === true && hydratedFlags.slow === true &&
+       hydratedFlags.sure === false && hydratedFlags.forgot === false,
+  'resume paints Guessed and Too slow from the attempt, not the all-false snapshot');
+assert(resumeSaves === 0, 'resume does not write the store');
+assert(PGRE.store.state.mistakes.p1.srs.due === dueBefore &&
+       PGRE.store.state.mistakes.p1.srs.baseDue === baseBefore,
+  'resume leaves the stored review date on its base');
+assert(PGRE.store.state.attempts.length === attemptsBefore && PGRE.store.state.xp === xpBefore,
+  'resume adds no attempt and no XP');
+
+var fbEl = elFor('feedback');
+fbEl.querySelectorAll = function (sel) {
+  if (sel !== '[data-assess]') return [];
+  return [{
+    getAttribute: function (name) {
+      if (name === 'data-assess') return 'guess';
+      if (name === 'aria-pressed') return 'true';
+      return null;
+    }
+  }];
+};
+docKeyHandlers.forEach(function (fn) {
+  fn({ key: 'g', preventDefault: function () {}, target: {} });
+});
+var parked = snap(park.PRACTICE_KEY);
+assert(parked && parked.answers[0] && parked.answers[0].assess &&
+       parked.answers[0].assess.guess === true,
+  'a chip tap saves the practice snapshot with Guessed on');
+assert(PGRE.store.state.mistakes.p1.srs.due === dueBefore,
+  'the snapshot save does not move the review date');
+fbEl.querySelectorAll = function () { return []; };
+
 /* ================= Top-bar drawer ================= */
 
 console.log('\nthe drawer lists only real parked slots and opens from the count');
@@ -565,6 +637,29 @@ clicked({ target: { closest: function (sel) {
   return sel === '.parked-band' ? { getAttribute: function () { return 'exam'; } } : null;
 } } });
 assert(locationStub.hash === '#/exam/run', 'exam band opens the room directly');
+
+console.log('\nshell cache tokens for the review-date scripts');
+
+var indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+function scriptToken(file) {
+  var m = indexHtml.match(new RegExp('<script src="' + file.replace(/\./g, '\\.') + '\\?v=([^"]+)"'));
+  return m ? m[1] : '';
+}
+assert(scriptToken('js/srs.js') === '20261002b', 'srs.js cache token is 20261002b, got ' + scriptToken('js/srs.js'));
+assert(scriptToken('js/gamify.js') === '20261002b', 'gamify.js cache token is 20261002b, got ' + scriptToken('js/gamify.js'));
+assert(scriptToken('js/view-practice.js') === '20261002d', 'view-practice.js cache token is 20261002d, got ' + scriptToken('js/view-practice.js'));
+assert(scriptToken('js/view-mistakes.js') === '20261002d', 'view-mistakes.js cache token is 20261002d, got ' + scriptToken('js/view-mistakes.js'));
+assert(scriptToken('js/app.js') === '20261002e', 'app.js cache token is 20261002e, got ' + scriptToken('js/app.js'));
+assert(indexHtml.indexOf('js/srs.js?v=20261001j') < 0 &&
+       indexHtml.indexOf('js/srs.js?v=20261002a') < 0 &&
+       indexHtml.indexOf('js/gamify.js?v=20260918c') < 0 &&
+       indexHtml.indexOf('js/gamify.js?v=20261002a') < 0 &&
+       indexHtml.indexOf('js/view-practice.js?v=20261002c') < 0 &&
+       indexHtml.indexOf('js/view-mistakes.js?v=20261002b') < 0 &&
+       indexHtml.indexOf('js/view-mistakes.js?v=20261002c') < 0 &&
+       indexHtml.indexOf('js/app.js?v=20261002c') < 0 &&
+       indexHtml.indexOf('js/app.js?v=20261002d') < 0,
+  'the pre-fix cache tokens are gone');
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

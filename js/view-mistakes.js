@@ -758,12 +758,15 @@ PGRE.views.mistakes = (function () {
   /* The feedback panel under an answered question. `fresh` (just answered) gets
      the interactive self-assessment row; a re-revealed answer shows what was
      recorded instead, so re-reading a question never rewrites its assessment. */
+  function correctTitle(q) {
+    if (PGRE.assess && typeof PGRE.assess.reviewTitle === 'function') return PGRE.assess.reviewTitle(q.id);
+    return 'Correct';
+  }
+
   function feedbackHTML(q, st, fresh, locked) {
-    var mk = PGRE.store.state.mistakes[q.id];
-    var nextDue = mk && mk.srs ? PGRE.srs.ivlLabel(PGRE.srs.daysUntil(mk.srs.due)) : '';
     var html = '<div class="feedback reveal-in ' + (st.correct ? 'feedback-good' : 'feedback-bad') + '">' +
       '<span class="fb-icon">' + (st.correct ? '✓' : '✗') + '</span>' +
-      '<strong>' + (st.correct ? 'Correct — next review in ' + nextDue
+      '<strong>' + (st.correct ? correctTitle(q)
                                : 'Incorrect — the answer is ' + LETTERS[q.answer] +
                                  '; back to the bottom of the ladder') + '</strong>' +
       '<span class="fb-xp">+' + st.xp + ' XP</span>' +

@@ -70,6 +70,57 @@ PGRE.srs = {
     mk.srs = { step: step, due: this.addDays(this.MISTAKE_LADDER[step]) };
   },
 
+  /* The review date this answer produced, before any self-assessment chip.
+     A chip may halve or pull that wait; unpicking restores this date. A new
+     answer replaces the base, including an archived solve that does not climb. */
+  noteAssessBase: function (mk) {
+    if (!mk || !mk.srs || !mk.srs.due) return;
+    mk.srs.baseDue = mk.srs.due;
+  },
+
+  /* Whole days from today after the chips on this answer. baseDays is the
+     ladder wait recorded with the answer.
+     Knew it leaves it alone.
+     Guessed and Too slow halve it once — together as well as alone — and
+     never land sooner than tomorrow. Whole days round up, so a 3-day wait
+     becomes 2 days and is never cut past half.
+     A wait already due stays due; moving it to tomorrow would only delay it.
+     Forgot something and Keep failing bring a future review back to tomorrow
+     and win over a halving chip. Together they still land on tomorrow once. */
+  assessWaitDays: function (baseDays, flags) {
+    var days = typeof baseDays === 'number' && isFinite(baseDays) ? baseDays : 0;
+    flags = flags || {};
+    if (flags.forgot || flags.stuck) return days <= 0 ? days : 1;
+    if (flags.guess || flags.slow) {
+      if (days <= 1) return days;
+      return Math.max(1, Math.ceil(days / 2));
+    }
+    return days;
+  },
+
+  /* Rewrite mk.srs.due from the answer's base date and the chips still on.
+     Does not touch the ladder step, misses, solves, archive flag, attempts,
+     or XP. No schedule yet: no-op — Guessed and Keep failing file their own
+     entry before this runs. Refuses when the store cannot persist. */
+  applyAssessSchedule: function (qid, flags) {
+    if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
+      if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
+      return null;
+    }
+    var mk = PGRE.store.state.mistakes && PGRE.store.state.mistakes[qid];
+    if (!mk || !mk.srs || !mk.srs.due) return null;
+    var stamped = false;
+    if (!mk.srs.baseDue) { mk.srs.baseDue = mk.srs.due; stamped = true; }
+    var baseDays = this.daysUntil(mk.srs.baseDue);
+    var days = this.assessWaitDays(baseDays, flags);
+    var due = days === baseDays ? mk.srs.baseDue : this.addDays(days);
+    if (mk.srs.due === due && !stamped) return mk;
+    if (mk.srs.due !== due) mk.lastTouchedAt = new Date().toISOString();
+    mk.srs.due = due;
+    PGRE.store.save();
+    return mk;
+  },
+
   /* ——— Self-assessment tagging (proposal #6, extended to multi-select) ———
      The answer is recorded first (confidence null, no tags); the assessment
      taps land a beat later, so we stamp the most recent attempt row for this
@@ -136,7 +187,9 @@ PGRE.srs = {
      this one. Same filing mechanism as a lucky guess: flag (or create) the
      mistake-book entry, reopen an archived one (fresh evidence), and if it
      isn't already scheduled seed the normal ladder (bottom rung, due
-     tomorrow) so it resurfaces. Intervals are untouched. */
+     tomorrow) so it resurfaces. An existing interval stays here. The assess
+     chip then rewrites it through applyAssessSchedule, which pulls a future
+     review to tomorrow. */
   markStuck: function (qid) {
     var s = PGRE.store.state, now = new Date().toISOString();
     var mk = s.mistakes[qid];

@@ -120,6 +120,11 @@ PGRE.gamify = {
       mk.lastSolvedAt = now;
       if (!mk.archivedAt) PGRE.srs.mistakeSolved(mk);
     }
+    // Chips rewrite due from this base. Forgot something and Keep failing pull
+    // a future review to tomorrow; Guessed and Too slow halve it once. A new
+    // answer replaces the base, so unpicking restores this answer's date and
+    // does not stack on an older adjustment.
+    if (mk && mk.srs && typeof PGRE.srs.noteAssessBase === 'function') PGRE.srs.noteAssessBase(mk);
 
     var rec = s.questions[q.id] || { attempts: 0, correct: 0, firstCorrect: false };
     rec.attempts += 1;
@@ -276,6 +281,9 @@ PGRE.gamify = {
       mk.lastSolvedAt = now;
       if (!mk.archivedAt) PGRE.srs.mistakeSolved(mk);
     }
+    // Same base as recordAnswer: Keep failing and Forgot something pull a
+    // future review to tomorrow from this date, and unpicking restores it.
+    if (mk && mk.srs && typeof PGRE.srs.noteAssessBase === 'function') PGRE.srs.noteAssessBase(mk);
 
     // a blank (picked null) scores as a miss above, but only a question the
     // user actually answered counts toward the answered/accuracy aggregates

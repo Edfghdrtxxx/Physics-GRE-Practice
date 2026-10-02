@@ -13,6 +13,7 @@ var vm = require('vm');
 var root = path.resolve(__dirname, '..');
 var storeSrc = fs.readFileSync(path.join(root, 'js', 'store.js'), 'utf8');
 var srsSrc = fs.readFileSync(path.join(root, 'js', 'srs.js'), 'utf8');
+var gamifySrc = fs.readFileSync(path.join(root, 'js', 'gamify.js'), 'utf8');
 
 var window = { PGRE: {} };
 var localStorageMock = {};
@@ -21,11 +22,16 @@ var localStorage = {
   setItem: function (k, v) { localStorageMock[k] = String(v); },
   removeItem: function (k) { delete localStorageMock[k]; }
 };
+var document = {
+  querySelector: function () { return null; },
+  getElementById: function () { return null; }
+};
 
 var sandbox = {
   window: window,
   PGRE: window.PGRE,
   localStorage: localStorage,
+  document: document,
   console: console,
   Date: Date,
   Math: Math,
@@ -40,6 +46,7 @@ var sandbox = {
 vm.createContext(sandbox);
 vm.runInContext(storeSrc, sandbox);
 vm.runInContext(srsSrc, sandbox);
+vm.runInContext(gamifySrc, sandbox);
 
 var PGRE = sandbox.PGRE;
 var store = PGRE.store;
@@ -49,6 +56,9 @@ if (!srs || typeof srs.mistakeMissed !== 'function') {
   process.exit(1);
 }
 store.load();
+PGRE.gamify.checkAchievements = function () {};
+PGRE.gamify.checkChallenges = function () {};
+PGRE.persistWarning = function () {};
 
 /* The mistake book resolves ids through PGRE.questionById; stub it so entries
    are listable without loading the whole bank. */
@@ -246,6 +256,208 @@ assert(srs.ivlLabel(0) === 'today' && srs.ivlLabel(1) === '1 d' && srs.ivlLabel(
 assert(srs.ivlLabel(30) === '1 mo' && srs.ivlLabel(60) === '2 mo',
   'ivlLabel renders whole months');
 assert(srs.ivlLabel(45) === '1.5 mo', 'ivlLabel renders fractional months');
+
+console.log('\nself-assessment review date');
+assert(srs.assessWaitDays(3, {}) === 3 && srs.assessWaitDays(3, { sure: true }) === 3,
+  'Knew it and no chip keep a 3-day wait');
+assert(srs.assessWaitDays(3, { stuck: true }) === 1 &&
+       srs.assessWaitDays(3, { stuck: true, guess: true, slow: true }) === 1 &&
+       srs.assessWaitDays(3, { stuck: true, forgot: true }) === 1,
+  'Keep failing brings a 3-day wait back to tomorrow, wins over a half, and does not stack with Forgot something');
+assert(srs.assessWaitDays(3, { guess: true }) === 2 &&
+       srs.assessWaitDays(3, { slow: true }) === 2 &&
+       srs.assessWaitDays(3, { guess: true, slow: true }) === 2,
+  'Guessed and Too slow halve a 3-day wait once, even together (2 days)');
+assert(srs.assessWaitDays(3, { forgot: true }) === 1 &&
+       srs.assessWaitDays(3, { forgot: true, guess: true, slow: true }) === 1,
+  'Forgot something brings a 3-day wait back to tomorrow and wins over a half');
+assert(srs.assessWaitDays(1, { guess: true }) === 1 && srs.assessWaitDays(0, { guess: true }) === 0 &&
+       srs.assessWaitDays(2, { slow: true }) === 1 && srs.assessWaitDays(7, { guess: true }) === 4 &&
+       srs.assessWaitDays(14, { slow: true }) === 7 && srs.assessWaitDays(30, { guess: true }) === 15 &&
+       srs.assessWaitDays(60, { slow: true }) === 30,
+  'halving rounds whole days up and never schedules sooner than tomorrow');
+assert(srs.assessWaitDays(0, { forgot: true }) === 0 && srs.assessWaitDays(1, { forgot: true }) === 1 &&
+       srs.assessWaitDays(14, { forgot: true }) === 1 &&
+       srs.assessWaitDays(0, { stuck: true }) === 0 && srs.assessWaitDays(1, { stuck: true }) === 1 &&
+       srs.assessWaitDays(14, { stuck: true }) === 1,
+  'Forgot something and Keep failing leave an already-due review due and a future one at tomorrow');
+
+resetState();
+var graded = mkEntry('qGrade');
+srs.mistakeMissed(graded);
+srs.mistakeSolved(graded);
+var baseDue = graded.srs.due;
+var baseStep = graded.srs.step;
+srs.noteAssessBase(graded);
+assert(graded.srs.baseDue === baseDue && srs.daysUntil(baseDue) === 3 && baseStep === 1,
+  'a first correct re-solve is the 3-day base the banner shows');
+store.state.attempts.push({ qid: 'qGrade', correct: true, confidence: null });
+var xpBefore = store.state.xp;
+var attemptsBefore = store.state.attempts.length;
+var missesBefore = graded.misses;
+var solvesBefore = graded.solves;
+
+srs.applyAssessSchedule('qGrade', { forgot: true });
+assert(srs.daysUntil(graded.srs.due) === 1 && graded.srs.step === baseStep,
+  'Forgot something stores tomorrow and does not move the ladder step');
+assert(graded.misses === missesBefore && graded.solves === solvesBefore &&
+       store.state.attempts.length === attemptsBefore && store.state.xp === xpBefore,
+  'Forgot something adds no miss, solve, attempt, or XP');
+var row = store.state.attempts[0];
+srs.setLastAssess('qGrade', null, ['forgot']);
+assert(store.state.attempts.length === 1 && store.state.attempts[0] === row &&
+       row.tags && row.tags[0] === 'forgot',
+  'Forgot something re-stamps the same attempt row');
+
+srs.applyAssessSchedule('qGrade', {});
+assert(graded.srs.due === baseDue && graded.srs.step === baseStep,
+  'unpicking Forgot something restores the original 3-day date');
+assert(graded.misses === missesBefore && graded.solves === solvesBefore &&
+       store.state.attempts.length === 1 && store.state.xp === xpBefore,
+  'unpicking restores the date without another attempt or XP');
+
+srs.applyAssessSchedule('qGrade', { guess: true });
+assert(srs.daysUntil(graded.srs.due) === 2 && graded.srs.step === baseStep,
+  'Guessed stores half of the 3-day wait (2 days) on the same rung');
+srs.applyAssessSchedule('qGrade', { guess: true, slow: true });
+assert(srs.daysUntil(graded.srs.due) === 2,
+  'Guessed plus Too slow still halves once');
+srs.applyAssessSchedule('qGrade', { guess: true });
+assert(srs.daysUntil(graded.srs.due) === 2,
+  'applying Guessed again does not halve the already halved date');
+srs.applyAssessSchedule('qGrade', { slow: true });
+assert(srs.daysUntil(graded.srs.due) === 2 && graded.srs.due !== baseDue,
+  'Too slow alone stores the same 2-day wait');
+srs.applyAssessSchedule('qGrade', { sure: true });
+assert(graded.srs.due === baseDue, 'Knew it restores the original date');
+srs.applyAssessSchedule('qGrade', { stuck: true });
+assert(srs.daysUntil(graded.srs.due) === 1 && graded.srs.step === baseStep && graded.stuck !== true,
+  'Keep failing stores tomorrow and does not move the ladder step or set the flag');
+assert(graded.misses === missesBefore && graded.solves === solvesBefore &&
+       store.state.attempts.length === 1 && store.state.xp === xpBefore,
+  'Keep failing adds no miss, solve, attempt, or XP');
+srs.applyAssessSchedule('qGrade', { stuck: true, guess: true, slow: true });
+assert(srs.daysUntil(graded.srs.due) === 1 && graded.srs.step === baseStep,
+  'Keep failing wins over a half and still does not stack past tomorrow');
+srs.applyAssessSchedule('qGrade', {});
+assert(graded.srs.due === baseDue && graded.srs.step === baseStep,
+  'unpicking Keep failing restores the original 3-day date');
+
+resetState();
+var archived = mkEntry('qArch', { archivedAt: new Date().toISOString() });
+srs.mistakeMissed(archived);
+srs.mistakeSolved(archived);
+var archDue = archived.srs.due;
+var archStep = archived.srs.step;
+archived.srs.baseDue = srs.addDays(14);
+archived.archivedAt = new Date().toISOString();
+var archMisses = archived.misses;
+var answered = PGRE.gamify.recordAnswer(
+  { id: 'qArch', topic: 'cm', answer: 0, choices: ['a', 'b'] },
+  true, 1200, { picked: 0, mode: 'mistakes' });
+assert(typeof answered === 'number' && answered > 0, 'archived re-solve still records XP once');
+assert(archived.archivedAt && archived.srs.step === archStep && archived.srs.due === archDue,
+  'an archived correct answer stays archived and does not climb');
+assert(archived.srs.baseDue === archDue,
+  'that answer replaces an older chip base with the date it left in place');
+var archAttempts = store.state.attempts.length;
+var archXp = store.state.xp;
+var archSolves = archived.solves;
+srs.applyAssessSchedule('qArch', { forgot: true });
+assert(srs.daysUntil(archived.srs.due) === 1 && archived.archivedAt &&
+       archived.srs.step === archStep && archived.misses === archMisses &&
+       archived.solves === archSolves,
+  'Forgot something on an archived record pulls the date to tomorrow without a miss or a reopen');
+assert(store.state.attempts.length === archAttempts && store.state.xp === archXp,
+  'the archived chip writes no second attempt and no extra XP');
+srs.setLastAssess('qArch', null, ['forgot']);
+assert(store.state.attempts.length === archAttempts &&
+       store.state.attempts[store.state.attempts.length - 1].tags[0] === 'forgot',
+  'the archived answer\'s own attempt row receives the Forgot something tag');
+srs.applyAssessSchedule('qArch', { slow: true });
+assert(srs.daysUntil(archived.srs.due) === 2 && archived.srs.step === archStep,
+  'Too slow on the archived record halves its own base, not an older one');
+srs.applyAssessSchedule('qArch', {});
+assert(archived.srs.due === archDue && archived.archivedAt,
+  'clearing the chip restores the archived date and leaves it archived');
+srs.applyAssessSchedule('qArch', { stuck: true });
+assert(srs.daysUntil(archived.srs.due) === 1 && archived.archivedAt &&
+       archived.srs.step === archStep && archived.misses === archMisses &&
+       archived.solves === archSolves,
+  'Keep failing on an archived record pulls the date to tomorrow without a miss or a reopen');
+srs.applyAssessSchedule('qArch', {});
+assert(archived.srs.due === archDue && archived.archivedAt,
+  'unpicking Keep failing restores the archived date and leaves it archived');
+
+resetState();
+var flagged = mkEntry('qStuck');
+srs.mistakeMissed(flagged);
+srs.mistakeSolved(flagged);
+srs.noteAssessBase(flagged);
+var stuckBase = flagged.srs.due;
+var stuckStep = flagged.srs.step;
+store.state.attempts.push({ qid: 'qStuck', correct: true });
+var stuckXp = store.state.xp;
+var stuckAttempts = store.state.attempts.length;
+var stuckMisses = flagged.misses;
+srs.markStuck('qStuck');
+srs.applyAssessSchedule('qStuck', { stuck: true });
+assert(flagged.stuck === true && srs.daysUntil(flagged.srs.due) === 1 &&
+       flagged.srs.step === stuckStep && flagged.srs.baseDue === stuckBase,
+  'the Keep failing chip files the flag and stores tomorrow from the saved base');
+assert(store.state.xp === stuckXp && store.state.attempts.length === stuckAttempts &&
+       flagged.misses === stuckMisses,
+  'that chip adds no miss, attempt, or XP');
+srs.unmarkStuck('qStuck');
+srs.applyAssessSchedule('qStuck', {});
+assert(flagged.srs.due === stuckBase && flagged.stuck !== true && flagged.srs.step === stuckStep,
+  'unpicking Keep failing restores the saved date and clears the flag');
+
+resetState();
+var openArch = mkEntry('qArchOpen');
+srs.mistakeSolved(openArch);
+srs.mistakeSolved(openArch); // step 2, 7 days
+var seven = openArch.srs.due;
+openArch.archivedAt = new Date().toISOString();
+srs.noteAssessBase(openArch);
+srs.markLucky('qArchOpen');
+srs.applyAssessSchedule('qArchOpen', { guess: true });
+assert(!openArch.archivedAt && openArch.lucky === true && openArch.srs.step === 2 &&
+       srs.daysUntil(openArch.srs.due) === 4,
+  'Guessed reopens an archived entry and halves its 7-day wait to 4 days');
+var solvesAtGuess = openArch.solves;
+var missesAtGuess = openArch.misses;
+srs.unmarkLucky('qArchOpen');
+srs.applyAssessSchedule('qArchOpen', {});
+assert(openArch.srs.due === seven && openArch.srs.step === 2 &&
+       openArch.solves === solvesAtGuess && openArch.misses === missesAtGuess &&
+       !openArch.lucky,
+  'unpicking Guessed restores the 7-day date on the same rung');
+
+resetState();
+store.state.attempts.push({ qid: 'qNone', correct: true });
+assert(srs.applyAssessSchedule('qNone', { forgot: true }) === null &&
+       !store.state.mistakes.qNone,
+  'Forgot something does not create a mistake entry when nothing is scheduled');
+srs.markLucky('qNone');
+assert(store.state.mistakes.qNone && srs.daysUntil(store.state.mistakes.qNone.srs.due) === 1,
+  'Guessed still seeds an unscheduled correct answer at tomorrow');
+srs.applyAssessSchedule('qNone', { guess: true });
+assert(srs.daysUntil(store.state.mistakes.qNone.srs.due) === 1 &&
+       store.state.mistakes.qNone.srs.step === 0 && store.state.mistakes.qNone.misses === 0,
+  'halving that seeded tomorrow stays tomorrow and still counts no miss');
+srs.unmarkLucky('qNone');
+assert(!store.state.mistakes.qNone, 'unpicking that Guessed still removes the lucky-only entry');
+
+resetState();
+var refused = mkEntry('qRefuse');
+srs.mistakeSolved(refused);
+var refusedDue = refused.srs.due;
+store._persistFailed = true;
+assert(srs.applyAssessSchedule('qRefuse', { forgot: true }) === null &&
+       refused.srs.due === refusedDue,
+  'a refused save does not move the review date in memory');
+store._persistFailed = false;
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

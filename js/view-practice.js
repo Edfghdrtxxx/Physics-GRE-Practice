@@ -349,6 +349,11 @@ PGRE.views.practice = (function () {
     else renderQuestion();
   }
 
+  function correctTitle(q) {
+    if (PGRE.assess && typeof PGRE.assess.reviewTitle === 'function') return PGRE.assess.reviewTitle(q.id);
+    return 'Correct';
+  }
+
   function reviewAssessNote(ans) {
     var bits = [];
     if (ans.row && ans.row.confidence) bits.push(ans.row.confidence === 'guess' ? 'Guessed' : 'Knew it');
@@ -362,15 +367,39 @@ PGRE.views.practice = (function () {
     return '';
   }
 
-  function assessFlags(ans) {
-    if (ans.assess) return ans.assess;
-    var flags = { sure: false, guess: false, slow: false, forgot: false, stuck: false };
-    if (ans.row) {
-      if (ans.row.confidence === 'sure') flags.sure = true;
-      if (ans.row.confidence === 'guess') flags.guess = true;
-      (ans.row.tags || []).forEach(function (tg) { flags[tg] = true; });
+  /* Latest attempt for this answer. The chip writes confidence and tags onto
+     that row in the same turn as the review date, so the row is what a resume
+     has to paint. Prefer the row from this parked session, then any row for
+     the question. */
+  function attemptFor(qid, sid) {
+    var arr = (PGRE.store && PGRE.store.state && PGRE.store.state.attempts) || [];
+    var any = null;
+    for (var i = arr.length - 1; i >= 0; i--) {
+      var row = arr[i];
+      if (!row || row.qid !== qid) continue;
+      if (!any) any = row;
+      if (sid && row.sid === sid) return row;
     }
+    return any;
+  }
+
+  function flagsFromRow(row) {
+    var flags = { sure: false, guess: false, slow: false, forgot: false, stuck: false };
+    if (!row) return flags;
+    if (row.confidence === 'sure') flags.sure = true;
+    if (row.confidence === 'guess') flags.guess = true;
+    (row.tags || []).forEach(function (tg) { if (tg in flags) flags[tg] = true; });
     return flags;
+  }
+
+  /* Paint the chips that match the stored review date. A snapshot taken
+     before the tap is all false and must not hide the attempt row. */
+  function assessFlags(ans) {
+    var row = ans && ans.row;
+    if (!row && ans && ans.q) row = attemptFor(ans.q.id, session && session.sid);
+    if (row) return flagsFromRow(row);
+    if (ans && ans.assess) return ans.assess;
+    return flagsFromRow(null);
   }
 
   function snapshotAssess(fb, ans) {
@@ -391,6 +420,9 @@ PGRE.views.practice = (function () {
     ctrl.toggle = function (key) {
       inner(key);
       snapshotAssess(fb, ans);
+      // The tap already rewrote the attempt and the date. Park that chip
+      // state too, so a later resume is not stuck with the pre-tap snapshot.
+      saveSession();
     };
     fb.addEventListener('click', function (e) {
       var t = e.target && e.target.closest ? e.target.closest('[data-assess]') : null;
@@ -478,7 +510,8 @@ PGRE.views.practice = (function () {
     var answers = qs.map(function (q) {
       var a = byQid[q.id];
       return a ? { q: q, picked: a.picked, correct: a.correct, xp: a.xp,
-                   ms: a.ms, assess: a.assess || null } : null;
+                   ms: a.ms, assess: a.assess || null,
+                   row: attemptFor(q.id, snap.sid) } : null;
     });
     // Realign the cursor by its question id (snap.i indexes the old ids list,
     // so a dropped id would otherwise point at the next question).
@@ -798,7 +831,7 @@ PGRE.views.practice = (function () {
     html += '</div>';
     html += '<div id="feedback">' +
       '<div class="feedback reveal-in ' + (ans.correct ? 'feedback-good' : 'feedback-bad') + '">' +
-        '<strong>' + (ans.correct ? 'Correct' : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
+        '<strong>' + (ans.correct ? correctTitle(q) : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
         (ans.xp != null ? '<span class="fb-xp">+' + ans.xp + ' XP</span>' : '') +
       '</div>' +
       (ans.ms != null ? paceMark(ans.ms) : '') +
@@ -876,7 +909,7 @@ PGRE.views.practice = (function () {
     var fb = document.getElementById('feedback');
     fb.innerHTML =
       '<div class="feedback reveal-in ' + (isCorrect ? 'feedback-good' : 'feedback-bad') + '">' +
-        '<strong>' + (isCorrect ? 'Correct' : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
+        '<strong>' + (isCorrect ? correctTitle(q) : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
         (refused
           ? '<span class="fb-xp">not recorded — saving failed</span>'
           : '<span class="fb-xp">+' + xp + ' XP</span>') +
@@ -1170,7 +1203,7 @@ PGRE.views.practice = (function () {
       '<div id="feedback">' +
         '<div class="feedback reveal-in ' + (ans.correct ? 'feedback-good' : 'feedback-bad') + '">' +
           '<span class="fb-icon">' + (ans.correct ? '✓' : '✗') + '</span>' +
-          '<strong>' + (ans.correct ? 'Correct' : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
+          '<strong>' + (ans.correct ? correctTitle(q) : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
           (ans.xp != null ? '<span class="fb-xp">+' + ans.xp + ' XP</span>' : '') +
         '</div>' +
         (ans.ms != null ? paceMark(ans.ms) : '') +
