@@ -146,6 +146,70 @@ async function browserTest() {
   await page.eval(function () { location.hash = '#/mistakes/drill'; });
   await wait('#drill-finish');
   assert(!await pending(), 'restoring a mistake-drill result never opens the reminder');
+
+  await page.eval(function () {
+    var now = new Date().toISOString();
+    PGRE.store.state.mistakes['keep-failing-second'] = {
+      firstMissedAt: now, lastMissedAt: now, misses: 1, solves: 0,
+      wrongPicks: [1], lastPick: 1, archivedAt: null,
+      srs: { step: 0, due: PGRE.srs.today() }
+    };
+    PGRE.store.save();
+    location.hash = '#/mistakes';
+  });
+  await wait('[data-stuck="keep-failing-first"]');
+  await click('[data-stuck="keep-failing-first"]');
+  assert(!await pending() && await page.eval(function () {
+    return !PGRE.store.state.mistakes['keep-failing-first'].stuck;
+  }), 'removing a mistake-book flag stays immediate');
+  var bookBefore = await progress();
+  await click('[data-stuck="keep-failing-first"]');
+  assert(await pending() && await progress() === bookBefore, 'mistake-book marking opens the reminder before changing data');
+  assert(await page.eval(function () {
+    return document.querySelector('[data-stuck="keep-failing-first"]').title ===
+      'Use for repeated difficulty. This flags the problem for mistake-book retakes.';
+  }), 'mistake-book Keep failing uses the same hover tip');
+  await click('#assess-stuck-cancel');
+  assert(!await pending() && await progress() === bookBefore, 'mistake-book Cancel leaves the problem unflagged');
+  assert(await page.eval(function () {
+    return document.activeElement.getAttribute('data-stuck') === 'keep-failing-first';
+  }), 'mistake-book Cancel returns focus to the selected problem');
+
+  await click('[data-stuck="keep-failing-first"]');
+  await click('[data-stuck="keep-failing-second"]');
+  assert(await pending() && await progress() === bookBefore && await page.eval(function () {
+    var confirmation = document.getElementById('assess-stuck-confirm');
+    return document.querySelectorAll('#assess-stuck-confirm').length === 1 &&
+      confirmation.closest('.miss-card').querySelector('[data-stuck]').getAttribute('data-stuck') ===
+        'keep-failing-second';
+  }), 'selecting another problem reuses one reminder next to the captured problem');
+  await click('#assess-stuck-yes');
+  assert(!await pending() && await page.eval(function () {
+    return PGRE.store.state.mistakes['keep-failing-second'].stuck === true &&
+      !PGRE.store.state.mistakes['keep-failing-first'].stuck;
+  }), 'mistake-book Confirm flags only the selected problem');
+  await click('[data-stuck="keep-failing-second"]');
+  assert(!await pending() && await page.eval(function () {
+    return !PGRE.store.state.mistakes['keep-failing-second'].stuck;
+  }), 'mistake-book removal does not request confirmation');
+
+  await click('[data-archive="keep-failing-first"]');
+  await click('.archived-block > summary');
+  var archivedBefore = await progress();
+  await click('[data-stuck="keep-failing-first"]');
+  assert(await pending() && await progress() === archivedBefore && await page.eval(function () {
+    return !!PGRE.store.state.mistakes['keep-failing-first'].archivedAt;
+  }), 'an archived problem stays archived and unflagged while confirmation is pending');
+  await click('#assess-stuck-cancel');
+  assert(!await pending() && await progress() === archivedBefore, 'Cancel preserves the archived entry and its retake schedule');
+  await click('[data-stuck="keep-failing-first"]');
+  await click('#assess-stuck-yes');
+  assert(!await pending() && await page.eval(function () {
+    var mistake = PGRE.store.state.mistakes['keep-failing-first'];
+    return mistake.stuck === true && mistake.archivedAt === null &&
+      !PGRE.store.state.mistakes['keep-failing-second'].stuck &&
+      !document.querySelector('[data-stuck="keep-failing-first"]').closest('.miss-card').classList.contains('is-archived');
+  }), 'Confirm reopens only the selected archived problem for retakes');
 }
 
 function run(args, env, input) {

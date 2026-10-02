@@ -1205,8 +1205,18 @@ var toggles = mroot.querySelectorAll('[data-stuck]');
 for (var ti = 0; ti < toggles.length; ti++) {
   if (toggles[ti].getAttribute('data-stuck') === 'pq2') { toggles[ti].click(); break; }
 }
+assert(MP.store.state.mistakes['pq2'].stuck !== true &&
+       mroot.querySelector('#assess-stuck-confirm').hidden === false,
+  'the per-entry Keep failing button opens the shared reminder before flagging');
+assert(mx.document.querySelector('[data-stuck="pq2"]').getAttribute('title').indexOf('mistake-book retakes') !== -1,
+  'the mistake-book button includes the shared hover tip');
+mroot.querySelector('#assess-stuck-cancel').click();
+assert(MP.store.state.mistakes['pq2'].stuck !== true,
+  'mistake-book Cancel leaves the entry unflagged');
+mx.document.querySelector('[data-stuck="pq2"]').click();
+mroot.querySelector('#assess-stuck-yes').click();
 assert(MP.store.state.mistakes['pq2'].stuck === true,
-  'the per-entry Keep failing button flags the record');
+  'the per-entry Confirm flags the record');
 assert(mx.document.querySelectorAll('#mistakes-root .stuck-chip').length === 2,
   'the book re-renders with both entries flagged');
 mx.document.querySelector('#mistakes-root [data-concern="stuck"]').click();

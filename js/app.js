@@ -563,20 +563,13 @@ PGRE.assess = (function () {
   var LABELS = {};
   OPTIONS.forEach(function (o) { LABELS[o.key] = o.label; });
 
-  function html(showKeys) {
-    var h = '<div class="conf-row assess-row" id="assess-row">' +
-      '<span class="conf-q">How did it go?</span>';
-    OPTIONS.forEach(function (o) {
-      h += '<button type="button" class="focus-chip assess-chip' +
-        (o.key === 'stuck' ? ' assess-stuck' : '') + '" data-assess="' + o.key +
-        '" aria-pressed="false"' + (o.key === 'stuck'
-          ? ' aria-controls="assess-stuck-confirm" aria-expanded="false"' +
-            ' title="Use for repeated difficulty. This flags the problem for mistake-book retakes."'
-          : '') + '>' + o.label +
-        (showKeys ? ' <span class="key-hint">' + o.kbd + '</span>' : '') + '</button>';
-    });
-    h += '<span class="assess-note muted" id="assess-note">pick any that apply</span></div>' +
-      '<div class="danger-confirm" id="assess-stuck-confirm" role="group"' +
+  function stuckButtonAttrs() {
+    return ' aria-controls="assess-stuck-confirm" aria-expanded="false"' +
+      ' title="Use for repeated difficulty. This flags the problem for mistake-book retakes."';
+  }
+
+  function stuckConfirmHTML() {
+    return '<div class="danger-confirm" id="assess-stuck-confirm" role="group"' +
         ' aria-labelledby="assess-stuck-title" aria-describedby="assess-stuck-hint" hidden>' +
         '<strong id="assess-stuck-title">Mark this problem as Keep failing?</strong>' +
         '<p class="muted" id="assess-stuck-hint">Use this for repeated difficulty, not a one-off slip. ' +
@@ -586,6 +579,59 @@ PGRE.assess = (function () {
           '<button type="button" class="btn btn-ghost btn-sm" id="assess-stuck-cancel">Cancel</button>' +
         '</div>' +
       '</div>';
+  }
+
+  function bindStuckConfirm(container) {
+    var confirmation = container.querySelector('#assess-stuck-confirm');
+    var source = null, onConfirm = null;
+
+    function close() {
+      confirmation.hidden = true;
+      if (source) {
+        source.setAttribute('aria-expanded', 'false');
+        if (source.isConnected) source.focus();
+      }
+      onConfirm = null;
+    }
+
+    if (confirmation) {
+      confirmation.querySelector('#assess-stuck-yes').addEventListener('click', function () {
+        if (confirmation.hidden || !confirmation.isConnected || !source || !source.isConnected || !onConfirm) return;
+        var action = onConfirm;
+        close();
+        action();
+      });
+      confirmation.querySelector('#assess-stuck-cancel').addEventListener('click', close);
+      confirmation.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          close();
+        }
+      });
+    }
+
+    return function (button, action) {
+      if (!confirmation || !confirmation.isConnected || !button.isConnected) return;
+      if (source) source.setAttribute('aria-expanded', 'false');
+      source = button;
+      onConfirm = action;
+      confirmation.hidden = false;
+      source.setAttribute('aria-expanded', 'true');
+      confirmation.querySelector('#assess-stuck-yes').focus();
+    };
+  }
+
+  function html(showKeys) {
+    var h = '<div class="conf-row assess-row" id="assess-row">' +
+      '<span class="conf-q">How did it go?</span>';
+    OPTIONS.forEach(function (o) {
+      h += '<button type="button" class="focus-chip assess-chip' +
+        (o.key === 'stuck' ? ' assess-stuck' : '') + '" data-assess="' + o.key +
+        '" aria-pressed="false"' + (o.key === 'stuck' ? stuckButtonAttrs() : '') + '>' + o.label +
+        (showKeys ? ' <span class="key-hint">' + o.kbd + '</span>' : '') + '</button>';
+    });
+    h += '<span class="assess-note muted" id="assess-note">pick any that apply</span></div>' + stuckConfirmHTML();
     return h;
   }
 
@@ -596,41 +642,16 @@ PGRE.assess = (function () {
     if (!row) return { toggle: function () {}, requestToggle: function () {} };
     var on = { sure: false, guess: false, slow: false, forgot: false, stuck: false };
     var luckyFiled = false, stuckFiled = false;
-    var confirmation = container.querySelector('#assess-stuck-confirm');
     var stuckButton = row.querySelector('[data-assess="stuck"]');
     var controller = { toggle: toggle, requestToggle: requestToggle };
-
-    function closeConfirmation() {
-      confirmation.hidden = true;
-      stuckButton.setAttribute('aria-expanded', 'false');
-      if (row.isConnected) stuckButton.focus();
-    }
+    var requestStuck = bindStuckConfirm(container);
 
     function requestToggle(key) {
       if (key === 'stuck' && !on.stuck) {
-        if (!confirmation || !row.isConnected) return;
-        confirmation.hidden = false;
-        stuckButton.setAttribute('aria-expanded', 'true');
-        confirmation.querySelector('#assess-stuck-yes').focus();
+        requestStuck(stuckButton, function () { controller.toggle('stuck'); });
         return;
       }
       controller.toggle(key);
-    }
-
-    if (confirmation) {
-      confirmation.querySelector('#assess-stuck-yes').addEventListener('click', function () {
-        if (confirmation.hidden || !row.isConnected) return;
-        closeConfirmation();
-        controller.toggle('stuck');
-      });
-      confirmation.querySelector('#assess-stuck-cancel').addEventListener('click', closeConfirmation);
-      confirmation.addEventListener('keydown', function (e) {
-        e.stopPropagation();
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          closeConfirmation();
-        }
-      });
     }
 
     function paint() {
@@ -694,7 +715,8 @@ PGRE.assess = (function () {
     return controller;
   }
 
-  return { OPTIONS: OPTIONS, LABELS: LABELS, html: html, bind: bind };
+  return { OPTIONS: OPTIONS, LABELS: LABELS, html: html, bind: bind,
+    stuckButtonAttrs: stuckButtonAttrs, stuckConfirmHTML: stuckConfirmHTML, bindStuckConfirm: bindStuckConfirm };
 })();
 
 /* store.save() failure hook: a sticky warning while progress cannot be

@@ -218,7 +218,8 @@ PGRE.views.mistakes = (function () {
           // the same Keep failing flag the answer screen's assess chip sets —
           // settable on any existing entry right from the book
           '<button class="btn btn-ghost btn-sm' + (mk.stuck ? ' stuck-on' : '') +
-            '" data-stuck="' + q.id + '" aria-pressed="' + (!!mk.stuck) + '">' +
+            '" data-stuck="' + q.id + '" aria-pressed="' + (!!mk.stuck) + '"' +
+            PGRE.assess.stuckButtonAttrs() + '>' +
             (mk.stuck ? '✓ Keep failing' : 'Keep failing') + '</button>' +
           (mk.archivedAt
             ? '<button class="btn btn-ghost btn-sm" data-restore="' + q.id + '">Restore</button>'
@@ -345,7 +346,7 @@ PGRE.views.mistakes = (function () {
       html += '</details>';
     }
 
-    root().innerHTML = html;
+    root().innerHTML = html + PGRE.assess.stuckConfirmHTML();
     PGRE.typesetMath(root());
     PGRE.refreshNavBadges(); // due counts change without a route change
 
@@ -435,13 +436,21 @@ PGRE.views.mistakes = (function () {
 
     // Keep failing toggle on every entry — same flag the post-answer assess
     // chip sets; markStuck reopens an archived entry (fresh evidence).
+    var stuckConfirmation = root().querySelector('#assess-stuck-confirm');
+    var requestStuck = PGRE.assess.bindStuckConfirm(root());
     root().querySelectorAll('[data-stuck]').forEach(function (b) {
       b.addEventListener('click', function () {
         var qid = b.getAttribute('data-stuck');
         var mk = PGRE.store.state.mistakes[qid];
         if (!mk || !mk.stuck) {
-          PGRE.srs.markStuck(qid);
-          PGRE.toast('Flagged keep failing — it shows under that filter and stays loud in drills.', 'info');
+          var card = b.closest('.miss-card');
+          card.insertBefore(stuckConfirmation, card.querySelector('.q-text'));
+          requestStuck(b, function () {
+            PGRE.srs.markStuck(qid);
+            PGRE.toast('Flagged keep failing — it shows under that filter and stays loud in drills.', 'info');
+            renderBook();
+          });
+          return;
         } else {
           PGRE.srs.unmarkStuck(qid);
           PGRE.toast('Removed the keep-failing flag.', 'info');

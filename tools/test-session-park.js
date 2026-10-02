@@ -146,6 +146,9 @@ PGRE.route = function () {};
 PGRE.assess = {
   bind: function () { return { toggle: function () {} }; },
   html: function () { return ''; },
+  stuckButtonAttrs: function () { return ''; },
+  stuckConfirmHTML: function () { return ''; },
+  bindStuckConfirm: function () { return function () {}; },
   LABELS: {}
 };
 PGRE.notes = { isBookmarked: function () { return false; }, get: function () { return ''; },
