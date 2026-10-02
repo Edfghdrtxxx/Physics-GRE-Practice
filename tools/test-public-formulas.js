@@ -217,8 +217,9 @@ assert(rad && String(rad.back).indexOf('<ul class="recall-list">') === 0 &&
 assert(rad && /\\hat\{\\mathbf\{r\}\}\\times\(\\hat\{\\mathbf\{r\}\}\\times\\mathbf\{a\}\)/.test(rad.back) &&
   /-\\mathbf\{a\}_\{\\perp\}/.test(rad.back),
   'the anchor is r-hat cross (r-hat cross a), equal to minus a_perp');
-assert(rad && /points opposite the part of \$\\mathbf\{a\}\$ perpendicular to \$\\hat\{\\mathbf\{r\}\}\$/.test(rad.back),
-  'for q > 0 the field points opposite a_perp');
+assert(rad && /points opposite the sideways acceleration \$\\mathbf\{a\}_\{\\perp\}\$ \(the part of \$\\mathbf\{a\}\$ perpendicular to \$\\hat\{\\mathbf\{r\}\}\$\)/.test(rad.back) &&
+  /negative charge reverses/.test(rad.back),
+  'for q > 0 the field points opposite a_perp, reversed for q < 0');
 assert(rad && /power per solid angle \$\\propto \\sin\^2\\theta\$/.test(rad.back) &&
   /180\^\\circ/.test(rad.back),
   'power per solid angle follows sin squared, with both axial nulls');
