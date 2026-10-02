@@ -386,7 +386,7 @@ PGRE.views.practice = (function () {
   function bindSessionAssess(fb, q, ans) {
     var ctrl = PGRE.assess.bind(fb, q, ans.correct);
     var flags = assessFlags(ans);
-    Object.keys(flags).forEach(function (k) { if (flags[k]) ctrl.toggle(k); });
+    if (typeof ctrl.hydrate === 'function') ctrl.hydrate(flags);
     var inner = ctrl.toggle;
     ctrl.toggle = function (key) {
       inner(key);
@@ -1370,7 +1370,7 @@ PGRE.views.practice = (function () {
       } else if (session.assess && (k === 'f' || k === 'F')) {
         e.preventDefault(); session.assess.toggle('forgot');
       } else if (session.assess && (k === 'r' || k === 'R')) {
-        e.preventDefault(); session.assess.toggle('stuck');
+        e.preventDefault(); session.assess.requestToggle('stuck');
       }
     } else if (session.stage === 'review') {
       if (k === 'ArrowLeft') {

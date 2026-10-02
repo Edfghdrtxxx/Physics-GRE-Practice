@@ -563,26 +563,114 @@ PGRE.assess = (function () {
   var LABELS = {};
   OPTIONS.forEach(function (o) { LABELS[o.key] = o.label; });
 
+  function stuckButtonAttrs() {
+    return ' aria-controls="assess-stuck-confirm" aria-expanded="false"' +
+      ' title="Use for repeated difficulty. This flags the problem for mistake-book retakes."';
+  }
+
+  function stuckConfirmHTML() {
+    return '<div class="danger-confirm" id="assess-stuck-confirm" role="group"' +
+        ' aria-labelledby="assess-stuck-title" aria-describedby="assess-stuck-hint" hidden>' +
+        '<strong id="assess-stuck-title">Mark this problem as Keep failing?</strong>' +
+        '<p class="muted" id="assess-stuck-hint">Use this for repeated difficulty, not a one-off slip. ' +
+          'This flags it in your mistake book for future retakes.</p>' +
+        '<div class="btn-row">' +
+          '<button type="button" class="btn btn-primary btn-sm" id="assess-stuck-yes">Confirm</button>' +
+          '<button type="button" class="btn btn-ghost btn-sm" id="assess-stuck-cancel">Cancel</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  var pendingEscape = null;
+
+  function bindStuckConfirm(container) {
+    var confirmation = container.querySelector('#assess-stuck-confirm');
+    var source = null, onConfirm = null;
+
+    function close() {
+      confirmation.hidden = true;
+      if (source) {
+        source.setAttribute('aria-expanded', 'false');
+        if (source.isConnected) source.focus();
+      }
+      onConfirm = null;
+    }
+
+    function onPendingEscape(e) {
+      if (!confirmation.isConnected) {
+        document.removeEventListener('keydown', onPendingEscape, true);
+        if (pendingEscape === onPendingEscape) pendingEscape = null;
+        return;
+      }
+      if (e.key !== 'Escape' || confirmation.hidden) return;
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    }
+
+    if (confirmation) {
+      confirmation.querySelector('#assess-stuck-yes').addEventListener('click', function () {
+        if (confirmation.hidden || !confirmation.isConnected || !source || !source.isConnected || !onConfirm) return;
+        var action = onConfirm;
+        close();
+        action();
+      });
+      confirmation.querySelector('#assess-stuck-cancel').addEventListener('click', close);
+      confirmation.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          close();
+        }
+      });
+      if (pendingEscape) document.removeEventListener('keydown', pendingEscape, true);
+      pendingEscape = onPendingEscape;
+      document.addEventListener('keydown', onPendingEscape, true);
+    }
+
+    return function (button, action) {
+      if (!confirmation || !confirmation.isConnected || !button.isConnected) return;
+      if (source) source.setAttribute('aria-expanded', 'false');
+      source = button;
+      onConfirm = action;
+      confirmation.hidden = false;
+      source.setAttribute('aria-expanded', 'true');
+      confirmation.querySelector('#assess-stuck-yes').focus();
+    };
+  }
+
   function html(showKeys) {
     var h = '<div class="conf-row assess-row" id="assess-row">' +
       '<span class="conf-q">How did it go?</span>';
     OPTIONS.forEach(function (o) {
       h += '<button type="button" class="focus-chip assess-chip' +
         (o.key === 'stuck' ? ' assess-stuck' : '') + '" data-assess="' + o.key +
-        '" aria-pressed="false">' + o.label +
+        '" aria-pressed="false"' + (o.key === 'stuck' ? stuckButtonAttrs() : '') + '>' + o.label +
         (showKeys ? ' <span class="key-hint">' + o.kbd + '</span>' : '') + '</button>';
     });
-    h += '<span class="assess-note muted" id="assess-note">pick any that apply</span></div>';
+    h += '<span class="assess-note muted" id="assess-note">pick any that apply</span></div>' + stuckConfirmHTML();
     return h;
   }
 
-  /* Wire a freshly rendered row for question q. Returns { toggle(key) } so
-     keyboard shortcuts drive the exact same path as clicks. */
+  /* Wire a freshly rendered row for question q. requestToggle is the click
+     and shortcut path (Keep failing asks first). hydrate paints a saved row
+     and does not write; toggle is the only path that files or saves. */
   function bind(container, q, isCorrect) {
     var row = container.querySelector('#assess-row');
-    if (!row) return { toggle: function () {} };
+    if (!row) return { toggle: function () {}, requestToggle: function () {}, hydrate: function () {} };
     var on = { sure: false, guess: false, slow: false, forgot: false, stuck: false };
     var luckyFiled = false, stuckFiled = false;
+    var stuckButton = row.querySelector('[data-assess="stuck"]');
+    var controller = { toggle: toggle, requestToggle: requestToggle, hydrate: hydrate };
+    var requestStuck = bindStuckConfirm(container);
+
+    function requestToggle(key) {
+      if (key === 'stuck' && !on.stuck) {
+        requestStuck(stuckButton, function () { controller.toggle('stuck'); });
+        return;
+      }
+      controller.toggle(key);
+    }
 
     function paint() {
       row.querySelectorAll('[data-assess]').forEach(function (b) {
@@ -606,6 +694,22 @@ PGRE.assess = (function () {
       if (on.forgot) tags.push('forgot');
       if (on.stuck) tags.push('stuck');
       PGRE.srs.setLastAssess(q.id, conf, tags);
+    }
+
+    /* Saved chips only. Mirrors toggle's mutual exclusion and remembers which
+       filings already exist so a later tap does not re-file them. */
+    function hydrate(flags) {
+      flags = flags || {};
+      Object.keys(on).forEach(function (k) { on[k] = false; });
+      Object.keys(on).forEach(function (k) {
+        if (!flags[k]) return;
+        on[k] = true;
+        if (k === 'sure') on.guess = false;
+        if (k === 'guess') on.sure = false;
+      });
+      luckyFiled = !!(isCorrect && on.guess);
+      stuckFiled = !!on.stuck;
+      paint();
     }
 
     function toggle(key) {
@@ -639,13 +743,14 @@ PGRE.assess = (function () {
     }
 
     row.querySelectorAll('[data-assess]').forEach(function (b) {
-      b.addEventListener('click', function () { toggle(b.getAttribute('data-assess')); });
+      b.addEventListener('click', function () { requestToggle(b.getAttribute('data-assess')); });
     });
 
-    return { toggle: toggle };
+    return controller;
   }
 
-  return { OPTIONS: OPTIONS, LABELS: LABELS, html: html, bind: bind };
+  return { OPTIONS: OPTIONS, LABELS: LABELS, html: html, bind: bind,
+    stuckButtonAttrs: stuckButtonAttrs, stuckConfirmHTML: stuckConfirmHTML, bindStuckConfirm: bindStuckConfirm };
 })();
 
 /* store.save() failure hook: a sticky warning while progress cannot be
