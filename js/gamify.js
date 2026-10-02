@@ -120,6 +120,9 @@ PGRE.gamify = {
       mk.lastSolvedAt = now;
       if (!mk.archivedAt) PGRE.srs.mistakeSolved(mk);
     }
+    // Chips rewrite due from this base. A new answer replaces it, so unpicking
+    // restores this answer's date and does not stack on an older adjustment.
+    if (mk && mk.srs && typeof PGRE.srs.noteAssessBase === 'function') PGRE.srs.noteAssessBase(mk);
 
     var rec = s.questions[q.id] || { attempts: 0, correct: 0, firstCorrect: false };
     rec.attempts += 1;
@@ -276,6 +279,7 @@ PGRE.gamify = {
       mk.lastSolvedAt = now;
       if (!mk.archivedAt) PGRE.srs.mistakeSolved(mk);
     }
+    if (mk && mk.srs && typeof PGRE.srs.noteAssessBase === 'function') PGRE.srs.noteAssessBase(mk);
 
     // a blank (picked null) scores as a miss above, but only a question the
     // user actually answered counts toward the answered/accuracy aggregates

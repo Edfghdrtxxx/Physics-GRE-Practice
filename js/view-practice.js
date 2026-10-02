@@ -349,6 +349,11 @@ PGRE.views.practice = (function () {
     else renderQuestion();
   }
 
+  function correctTitle(q) {
+    if (PGRE.assess && typeof PGRE.assess.reviewTitle === 'function') return PGRE.assess.reviewTitle(q.id);
+    return 'Correct';
+  }
+
   function reviewAssessNote(ans) {
     var bits = [];
     if (ans.row && ans.row.confidence) bits.push(ans.row.confidence === 'guess' ? 'Guessed' : 'Knew it');
@@ -798,7 +803,7 @@ PGRE.views.practice = (function () {
     html += '</div>';
     html += '<div id="feedback">' +
       '<div class="feedback reveal-in ' + (ans.correct ? 'feedback-good' : 'feedback-bad') + '">' +
-        '<strong>' + (ans.correct ? 'Correct' : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
+        '<strong>' + (ans.correct ? correctTitle(q) : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
         (ans.xp != null ? '<span class="fb-xp">+' + ans.xp + ' XP</span>' : '') +
       '</div>' +
       (ans.ms != null ? paceMark(ans.ms) : '') +
@@ -876,7 +881,7 @@ PGRE.views.practice = (function () {
     var fb = document.getElementById('feedback');
     fb.innerHTML =
       '<div class="feedback reveal-in ' + (isCorrect ? 'feedback-good' : 'feedback-bad') + '">' +
-        '<strong>' + (isCorrect ? 'Correct' : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
+        '<strong>' + (isCorrect ? correctTitle(q) : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
         (refused
           ? '<span class="fb-xp">not recorded — saving failed</span>'
           : '<span class="fb-xp">+' + xp + ' XP</span>') +
@@ -1170,7 +1175,7 @@ PGRE.views.practice = (function () {
       '<div id="feedback">' +
         '<div class="feedback reveal-in ' + (ans.correct ? 'feedback-good' : 'feedback-bad') + '">' +
           '<span class="fb-icon">' + (ans.correct ? '✓' : '✗') + '</span>' +
-          '<strong>' + (ans.correct ? 'Correct' : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
+          '<strong>' + (ans.correct ? correctTitle(q) : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
           (ans.xp != null ? '<span class="fb-xp">+' + ans.xp + ' XP</span>' : '') +
         '</div>' +
         (ans.ms != null ? paceMark(ans.ms) : '') +
