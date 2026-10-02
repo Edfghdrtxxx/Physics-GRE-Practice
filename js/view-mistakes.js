@@ -767,8 +767,7 @@ PGRE.views.mistakes = (function () {
 
   function reanswerHint() {
     return '<div class="drill-reanswer-hint muted">Select a different choice, then Confirm or double-click — ' +
-      'it replaces this answer. Leave and come back and the question is blank again; ' +
-      'confirming the same choice brings this result back.</div>';
+      'it replaces this answer.</div>';
   }
 
   /* The row a regrade stamps (see PGRE.assess.regradeRow), re-pointed at the

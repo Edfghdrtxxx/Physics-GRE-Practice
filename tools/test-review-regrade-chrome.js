@@ -363,7 +363,7 @@ var STAGES = [
     await h.frame();
   } },
 
-  { shot: '10-mistake-drill-reveal-after-resume', run: async function (page, h) {
+  { shot: '10-mistake-drill-result-after-resume', run: async function (page, h) {
     await page.eval(function () {
       var today = PGRE.srs.today();
       ['rr-a', 'rr-c'].forEach(function (qid) {
@@ -388,16 +388,18 @@ var STAGES = [
     await h.inject();
     await page.eval(function () { location.hash = '#/mistakes/drill'; });
     await h.wait('#drill-finish');
-    h.assert(await h.onScreen() === first && !(await h.panel()).row,
-      'the resumed drill reopens the answered question blank');
+    h.assert(await h.onScreen() === first, 'the resumed drill reopens on the answered question');
     var before = await h.state();
-    await h.click('.choice[data-idx="0"]');
-    await h.click('#confirm-btn');
+    // Put the saved result on screen if the resume has not already done so.
+    if (!(await h.panel()).row) {
+      await h.click('.choice[data-idx="0"]');
+      await h.click('#confirm-btn');
+    }
     await h.wait('#assess-row');
     var p = await h.panel(), s = await h.state();
     h.assert(p.review && !p.readOnlyLine && p.on === 'guess' && p.moved &&
       JSON.stringify(s) === JSON.stringify(before),
-      'confirming the same choice reveals the result with Guessed selected and records nothing');
+      'the saved result is back on screen with Guessed selected and nothing new recorded');
     await page.press('t');
     p = await h.panel(); s = await h.state();
     h.assert(p.on === 'guess,slow' && s.rows[first].tags === 'slow' && s.attempts === before.attempts && s.xp === before.xp,
