@@ -1141,9 +1141,21 @@ assert(sure.getAttribute('aria-pressed') === 'false', 'bind().toggle still share
 var stuckChipEl = box.querySelector('[data-assess="stuck"]');
 assert(!!stuckChipEl, 'bind() finds the Keep failing chip');
 stuckChipEl.click();
+assert(box.querySelector('#assess-stuck-confirm').hidden === false &&
+       stuckChipEl.getAttribute('aria-pressed') === 'false' &&
+       !env.window.PGRE.store.state.mistakes['q-ux-1'],
+  'click on Keep failing asks for confirmation before flagging');
+assert(stuckChipEl.getAttribute('title').indexOf('mistake-book retakes') !== -1,
+  'Keep failing includes a native hover tip explaining retakes');
+box.querySelector('#assess-stuck-cancel').click();
+assert(box.querySelector('#assess-stuck-confirm').hidden === true &&
+       !env.window.PGRE.store.state.mistakes['q-ux-1'],
+  'Cancel leaves Keep failing unflagged');
+ctrl.requestToggle('stuck');
+box.querySelector('#assess-stuck-yes').click();
 assert(stuckChipEl.getAttribute('aria-pressed') === 'true' &&
        stuckChipEl.classList.contains('active'),
-  'click on Keep failing sets aria-pressed/active like the other tags');
+  'Confirm sets Keep failing aria-pressed/active like the other tags');
 assert(env.window.PGRE.store.state.mistakes['q-ux-1'] &&
        env.window.PGRE.store.state.mistakes['q-ux-1'].stuck === true,
   'selecting Keep failing files the question into state.mistakes');

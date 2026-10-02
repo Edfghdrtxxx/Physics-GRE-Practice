@@ -569,20 +569,69 @@ PGRE.assess = (function () {
     OPTIONS.forEach(function (o) {
       h += '<button type="button" class="focus-chip assess-chip' +
         (o.key === 'stuck' ? ' assess-stuck' : '') + '" data-assess="' + o.key +
-        '" aria-pressed="false">' + o.label +
+        '" aria-pressed="false"' + (o.key === 'stuck'
+          ? ' aria-controls="assess-stuck-confirm" aria-expanded="false"' +
+            ' title="Use for repeated difficulty. This flags the problem for mistake-book retakes."'
+          : '') + '>' + o.label +
         (showKeys ? ' <span class="key-hint">' + o.kbd + '</span>' : '') + '</button>';
     });
-    h += '<span class="assess-note muted" id="assess-note">pick any that apply</span></div>';
+    h += '<span class="assess-note muted" id="assess-note">pick any that apply</span></div>' +
+      '<div class="danger-confirm" id="assess-stuck-confirm" role="group"' +
+        ' aria-labelledby="assess-stuck-title" aria-describedby="assess-stuck-hint" hidden>' +
+        '<strong id="assess-stuck-title">Mark this problem as Keep failing?</strong>' +
+        '<p class="muted" id="assess-stuck-hint">Use this for repeated difficulty, not a one-off slip. ' +
+          'This flags it in your mistake book for future retakes.</p>' +
+        '<div class="btn-row">' +
+          '<button type="button" class="btn btn-primary btn-sm" id="assess-stuck-yes">Confirm</button>' +
+          '<button type="button" class="btn btn-ghost btn-sm" id="assess-stuck-cancel">Cancel</button>' +
+        '</div>' +
+      '</div>';
     return h;
   }
 
-  /* Wire a freshly rendered row for question q. Returns { toggle(key) } so
-     keyboard shortcuts drive the exact same path as clicks. */
+  /* Wire a freshly rendered row for question q. requestToggle is the click /
+     shortcut path; toggle also restores saved assessments without a prompt. */
   function bind(container, q, isCorrect) {
     var row = container.querySelector('#assess-row');
-    if (!row) return { toggle: function () {} };
+    if (!row) return { toggle: function () {}, requestToggle: function () {} };
     var on = { sure: false, guess: false, slow: false, forgot: false, stuck: false };
     var luckyFiled = false, stuckFiled = false;
+    var confirmation = container.querySelector('#assess-stuck-confirm');
+    var stuckButton = row.querySelector('[data-assess="stuck"]');
+    var controller = { toggle: toggle, requestToggle: requestToggle };
+
+    function closeConfirmation() {
+      confirmation.hidden = true;
+      stuckButton.setAttribute('aria-expanded', 'false');
+      if (row.isConnected) stuckButton.focus();
+    }
+
+    function requestToggle(key) {
+      if (key === 'stuck' && !on.stuck) {
+        if (!confirmation || !row.isConnected) return;
+        confirmation.hidden = false;
+        stuckButton.setAttribute('aria-expanded', 'true');
+        confirmation.querySelector('#assess-stuck-yes').focus();
+        return;
+      }
+      controller.toggle(key);
+    }
+
+    if (confirmation) {
+      confirmation.querySelector('#assess-stuck-yes').addEventListener('click', function () {
+        if (confirmation.hidden || !row.isConnected) return;
+        closeConfirmation();
+        controller.toggle('stuck');
+      });
+      confirmation.querySelector('#assess-stuck-cancel').addEventListener('click', closeConfirmation);
+      confirmation.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeConfirmation();
+        }
+      });
+    }
 
     function paint() {
       row.querySelectorAll('[data-assess]').forEach(function (b) {
@@ -639,10 +688,10 @@ PGRE.assess = (function () {
     }
 
     row.querySelectorAll('[data-assess]').forEach(function (b) {
-      b.addEventListener('click', function () { toggle(b.getAttribute('data-assess')); });
+      b.addEventListener('click', function () { requestToggle(b.getAttribute('data-assess')); });
     });
 
-    return { toggle: toggle };
+    return controller;
   }
 
   return { OPTIONS: OPTIONS, LABELS: LABELS, html: html, bind: bind };

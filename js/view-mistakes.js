@@ -1127,7 +1127,7 @@ PGRE.views.mistakes = (function () {
       else if (a === 'g') { e.preventDefault(); drill.assess.toggle('guess'); }
       else if (a === 't') { e.preventDefault(); drill.assess.toggle('slow'); }
       else if (a === 'f') { e.preventDefault(); drill.assess.toggle('forgot'); }
-      else if (a === 'r') { e.preventDefault(); drill.assess.toggle('stuck'); }
+      else if (a === 'r') { e.preventDefault(); drill.assess.requestToggle('stuck'); }
     }
   }
 

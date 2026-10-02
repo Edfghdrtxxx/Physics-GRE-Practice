@@ -1370,7 +1370,7 @@ PGRE.views.practice = (function () {
       } else if (session.assess && (k === 'f' || k === 'F')) {
         e.preventDefault(); session.assess.toggle('forgot');
       } else if (session.assess && (k === 'r' || k === 'R')) {
-        e.preventDefault(); session.assess.toggle('stuck');
+        e.preventDefault(); session.assess.requestToggle('stuck');
       }
     } else if (session.stage === 'review') {
       if (k === 'ArrowLeft') {
