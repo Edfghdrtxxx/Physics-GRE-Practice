@@ -752,4 +752,34 @@ PGRE.FORMULAS = [
     back: "<ul class=\"recall-list\"><li>$E \\gt 0$: hyperbolic orbit.</li><li>$E = 0$: parabolic orbit.</li><li>$E \\lt 0$: elliptical orbit. It is bound, since $U(r)$ falls off at large $r$; for an attractive $1/r$ potential ($k \\lt 0$) the shape happens to be elliptical.</li><li>$E = V_{\\min}$: circular orbit, the special case of lowest possible energy, where $V_{\\min}$ is the minimum of the effective potential.</li></ul>",
     note: "Kahn §1.6.2. These shapes require an attractive potential $U(r) = k/r$ with $k \\lt 0$ (such as Newtonian gravity $k = -GMm$). If $k \\gt 0$, the potential is repulsive and only hyperbolic scattering orbits occur; no bound states exist."
   },
+  {
+    id: "supp-relativistic-velocity-addition",
+    eq: "supp",
+    topic: "sr",
+    tag: "Velocity addition",
+    name: "Relativistic velocity addition in one dimension (supplemental)",
+    front: "For frame $S'$ moving at velocity $v$ along the $x$-axis relative to $S$, how does a particle's longitudinal velocity $u_x'$ in $S'$ transform to its velocity $u_x$ in $S$?",
+    back: "$$u_x = \\frac{u_x' + v}{1 + \\frac{u_x' v}{c^2}}$$\nInverse transformation (from $S$ to $S'$, exchange frames: replace $v$ with $-v$ and swap $u_x$ with $u_x'$):\n$$u_x' = \\frac{u_x - v}{1 - \\frac{u_x v}{c^2}}$$\n\n**Limits & Invariants**\n<ul class=\"recall-list\"><li>If $u_x' = c$, then $u_x = \\frac{c+v}{1+v/c} = c$, ensuring light speed invariance in all inertial frames.</li><li>For low speeds $u_x', v \\ll c$, the denominator approaches $1$, reducing to the Galilean addition law $u_x \\approx u_x' + v$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation."
+  },
+  {
+    id: "supp-relativistic-doppler",
+    eq: "supp",
+    topic: "sr",
+    tag: "Doppler effect",
+    name: "Relativistic longitudinal Doppler effect (supplemental)",
+    front: "What observed frequency $f$ is detected when a light source emitting proper frequency $f_0$ moves directly toward or away from an observer at speed $v$ (with $\\beta = v/c$)?",
+    back: "$$f = f_0\\sqrt{\\frac{1+\\beta}{1-\\beta}} = f_0\\sqrt{\\frac{c+v}{c-v}}$$\nApproaching source (blueshift).\n\n<ul class=\"recall-list\"><li>**Receding source (redshift)**: $$f = f_0\\sqrt{\\frac{1-\\beta}{1+\\beta}} = f_0\\sqrt{\\frac{c-v}{c+v}}$$</li><li>For $\\beta \\ll 1$, Taylor expansion gives $f \\approx f_0(1 \\pm \\beta)$, matching the classical first-order Doppler shift $\\Delta f/f_0 \\approx \\pm v/c$.</li><li>Unlike sound waves, no medium exists: only the relative speed $v$ between source and observer matters.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation."
+  },
+  {
+    id: "supp-brewster-angle",
+    eq: "supp",
+    topic: "ow",
+    tag: "Polarization",
+    name: "Brewster's polarizing angle (supplemental)",
+    front: "What is Brewster's angle $\\theta_B$ for light incident from a medium of index $n_1$ onto a medium of index $n_2$, and what are the polarization and angular properties of the reflected beam?",
+    back: "$$\\tan\\theta_B = \\frac{n_2}{n_1}$$\n\n**Key Properties**\n<ul class=\"recall-list\"><li>**Reflected beam**: Completely polarized with electric field perpendicular to the plane of incidence ($s$-polarized / parallel to the interface). The parallel component ($p$-polarization) is completely transmitted with zero reflection ($R_p = 0$).</li><li>**Ray geometry**: The reflected ray and refracted ray are mutually perpendicular:\n$$\\theta_B + \\theta_t = 90^\\circ$$\nFrom Snell's law: $n_1\\sin\\theta_B = n_2\\sin\\theta_t = n_2\\sin(90^\\circ - \\theta_B) = n_2\\cos\\theta_B \\implies \\tan\\theta_B = n_2/n_1$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation."
+  },
 ];
