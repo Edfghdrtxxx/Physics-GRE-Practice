@@ -782,4 +782,15 @@ PGRE.FORMULAS = [
     back: "$$\\tan\\theta_B = \\frac{n_2}{n_1}$$\n\n**Key Properties**\n<ul class=\"recall-list\"><li>**Reflected beam**: Completely polarized with electric field perpendicular to the plane of incidence ($s$-polarized / parallel to the interface). The parallel component ($p$-polarization) is completely transmitted with zero reflection ($R_p = 0$).</li><li>**Ray geometry**: The reflected ray and refracted ray are mutually perpendicular:\n$$\\theta_B + \\theta_t = 90^\\circ$$\nFrom Snell's law: $n_1\\sin\\theta_B = n_2\\sin\\theta_t = n_2\\sin(90^\\circ - \\theta_B) = n_2\\cos\\theta_B \\implies \\tan\\theta_B = n_2/n_1$.</li></ul>",
     note: "Supplemental — not a numbered CPG equation."
   },
+  {
+    id: "supp-radiation-field",
+    kind: "list",
+    eq: "supp",
+    topic: "em",
+    tag: "Radiation field",
+    name: "Nonrelativistic radiation-field direction (supplemental list)",
+    front: "For the nonrelativistic radiation field of a point charge with $q > 0$, give the direction of $\\mathbf{E}_{\\mathrm{rad}}$, the line it lies on, and the angular factors in $|\\mathbf{E}_{\\mathrm{rad}}|$ and in the power per solid angle. (4)",
+    back: "<ul class=\"recall-list\"><li>Radiation zone and $v \\ll c$: $\\mathbf{E}_{\\mathrm{rad}}$ is parallel to $\\hat{\\mathbf{r}}\\times(\\hat{\\mathbf{r}}\\times\\mathbf{a})/R$, where $R$ is the distance. That triple product equals $-\\mathbf{a}_{\\perp}$. The coefficient of that triple product is positive for $q > 0$, so $\\mathbf{E}_{\\mathrm{rad}}$ points opposite the part of $\\mathbf{a}$ perpendicular to $\\hat{\\mathbf{r}}$.</li><li>$\\mathbf{E}_{\\mathrm{rad}}$ lies in the plane of $\\hat{\\mathbf{r}}$ and $\\mathbf{a}$. For a wire along the $x$-axis and an observer in the $xy$-plane, that plane is the $xy$-plane, so the $z$ component is $0$.</li><li>$\\mathbf{E}_{\\mathrm{rad}}$ is perpendicular to $\\hat{\\mathbf{r}}$. When $\\mathbf{E}_{\\mathrm{rad}} \\ne 0$, this and the plane fix the line of $\\mathbf{E}_{\\mathrm{rad}}$ and leave both directions along that line open. The triple product picks the direction.</li><li>$|\\mathbf{E}_{\\mathrm{rad}}| \\propto \\sin\\theta$ and the power per solid angle $\\propto \\sin^2\\theta$. Here $\\theta$ is the angle from $\\mathbf{a}$. Both are zero along $\\mathbf{a}$, at $\\theta = 0$ and at $\\theta = 180^\\circ$, and both are largest at $\\theta = 90^\\circ$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. These statements are for the radiation field at $v \\ll c$. They are not the velocity field, and $\\sin^2\\theta$ is not the total radiated power."
+  },
 ];
