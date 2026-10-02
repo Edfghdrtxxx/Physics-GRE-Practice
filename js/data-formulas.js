@@ -402,7 +402,7 @@ PGRE.FORMULAS = [
     tag: "Maximum power",
     name: "Load match for maximum average power (supplemental list)",
     front: "For a fixed linear source and a passive load, state the complex match for maximum average power, the resistive special case, and why the reactances must cancel. (3)",
-    back: "<ul class=\"recall-list\"><li>Maximum average power when $Z_L = Z_g^*$. This is not the reflectionless choice $Z_L = Z_0$.</li><li>If the source resistance satisfies $R_g \\gt 0$, the resistive match is $R_L = R_g$.</li><li>Reactances add in series, so the load reactance cancels the source reactance: $X_L = -X_g$. With $R_L$ held fixed, that zeroes the loop reactance and maximises $|I|$, and therefore maximises $P = I_{\\mathrm{rms}}^2 R_L$. $X_L = 0$ is the trap: a purely resistive load, not a purely resistive loop.</li></ul>",
+    back: "<ul class=\"recall-list\"><li>Maximum average power when $Z_L = Z_g^*$. This is not the reflectionless choice $Z_L = Z_0$.</li><li>If $R_g > 0$ and the loop reactance is zero, $R_L = R_g$. If only $R_L$ can vary, the best value is $\\sqrt{R_g^2+(X_g+X_L)^2}$; when $X_L = 0$ that is $|Z_g|$, not $R_g$.</li><li>Reactances add in series, so the load reactance cancels the source reactance: $X_L = -X_g$. With $R_L$ held fixed, that zeroes the loop reactance and maximises $|I|$, and therefore maximises $P = I_{\\mathrm{rms}}^2 R_L$. $X_L = 0$ is the trap: a purely resistive load, not a purely resistive loop.</li></ul>",
     note: "Supplemental — not a numbered CPG equation. $Z_L = Z_0$ is the condition on supp-ac-reflection."
   },
   {

@@ -204,6 +204,19 @@ assert(film && filmBack.indexOf('2nt \\to 0') !== -1 && /2nt = m\\lambda/.test(f
 assert(film && filmBack.indexOf('one flip and $m = 0$, is dark') === -1,
   'supp-thin-film does not call m = 0 of the half-integer condition dark');
 
+var power = byId['supp-max-power-match'];
+var powerBack = power ? power.back : '';
+var powerItems = powerBack.match(/<li>/g);
+var powerResist = 'If $R_g > 0$ and the loop reactance is zero, $R_L = R_g$. ' +
+  'If only $R_L$ can vary, the best value is $\\sqrt{R_g^2+(X_g+X_L)^2}$; ' +
+  'when $X_L = 0$ that is $|Z_g|$, not $R_g$.';
+assert(power && powerItems && powerItems.length === 3 && /\(3\)/.test(power.front),
+  'supp-max-power-match keeps three graded items');
+assert(power && powerBack.indexOf(powerResist) !== -1,
+  'supp-max-power-match separates R_L = R_g from R_L = |Z_g|');
+assert(power && powerBack.indexOf('the resistive match is $R_L = R_g$') === -1,
+  'supp-max-power-match does not state R_L = R_g for every positive source resistance');
+
 EXPECTED.forEach(function (id) {
   var c = byId[id];
   if (!c) return;
