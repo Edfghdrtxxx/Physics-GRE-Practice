@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* Public supplemental formula cards in js/data-formulas.js.
    Locks the signed 45-id write set, list markup, the pendulum correction,
-   and KaTeX on every public front, back, and note.
+   the radiation-field direction card, and KaTeX on every public front, back, and note.
    Run: node tools/test-public-formulas.js */
 'use strict';
 
@@ -216,6 +216,34 @@ assert(power && powerBack.indexOf(powerResist) !== -1,
   'supp-max-power-match separates R_L = R_g from R_L = |Z_g|');
 assert(power && powerBack.indexOf('the resistive match is $R_L = R_g$') === -1,
   'supp-max-power-match does not state R_L = R_g for every positive source resistance');
+
+var rad = byId['supp-radiation-field'];
+var radText = rad ? [rad.front, rad.back, rad.note].join('\n') : '';
+var radLis = rad ? (String(rad.back).match(/<li>/g) || []).length : 0;
+assert(!!rad && rad.kind === 'list' && rad.eq === 'supp' && rad.topic === 'em',
+  'supp-radiation-field is an electromagnetism recall list');
+assert(rad && rad.note.indexOf('Supplemental — not a numbered CPG equation.') === 0,
+  'supp-radiation-field note starts with the supplemental sentence');
+assert(rad && String(rad.back).indexOf('<ul class="recall-list">') === 0 &&
+  radLis === 4 && /\(4\)\s*$/.test(rad.front),
+  'supp-radiation-field is four recall-list items');
+assert(rad && /\\hat\{\\mathbf\{r\}\}\\times\(\\hat\{\\mathbf\{r\}\}\\times\\mathbf\{a\}\)/.test(rad.back) &&
+  /-\\mathbf\{a\}_\{\\perp\}/.test(rad.back),
+  'the anchor is r-hat cross (r-hat cross a), equal to minus a_perp');
+assert(rad && /points opposite the sideways acceleration \$\\mathbf\{a\}_\{\\perp\}\$ \(the part of \$\\mathbf\{a\}\$ perpendicular to \$\\hat\{\\mathbf\{r\}\}\$\)/.test(rad.back) &&
+  /negative charge reverses/.test(rad.back),
+  'for q > 0 the field points opposite a_perp, reversed for q < 0');
+assert(rad && /power per solid angle \$\\propto \\sin\^2\\theta\$/.test(rad.back) &&
+  /180\^\\circ/.test(rad.back),
+  'power per solid angle follows sin squared, with both axial nulls');
+assert(rad && /leave both directions along that line open/.test(rad.back),
+  'the plane and transversality do not fix the sense');
+assert(rad && !/completely lock/i.test(radText) && !/dipole axis/i.test(radText),
+  'the card does not keep the unlocked direction claim');
+assert(rad && rad.back.indexOf('accelerating along') !== -1,
+  'the wire bullet says the charge is accelerating along the wire');
+assert(rad && rad.back.indexOf('from the charge') !== -1,
+  'r-hat is defined as pointing from the charge to the field point');
 
 EXPECTED.forEach(function (id) {
   var c = byId[id];
