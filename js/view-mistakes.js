@@ -784,8 +784,7 @@ PGRE.views.mistakes = (function () {
       }
       if (!locked) {
         html += '<div class="drill-reanswer-hint muted">Select a different choice, then Confirm or double-click — ' +
-          'it replaces this answer. Leave and come back and the question is blank again; ' +
-          'confirming the same choice brings this result back.</div>';
+          'it replaces this answer.</div>';
       }
     }
     html += '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
@@ -798,19 +797,16 @@ PGRE.views.mistakes = (function () {
                 interactive assessment row, and no scroll back to the top.
        reveal — the stored result put back on screen because you re-picked the
                 choice you had already committed to (nothing is re-recorded).
-     Neither flag means a plain visit, and then an answered question is
-     indistinguishable from an unanswered one — not even which choice you took
-     last time, since seeing your own earlier pick is itself a cue and the point
-     of coming back is to recall the question cold. The palette (answered /
-     unanswered) is the only record that you have been here; the mechanic is
-     explained in the feedback panel, where the result is already on screen. */
+     A plain visit uses that same result whenever the question is already
+     answered, so resuming a drill shows the saved choice and verdict. An
+     unanswered question still hides the key. */
   function renderDrillQuestion(opts) {
     opts = opts || {};
     if (PGRE.nav) PGRE.nav.setTrail([]);   // plain view resets the Review crumb
     lastRenderAt = Date.now();
     var q = drill.qs[drill.i];
     var st = drill.st[drill.i];
-    var show = st && (opts.fresh || opts.reveal);   // is the result on screen?
+    var show = !!st;   // saved choice and verdict, including a resumed drill
     var t = PGRE.topicById(q.topic) || { id: 'xx', short: '?', name: 'Unknown topic' };
     var done = answeredCount();
     var keys = PGRE.store.state.settings.keyboard;

@@ -198,6 +198,17 @@ function snap(key) {
 function put(key, obj) {
   sessionStorage.setItem(key, JSON.stringify(obj));
 }
+function choiceAttrs(html, idx) {
+  var re = new RegExp('<button class="([^"]*)" data-idx="' + idx + '" aria-pressed="(true|false)">');
+  var m = String(html).match(re);
+  return m ? { cls: m[1], pressed: m[2] } : null;
+}
+function hidesAnswerKey(html) {
+  return !/<button class="choice[^"]*\bis-answer/.test(html) &&
+    !/<button class="choice[^"]*\bis-wrong/.test(html) &&
+    !/aria-pressed="true"/.test(html) &&
+    !/feedback-good|feedback-bad/.test(html);
+}
 function lastAttempt() {
   var a = PGRE.store.state.attempts;
   return a.length ? a[a.length - 1] : null;
@@ -333,6 +344,68 @@ assert(!/parked-drill-card/.test(elFor('mistakes-root').innerHTML),
 mistakes.mount({ sub: 'drill' });                     // the stale route reopens the summary, not a question
 assert(/Drill complete/.test(elFor('mistakes-root').innerHTML),
   'stale drill route repaints the completion screen');
+mistakes._test.dropLive();
+
+console.log('\na resumed answered question shows the saved choice and verdict');
+
+locationStub.hash = '#/';
+mistakes._test.startDrill([BANK.m1, BANK.m2, BANK.m3]);
+var resumeDrill = mistakes._test.drill;
+var qWrong = resumeDrill.qs[0];
+var qRight = resumeDrill.qs[1];
+var qOpen = resumeDrill.qs[2];
+var wrongPick = (qWrong.answer + 1) % 5;
+var rightPick = qRight.answer;
+mistakes.mount({ sub: 'drill' });
+var openHtml = elFor('mistakes-root').innerHTML;
+assert(hidesAnswerKey(openHtml) && openHtml.indexOf(qWrong.sol) === -1,
+  'a fresh unanswered question still hides the key');
+var attemptsBeforeResume = PGRE.store.state.attempts.length;
+mistakes._test.drillAnswer(wrongPick);
+resumeDrill.i = 1;
+mistakes._test.drillAnswer(rightPick);
+var attemptsAfterAnswers = PGRE.store.state.attempts.length;
+assert(attemptsAfterAnswers === attemptsBeforeResume + 2, 'the two drill answers were recorded once');
+var attemptsFrozen = JSON.stringify(PGRE.store.state.attempts);
+var mistakesFrozen = JSON.stringify(PGRE.store.state.mistakes);
+var sessionsFrozen = JSON.stringify(PGRE.store.state.sessions);
+mistakes._test.dropLive();
+mistakes.mount({ sub: 'drill' });
+var resumed = mistakes._test.drill;
+assert(resumed && resumed.i === 1 && resumed.st[1].picked === rightPick && resumed.st[1].correct === true,
+  'reload restored the saved cursor, choice, and verdict');
+var rightHtml = elFor('mistakes-root').innerHTML;
+var rightChoice = choiceAttrs(rightHtml, rightPick);
+assert(rightChoice && rightChoice.pressed === 'true' && /is-answer/.test(rightChoice.cls),
+  'resumed correct question shows the saved choice');
+assert(/feedback-good/.test(rightHtml) && /Correct —/.test(rightHtml),
+  'resumed correct question shows the correct verdict');
+assert(rightHtml.indexOf(qRight.sol) !== -1, 'resumed question reuses the stored solution');
+assert(!/blank again|hidden for recall|View saved answer|Leave and come back/.test(rightHtml),
+  'resume adds no recall explanation and no extra button');
+assert(PGRE.store.state.attempts.length === attemptsAfterAnswers,
+  'painting the saved answer did not record another attempt');
+
+resumed.i = 0;
+mistakes.mount({ sub: 'drill' });
+var wrongHtml = elFor('mistakes-root').innerHTML;
+var wrongChoice = choiceAttrs(wrongHtml, wrongPick);
+var keyChoice = choiceAttrs(wrongHtml, qWrong.answer);
+assert(wrongChoice && wrongChoice.pressed === 'true' && /is-wrong/.test(wrongChoice.cls),
+  'revisited missed question shows the saved choice');
+assert(keyChoice && /is-answer/.test(keyChoice.cls) && keyChoice.pressed === 'false',
+  'revisited miss still marks the right choice without pressing it');
+assert(/feedback-bad/.test(wrongHtml) && /Incorrect —/.test(wrongHtml),
+  'revisited missed question shows the missed verdict');
+
+resumed.i = 2;
+mistakes.mount({ sub: 'drill' });
+var unansweredHtml = elFor('mistakes-root').innerHTML;
+assert(hidesAnswerKey(unansweredHtml) && unansweredHtml.indexOf(qOpen.sol) === -1,
+  'an unanswered question in the resumed drill still hides the key');
+assert(JSON.stringify(PGRE.store.state.attempts) === attemptsFrozen, 'resume paints left the attempt log unchanged');
+assert(JSON.stringify(PGRE.store.state.mistakes) === mistakesFrozen, 'resume paints left mistake schedules unchanged');
+assert(JSON.stringify(PGRE.store.state.sessions) === sessionsFrozen, 'resume paints left session rows unchanged');
 mistakes._test.dropLive();
 
 /* ================= Practice corrections ================= */
