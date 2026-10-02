@@ -401,8 +401,8 @@ PGRE.FORMULAS = [
     topic: "em",
     tag: "Maximum power",
     name: "Load match for maximum average power (supplemental list)",
-    front: "For a fixed linear source and a passive load, state the complex match for maximum average power and the resistive special case. (2)",
-    back: "<ul class=\"recall-list\"><li>Maximum average power when $Z_L = Z_g^*$. This is not the reflectionless choice $Z_L = Z_0$.</li><li>If the source resistance satisfies $R_g \\gt 0$, the resistive match is $R_L = R_g$.</li></ul>",
+    front: "For a fixed linear source and a passive load, state the complex match for maximum average power, the resistive special case, and why the reactances must cancel. (3)",
+    back: "<ul class=\"recall-list\"><li>Maximum average power when $Z_L = Z_g^*$. This is not the reflectionless choice $Z_L = Z_0$.</li><li>If $R_g > 0$ and the loop reactance is zero, $R_L = R_g$. If only $R_L$ can vary, the best value is $\\sqrt{R_g^2+(X_g+X_L)^2}$; when $X_L = 0$ that is $|Z_g|$, which is not $R_g$ unless $X_g = 0$.</li><li>Reactances add in series, so the load reactance cancels the source reactance: $X_L = -X_g$. With $R_L$ held fixed, that zeroes the loop reactance and maximises $|I|$, and therefore maximises $P = I_{\\mathrm{rms}}^2 R_L$. $X_L = 0$ is the trap: a purely resistive load, not a purely resistive loop.</li></ul>",
     note: "Supplemental — not a numbered CPG equation. $Z_L = Z_0$ is the condition on supp-ac-reflection."
   },
   {
@@ -781,5 +781,16 @@ PGRE.FORMULAS = [
     front: "What is Brewster's angle $\\theta_B$ for light incident from a medium of index $n_1$ onto a medium of index $n_2$, and what are the polarization and angular properties of the reflected beam?",
     back: "$$\\tan\\theta_B = \\frac{n_2}{n_1}$$\n\n**Key Properties**\n<ul class=\"recall-list\"><li>**Reflected beam**: Completely polarized with electric field perpendicular to the plane of incidence ($s$-polarized / parallel to the interface). The parallel component ($p$-polarization) is completely transmitted with zero reflection ($R_p = 0$).</li><li>**Ray geometry**: The reflected ray and refracted ray are mutually perpendicular:\n$$\\theta_B + \\theta_t = 90^\\circ$$\nFrom Snell's law: $n_1\\sin\\theta_B = n_2\\sin\\theta_t = n_2\\sin(90^\\circ - \\theta_B) = n_2\\cos\\theta_B \\implies \\tan\\theta_B = n_2/n_1$.</li></ul>",
     note: "Supplemental — not a numbered CPG equation."
+  },
+  {
+    id: "supp-radiation-field",
+    kind: "list",
+    eq: "supp",
+    topic: "em",
+    tag: "Radiation field",
+    name: "Nonrelativistic radiation-field direction (supplemental list)",
+    front: "For the nonrelativistic radiation field of a point charge with $q > 0$, give the direction of $\\mathbf{E}_{\\mathrm{rad}}$, the line it lies on, and the angular factors in $|\\mathbf{E}_{\\mathrm{rad}}|$ and in the power per solid angle. (4)",
+    back: "<ul class=\"recall-list\"><li>Radiation zone ($v \\ll c$): $\\mathbf{E}_{\\mathrm{rad}}$ is parallel to $\\hat{\\mathbf{r}}\\times(\\hat{\\mathbf{r}}\\times\\mathbf{a})/R = -\\mathbf{a}_{\\perp}/R$, where $\\hat{\\mathbf{r}}$ points from the charge to the field point and $R$ is that distance. For $q > 0$, $\\mathbf{E}_{\\mathrm{rad}}$ points opposite the sideways acceleration $\\mathbf{a}_{\\perp}$ (the part of $\\mathbf{a}$ perpendicular to $\\hat{\\mathbf{r}}$); a negative charge reverses it.</li><li>$\\mathbf{E}_{\\mathrm{rad}}$ lies in the plane of the line of sight $\\hat{\\mathbf{r}}$ and the acceleration $\\mathbf{a}$. For a charge accelerating along a wire on the $x$-axis, seen from the $xy$-plane, that plane is the $xy$-plane, so the $z$ component is $0$.</li><li>$\\mathbf{E}_{\\mathrm{rad}}$ is perpendicular to the line of sight $\\hat{\\mathbf{r}}$. When $\\mathbf{E}_{\\mathrm{rad}} \\ne 0$, this and the plane fix the line of $\\mathbf{E}_{\\mathrm{rad}}$, but leave both directions along that line open. The triple product gives the direction.</li><li>$|\\mathbf{E}_{\\mathrm{rad}}| \\propto \\sin\\theta$ and the power per solid angle $\\propto \\sin^2\\theta$, where $\\theta$ is the angle from $\\mathbf{a}$. Both are zero both ways along the acceleration axis ($\\theta = 0$ and $\\theta = 180^\\circ$), and both are largest at $\\theta = 90^\\circ$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. These statements are for the radiation field at $v \\ll c$. They are not the velocity field, and $\\sin^2\\theta$ is not the total radiated power."
   },
 ];
