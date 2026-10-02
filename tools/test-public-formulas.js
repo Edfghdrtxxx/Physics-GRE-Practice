@@ -226,6 +226,10 @@ assert(rad && /leave both directions along that line open/.test(rad.back),
   'the plane and transversality do not fix the sense');
 assert(rad && !/completely lock/i.test(radText) && !/dipole axis/i.test(radText),
   'the card does not keep the unlocked direction claim');
+assert(rad && rad.back.indexOf('accelerating along') !== -1,
+  'the wire bullet says the charge is accelerating along the wire');
+assert(rad && rad.back.indexOf('from the charge') !== -1,
+  'r-hat is defined as pointing from the charge to the field point');
 
 EXPECTED.forEach(function (id) {
   var c = byId[id];
