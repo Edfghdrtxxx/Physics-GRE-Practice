@@ -2389,6 +2389,50 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 [data-theme="dark"] .assess-chip.active::before {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5.2l2.1 2.1L8 3.2' fill='none' stroke='%23181715' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
+/* Review-window strip (review-result pages only, PGRE.assess html review):
+   one fixed-height line under the tiles, so a tap never moves the page. At
+   rest it shows the wait alone; .is-moved (a chip changed the date) strikes
+   the answer's own wait and tints the new one; .is-pulse flashes once per
+   change. */
+.assess-row .assess-window {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 10px;
+  min-height: 40px; box-sizing: border-box;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface);
+  font-size: 13px; color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  transition: border-color .2s, background .2s;
+}
+.assess-window .aw-label { color: var(--ink-3); white-space: nowrap; }
+.assess-window .aw-value { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.assess-window [hidden] { display: none; }
+.assess-window .aw-from { color: var(--ink-3); text-decoration: line-through; }
+.assess-window .aw-arrow { color: var(--ink-3); }
+.assess-window .aw-to {
+  font-weight: 600; color: var(--ink);
+  padding: 2px 9px; border-radius: 999px;
+  background: var(--ivory);
+  transition: background .2s, color .2s;
+}
+.assess-window .aw-date { margin-left: auto; color: var(--ink-3); font-size: 12px; white-space: nowrap; }
+.assess-window.is-unscheduled .aw-to { font-weight: 500; color: var(--ink-3); background: transparent; padding-left: 0; }
+.assess-window.is-moved { border-color: var(--accent); background: var(--accent-tint); }
+.assess-window.is-moved .aw-to { background: var(--accent-deep); color: var(--surface); }
+@media (prefers-reduced-motion: no-preference) {
+  .assess-window.is-pulse { animation: assess-window-pulse .5s ease-out; }
+  .assess-window.is-pulse .aw-to { animation: assess-window-pop .32s ease-out; }
+}
+@keyframes assess-window-pulse {
+  0% { box-shadow: 0 0 0 0 var(--accent); }
+  100% { box-shadow: 0 0 0 7px transparent; }
+}
+@keyframes assess-window-pop {
+  0% { transform: scale(.86); }
+  60% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
 @media (max-width: 560px) {
   .assess-row { padding: 12px; }
   .assess-row .conf-q { grid-column: 1 / -1; }
