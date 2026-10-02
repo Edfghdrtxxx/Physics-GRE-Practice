@@ -258,9 +258,12 @@ assert(srs.ivlLabel(30) === '1 mo' && srs.ivlLabel(60) === '2 mo',
 assert(srs.ivlLabel(45) === '1.5 mo', 'ivlLabel renders fractional months');
 
 console.log('\nself-assessment review date');
-assert(srs.assessWaitDays(3, {}) === 3 && srs.assessWaitDays(3, { sure: true }) === 3 &&
-       srs.assessWaitDays(3, { stuck: true }) === 3,
-  'Knew it, Keep failing, and no chip keep a 3-day wait');
+assert(srs.assessWaitDays(3, {}) === 3 && srs.assessWaitDays(3, { sure: true }) === 3,
+  'Knew it and no chip keep a 3-day wait');
+assert(srs.assessWaitDays(3, { stuck: true }) === 1 &&
+       srs.assessWaitDays(3, { stuck: true, guess: true, slow: true }) === 1 &&
+       srs.assessWaitDays(3, { stuck: true, forgot: true }) === 1,
+  'Keep failing brings a 3-day wait back to tomorrow, wins over a half, and does not stack with Forgot something');
 assert(srs.assessWaitDays(3, { guess: true }) === 2 &&
        srs.assessWaitDays(3, { slow: true }) === 2 &&
        srs.assessWaitDays(3, { guess: true, slow: true }) === 2,
@@ -274,8 +277,10 @@ assert(srs.assessWaitDays(1, { guess: true }) === 1 && srs.assessWaitDays(0, { g
        srs.assessWaitDays(60, { slow: true }) === 30,
   'halving rounds whole days up and never schedules sooner than tomorrow');
 assert(srs.assessWaitDays(0, { forgot: true }) === 0 && srs.assessWaitDays(1, { forgot: true }) === 1 &&
-       srs.assessWaitDays(14, { forgot: true }) === 1,
-  'Forgot something leaves an already-due review due and a future one at tomorrow');
+       srs.assessWaitDays(14, { forgot: true }) === 1 &&
+       srs.assessWaitDays(0, { stuck: true }) === 0 && srs.assessWaitDays(1, { stuck: true }) === 1 &&
+       srs.assessWaitDays(14, { stuck: true }) === 1,
+  'Forgot something and Keep failing leave an already-due review due and a future one at tomorrow');
 
 resetState();
 var graded = mkEntry('qGrade');
@@ -326,8 +331,17 @@ assert(srs.daysUntil(graded.srs.due) === 2 && graded.srs.due !== baseDue,
 srs.applyAssessSchedule('qGrade', { sure: true });
 assert(graded.srs.due === baseDue, 'Knew it restores the original date');
 srs.applyAssessSchedule('qGrade', { stuck: true });
-assert(graded.srs.due === baseDue && graded.stuck !== true,
-  'Keep failing is not a date change — applyAssessSchedule leaves the base date and the flag');
+assert(srs.daysUntil(graded.srs.due) === 1 && graded.srs.step === baseStep && graded.stuck !== true,
+  'Keep failing stores tomorrow and does not move the ladder step or set the flag');
+assert(graded.misses === missesBefore && graded.solves === solvesBefore &&
+       store.state.attempts.length === 1 && store.state.xp === xpBefore,
+  'Keep failing adds no miss, solve, attempt, or XP');
+srs.applyAssessSchedule('qGrade', { stuck: true, guess: true, slow: true });
+assert(srs.daysUntil(graded.srs.due) === 1 && graded.srs.step === baseStep,
+  'Keep failing wins over a half and still does not stack past tomorrow');
+srs.applyAssessSchedule('qGrade', {});
+assert(graded.srs.due === baseDue && graded.srs.step === baseStep,
+  'unpicking Keep failing restores the original 3-day date');
 
 resetState();
 var archived = mkEntry('qArch', { archivedAt: new Date().toISOString() });
@@ -366,6 +380,38 @@ assert(srs.daysUntil(archived.srs.due) === 2 && archived.srs.step === archStep,
 srs.applyAssessSchedule('qArch', {});
 assert(archived.srs.due === archDue && archived.archivedAt,
   'clearing the chip restores the archived date and leaves it archived');
+srs.applyAssessSchedule('qArch', { stuck: true });
+assert(srs.daysUntil(archived.srs.due) === 1 && archived.archivedAt &&
+       archived.srs.step === archStep && archived.misses === archMisses &&
+       archived.solves === archSolves,
+  'Keep failing on an archived record pulls the date to tomorrow without a miss or a reopen');
+srs.applyAssessSchedule('qArch', {});
+assert(archived.srs.due === archDue && archived.archivedAt,
+  'unpicking Keep failing restores the archived date and leaves it archived');
+
+resetState();
+var flagged = mkEntry('qStuck');
+srs.mistakeMissed(flagged);
+srs.mistakeSolved(flagged);
+srs.noteAssessBase(flagged);
+var stuckBase = flagged.srs.due;
+var stuckStep = flagged.srs.step;
+store.state.attempts.push({ qid: 'qStuck', correct: true });
+var stuckXp = store.state.xp;
+var stuckAttempts = store.state.attempts.length;
+var stuckMisses = flagged.misses;
+srs.markStuck('qStuck');
+srs.applyAssessSchedule('qStuck', { stuck: true });
+assert(flagged.stuck === true && srs.daysUntil(flagged.srs.due) === 1 &&
+       flagged.srs.step === stuckStep && flagged.srs.baseDue === stuckBase,
+  'the Keep failing chip files the flag and stores tomorrow from the saved base');
+assert(store.state.xp === stuckXp && store.state.attempts.length === stuckAttempts &&
+       flagged.misses === stuckMisses,
+  'that chip adds no miss, attempt, or XP');
+srs.unmarkStuck('qStuck');
+srs.applyAssessSchedule('qStuck', {});
+assert(flagged.srs.due === stuckBase && flagged.stuck !== true && flagged.srs.step === stuckStep,
+  'unpicking Keep failing restores the saved date and clears the flag');
 
 resetState();
 var openArch = mkEntry('qArchOpen');
