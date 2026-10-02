@@ -245,6 +245,20 @@ assert(rad && rad.back.indexOf('accelerating along') !== -1,
 assert(rad && rad.back.indexOf('from the charge') !== -1,
   'r-hat is defined as pointing from the charge to the field point');
 
+var ham = byId['supp-hamilton-principle'];
+var hamText = ham ? [ham.front, ham.back, ham.note].join('\n') : '';
+assert(!!ham && ham.eq === 'supp' && ham.topic === 'cm' && ham.tag === 'Lagrangian',
+  'supp-hamilton-principle is a classical mechanics Lagrangian card');
+assert(ham && ham.note.indexOf('Supplemental — not a numbered CPG equation.') === 0,
+  'supp-hamilton-principle note starts with the supplemental sentence');
+assert(ham && /\\delta S = 0/.test(ham.back) && /S = \\int_\{t_1\}\^\{t_2\} L\\,dt/.test(ham.back),
+  'supp-hamilton-principle states stationary action and the action integral');
+assert(ham && /L = T - U/.test(ham.back) && /time \$dt\$/.test(ham.back),
+  'supp-hamilton-principle defines L = T - U and integration variable dt');
+assert(ham && /T - U/.test(ham.note) && /never \$T \+ U\$/.test(ham.note) &&
+  /time \$dt\$/.test(ham.note) && /never spatial coordinate \$dx\$/.test(ham.note),
+  'supp-hamilton-principle note highlights T - U and dt traps');
+
 EXPECTED.forEach(function (id) {
   var c = byId[id];
   if (!c) return;
