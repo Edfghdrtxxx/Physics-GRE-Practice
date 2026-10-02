@@ -551,10 +551,10 @@ PGRE.toast = function (html, kind, sticky) {
    Keep failing (combine freely with anything). Every tap re-stamps the newest
    attempt row (srs.setLastAssess), keeps the lucky-guess and keep-failing
    bookkeeping in sync, and rewrites the review date from this answer's base
-   (srs.applyAssessSchedule). Knew it and Keep failing leave that date.
+   (srs.applyAssessSchedule). Knew it leaves that date.
    Guessed and Too slow halve the remaining wait once (minimum tomorrow).
-   Forgot something brings a future review back to tomorrow. Unpicking
-   restores the base. No extra attempt, miss, or XP. Tapping an active chip
+   Forgot something and Keep failing bring a future review back to tomorrow.
+   Unpicking restores the base. No extra attempt, miss, or XP. Tapping an active chip
    un-picks it. The chips stay editable until the next question. */
 PGRE.assess = (function () {
   var OPTIONS = [

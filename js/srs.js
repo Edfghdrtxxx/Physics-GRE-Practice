@@ -80,17 +80,17 @@ PGRE.srs = {
 
   /* Whole days from today after the chips on this answer. baseDays is the
      ladder wait recorded with the answer.
-     Knew it and Keep failing leave it alone.
+     Knew it leaves it alone.
      Guessed and Too slow halve it once — together as well as alone — and
      never land sooner than tomorrow. Whole days round up, so a 3-day wait
      becomes 2 days and is never cut past half.
      A wait already due stays due; moving it to tomorrow would only delay it.
-     Forgot something brings a future review back to tomorrow and wins over
-     a halving chip. */
+     Forgot something and Keep failing bring a future review back to tomorrow
+     and win over a halving chip. Together they still land on tomorrow once. */
   assessWaitDays: function (baseDays, flags) {
     var days = typeof baseDays === 'number' && isFinite(baseDays) ? baseDays : 0;
     flags = flags || {};
-    if (flags.forgot) return days <= 0 ? days : 1;
+    if (flags.forgot || flags.stuck) return days <= 0 ? days : 1;
     if (flags.guess || flags.slow) {
       if (days <= 1) return days;
       return Math.max(1, Math.ceil(days / 2));
@@ -187,7 +187,9 @@ PGRE.srs = {
      this one. Same filing mechanism as a lucky guess: flag (or create) the
      mistake-book entry, reopen an archived one (fresh evidence), and if it
      isn't already scheduled seed the normal ladder (bottom rung, due
-     tomorrow) so it resurfaces. Intervals are untouched. */
+     tomorrow) so it resurfaces. An existing interval stays here. The assess
+     chip then rewrites it through applyAssessSchedule, which pulls a future
+     review to tomorrow. */
   markStuck: function (qid) {
     var s = PGRE.store.state, now = new Date().toISOString();
     var mk = s.mistakes[qid];
