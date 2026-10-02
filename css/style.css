@@ -2316,27 +2316,83 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .conf-row.is-tagged { min-height: 30px; }
 .conf-done { font-size: 13.5px; color: var(--good); font-weight: 500; }
 
-/* Multi-select self-assessment chips (PGRE.assess, js/app.js) — practice
-   feedback + mistake drills. Rides on the .focus-chip pill look; .active is
-   the picked state. The note echoes lucky-guess / keep-failing filings in
-   neutral text. Keep failing is the strongest concern level: at rest it
-   keeps a danger border and label so it stands apart from the neutral
-   chips, and the picked state fills with the danger tint. Hover previews
-   that fill; it must beat .focus-chip:hover, which would paint the chip
-   back to ink. Tokens follow [data-theme="dark"]. */
-.assess-chip { font-family: var(--sans); font-weight: 500; padding: 6px 12px; }
-.assess-chip .key-hint { margin-left: 2px; }
-.assess-chip.assess-stuck {
+/* Multi-select self-assessment tiles (PGRE.assess, js/app.js) — practice
+   feedback + mistake drills. One quiet panel: the question and the note share
+   a header line, the four ordinary answers sit in an even grid of tiles, and
+   Keep failing spans the full width underneath as the strongest concern.
+   Each tile carries a tone (--tone / --tone-tint) shown as a ring at rest and
+   a filled check when picked; .active is the picked state. The note echoes
+   lucky-guess / keep-failing filings in neutral text. Tokens follow
+   [data-theme="dark"]. */
+.assess-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: stretch;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.assess-row .conf-q {
+  grid-row: 1; grid-column: 1;
+  align-self: center;
+  font-family: var(--serif); font-size: 16px; font-weight: 500; color: var(--ink);
+}
+.assess-row .assess-note {
+  grid-row: 1; grid-column: 2;
+  align-self: center; justify-self: end; text-align: right;
+  font-size: 12px; line-height: 1.35; color: var(--ink-3);
+}
+.assess-row .assess-chip {
+  --tone: var(--ink-2); --tone-tint: var(--ivory);
+  display: flex; align-items: center; gap: 9px;
+  min-width: 0; min-height: 44px;
+  font-family: var(--sans); font-size: 13.5px; font-weight: 500; line-height: 1.2;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s, box-shadow .15s;
+}
+.assess-row .assess-chip::before {
+  content: ''; flex: none; box-sizing: border-box;
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1.5px solid var(--tone);
+  background: transparent center / 10px 10px no-repeat;
+  transition: background-color .15s, border-color .15s;
+}
+.assess-row .assess-chip .key-hint { margin-left: auto; flex: none; }
+.assess-row .assess-chip[data-assess="sure"]   { --tone: var(--good);  --tone-tint: var(--good-tint); }
+.assess-row .assess-chip[data-assess="guess"]  { --tone: var(--amber); --tone-tint: var(--amber-tint); }
+.assess-row .assess-chip[data-assess="slow"]   { --tone: var(--ink-2); --tone-tint: var(--ivory); }
+.assess-row .assess-chip[data-assess="forgot"] { --tone: var(--accent-deep); --tone-tint: var(--accent-tint); }
+.assess-row .assess-chip.assess-stuck {
+  --tone: var(--bad); --tone-tint: var(--bad-tint);
+  grid-column: 1 / -1;
   border-color: var(--bad);
   color: var(--bad);
 }
-.assess-chip.assess-stuck:hover {
-  border-color: var(--bad);
-  background: var(--bad-tint);
-  color: var(--bad);
+.assess-row .assess-chip:hover { border-color: var(--tone); background: var(--tone-tint); }
+.assess-row .assess-chip:focus-visible { outline: 2px solid var(--tone); outline-offset: 2px; }
+.assess-row .assess-chip.active {
+  border-color: var(--tone); background: var(--tone-tint);
+  box-shadow: inset 0 0 0 1px var(--tone);
 }
-.assess-chip.assess-stuck.active {
-  border-color: var(--bad); background: var(--bad-tint); color: var(--bad);
+.assess-row .assess-chip.active::before {
+  background-color: var(--tone);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5.2l2.1 2.1L8 3.2' fill='none' stroke='%23faf9f5' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.assess-row .assess-chip.assess-stuck.active { color: var(--bad); }
+.assess-row .assess-chip.assess-stuck .key-hint { border-color: currentColor; color: inherit; opacity: .7; }
+[data-theme="dark"] .assess-chip.active::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5.2l2.1 2.1L8 3.2' fill='none' stroke='%23181715' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+@media (max-width: 560px) {
+  .assess-row { padding: 12px; }
+  .assess-row .conf-q { grid-column: 1 / -1; }
+  .assess-row .assess-note { grid-row: auto; grid-column: 1 / -1; justify-self: start; text-align: left; order: 99; }
 }
 .assess-note { font-size: 12.5px; }
 
@@ -2370,7 +2426,13 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
    entry-detail line. Keep failing outranks a lucky guess: red tint + label. */
 .lucky-chip { color: var(--ink); background: var(--accent-track); }
 .stuck-chip { color: var(--bad); background: var(--bad-tint); }
-.miss-actions .stuck-on { border-color: var(--bad); color: var(--bad); }
+.miss-actions [data-stuck] { display: inline-flex; align-items: center; gap: 7px; border-color: var(--bad); color: var(--bad); }
+.miss-actions [data-stuck]:not(.stuck-on)::before {
+  content: ''; width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%;
+  border: 1.5px solid var(--bad);
+}
+.miss-actions [data-stuck]:hover { background: var(--bad-tint); }
+.miss-actions .stuck-on { border-color: var(--bad); background: var(--bad-tint); color: var(--bad); font-weight: 600; }
 .conf-note { margin: 4px 0 8px; font-size: 12.5px; }
 .conf-note strong { color: var(--ink-2); }
 
