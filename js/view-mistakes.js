@@ -756,11 +756,38 @@ PGRE.views.mistakes = (function () {
   }
 
   /* The feedback panel under an answered question. `fresh` (just answered) gets
-     the interactive self-assessment row; a re-revealed answer shows what was
-     recorded instead, so re-reading a question never rewrites its assessment. */
+     the blank self-assessment row. A result put back on screen (reveal, or the
+     review page from the results) gets the same chips painted from its row,
+     with the review window; re-reading writes nothing, a tap regrades. Only a
+     result whose row is gone or superseded falls back to the read-only line. */
   function correctTitle(q) {
     if (PGRE.assess && typeof PGRE.assess.reviewTitle === 'function') return PGRE.assess.reviewTitle(q.id);
     return 'Correct';
+  }
+
+  function reanswerHint() {
+    return '<div class="drill-reanswer-hint muted">Select a different choice, then Confirm or double-click — ' +
+      'it replaces this answer. Leave and come back and the question is blank again; ' +
+      'confirming the same choice brings this result back.</div>';
+  }
+
+  /* The row a regrade stamps (see PGRE.assess.regradeRow), re-pointed at the
+     live attempt object. null keeps the read-only line. */
+  function regradeRow(q, st) {
+    var row = PGRE.assess && typeof PGRE.assess.regradeRow === 'function'
+      ? PGRE.assess.regradeRow(q.id, st.row) : null;
+    if (row) st.row = row;
+    return row;
+  }
+
+  /* Wire the chips under an answered question. A fresh answer starts blank;
+     a result put back on screen is painted from its row without writing. */
+  function bindAssess(q, st, fresh) {
+    var fb = document.getElementById('feedback');
+    if (!fb || !fb.querySelector('#assess-row')) return null;
+    var ctrl = PGRE.assess.bind(fb, q, st.correct);
+    if (!fresh && typeof ctrl.hydrate === 'function') ctrl.hydrate(PGRE.assess.flagsFromRow(st.row));
+    return ctrl;
   }
 
   function feedbackHTML(q, st, fresh, locked) {
@@ -774,6 +801,11 @@ PGRE.views.mistakes = (function () {
     html += paceMark(st.ms != null ? st.ms : (st.row && st.row.ms));
     if (fresh) {
       html += PGRE.assess.html(PGRE.store.state.settings.keyboard);
+    } else if (regradeRow(q, st)) {
+      // the same chips, painted from this drill's own row, plus the review
+      // window; a tap regrades that row and never records a new attempt
+      html += PGRE.assess.html(PGRE.store.state.settings.keyboard, { review: true });
+      if (!locked) html += reanswerHint();
     } else {
       // read the assessment off THIS drill's own attempt row (st.row, which
       // PGRE.assess stamps in place) — lastAssess() would happily surface a
@@ -785,11 +817,7 @@ PGRE.views.mistakes = (function () {
         html += '<div class="conf-note muted">Your self-assessment: <strong>' +
           bits.join(' · ') + '</strong></div>';
       }
-      if (!locked) {
-        html += '<div class="drill-reanswer-hint muted">Select a different choice, then Confirm or double-click — ' +
-          'it replaces this answer. Leave and come back and the question is blank again; ' +
-          'confirming the same choice brings this result back.</div>';
-      }
+      if (!locked) html += reanswerHint();
     }
     html += '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
       distractorBlock(q);
@@ -886,11 +914,9 @@ PGRE.views.mistakes = (function () {
     else startPaceTimer();
 
     drill.choiceCommit = PGRE.ui.bindChoiceCommit(root(), { onCommit: drillAnswer });
-    // the controller is per-render: any later re-render (browse, reveal)
-    // orphans the old chip row, so only a fresh answer leaves live shortcuts
-    drill.assess = opts.fresh
-      ? PGRE.assess.bind(document.getElementById('feedback'), q, st.correct)
-      : null;
+    // the controller is per-render: a later re-render orphans the old chip
+    // row, so shortcuts stay live only while a result is on screen
+    drill.assess = show ? bindAssess(q, st, !!opts.fresh) : null;
 
     document.getElementById('drill-prev').addEventListener('click', function () { goTo(drill.i - 1); });
     document.getElementById('drill-next').addEventListener('click', function () { goTo(drill.i + 1); });
@@ -1032,6 +1058,7 @@ PGRE.views.mistakes = (function () {
       if (next >= 0) renderDrillReview(next);
     });
     document.getElementById('review-summary').addEventListener('click', renderDrillSummary);
+    drill.assess = bindAssess(q, st, false);
     bindReviewJumps();
     saveDrill();
   }
@@ -1044,6 +1071,7 @@ PGRE.views.mistakes = (function () {
     var firstClose = !drill.done;
     drill.done = true;                     // the keys stop answering from here on
     drill.reviewing = false;
+    drill.assess = null;
     var done = answeredCount(), correct = correctCount(), xp = earnedXP();
     var left = drill.qs.length - done;
     if (firstClose) {
@@ -1092,10 +1120,10 @@ PGRE.views.mistakes = (function () {
   /* ——— Keyboard (same opt-in setting as practice: settings.keyboard) ———
      A–E / 1–5 select, Enter confirms (or re-answers), ← / → browse, S skip,
      Enter/Space/N advance when nothing is pending, K / G / T / F / R self-assess
-     (only while a fresh result is on screen). */
+     (while a result's chip row is on screen, the review page included). */
   function onKey(e) {
-    if (!drill || drill.done) return;                       // no drill, or its summary is up
-    if (drill.reviewing) return;                            // read-only review: click nav only
+    if (!drill) return;
+    if (drill.done && !drill.reviewing) return;             // the summary is up
     if (!document.getElementById('mistakes-root')) return;  // not on the mistake-book view
     if (!PGRE.store.state.settings.keyboard) return;
     var tg = (e.target && e.target.tagName) || '';
@@ -1103,6 +1131,10 @@ PGRE.views.mistakes = (function () {
         (e.target && e.target.isContentEditable)) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     var k = e.key;
+
+    // Review page: questions are not re-answerable and the nav is click only,
+    // but the grading chips keep the answer page's letters.
+    if (drill.reviewing) { assessKey(e, k); return; }
 
     if (/^[a-eA-E]$/.test(k) || /^[1-5]$/.test(k)) {
       var idx = /^[1-5]$/.test(k) ? parseInt(k, 10) - 1 : k.toUpperCase().charCodeAt(0) - 65;
@@ -1131,22 +1163,27 @@ PGRE.views.mistakes = (function () {
       var nb = document.getElementById('drill-next');
       if (nb && !nb.disabled) nb.click();
       else document.getElementById('drill-finish').click();
-    } else if (drill.assess) {
-      // self-assessment chips, same keys as practice: K knew it, G guessed,
-      // T too slow, F forgot something, R keep failing
-      var a = k.toLowerCase();
-      if (a === 'k') { e.preventDefault(); drill.assess.toggle('sure'); }
-      else if (a === 'g') { e.preventDefault(); drill.assess.toggle('guess'); }
-      else if (a === 't') { e.preventDefault(); drill.assess.toggle('slow'); }
-      else if (a === 'f') { e.preventDefault(); drill.assess.toggle('forgot'); }
-      else if (a === 'r') { e.preventDefault(); drill.assess.requestToggle('stuck'); }
+    } else {
+      assessKey(e, k);
     }
+  }
+
+  /* Self-assessment chips, same keys as practice: K knew it, G guessed,
+     T too slow, F forgot something, R keep failing (asks first). Only while
+     the chip row this controller was bound to is still on screen. */
+  var ASSESS_KEYS = { k: 'sure', g: 'guess', t: 'slow', f: 'forgot', r: 'stuck' };
+  function assessKey(e, k) {
+    var key = ASSESS_KEYS[String(k).toLowerCase()];
+    if (!key || !drill.assess || !document.getElementById('assess-row')) return;
+    e.preventDefault();
+    drill.assess.requestToggle(key);
   }
 
   return {
     render: function () { return '<div id="mistakes-root"></div>'; },
     mount: function (params) {
       clearPace();
+      if (drill) drill.assess = null;   // the chip row it was bound to is gone
       topicFilter = 'all';
       concernFilter = 'all';
       if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }

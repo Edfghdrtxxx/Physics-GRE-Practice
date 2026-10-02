@@ -121,6 +121,19 @@ PGRE.srs = {
     return mk;
   },
 
+  /* What a grading control shows next to its chips: the wait this answer
+     produced (base) and the wait after the chips now on it. Read only — the
+     dates are the ones applyAssessSchedule wrote. null when nothing is
+     scheduled. */
+  assessWindow: function (qid) {
+    var mk = PGRE.store.state.mistakes && PGRE.store.state.mistakes[qid];
+    if (!mk || !mk.srs || !mk.srs.due) return null;
+    var baseDue = mk.srs.baseDue || mk.srs.due;
+    var days = this.daysUntil(mk.srs.due), baseDays = this.daysUntil(baseDue);
+    return { due: mk.srs.due, days: days, baseDue: baseDue, baseDays: baseDays,
+             changed: mk.srs.due !== baseDue };
+  },
+
   /* ——— Self-assessment tagging (proposal #6, extended to multi-select) ———
      The answer is recorded first (confidence null, no tags); the assessment
      taps land a beat later, so we stamp the most recent attempt row for this

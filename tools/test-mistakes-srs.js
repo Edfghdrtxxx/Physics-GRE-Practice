@@ -413,5 +413,34 @@ assert(srs.applyAssessSchedule('qRefuse', { forgot: true }) === null &&
   'a refused save does not move the review date in memory');
 store._persistFailed = false;
 
+console.log('\nreview window read by the grading control');
+resetState();
+assert(srs.assessWindow('qWin') === null, 'no schedule reads as no review window');
+var win = mkEntry('qWin');
+srs.mistakeMissed(win);
+srs.mistakeSolved(win);
+srs.noteAssessBase(win);
+var w0 = srs.assessWindow('qWin');
+assert(w0 && w0.days === 3 && w0.baseDays === 3 && w0.changed === false && w0.due === win.srs.due,
+  'an ungraded answer reads its own wait, unchanged');
+var winBefore = JSON.stringify(store.state);
+srs.assessWindow('qWin');
+assert(JSON.stringify(store.state) === winBefore, 'reading the window writes nothing');
+srs.applyAssessSchedule('qWin', { forgot: true });
+var w1 = srs.assessWindow('qWin');
+assert(w1.baseDays === 3 && w1.days === 1 && w1.changed === true,
+  'Forgot something reads 3 d before and 1 d now');
+srs.applyAssessSchedule('qWin', { guess: true });
+var w2 = srs.assessWindow('qWin');
+assert(w2.baseDays === 3 && w2.days === 2 && w2.changed === true,
+  'switching to Guessed reads 3 d before and 2 d now, from the same base');
+srs.applyAssessSchedule('qWin', {});
+var w3 = srs.assessWindow('qWin');
+assert(w3.baseDays === 3 && w3.days === 3 && w3.changed === false,
+  'unpicking reads the saved wait again with no change');
+delete win.srs.baseDue;
+assert(srs.assessWindow('qWin').changed === false && srs.assessWindow('qWin').days === 3,
+  'an entry saved before base dates existed reads as unchanged');
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

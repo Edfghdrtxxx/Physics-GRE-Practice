@@ -643,8 +643,16 @@ PGRE.assess = (function () {
     };
   }
 
-  function html(showKeys) {
-    var h = '<div class="conf-row assess-row" id="assess-row">' +
+  var IDLE_NOTE = 'pick any that apply';
+  var REVIEW_NOTE = 'tap to change your grading';
+
+  /* opts.review: the row on a review-result page. Same chips and the same
+     writes; it adds the review-window strip (what the wait was, what it is
+     now) and words the idle note as a regrade. */
+  function html(showKeys, opts) {
+    var review = !!(opts && opts.review);
+    var h = '<div class="conf-row assess-row' + (review ? ' assess-review' : '') + '" id="assess-row"' +
+      (review ? ' data-idle-note="' + REVIEW_NOTE + '"' : '') + '>' +
       '<span class="conf-q">How did it go?</span>';
     OPTIONS.forEach(function (o) {
       h += '<button type="button" class="focus-chip assess-chip' +
@@ -652,8 +660,44 @@ PGRE.assess = (function () {
         '" aria-pressed="false"' + (o.key === 'stuck' ? stuckButtonAttrs() : '') + '>' + o.label +
         (showKeys ? ' <span class="key-hint">' + o.kbd + '</span>' : '') + '</button>';
     });
-    h += '<span class="assess-note muted" id="assess-note">pick any that apply</span></div>' + stuckConfirmHTML();
+    if (review) {
+      h += '<div class="assess-window" id="assess-window" role="status" aria-live="polite">' +
+        '<span class="aw-label">Next review</span>' +
+        '<span class="aw-value">' +
+          '<span class="aw-from" id="assess-window-from" hidden></span>' +
+          '<span class="aw-arrow" id="assess-window-arrow" aria-hidden="true" hidden>→</span>' +
+          '<strong class="aw-to" id="assess-window-to"></strong>' +
+        '</span>' +
+        '<span class="aw-date" id="assess-window-date"></span>' +
+      '</div>';
+    }
+    h += '<span class="assess-note muted" id="assess-note">' + (review ? REVIEW_NOTE : IDLE_NOTE) +
+      '</span></div>' + stuckConfirmHTML();
     return h;
+  }
+
+  /* The attempt row a regrade would stamp, or null when it must stay read
+     only. srs.setLastAssess stamps the newest row for the question and the
+     review date belongs to that newest answer, so an older answer (the
+     question was answered again since) is not regradable from its own page. */
+  function regradeRow(qid, row) {
+    if (!row) return null;
+    var arr = (PGRE.store.state && PGRE.store.state.attempts) || [];
+    for (var i = arr.length - 1; i >= 0; i--) {
+      var a = arr[i];
+      if (!a || a.qid !== qid) continue;
+      return (a === row || (a.ts === row.ts && a.sid === row.sid)) ? a : null;
+    }
+    return null;
+  }
+
+  function flagsFromRow(row) {
+    var flags = { sure: false, guess: false, slow: false, forgot: false, stuck: false };
+    if (!row) return flags;
+    if (row.confidence === 'sure') flags.sure = true;
+    if (row.confidence === 'guess') flags.guess = true;
+    (row.tags || []).forEach(function (tg) { if (tg in flags) flags[tg] = true; });
+    return flags;
   }
 
   /* "Correct" plus the live review interval, when this answer has one.
@@ -701,7 +745,49 @@ PGRE.assess = (function () {
         var parts = [];
         if (luckyFiled) parts.push('filed as a lucky guess in your mistake book');
         if (stuckFiled) parts.push('flagged keep failing in your mistake book');
-        note.textContent = parts.length ? parts.join(' · ') : 'pick any that apply';
+        note.textContent = parts.length ? parts.join(' · ')
+          : (row.getAttribute('data-idle-note') || IDLE_NOTE);
+      }
+    }
+
+    /* Review-window strip (review rows only), painted from storage like the
+       banner. Unchanged: the wait alone. Moved by a chip: the answer's own
+       wait struck through, then the wait now. A change pulses once. */
+    var unscheduledAtBind = !(PGRE.srs && typeof PGRE.srs.assessWindow === 'function' &&
+                              PGRE.srs.assessWindow(q.id));
+    function paintWindow(announce) {
+      var box = row.querySelector('#assess-window');
+      if (!box || !PGRE.srs || typeof PGRE.srs.assessWindow !== 'function') return;
+      var from = box.querySelector('#assess-window-from');
+      var arrow = box.querySelector('#assess-window-arrow');
+      var to = box.querySelector('#assess-window-to');
+      var date = box.querySelector('#assess-window-date');
+      var win = PGRE.srs.assessWindow(q.id);
+      var was = '', now = 'not scheduled', when = '';
+      if (win) {
+        now = PGRE.srs.ivlLabel(win.days);
+        if (win.changed) was = PGRE.srs.ivlLabel(win.baseDays);
+        else if (unscheduledAtBind) was = 'not scheduled';
+        try {
+          when = new Date(win.due + 'T12:00:00').toLocaleDateString(undefined,
+            { weekday: 'short', month: 'short', day: 'numeric' });
+        } catch (e) { when = win.due; }
+      }
+      var before = box.getAttribute('data-window');
+      var sig = was + '>' + now;
+      from.textContent = was;
+      from.hidden = arrow.hidden = !was;
+      to.textContent = now;
+      date.textContent = when;
+      box.classList.toggle('is-moved', !!was);
+      box.classList.toggle('is-unscheduled', !win);
+      box.setAttribute('data-window', sig);
+      box.setAttribute('aria-label', 'Next review ' + (was ? 'was ' + was + ', now ' : '') + now +
+        (when ? ', ' + when : ''));
+      if (announce && before !== sig) {
+        box.classList.remove('is-pulse');
+        void box.offsetWidth;   // restart the pulse when two taps land back to back
+        box.classList.add('is-pulse');
       }
     }
 
@@ -746,6 +832,7 @@ PGRE.assess = (function () {
       luckyFiled = !!(isCorrect && on.guess);
       stuckFiled = !!on.stuck;
       paint();
+      paintWindow(false);
     }
 
     function toggle(key) {
@@ -778,16 +865,19 @@ PGRE.assess = (function () {
       commit();
       paint();
       paintReviewLabel();
+      paintWindow(true);
     }
 
     row.querySelectorAll('[data-assess]').forEach(function (b) {
       b.addEventListener('click', function () { requestToggle(b.getAttribute('data-assess')); });
     });
+    paintWindow(false);
 
     return controller;
   }
 
   return { OPTIONS: OPTIONS, LABELS: LABELS, html: html, reviewTitle: reviewTitle, bind: bind,
+    regradeRow: regradeRow, flagsFromRow: flagsFromRow,
     stuckButtonAttrs: stuckButtonAttrs, stuckConfirmHTML: stuckConfirmHTML, bindStuckConfirm: bindStuckConfirm };
 })();
 

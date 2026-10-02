@@ -1162,9 +1162,10 @@ PGRE.views.practice = (function () {
   }
 
   /* ——— Question review (post-checkout box navigation) ———
-     Read-only card for any question completed in this session: choices with the
-     user's pick and correct answer, solution, distractors, notes, and the
-     palette grid for free jumping. Reuses .drill-navrow geometry from mistakes. */
+     Card for any question completed in this session: choices with the user's
+     pick and correct answer (not re-answerable), the grading chips with the
+     review window (PGRE.assess review row — regrades, never a new attempt),
+     solution, distractors, notes, and the palette grid for free jumping. Reuses .drill-navrow geometry from mistakes. */
   function renderReview(idx) {
     if (!session || idx < 0 || idx >= session.qs.length) return;
     var ans = answerAt(idx);
@@ -1180,6 +1181,12 @@ PGRE.views.practice = (function () {
     var t = PGRE.topicById(q.topic) || { id: 'xx', short: '?', name: 'Unknown topic' };
     var prev = neighborAnswered(idx, -1);
     var next = neighborAnswered(idx, 1);
+    // The chips regrade the row this answer recorded. When that row is gone,
+    // or the question was answered again since, the line stays read only.
+    var liveRow = PGRE.assess.regradeRow(q.id, ans.row);
+    var regradable = !!liveRow;
+    if (liveRow) ans.row = liveRow;
+    session.assess = null;
     var html = '<div class="card practice-card">' +
       '<div class="practice-meta">' +
         '<span>Review — ' + (idx + 1) + ' of ' + session.qs.length + '</span>' +
@@ -1207,7 +1214,7 @@ PGRE.views.practice = (function () {
           (ans.xp != null ? '<span class="fb-xp">+' + ans.xp + ' XP</span>' : '') +
         '</div>' +
         (ans.ms != null ? paceMark(ans.ms) : '') +
-        reviewAssessNote(ans) +
+        (regradable ? PGRE.assess.html(settings().keyboard, { review: true }) : reviewAssessNote(ans)) +
         '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
         distractorBlock(q) +
         notesBlock(q) +
@@ -1223,7 +1230,10 @@ PGRE.views.practice = (function () {
     PGRE.typesetMath(el());
     window.scrollTo(0, 0);
     var fb = document.getElementById('feedback');
-    if (fb) bindNotes(fb, q);
+    if (fb) {
+      if (regradable) bindSessionAssess(fb, q, ans);
+      bindNotes(fb, q);
+    }
     document.getElementById('review-prev').addEventListener('click', function () {
       if (prev >= 0) renderReview(prev);
     });
@@ -1240,6 +1250,7 @@ PGRE.views.practice = (function () {
     if (PGRE.nav) PGRE.nav.setTrail([]);
     session.stage = 'summary';
     session.reviewing = false;
+    session.assess = null;
     clearSaved();
     lastRenderAt = Date.now();
     var firstClose = !session.done;
@@ -1356,6 +1367,7 @@ PGRE.views.practice = (function () {
   }
 
   /* ——— Keyboard-first practice (#14) ——— */
+  var REVIEW_ASSESS_KEYS = { k: 'sure', g: 'guess', t: 'slow', f: 'forgot', r: 'stuck' };
   function onKey(e) {
     if (!settings().keyboard) return;
     if (!session) return;
@@ -1415,6 +1427,10 @@ PGRE.views.practice = (function () {
       } else if (k === 'Escape') {
         e.preventDefault();
         renderSummary();
+      } else if (session.assess && REVIEW_ASSESS_KEYS[String(k).toLowerCase()]) {
+        // same letters as the answer page: K G T F toggle, R asks first
+        e.preventDefault();
+        session.assess.requestToggle(REVIEW_ASSESS_KEYS[String(k).toLowerCase()]);
       }
     }
   }

@@ -1165,6 +1165,84 @@ stuckChipEl.click();
 assert(!env.window.PGRE.store.state.mistakes['q-ux-1'],
   'un-picking Keep failing removes a flag-only entry (no ghost)');
 
+/* ——— Review-result grading row (assess.html review + shipped srs.js) ———
+   The same chips, hydrated from the saved row, with the review-window strip:
+   a tap regrades the row and moves the date, and never adds an attempt. */
+console.log('\nreview-result grading row');
+var rx = loadShipped(true, { views: true });
+vm.runInContext(fs.readFileSync(path.join(root, 'js/srs.js'), 'utf8'), rx.sandbox,
+  { filename: 'js/srs.js' });
+var RP = rx.sandbox.PGRE;
+assert(assess.html(true).indexOf('assess-window') === -1,
+  'the answer-page row carries no review-window strip');
+var reviewHtml = RP.assess.html(true, { review: true });
+assert(reviewHtml.indexOf('id="assess-window"') !== -1 && reviewHtml.indexOf('assess-review') !== -1 &&
+       reviewHtml.indexOf('data-assess="forgot"') !== -1 && reviewHtml.indexOf('id="assess-stuck-confirm"') !== -1,
+  'the review row is the same chip set plus the review-window strip');
+var rRow = { ts: 't1', sid: 's1', qid: 'rq1', correct: true, confidence: null, tags: ['slow'] };
+RP.store.state.attempts.push({ ts: 't0', sid: 's0', qid: 'rq1', correct: false, confidence: 'guess' });
+RP.store.state.attempts.push(rRow);
+RP.store.state.mistakes.rq1 = { firstMissedAt: 't0', misses: 1, solves: 1, wrongPicks: [1], archivedAt: null,
+  srs: { step: 2, due: RP.srs.addDays(4), baseDue: RP.srs.addDays(7) } };
+assert(RP.assess.regradeRow('rq1', rRow) === rRow, 'the newest row for the question is regradable');
+assert(RP.assess.regradeRow('rq1', { ts: 't1', sid: 's1' }) === rRow,
+  'a stale copy of that row resolves to the live attempt object');
+assert(RP.assess.regradeRow('rq1', RP.store.state.attempts[0]) === null &&
+       RP.assess.regradeRow('rq1', null) === null,
+  'an older answer, or a result with no row, stays read only');
+var rFlags = RP.assess.flagsFromRow(rRow);
+assert(rFlags.slow === true && !rFlags.sure && !rFlags.guess && !rFlags.forgot && !rFlags.stuck,
+  'flagsFromRow reads the saved grading off the row');
+var rbox = rx.document.createElement('div');
+rbox.innerHTML = reviewHtml;
+rx.document.body.appendChild(rbox);
+var rAttempts = RP.store.state.attempts.length, rXp = RP.store.state.xp;
+var rBefore = JSON.stringify(RP.store.state.mistakes.rq1);
+var rctrl = RP.assess.bind(rbox, { id: 'rq1' }, true);
+rctrl.hydrate(rFlags);
+var rWin = rbox.querySelector('#assess-window');
+var rFrom = rbox.querySelector('#assess-window-from');
+var rTo = rbox.querySelector('#assess-window-to');
+assert(rbox.querySelector('[data-assess="slow"]').getAttribute('aria-pressed') === 'true' &&
+       JSON.stringify(RP.store.state.mistakes.rq1) === rBefore && rRow.tags.join() === 'slow',
+  'opening the review paints the saved chip and writes nothing');
+assert(rFrom.hidden === false && rFrom.textContent === '7 d' && rTo.textContent === '4 d' &&
+       rWin.classList.contains('is-moved') && !rWin.classList.contains('is-pulse'),
+  'the strip opens on the saved window, 7 d before and 4 d now, without a pulse');
+rbox.querySelector('[data-assess="forgot"]').click();
+assert(rFrom.textContent === '7 d' && rTo.textContent === '1 d' && rWin.classList.contains('is-pulse') &&
+       RP.srs.daysUntil(RP.store.state.mistakes.rq1.srs.due) === 1,
+  'Forgot something moves the stored date to tomorrow and the strip shows 7 d then 1 d at once');
+assert(rRow.tags.join() === 'slow,forgot' && RP.store.state.attempts.length === rAttempts &&
+       RP.store.state.xp === rXp && RP.store.state.mistakes.rq1.misses === 1 &&
+       RP.store.state.mistakes.rq1.solves === 1 && RP.store.state.mistakes.rq1.srs.step === 2,
+  'the regrade stamps the same row and adds no attempt, XP, miss, solve, or ladder step');
+rbox.querySelector('[data-assess="forgot"]').click();
+rbox.querySelector('[data-assess="slow"]').click();
+assert(rFrom.hidden === true && rTo.textContent === '7 d' && !rWin.classList.contains('is-moved') &&
+       RP.store.state.mistakes.rq1.srs.due === RP.store.state.mistakes.rq1.srs.baseDue && !rRow.tags,
+  'unpicking every chip restores the saved date and the strip shows 7 d alone');
+assert(rbox.querySelector('#assess-note').textContent === 'tap to change your grading',
+  'the idle note on a review row reads as a regrade');
+var ubox = rx.document.createElement('div');
+ubox.innerHTML = reviewHtml;
+rx.document.body.appendChild(ubox);
+RP.store.state.attempts.push({ ts: 't2', sid: 's1', qid: 'rq2', correct: true, confidence: null });
+var uctrl = RP.assess.bind(ubox, { id: 'rq2' }, true);
+uctrl.hydrate({});
+assert(ubox.querySelector('#assess-window-to').textContent === 'not scheduled' &&
+       ubox.querySelector('#assess-window').classList.contains('is-unscheduled'),
+  'a correct answer with no schedule reads not scheduled');
+uctrl.toggle('guess');
+assert(ubox.querySelector('#assess-window-from').textContent === 'not scheduled' &&
+       ubox.querySelector('#assess-window-to').textContent === '1 d',
+  'Guessed on it files the lucky guess and the strip shows not scheduled then 1 d');
+uctrl.toggle('guess');
+assert(!RP.store.state.mistakes.rq2 &&
+       ubox.querySelector('#assess-window-to').textContent === 'not scheduled' &&
+       ubox.querySelector('#assess-window-from').hidden === true,
+  'unpicking it removes the entry and the strip returns to not scheduled');
+
 /* ——— Keep failing in the shipped mistake-book view ———
    A fresh env running the shipped srs.js + view-mistakes.js: the assess chip
    flags the record, the book renders its chip + per-entry toggle, and the
