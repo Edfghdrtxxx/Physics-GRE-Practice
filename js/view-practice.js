@@ -367,15 +367,39 @@ PGRE.views.practice = (function () {
     return '';
   }
 
-  function assessFlags(ans) {
-    if (ans.assess) return ans.assess;
-    var flags = { sure: false, guess: false, slow: false, forgot: false, stuck: false };
-    if (ans.row) {
-      if (ans.row.confidence === 'sure') flags.sure = true;
-      if (ans.row.confidence === 'guess') flags.guess = true;
-      (ans.row.tags || []).forEach(function (tg) { flags[tg] = true; });
+  /* Latest attempt for this answer. The chip writes confidence and tags onto
+     that row in the same turn as the review date, so the row is what a resume
+     has to paint. Prefer the row from this parked session, then any row for
+     the question. */
+  function attemptFor(qid, sid) {
+    var arr = (PGRE.store && PGRE.store.state && PGRE.store.state.attempts) || [];
+    var any = null;
+    for (var i = arr.length - 1; i >= 0; i--) {
+      var row = arr[i];
+      if (!row || row.qid !== qid) continue;
+      if (!any) any = row;
+      if (sid && row.sid === sid) return row;
     }
+    return any;
+  }
+
+  function flagsFromRow(row) {
+    var flags = { sure: false, guess: false, slow: false, forgot: false, stuck: false };
+    if (!row) return flags;
+    if (row.confidence === 'sure') flags.sure = true;
+    if (row.confidence === 'guess') flags.guess = true;
+    (row.tags || []).forEach(function (tg) { if (tg in flags) flags[tg] = true; });
     return flags;
+  }
+
+  /* Paint the chips that match the stored review date. A snapshot taken
+     before the tap is all false and must not hide the attempt row. */
+  function assessFlags(ans) {
+    var row = ans && ans.row;
+    if (!row && ans && ans.q) row = attemptFor(ans.q.id, session && session.sid);
+    if (row) return flagsFromRow(row);
+    if (ans && ans.assess) return ans.assess;
+    return flagsFromRow(null);
   }
 
   function snapshotAssess(fb, ans) {
@@ -396,6 +420,9 @@ PGRE.views.practice = (function () {
     ctrl.toggle = function (key) {
       inner(key);
       snapshotAssess(fb, ans);
+      // The tap already rewrote the attempt and the date. Park that chip
+      // state too, so a later resume is not stuck with the pre-tap snapshot.
+      saveSession();
     };
     fb.addEventListener('click', function (e) {
       var t = e.target && e.target.closest ? e.target.closest('[data-assess]') : null;
@@ -483,7 +510,8 @@ PGRE.views.practice = (function () {
     var answers = qs.map(function (q) {
       var a = byQid[q.id];
       return a ? { q: q, picked: a.picked, correct: a.correct, xp: a.xp,
-                   ms: a.ms, assess: a.assess || null } : null;
+                   ms: a.ms, assess: a.assess || null,
+                   row: attemptFor(q.id, snap.sid) } : null;
     });
     // Realign the cursor by its question id (snap.i indexes the old ids list,
     // so a dropped id would otherwise point at the next question).
