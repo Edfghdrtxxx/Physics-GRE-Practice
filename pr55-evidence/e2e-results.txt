@@ -25,10 +25,10 @@ PASS: keyboard regrades add no attempt or XP
 PASS: unpicking Guessed removes the lucky flag and restores 3 d
 PASS: R opens the Keep failing confirmation and writes nothing yet
 
-05-practice-review-keep-failing-and-knew-it
+05-practice-review-keep-failing-confirmed
 PASS: Escape closes the confirmation and stays on the review page
-PASS: confirmed Keep failing flags the problem and leaves the review window at 3 d
-PASS: K adds Knew it and the window stays 3 d
+PASS: confirmed Keep failing flags the problem and the window follows the shared rule (3 d then 1 d)
+PASS: K adds Knew it and the window still follows the shared rule (1 d)
 
 06-practice-review-unscheduled-answer-guessed
 PASS: a correct answer with no schedule reads not scheduled
@@ -48,19 +48,19 @@ PASS: chip keys on the results page change nothing
 PASS: reopening a regraded question paints what was saved
 PASS: after every practice regrade: still four attempts and the same XP, in memory and on disk
 
-10-mistake-drill-reveal-after-resume
+10-mistake-drill-result-after-resume
 PASS: mistake drill answer page: Guessed halves the fresh wait
-PASS: the resumed drill reopens the answered question blank
-PASS: confirming the same choice reveals the result with Guessed selected and records nothing
+PASS: the resumed drill reopens on the answered question
+PASS: the saved result is back on screen with Guessed selected and nothing new recorded
 PASS: T regrades the revealed result on the same attempt
 
 11-mistake-drill-review-regraded
 PASS: the resumed drill moves on to the other question
 PASS: mistake-drill review shows the chips with the saved Guessed and the moved window
 PASS: opening the mistake-drill review writes nothing
-PASS: G unpicks it and the window returns to the saved 3 d (it was 2 d)
+PASS: G unpicks it and the window returns to the saved 7 d (it was 4 d)
 PASS: no layout movement in the drill review
-PASS: F selects Forgot something: 3 d then 1 d, stored as tomorrow
+PASS: F selects Forgot something: 7 d then 1 d, stored as tomorrow
 PASS: the drill regrade adds no attempt, XP, solve, or ladder step
 
 12-mistake-book-after-regrade
