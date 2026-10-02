@@ -384,7 +384,7 @@ var rightHtml = elFor('mistakes-root').innerHTML;
 var rightChoice = choiceAttrs(rightHtml, rightPick);
 assert(rightChoice && rightChoice.pressed === 'true' && /is-answer/.test(rightChoice.cls),
   'resumed correct question shows the saved choice');
-assert(/feedback-good/.test(rightHtml) && /Correct —/.test(rightHtml),
+assert(/feedback-good/.test(rightHtml) && /<strong>Correct/.test(rightHtml),
   'resumed correct question shows the correct verdict');
 assert(rightHtml.indexOf(qRight.sol) !== -1, 'resumed question reuses the stored solution');
 assert(!/blank again|hidden for recall|View saved answer|Leave and come back/.test(rightHtml),
@@ -648,12 +648,13 @@ function scriptToken(file) {
 assert(scriptToken('js/srs.js') === '20261002a', 'srs.js cache token is 20261002a, got ' + scriptToken('js/srs.js'));
 assert(scriptToken('js/gamify.js') === '20261002a', 'gamify.js cache token is 20261002a, got ' + scriptToken('js/gamify.js'));
 assert(scriptToken('js/view-practice.js') === '20261002d', 'view-practice.js cache token is 20261002d, got ' + scriptToken('js/view-practice.js'));
-assert(scriptToken('js/view-mistakes.js') === '20261002c', 'view-mistakes.js cache token is 20261002c, got ' + scriptToken('js/view-mistakes.js'));
+assert(scriptToken('js/view-mistakes.js') === '20261002d', 'view-mistakes.js cache token is 20261002d, got ' + scriptToken('js/view-mistakes.js'));
 assert(scriptToken('js/app.js') === '20261002d', 'app.js cache token is 20261002d, got ' + scriptToken('js/app.js'));
 assert(indexHtml.indexOf('js/srs.js?v=20261001j') < 0 &&
        indexHtml.indexOf('js/gamify.js?v=20260918c') < 0 &&
        indexHtml.indexOf('js/view-practice.js?v=20261002c') < 0 &&
        indexHtml.indexOf('js/view-mistakes.js?v=20261002b') < 0 &&
+       indexHtml.indexOf('js/view-mistakes.js?v=20261002c') < 0 &&
        indexHtml.indexOf('js/app.js?v=20261002c') < 0,
   'the pre-fix cache tokens are gone');
 
