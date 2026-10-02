@@ -127,6 +127,19 @@ async function helpers(page) {
     }));
   }
 
+  /* What the strip must read for these chips, taken from the shared rule
+     (srs.assessWaitDays) and the answer's saved base, so a chip's effect on
+     the date is never restated here. */
+  async function expected(qid, chips) {
+    return JSON.parse(await page.eval('() => { var flags = {};' +
+      JSON.stringify(chips) + '.forEach(function (k) { flags[k] = true; });' +
+      'var mk = PGRE.store.state.mistakes[' + JSON.stringify(qid) + '];' +
+      'var base = PGRE.srs.daysUntil(mk.srs.baseDue || mk.srs.due);' +
+      'var days = PGRE.srs.assessWaitDays(base, flags);' +
+      'return JSON.stringify({ days: days, to: PGRE.srs.ivlLabel(days),' +
+      '  from: days === base ? "" : PGRE.srs.ivlLabel(base), moved: days !== base }); }'));
+  }
+
   async function openReview(qid) {
     var n = await page.eval(function () { return document.querySelectorAll('[data-review]').length; });
     for (var i = 0; i < n; i++) {
@@ -146,7 +159,7 @@ async function helpers(page) {
   }
 
   return { sleep: sleep, URL: URL, IDS: IDS, assert: assert, wait: wait, click: click, inject: inject,
-    onScreen: onScreen, answer: answer, state: state, panel: panel, openReview: openReview, frame: frame };
+    onScreen: onScreen, answer: answer, state: state, panel: panel, expected: expected, openReview: openReview, frame: frame };
 }
 
 var STAGES = [
@@ -264,7 +277,7 @@ var STAGES = [
     await h.frame();
   } },
 
-  { shot: '05-practice-review-keep-failing-and-knew-it', run: async function (page, h) {
+  { shot: '05-practice-review-keep-failing-confirmed', run: async function (page, h) {
     await page.press('Escape');
     var p = await h.panel();
     h.assert(!p.confirmOpen && await page.eval('!!document.getElementById("review-summary")'),
@@ -273,11 +286,17 @@ var STAGES = [
     await page.press('Enter');
     p = await h.panel();
     var s = await h.state();
-    h.assert(p.on === 'stuck' && s.mk['rr-a'].stuck && p.to === '3 d' && p.from === '',
-      'confirmed Keep failing flags the problem and leaves the review window at 3 d');
+    var want = await h.expected('rr-a', ['stuck']);
+    h.assert(p.on === 'stuck' && s.mk['rr-a'].stuck && p.to === want.to && p.from === want.from &&
+      p.moved === want.moved && s.mk['rr-a'].days === want.days && p.banner === want.to,
+      'confirmed Keep failing flags the problem and the window follows the shared rule (' +
+        (want.from ? want.from + ' then ' : '') + want.to + ')');
     await page.press('k');
-    p = await h.panel();
-    h.assert(p.on === 'sure,stuck' && p.to === '3 d' && !p.moved, 'K adds Knew it and the window stays 3 d');
+    p = await h.panel(); s = await h.state();
+    want = await h.expected('rr-a', ['sure', 'stuck']);
+    h.assert(p.on === 'sure,stuck' && p.to === want.to && p.from === want.from && p.moved === want.moved &&
+      s.mk['rr-a'].days === want.days,
+      'K adds Knew it and the window still follows the shared rule (' + want.to + ')');
     await h.frame();
   } },
 
@@ -336,7 +355,9 @@ var STAGES = [
       'chip keys on the results page change nothing');
     await h.openReview('rr-a');
     var p = await h.panel();
-    h.assert(p.on === 'sure,stuck' && p.to === '3 d', 'reopening a regraded question paints what was saved');
+    var want = await h.expected('rr-a', ['sure', 'stuck']);
+    h.assert(p.on === 'sure,stuck' && p.to === want.to && p.from === want.from,
+      'reopening a regraded question paints what was saved');
     h.assert(s.attempts === base.attempts && s.diskAttempts === base.attempts && s.xp === base.xp && s.diskXp === base.xp,
       'after every practice regrade: still four attempts and the same XP, in memory and on disk');
     await h.frame();
