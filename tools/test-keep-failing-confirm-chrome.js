@@ -45,7 +45,50 @@ async function browserTest() {
     });
   }
 
+  async function installWriteProbe() {
+    await page.eval(function () {
+      if (window.__writeProbe) return;
+      window.__writeProbe = { markStuck: 0, unmarkStuck: 0, setLastAssess: 0,
+        markLucky: 0, unmarkLucky: 0, clearLucky: 0 };
+      Object.keys(window.__writeProbe).forEach(function (name) {
+        var orig = PGRE.srs[name];
+        PGRE.srs[name] = function () {
+          window.__writeProbe[name]++;
+          return orig.apply(this, arguments);
+        };
+      });
+    });
+  }
+
+  async function writeProbe() {
+    return page.eval(function () { return JSON.stringify(window.__writeProbe); });
+  }
+
+  function probeClean(json) {
+    var counts = JSON.parse(json);
+    return counts.markStuck === 0 && counts.unmarkStuck === 0 && counts.setLastAssess === 0 &&
+      counts.markLucky === 0 && counts.unmarkLucky === 0 && counts.clearLucky === 0;
+  }
+
+  async function tabOutOfConfirm() {
+    for (var i = 0; i < 8; i++) {
+      var inside = await page.eval(function () {
+        var confirmation = document.getElementById('assess-stuck-confirm');
+        return !!(confirmation && confirmation.contains(document.activeElement));
+      });
+      if (!inside) return;
+      await page.press('Tab');
+    }
+    throw new Error('Tab did not leave the Keep failing reminder');
+  }
+
   await page.open(process.env.PGRE_CONFIRM_TEST_URL);
+  var forcedRandom = process.env.PGRE_CONFIRM_RANDOM;
+  if (forcedRandom != null && forcedRandom !== '') {
+    var randomValue = Number(forcedRandom);
+    if (randomValue !== randomValue) throw new Error('PGRE_CONFIRM_RANDOM is not a number');
+    await page.eval('() => { var v = ' + randomValue + '; Math.random = function () { return v; }; }');
+  }
   await wait('#main');
   await page.eval(function () {
     PGRE.store.state.settings.keyboard = true;
@@ -92,6 +135,33 @@ async function browserTest() {
   assert(await pending() && await progress() === before, 'R opens the same confirmation without flagging');
   await page.press('Escape');
   assert(!await pending() && await progress() === before, 'Escape cancels without flagging');
+
+  await click('[data-assess="stuck"]');
+  await click('[data-assess="slow"]');
+  var afterSlow = await progress();
+  assert(await pending() && await page.eval(function () {
+    return document.querySelector('[data-assess="slow"]').getAttribute('aria-pressed') === 'true' &&
+      document.querySelector('[data-assess="stuck"]').getAttribute('aria-pressed') === 'false';
+  }), 'Too slow is recorded while the reminder stays open');
+  await page.press('Escape');
+  assert(!await pending() && await progress() === afterSlow, 'Escape after Too slow dismisses the reminder without further writes');
+  assert(await page.eval(function () {
+    return document.querySelector('[data-assess="slow"]').getAttribute('aria-pressed') === 'true' &&
+      document.querySelector('[data-assess="stuck"]').getAttribute('aria-pressed') === 'false';
+  }), 'Escape keeps the Too slow assessment and does not flag Keep failing');
+  await click('[data-assess="slow"]');
+  assert(await progress() === before, 'clearing Too slow restores the original answer record');
+
+  await click('[data-assess="stuck"]');
+  var tabBefore = await progress();
+  await tabOutOfConfirm();
+  await page.press('Escape');
+  assert(!await pending() && await progress() === tabBefore,
+    'Escape after Tab leaves the reminder cancels it without flagging');
+  assert(await page.eval(function () {
+    return document.querySelector('[data-assess="stuck"]').getAttribute('aria-pressed') === 'false';
+  }), 'Tab then Escape does not mark Keep failing');
+
   await page.press('r');
   await page.press('r');
   await page.press('n');
@@ -118,13 +188,51 @@ async function browserTest() {
   await new Promise(function (resolve) { setTimeout(resolve, 350); });
   await click('#next-btn');
   await wait('.choice[data-idx="0"]');
+  await installWriteProbe();
+  var returnBefore = await progress();
   await page.press('ArrowLeft');
   await wait('[data-assess="stuck"]');
-  assert(!await pending() && await page.eval(function () {
-    return document.querySelector('[data-assess="stuck"]').getAttribute('aria-pressed') === 'true';
-  }), 're-rendering a previously flagged answer restores the chip without prompting');
+  assert(!await pending() && await progress() === returnBefore && probeClean(await writeProbe()) &&
+    await page.eval(function () {
+      return document.querySelector('[data-assess="stuck"]').getAttribute('aria-pressed') === 'true';
+    }), 'returning to a flagged answer restores the chip and leaves attempts and mistakes unchanged');
 
-  await page.eval(function () { location.hash = '#/mistakes'; });
+  await page.eval(function () {
+    Object.keys(PGRE.store.state.mistakes).forEach(function (qid) {
+      var mk = PGRE.store.state.mistakes[qid];
+      if (mk && mk.stuck) mk.archivedAt = '2026-10-01T00:00:00.000Z';
+    });
+    PGRE.store.save();
+  });
+  var archivedBefore = await progress();
+  var archivedWrites = await writeProbe();
+  await page.eval(function () { location.hash = '#/practice/all'; });
+  await wait('#practice-root h1');
+  assert(await progress() === archivedBefore && await writeProbe() === archivedWrites,
+    'leaving a flagged answer does not rewrite the archived mistake');
+  await page.eval(function () { location.hash = '#/practice/custom'; });
+  await wait('#resume-btn');
+  await click('#resume-btn');
+  await wait('[data-assess="stuck"]');
+  assert(!await pending() && await progress() === archivedBefore && await writeProbe() === archivedWrites,
+    'resuming flagged feedback leaves the attempt and the archived mistake unchanged');
+  assert(await page.eval(function () {
+    var archived = null;
+    Object.keys(PGRE.store.state.mistakes).forEach(function (qid) {
+      var mk = PGRE.store.state.mistakes[qid];
+      if (mk && mk.stuck) archived = mk;
+    });
+    return !!archived && archived.archivedAt === '2026-10-01T00:00:00.000Z' &&
+      document.querySelector('[data-assess="stuck"]').getAttribute('aria-pressed') === 'true';
+  }), 'resume paints Keep failing and does not reopen the archived entry');
+  await page.eval(function () {
+    Object.keys(PGRE.store.state.mistakes).forEach(function (qid) {
+      var mk = PGRE.store.state.mistakes[qid];
+      if (mk && mk.archivedAt === '2026-10-01T00:00:00.000Z') mk.archivedAt = null;
+    });
+    PGRE.store.save();
+    location.hash = '#/mistakes';
+  });
   await wait('[data-drill-one]');
   await click('[data-drill-one]');
   await wait('.choice[data-idx="1"]');
@@ -148,11 +256,17 @@ async function browserTest() {
   assert(!await pending(), 'restoring a mistake-drill result never opens the reminder');
 
   await page.eval(function () {
-    var now = new Date().toISOString();
+    var now = '2026-10-01T00:00:00.000Z';
+    var today = PGRE.srs.today();
+    PGRE.store.state.mistakes['keep-failing-first'] = {
+      firstMissedAt: now, lastMissedAt: now, misses: 2, solves: 0,
+      wrongPicks: [1], lastPick: 1, archivedAt: null, stuck: true,
+      srs: { step: 1, due: today }
+    };
     PGRE.store.state.mistakes['keep-failing-second'] = {
       firstMissedAt: now, lastMissedAt: now, misses: 1, solves: 0,
       wrongPicks: [1], lastPick: 1, archivedAt: null,
-      srs: { step: 0, due: PGRE.srs.today() }
+      srs: { step: 0, due: today }
     };
     PGRE.store.save();
     location.hash = '#/mistakes';

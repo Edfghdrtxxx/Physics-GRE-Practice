@@ -581,6 +581,8 @@ PGRE.assess = (function () {
       '</div>';
   }
 
+  var pendingEscape = null;
+
   function bindStuckConfirm(container) {
     var confirmation = container.querySelector('#assess-stuck-confirm');
     var source = null, onConfirm = null;
@@ -592,6 +594,18 @@ PGRE.assess = (function () {
         if (source.isConnected) source.focus();
       }
       onConfirm = null;
+    }
+
+    function onPendingEscape(e) {
+      if (!confirmation.isConnected) {
+        document.removeEventListener('keydown', onPendingEscape, true);
+        if (pendingEscape === onPendingEscape) pendingEscape = null;
+        return;
+      }
+      if (e.key !== 'Escape' || confirmation.hidden) return;
+      e.preventDefault();
+      e.stopPropagation();
+      close();
     }
 
     if (confirmation) {
@@ -609,6 +623,9 @@ PGRE.assess = (function () {
           close();
         }
       });
+      if (pendingEscape) document.removeEventListener('keydown', pendingEscape, true);
+      pendingEscape = onPendingEscape;
+      document.addEventListener('keydown', onPendingEscape, true);
     }
 
     return function (button, action) {
@@ -635,15 +652,16 @@ PGRE.assess = (function () {
     return h;
   }
 
-  /* Wire a freshly rendered row for question q. requestToggle is the click /
-     shortcut path; toggle also restores saved assessments without a prompt. */
+  /* Wire a freshly rendered row for question q. requestToggle is the click
+     and shortcut path (Keep failing asks first). hydrate paints a saved row
+     and does not write; toggle is the only path that files or saves. */
   function bind(container, q, isCorrect) {
     var row = container.querySelector('#assess-row');
-    if (!row) return { toggle: function () {}, requestToggle: function () {} };
+    if (!row) return { toggle: function () {}, requestToggle: function () {}, hydrate: function () {} };
     var on = { sure: false, guess: false, slow: false, forgot: false, stuck: false };
     var luckyFiled = false, stuckFiled = false;
     var stuckButton = row.querySelector('[data-assess="stuck"]');
-    var controller = { toggle: toggle, requestToggle: requestToggle };
+    var controller = { toggle: toggle, requestToggle: requestToggle, hydrate: hydrate };
     var requestStuck = bindStuckConfirm(container);
 
     function requestToggle(key) {
@@ -676,6 +694,22 @@ PGRE.assess = (function () {
       if (on.forgot) tags.push('forgot');
       if (on.stuck) tags.push('stuck');
       PGRE.srs.setLastAssess(q.id, conf, tags);
+    }
+
+    /* Saved chips only. Mirrors toggle's mutual exclusion and remembers which
+       filings already exist so a later tap does not re-file them. */
+    function hydrate(flags) {
+      flags = flags || {};
+      Object.keys(on).forEach(function (k) { on[k] = false; });
+      Object.keys(on).forEach(function (k) {
+        if (!flags[k]) return;
+        on[k] = true;
+        if (k === 'sure') on.guess = false;
+        if (k === 'guess') on.sure = false;
+      });
+      luckyFiled = !!(isCorrect && on.guess);
+      stuckFiled = !!on.stuck;
+      paint();
     }
 
     function toggle(key) {
