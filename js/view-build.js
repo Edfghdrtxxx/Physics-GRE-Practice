@@ -184,9 +184,8 @@ PGRE.views.build = (function () {
   function render(params) {
     var ui = PGRE.ui;
     var html = '<div class="card page-head"><h1>Custom quiz</h1>' +
-      '<p class="muted">Assemble a practice set the way UWorld does — pick topics, ' +
-      'difficulty and status, then start. Nothing is timed here; misses still feed the ' +
-      '<a href="#/mistakes">mistake book</a>.</p></div>';
+      '<p class="muted">Pick topics, difficulty and status, then start. Untimed; misses ' +
+      'go to the <a href="#/mistakes">mistake book</a>.</p></div>';
 
     html += '<div class="card build-section"><h2>Topics</h2>' +
       '<p class="muted">Leave all off for a mix across every topic.</p>' +

@@ -446,9 +446,8 @@ PGRE.views.analytics = (function () {
       var agg = aggregate();
 
       var head = '<div class="card page-head"><h1>Analytics &amp; trends</h1>' +
-        '<p class="muted">Where your practice is going — accuracy over time, the topics costing you ' +
-        'the most points, your pace against the ' + target + '-second budget, and how often you show up. ' +
-        'Everything here is computed from your own answer log.</p></div>';
+        '<p class="muted">Accuracy over time, the topics costing the most points, and your pace ' +
+        'against the ' + target + '-second budget. Built from your own answer log.</p></div>';
 
       // Fresh, data-less profile → one friendly prompt, nothing to chart.
       if (agg.total === 0 && (!s.exams || !s.exams.filter(function (x) { return x.submittedAt; }).length)) {

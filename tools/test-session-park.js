@@ -647,9 +647,9 @@ function scriptToken(file) {
 }
 assert(scriptToken('js/srs.js') === '20261002c', 'srs.js cache token is 20261002c, got ' + scriptToken('js/srs.js'));
 assert(scriptToken('js/gamify.js') === '20261002b', 'gamify.js cache token is 20261002b, got ' + scriptToken('js/gamify.js'));
-assert(scriptToken('js/view-practice.js') === '20261002e', 'view-practice.js cache token is 20261002e, got ' + scriptToken('js/view-practice.js'));
-assert(scriptToken('js/view-mistakes.js') === '20261002f', 'view-mistakes.js cache token is 20261002f, got ' + scriptToken('js/view-mistakes.js'));
-assert(scriptToken('js/app.js') === '20261002f', 'app.js cache token is 20261002f, got ' + scriptToken('js/app.js'));
+assert(scriptToken('js/view-practice.js') === '20261003a', 'view-practice.js cache token is 20261003a, got ' + scriptToken('js/view-practice.js'));
+assert(scriptToken('js/view-mistakes.js') === '20261003a', 'view-mistakes.js cache token is 20261003a, got ' + scriptToken('js/view-mistakes.js'));
+assert(scriptToken('js/app.js') === '20261003a', 'app.js cache token is 20261003a, got ' + scriptToken('js/app.js'));
 assert(indexHtml.indexOf('js/srs.js?v=20261001j') < 0 &&
        indexHtml.indexOf('js/srs.js?v=20261002a') < 0 &&
        indexHtml.indexOf('js/gamify.js?v=20260918c') < 0 &&

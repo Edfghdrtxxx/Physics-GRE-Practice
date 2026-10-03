@@ -171,9 +171,8 @@ PGRE.views.history = (function () {
       var openMistakes = PGRE.srs.openMistakes().length;
 
       var html = '<div class="card page-head"><h1>History</h1>' +
-        '<p class="muted">Every answer you have ever given, kept for good — which question, ' +
-        'what you picked, and how long it took. Misses feed the ' +
-        '<a href="#/mistakes">mistake book</a>.</p></div>';
+        '<p class="muted">Every answer you have given: the question, your pick and the time ' +
+        'taken. Misses go to the <a href="#/mistakes">mistake book</a>.</p></div>';
 
       html += '<div class="stat-row">' +
         ui.statTile('Attempts logged', ui.fmt(total)) +

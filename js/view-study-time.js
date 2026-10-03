@@ -564,10 +564,8 @@ PGRE.views.studytime = (function () {
 
   function render() {
     var head = '<div class="card page-head"><h1>Study time</h1>' +
-      '<p class="muted">A deeper look at how much you show up — active minutes, weekly hours against ' +
-      'the 20 h target, your longest streaks, and time logged on the focus timer. Everything here is ' +
-      'computed from your own local activity; there is no per-topic breakdown because this data is ' +
-      'day-level only.</p></div>';
+      '<p class="muted">Active minutes, weekly hours against the 20 h target, streaks and ' +
+      'focus-timer time. Counted per day, so there is no per-topic split.</p></div>';
 
     return head +
       tilesHTML() +

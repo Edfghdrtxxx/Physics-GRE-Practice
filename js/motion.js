@@ -278,13 +278,30 @@
     el.appendChild(el.ownerDocument.createTextNode(flat));
   }
 
-  function buildSwap(label) {
+  /* byWord (page titles): the glyphs of each word share one unbreakable
+     box and the spaces between words stay ordinary text, so a long title
+     wraps at its spaces. Without it (nav labels) the whole label is one
+     unbreakable row and a space is a cell like any glyph. */
+  function buildSwap(label, byWord) {
     var wrap = document.createElement('span');
-    wrap.className = 'letter-swap';
+    wrap.className = byWord ? 'letter-swap letter-swap-wrap' : 'letter-swap';
     wrap.setAttribute('aria-hidden', 'true');
+    var host = wrap;
     var i, ch, cell, spacer, primary, secondary;
     for (i = 0; i < label.length; i++) {
       ch = label.charAt(i);
+      if (byWord) {
+        if (ch === ' ' || ch === '\n' || ch === '\t' || ch === '\r') {
+          wrap.appendChild(document.createTextNode(' '));
+          host = wrap;
+          continue;
+        }
+        if (host === wrap) {
+          host = document.createElement('span');
+          host.className = 'letter-swap-word';
+          wrap.appendChild(host);
+        }
+      }
       cell = document.createElement('span');
       cell.className = 'letter-swap-cell';
       spacer = document.createElement('span');
@@ -299,7 +316,7 @@
       cell.appendChild(spacer);
       cell.appendChild(primary);
       cell.appendChild(secondary);
-      wrap.appendChild(cell);
+      host.appendChild(cell);
     }
     return wrap;
   }
@@ -368,7 +385,7 @@
     safety = setTimeout(finish, SWAP_MS + Math.max(0, n - 1) * SWAP_STAGGER + 48);
   }
 
-  function enhanceSwapEl(el) {
+  function enhanceSwapEl(el, byWord) {
     if (!el || el.getAttribute('data-letter-swap') === '1') return;
     var node = firstLabelTextNode(el);
     if (!node) return;
@@ -377,7 +394,7 @@
     var parent = node.parentNode;
     if (!parent || !parent.insertBefore) return;
     el.setAttribute('data-letter-swap', '1');
-    var wrap = buildSwap(label);
+    var wrap = buildSwap(label, byWord);
     var sr = document.createElement('span');
     sr.className = 'letter-swap-sr';
     sr.textContent = label;
@@ -420,7 +437,7 @@
       if (el.querySelector && el.querySelector('.katex')) continue;
       text = String(el.textContent || '').replace(/\s+/g, ' ').trim();
       if (SKIP_TITLE_TEXT.test(text)) continue;
-      enhanceSwapEl(el);
+      enhanceSwapEl(el, true);
     }
   };
 
