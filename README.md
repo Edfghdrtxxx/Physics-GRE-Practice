@@ -20,11 +20,11 @@ on `file://` pages — the local server is the reliable way.)
 
 | Page | What it does |
 |---|---|
-| **Dashboard** | Today first: greeting, exam countdown, and four launchers (mixed practice, mistake book, formula study, next mock); this week's plan tasks with a Start button; a collapsed Progress panel (level, XP, streak, stat tiles, daily challenges, question of the day, readiness, achievements); topic portals and recent activity |
+| **Dashboard** | Today first: greeting, exam countdown, an eight-week prep runway, one Next up launcher (mixed practice) and three tiles (mistake book, recall review, next mock); this week's plan tasks with a Start button; a collapsed Progress panel (level, XP, streak, stat tiles, daily challenges, question of the day, readiness, achievements); study time beside recent activity; topic portals |
 | **Knowledge portals** (×9) | One per exam topic with official weights (CM 20% … LM 6%): mastery/accuracy stats, subtopic map, practice launcher, and a Notes section that renders imported book chapters (markdown + KaTeX, offline) |
 | **Practice** | GRE-style 5-choice questions with instant feedback, worked solutions, and XP — all math written in LaTeX and typeset offline by KaTeX. Mixed pool of ~366 questions: 20 preview + 146 *Conquering the Physics GRE* chapter problems + 200 drills from the two oldest released ETS forms (GR8677/GR9277) |
 | **History** | Every answer ever given, kept for good: question, your pick vs. the correct one, time taken, and its session. Session list + filterable attempt log |
-| **Mistake book** | Every missed question with your wrong pick beside the solution. Re-drillable anytime; resurfaced on a spaced-repetition ladder (1→3→7→14→30→60 days). Solving never removes an entry — only your manual Archive does |
+| **Mistake book** | Every missed question with your wrong pick beside the solution. Re-drillable anytime; resurfaced on a spaced-repetition ladder (1→3→7→14→30→60 days). Solving never removes an entry — only your manual Archive does. Entries list collapsed under Due now and Coming up, 20 at a time |
 | **Formula recall** | Flip cards: recall, flip, self-grade Again/Hard/Good/Easy → SM-2 intervals and a daily due queue. 463 cards: 337 extracted from the book, 66 supplemental, 60 book recall lists. One Study button on landing; Match/Type/Cloze/Quiz drills, the daily check-in, and interval settings sit behind Options; agent learning status export in-progress and at checkout |
 | **Study plan** | Sep 14 → Nov 1 · 7 live weeks · ~16 h/wk · generated from the vault syllabus via tools/build-plan.js · each timed set has a Start button and is ticked automatically when finished |
 | **Achievements** | 80 achievements across 10 categories, 7 secret |

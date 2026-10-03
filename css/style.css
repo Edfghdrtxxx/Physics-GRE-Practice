@@ -1339,7 +1339,10 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 .hist-mark { font-weight: 700; min-width: 14px; }
 .hist-mark.is-good { color: var(--good); }
 .hist-mark.is-bad { color: var(--bad); }
-.hist-q { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* position: relative makes the clip also catch KaTeX's hidden MathML copies
+   (absolutely positioned); unclipped, the ones past the row's end widened
+   the whole page. */
+.hist-q { position: relative; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hist-pick { color: var(--ink-2); white-space: nowrap; min-width: 54px; }
 .hist-ms { color: var(--ink-3); font-size: 12.5px; white-space: nowrap; min-width: 44px; text-align: right; }
 .hist-when { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
@@ -5509,6 +5512,680 @@ button.btn-ok {
   #today-agenda.today-agenda-shell .hero { flex-direction: column; align-items: stretch; }
   #today-agenda.today-agenda-shell .countdown { border-left: 0; border-top: 1px solid var(--line); padding: 14px 0 0; }
   .today-agenda-shell .rq-row { min-height: 68px; padding: 12px; }
+}
+
+/* ==================================================================
+   STUDIO PASS (2026-10-03)
+   One more turn of the same identity: cream floor, warm ink, one coral,
+   Newsreader for display, Inter for running text, JetBrains Mono for
+   codes and counts. What changes is rhythm and hierarchy:
+   1. A shared kicker (small uppercase label) names every band and tile,
+      so a heading never has to say what kind of thing it is.
+   2. Display numerals and status lines use the serif; labels stay sans.
+   3. Sidebar groups follow the study day (Today, Practice, Review,
+      Reference) and every destination has its own glyph.
+   4. On phones the top bar is one row.
+   Later blocks in this pass cover the Practice room, Recall landing and
+   Mistake book.
+   ================================================================== */
+:root {
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --fs-cap: 12.5px;
+  --fs-sm: 13.5px;
+}
+
+/* 1. Kicker */
+.kicker,
+.rq-kicker,
+#today-agenda .today-kicker {
+  display: block;
+  margin: 0;
+  font: 600 11px/1.3 var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+/* Band head: kicker + title on the left, one quiet link on the right. */
+.band-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+.band-head-copy { min-width: 0; }
+.band-head h2 { margin: 6px 0 0; }
+.card .band-head .band-head-link { margin: 0; flex: none; }
+.band-head-note { font-size: var(--fs-cap); color: var(--ink-2); white-space: nowrap; }
+.band-head.section-head { align-items: baseline; margin: 36px 0 14px; }
+.band-head.section-head .section-title { margin: 0; }
+
+/* 2. Shell — sidebar */
+#sidebar { width: 264px; min-width: 264px; padding: 24px 12px 14px; }
+.brand { padding: 0 12px 22px; }
+.brand-name { font-size: 22px; letter-spacing: -0.2px; }
+.brand-sub { font-size: 11.5px; margin-top: 3px; }
+.nav-tree { gap: 0; }
+.nav-tree-group + .nav-tree-group { margin-top: 8px; }
+.nav-tree-toggle {
+  padding: 6px 10px;
+  font: 600 10.5px/1.2 var(--sans);
+  letter-spacing: 0.09em;
+}
+.nav-tree-items { padding: 2px 0 4px 14px; }
+.nav-tree-items::before { bottom: 18px; }
+#sidebar-nav a { min-height: 32px; padding: 5px 10px; font-size: 13.5px; gap: 10px; }
+#sidebar-nav a .nav-icon { color: var(--ink-3); transition: color .15s; }
+#sidebar-nav a:hover .nav-icon { color: var(--ink-2); }
+#sidebar-nav a.active .nav-icon { color: var(--accent-deep); }
+/* Topic links lead with the monogram in the icon column. */
+#sidebar-nav .nav-mono {
+  flex: 0 0 auto;
+  min-width: 26px;
+  margin: 0;
+  padding: 2px 4px;
+  font: 500 9.5px/1.3 var(--mono);
+  letter-spacing: 0.03em;
+  color: var(--ink-2);
+}
+#sidebar-nav a.active .nav-mono { background: var(--surface); color: var(--accent-deep); }
+.nav-weight { font-family: var(--mono); font-size: 10.5px; }
+.nav-badge-due {
+  font: 500 10px/1.4 var(--mono);
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 1px 7px;
+}
+/* Due badges carry the top bar's editorial text shimmer: a coral ribbon
+   crosses the ink label, then the label rests in plain ink. The pill does
+   not move. Two background layers: the ribbon, clipped to the glyphs, and
+   an empty one that keeps the pill's own colour on the whole box. The
+   ribbon enters and leaves outside the label, so no frame cuts it.
+   PGRE.refreshNavBadges puts every badge on the same beat. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports ((-webkit-background-clip: text, border-box) or (background-clip: text, border-box)) {
+    .nav-badge-due {
+      background-image: linear-gradient(105deg,
+        var(--ink) 0%,
+        var(--ink) 42%,
+        var(--accent) 50%,
+        var(--ink) 58%,
+        var(--ink) 100%), none;
+      background-size: 300% 100%, auto;
+      background-repeat: no-repeat;
+      -webkit-background-clip: text, border-box;
+      background-clip: text, border-box;
+      color: transparent;
+      -webkit-text-fill-color: transparent;
+      animation: due-shimmer 2.2s linear infinite;
+    }
+  }
+}
+@keyframes due-shimmer {
+  from { background-position: 100% 0, 0 0; }
+  to   { background-position: 0% 0, 0 0; }
+}
+
+/* 2b. Shell — top bar */
+.topbar-inner { padding-top: 9px; padding-bottom: 9px; }
+/* Profile chip: which stored profile this tab reads (state is per origin).
+   A hairline pill in the bar's control language: icon, kicker, short name.
+   It is shown whole or not at all. #origin-line is a one-row wrapping box
+   that gives up its width before the page trail has to wrap; the moment the
+   pill no longer fits, it moves to a second row that the fixed height hides. */
+.origin-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  flex: 0 1000000 auto;
+  min-width: 0;
+  max-width: none;
+  height: 22px;
+  overflow: hidden;
+  cursor: default;
+}
+.origin-line::before { content: ""; flex: none; width: 0; height: 22px; }
+.origin-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  box-sizing: border-box;
+  height: 22px;
+  padding: 0 9px 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  line-height: 1;
+}
+.origin-ico {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.origin-kicker {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.origin-name {
+  white-space: nowrap;
+  font: 500 11px/1.3 var(--sans);
+  color: var(--ink-2);
+}
+.origin-name.is-host { font: 500 10.5px/1.3 var(--mono); }
+@media (max-width: 1180px) {
+  .origin-kicker { display: none; }
+}
+/* An unfinished-session button and today's time do not both fit beside the
+   timer below this width; the time is also on the Dashboard and Study time. */
+@media (max-width: 940px) {
+  .topbar-inner:has(.session-park:not([hidden])) .today-learn { display: none; }
+}
+@media (max-width: 860px) {
+  .topbar-inner { flex-wrap: nowrap; gap: 6px; }
+  .breadcrumbs {
+    flex: 1 1 auto;
+    flex-basis: auto;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .origin-line,
+  .today-learn { display: none; }
+  .topbar-arrow { width: 40px; height: 40px; }
+}
+@media (max-width: 560px) {
+  .topbar-inner { padding: 6px 12px; }
+  .topbar-arrows,
+  .breadcrumbs { display: none; }
+  .topbar-brand { flex: 1 1 auto; padding-left: 4px; }
+  .focus-label { display: none; }
+  .focus-toggle { padding-inline: 12px; }
+  .parked-btn { height: 34px; }
+}
+
+/* 3. Dashboard — Today band */
+#today-agenda.today-agenda-shell { padding: 30px 32px 28px; }
+#today-agenda.today-agenda-shell .hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--sp-5);
+  margin-bottom: 0;
+}
+#today-agenda .today-kicker { margin-bottom: 10px; }
+#today-agenda h1.today-greet { font-size: 46px; line-height: 1.02; letter-spacing: -0.9px; }
+.today-agenda-shell .today-lead { margin-top: 12px; max-width: 44ch; font-size: 15px; }
+#today-agenda.today-agenda-shell .countdown { padding: 0 0 2px 28px; }
+#today-agenda .countdown-num {
+  font-size: 68px;
+  line-height: 0.9;
+  letter-spacing: -1.6px;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+#today-agenda .countdown-label { margin-top: 10px; font-size: var(--fs-cap); }
+
+/* Prep runway: one segment per plan week. */
+.runway { margin-top: 26px; }
+.runway-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+.runway-wk {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent-track);
+  outline-offset: 4px;
+}
+.runway-wk::after { content: ""; position: absolute; inset: -9px 0; }
+/* The Recall band's coral pair: finished weeks soft, the current week full. */
+.runway-wk.is-past { background: var(--heat-2); }
+.runway-wk.is-now {
+  background: linear-gradient(to right, var(--accent) var(--wk-fill, 50%), var(--accent-track) var(--wk-fill, 50%));
+}
+.runway-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-top: 9px;
+  font-size: var(--fs-cap);
+  color: var(--ink-2);
+}
+
+/* Next up + three tiles */
+.today-agenda-shell .rq-rows {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+.today-agenda-shell .rq-row.rq-primary {
+  grid-column: 1 / -1;
+  min-height: 0;
+  padding: 20px 22px;
+  background: var(--surface);
+}
+.today-agenda-shell .rq-row-copy { gap: 4px; }
+.today-agenda-shell .rq-primary .rq-label {
+  font: 400 26px/1.15 var(--serif);
+  letter-spacing: -0.3px;
+}
+.today-agenda-shell .rq-primary .rq-count { font-size: var(--fs-sm); }
+.today-agenda-shell .rq-row.rq-tile {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  min-height: 176px;
+  padding: 18px;
+}
+.today-agenda-shell .rq-tile .rq-row-copy { gap: 6px; }
+.today-agenda-shell .rq-status {
+  display: block;
+  font: 400 23px/1.2 var(--serif);
+  letter-spacing: -0.2px;
+  color: var(--ink);
+  font-variant-numeric: lining-nums;
+}
+.today-agenda-shell .rq-status::first-letter { text-transform: uppercase; }
+.today-agenda-shell .rq-tile .rq-count { font-size: 13px; line-height: 1.5; }
+.today-agenda-shell .rq-tile #formula-readiness { font-size: var(--fs-cap); color: var(--ink-2); }
+.today-agenda-shell .rq-tile .btn { margin: auto 0 0; align-self: flex-start; }
+
+@media (max-width: 860px) {
+  #today-agenda.today-agenda-shell { padding: 24px 20px 20px; }
+  #today-agenda h1.today-greet { font-size: 36px; }
+  #today-agenda .countdown-num { font-size: 56px; }
+}
+@media (max-width: 700px) {
+  .today-agenda-shell .rq-rows { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .today-agenda-shell .rq-row.rq-tile {
+    flex-direction: row;
+    align-items: center;
+    min-height: 0;
+    padding: 14px 16px;
+  }
+  .today-agenda-shell .rq-tile .btn { margin: 0 0 0 auto; align-self: center; }
+  .today-agenda-shell .rq-status { font-size: 20px; }
+}
+@media (max-width: 560px) {
+  #today-agenda.today-agenda-shell .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+  #today-agenda.today-agenda-shell .countdown { border-top: 0; border-left: 1px solid var(--line); padding: 0 0 2px 16px; }
+  #today-agenda h1.today-greet { font-size: 32px; }
+  #today-agenda .countdown-num { font-size: 48px; }
+  .today-agenda-shell .today-lead { grid-column: 1 / -1; }
+  .today-agenda-shell .rq-primary { flex-wrap: wrap; }
+  .today-agenda-shell .rq-primary .rq-label { font-size: 23px; }
+  .today-agenda-shell .rq-primary > .btn { flex: 1 1 100%; justify-content: center; }
+}
+
+/* This week */
+.dash-week .meter-chrome { margin-top: 20px; }
+.next-task-label { flex: 1 1 auto; min-width: 0; }
+.next-task-time {
+  flex: none;
+  font: 400 12px/1 var(--mono);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.next-tasks li .btn { margin-left: 4px; }
+
+/* Progress disclosure: the closed summary still says something. */
+.prog-sum-stats {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-2);
+  text-align: right;
+}
+.card.dashboard-progress > summary::after { margin-left: 8px; flex: none; }
+/* Inside the disclosure, sub-panels are sections, not boxes inside a box. */
+.dashboard-progress .card,
+.dashboard-progress .card.dash-qotd-card:hover {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  padding: 22px 0 4px;
+  margin: 22px 0 0;
+  transform: none;
+}
+
+/* Study time + recent activity share a row. */
+.dash-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.dash-pair > .card { margin-bottom: 0; }
+.dash-spark-empty { margin: 14px 0 0; }
+.activity-list li { align-items: center; gap: 12px; padding: 9px 0; }
+.act-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.act-dot.act-practice { background: var(--ink-2); }
+.act-dot.act-achievement { background: var(--gold); }
+.act-dot.act-level { background: var(--accent); }
+.act-dot.act-challenge { background: var(--good); }
+.act-dot.act-mistake { background: var(--bad); }
+.act-dot.act-review { background: var(--platinum); }
+.act-text { min-width: 0; }
+.act-time { font-variant-numeric: tabular-nums; }
+@media (max-width: 860px) {
+  .dash-pair { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Knowledge portals */
+.topic-grid { gap: 12px; }
+.topic-card { display: flex; flex-direction: column; padding: 16px 18px 18px; }
+.topic-card-head { margin-bottom: 12px; }
+.topic-card-name { min-height: 0; margin-bottom: 14px; font-size: 15.5px; line-height: 1.35; }
+.topic-card .meter { margin-top: auto; }
+.topic-grid > .topic-card { margin-bottom: 0; }
+/* Nine mastery bars in one band would spend coral nine times; the grid
+   reads in ink, and coral stays on the page's single live marker. */
+.topic-card .meter--width .meter-fill { background: var(--ink-2); }
+.mono {
+  font-family: var(--mono);
+  font-weight: 500;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  padding: 4px 8px;
+}
+.weight-chip { font: 400 11.5px/1 var(--mono); }
+
+/* 4. Practice room — choices
+   The letter is a small key cap; it fills ink when picked and takes the
+   verdict colour once answered. An answered choice also says in words what
+   it is, so the result never rests on colour alone. */
+.choice {
+  align-items: center;
+  gap: 14px;
+  padding: 11px 14px 11px 12px;
+  border-radius: 10px;
+}
+.choice-letter {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg);
+  font: 500 12px/1 var(--mono);
+  color: var(--ink-2);
+  transition: background .12s, border-color .12s, color .12s;
+}
+.choice-body { flex: 1 1 auto; min-width: 0; }
+.choice:hover:not(:disabled) .choice-letter { border-color: var(--ink-3); color: var(--ink); }
+.choice.is-picked .choice-letter { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.choice.is-answer .choice-letter { background: var(--good); border-color: var(--good); color: var(--bg); }
+.choice.is-wrong .choice-letter { background: var(--bad); border-color: var(--bad); color: var(--bg); }
+.choice.is-answer::after,
+.choice.is-wrong::after {
+  flex: none;
+  margin-left: auto;
+  padding-left: 8px;
+  font: 600 10.5px/1 var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.choice.is-answer::after { content: "Correct"; color: var(--good); }
+.choice.is-answer[aria-pressed="true"]::after { content: "Your pick · correct"; }
+.choice.is-wrong::after { content: "Your pick"; color: var(--bad); }
+
+.practice-meta > span:first-child { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.practice-card .q-text { font-size: 17px; line-height: 1.65; }
+.feedback { border-radius: 10px; }
+.solution { border-radius: 10px; }
+
+/* 5. Mistake book — a paged list of collapsed entries */
+.miss-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  margin: 18px 0 4px;
+}
+.miss-stat { display: inline-flex; align-items: baseline; gap: 7px; font-size: var(--fs-sm); color: var(--ink-2); }
+.miss-stat-num {
+  font: 400 26px/1 var(--serif);
+  color: var(--ink);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+/* Review ladder: its own line under the intro, numerals in ink. */
+.review-ladder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-top: 12px;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.ladder-kicker {
+  font: 600 11px/1.3 var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ladder-run {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  white-space: nowrap;
+}
+.ladder-step {
+  font-weight: 500;
+  font-variant-numeric: lining-nums tabular-nums;
+  color: var(--ink);
+}
+.ladder-arrow {
+  align-self: center;
+  width: 12px;
+  height: 8px;
+  flex: none;
+  fill: none;
+  stroke: var(--ink-3);
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+#miss-topic-row { margin-top: 18px; }
+.miss-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 28px 0 12px;
+  font: 600 11px/1.3 var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.miss-group-count { font: 500 11px/1 var(--mono); color: var(--ink-2); letter-spacing: 0; }
+.miss-card { padding: 16px 20px 6px; margin-bottom: 10px; }
+.miss-head .miss-meta { font-size: var(--fs-cap); }
+.miss-card .q-text {
+  margin: 12px 0 4px;
+  font-size: 15px;
+  line-height: 1.6;
+  max-height: 8em;
+  overflow: hidden;
+}
+.miss-card .q-text.is-clamped {
+  -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent);
+  mask-image: linear-gradient(to bottom, #000 62%, transparent);
+}
+.miss-card.is-open .q-text { max-height: none; overflow-x: auto; -webkit-mask-image: none; mask-image: none; }
+.miss-more { display: none; }
+.miss-card.is-open .miss-more { display: block; padding-top: 8px; }
+.miss-expand {
+  display: block;
+  width: calc(100% + 40px);
+  margin: 6px -20px 0;
+  padding: 10px 20px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  font: 500 12.5px/1.2 var(--sans);
+  color: var(--ink-2);
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+.miss-expand::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 9px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-3px);
+  transition: transform 150ms ease;
+}
+.miss-card.is-open .miss-expand::after { transform: rotate(-135deg) translate(-1px, -1px); }
+.miss-expand:hover { background: var(--ivory); color: var(--ink); }
+.miss-pager {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 18px 0 24px;
+}
+.miss-pager .btn { margin: 0; }
+.archived-block .miss-card { padding-bottom: 6px; }
+/* 6. Recall landing — the band is the masthead, the Today card is the
+   one place that says what to study, Options is a slim bar. */
+.card.formulas-options { padding: 12px 18px; }
+.card.formulas-options > summary { font-size: 13.5px; color: var(--ink-2); }
+.card.formula-recall-band {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 10px 0 22px;
+  margin-bottom: 22px;
+}
+.fr-kicker { margin-bottom: 10px; }
+.fr-usage-head { margin-bottom: 18px; align-items: flex-end; }
+.fr-usage-pct { font-size: 56px; line-height: 0.95; letter-spacing: -1.2px; margin-right: 6px; }
+.fr-usage-word { font-size: 16px; }
+.fr-usage-meta { font-size: var(--fs-sm); color: var(--ink-2); }
+.fr-usage-bar.meter { height: 10px; }
+.card.fm-landing { padding: 24px 26px; }
+.fm-landing .fm-today-title { font: 400 28px/1.15 var(--serif); letter-spacing: -0.3px; margin-bottom: 8px; }
+.fm-landing .fm-today-line { font-size: 14.5px; }
+.fm-ready {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.fm-ready p { flex: 1 1 auto; font-size: var(--fs-cap); line-height: 1.55; max-width: 62ch; }
+.card .fm-ready .btn { margin: 0; flex: none; }
+.fm-stats { margin-bottom: 16px; }
+@media (max-width: 560px) {
+  .fr-usage-pct { font-size: 44px; }
+  .fm-ready { flex-direction: column; align-items: flex-start; }
+  .fm-stats.stat-row-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .fm-stats .stat-tile { padding: 12px; }
+  .fm-stats .stat-label { font-size: 11.5px; }
+  .fm-stats .stat-value { font-size: 24px; }
+}
+
+.deck-topic { margin: 0; border-top: 1px solid var(--line); }
+.deck-topic:first-child { border-top: 0; }
+.deck-topic > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 2px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+}
+.deck-topic > summary::-webkit-details-marker { display: none; }
+.deck-topic-name { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; }
+.deck-topic-meta { font: 400 var(--fs-cap) var(--mono); color: var(--ink-2); flex: none; }
+.deck-topic > summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: none;
+  margin: 0 4px 3px 4px;
+  border-right: 1.5px solid var(--ink-2);
+  border-bottom: 1.5px solid var(--ink-2);
+  transform: rotate(45deg);
+  transition: transform 150ms ease;
+}
+.deck-topic[open] > summary::after { transform: rotate(-135deg); margin-bottom: -3px; }
+.deck-topic[open] { padding-bottom: 10px; }
+.card .browse-row .btn { margin-top: 0; }
+.browse-row { padding: 6px 0; }
+.deck-topic > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+/* 7. Small-text contrast. --ink-3 measures 3.0:1 on the cream floor and
+   --ink-2 4.48:1 on ivory chips, both under WCAG AA (4.5:1) for text this
+   small. The tokens keep their values for icons, bars and hairlines; these
+   text spots borrow --ink-meta instead (5.2:1 floor, 4.9:1 ivory; dark
+   theme maps it to its own --ink-2, 5.8:1). */
+:root { --ink-meta: #66645e; }
+:root[data-theme="dark"] { --ink-meta: #a09d96; }
+:where(.brand-sub, .nav-tree-toggle, .nav-weight, .origin-line, .focus-time,
+  .parked-dismiss, .meter-chrome-meta, .stat-unit, .dash-qotd-date, .practice-keys,
+  .key-hint, .act-time, .weight-chip, .week-meta, .task-meta, .week-links-label,
+  .hist-sess-when, .hist-sess-meta, .hist-ms, .hist-when, .challenge.done, .task.done,
+  .today-learn-kicker) { --ink-3: var(--ink-meta); }
+:where(.chip, .due-chip, .mono, .nav-mono, .week-badge, .task-meta, .dash-est-chip,
+  .today-agenda-shell) { --ink-2: var(--ink-meta); }
+
+/* Disclosure rows inside entries use the same chevron as the bands. */
+details.miss > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+}
+details.miss > summary::-webkit-details-marker { display: none; }
+details.miss > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-right: 1.5px solid var(--ink-2);
+  border-bottom: 1.5px solid var(--ink-2);
+  transform: rotate(-45deg);
+  transition: transform 150ms ease;
+}
+details.miss[open] > summary::before { transform: rotate(45deg) translate(-1px, -1px); }
+
+@media (max-width: 560px) {
+  .miss-card { padding: 14px 16px 4px; }
+  .miss-expand { width: calc(100% + 32px); margin-inline: -16px; padding-inline: 16px; }
+  .miss-actions { margin-left: 0; width: 100%; }
+  .miss-stats { gap: 8px 20px; }
 }
 
 

@@ -1104,19 +1104,31 @@ PGRE.route = function () {
 PGRE.refreshNavBadges = function () {
   var m = PGRE.srs.dueMistakes().length;
   var el = document.getElementById('nav-mist-due');
-  if (el) { el.textContent = m + ' due'; el.hidden = m === 0; }
+  if (el) { el.textContent = m + ' due'; el.hidden = m === 0; PGRE.syncBadgeShimmer(el); }
   PGRE.formulaDeck().then(function (deck) {
     var n = PGRE.srs.formulaDayRemaining(deck).length;
     var el2 = document.getElementById('nav-form-due');
-    if (el2) { el2.textContent = n + ' left'; el2.hidden = n === 0; }
+    if (el2) { el2.textContent = n + ' left'; el2.hidden = n === 0; PGRE.syncBadgeShimmer(el2); }
   });
+};
+
+/* The badges shimmer (`due-shimmer` in css/style.css) and appear at different
+   moments, so each sweep is counted from the page's time zero: every badge on
+   screen then moves in step. No-op where the animation is off or absent. */
+PGRE.syncBadgeShimmer = function (el) {
+  if (!el || el.hidden || typeof el.getAnimations !== 'function') return;
+  try {
+    el.getAnimations().forEach(function (a) {
+      if (a.animationName === 'due-shimmer') a.startTime = 0;
+    });
+  } catch (e) { /* the badge keeps its own beat */ }
 };
 
 PGRE.setActiveNav = function (view, params) {
   document.querySelectorAll('#sidebar a[data-nav]').forEach(function (a) {
     var key = a.getAttribute('data-nav');
     var active = key === view || (view === 'topic' && key === 'topic-' + params.id) ||
-                 (view === 'practice' && key === 'topic-' + params.id);
+                 (view === 'practice' && (key === 'topic-' + params.id || key === 'practice-' + params.id));
     a.classList.toggle('active', active);
     if (active) {
       a.setAttribute('aria-current', 'page');
@@ -1136,34 +1148,38 @@ PGRE.buildNav = function () {
     return PGRE.sidebarIcon ? PGRE.sidebarIcon(name) : '';
   };
   var items = {
-    workspace: [
+    today: [
       { href: '#/', key: 'dashboard', label: 'Dashboard', icon: 'home' },
-      { href: '#/plan', key: 'plan', label: 'Study plan', icon: 'book' },
-      { href: '#/history', key: 'history', label: 'History', icon: 'clock' },
-      { href: '#/analytics', key: 'analytics', label: 'Analytics', icon: 'chart' }
+      { href: '#/plan', key: 'plan', label: 'Study plan', icon: 'calendar' },
+      { href: '#/focus', key: 'focus', label: 'Focus timer', icon: 'timer' }
     ],
     practice: [
-      { href: '#/build', key: 'build', label: 'Custom quiz', icon: 'task' },
+      { href: '#/practice/all', key: 'practice-all', label: 'Mixed practice', icon: 'play' },
+      { href: '#/mistakes', key: 'mistakes', label: 'Mistake book', icon: 'mistake',
+        badge: 'nav-mist-due' },
+      { href: '#/formulas', key: 'formulas', label: 'Recall', icon: 'cards',
+        badge: 'nav-form-due' },
+      { href: '#/exam', key: 'exam', label: 'Mock exam', icon: 'stopwatch' },
+      { href: '#/build', key: 'build', label: 'Custom quiz', icon: 'sliders' }
+    ],
+    review: [
+      { href: '#/history', key: 'history', label: 'History', icon: 'history' },
+      { href: '#/analytics', key: 'analytics', label: 'Analytics', icon: 'chart' },
+      { href: '#/study-time', key: 'studytime', label: 'Study time', icon: 'hourglass' },
+      { href: '#/achievements', key: 'achievements', label: 'Achievements', icon: 'award' }
+    ],
+    reference: [
       { href: '#/search', key: 'search', label: 'Search', icon: 'search' },
       { href: '#/notes', key: 'notes', label: 'Notes &amp; bookmarks', icon: 'note' },
-      { href: '#/mistakes', key: 'mistakes', label: 'Mistake book', icon: 'task',
-        badge: 'nav-mist-due' },
-      { href: '#/formulas', key: 'formulas', label: 'Recall', icon: 'book',
-        badge: 'nav-form-due' }
-    ],
-    explore: [
       { href: '#/concepts', key: 'concepts', label: 'Concept visualization', icon: 'atom' },
-      { href: '#/focus', key: 'focus', label: 'Focus timer', icon: 'clock' },
-      { href: '#/study-time', key: 'studytime', label: 'Study time', icon: 'clock' },
-      { href: '#/achievements', key: 'achievements', label: 'Achievements', icon: 'award' },
-      { href: '#/library', key: 'library', label: 'Library', icon: 'folder' },
-      { href: '#/exam', key: 'exam', label: 'Mock exam', icon: 'task' }
+      { href: '#/library', key: 'library', label: 'Library', icon: 'folder' }
     ]
   };
   var groupLabels = {
-    workspace: 'Workspace',
+    today: 'Today',
     practice: 'Practice',
-    explore: 'Explore',
+    review: 'Review',
+    reference: 'Reference',
     topics: 'Knowledge portals'
   };
   var renderItem = function (item) {
@@ -1174,11 +1190,13 @@ PGRE.buildNav = function () {
       icon(item.icon) + '<span class="nav-label">' + item.label + '</span>' +
       badge + '</a>';
   };
-  var renderGroup = function (id, children, groupIcon) {
+  // Group headers are quiet uppercase labels with a chevron; the icon
+  // column belongs to the destinations, so no glyph repeats in a header.
+  var renderGroup = function (id, children) {
     return '<section class="nav-tree-group" data-nav-group="' + id + '">' +
       '<button class="nav-tree-toggle" type="button" aria-expanded="true" ' +
         'aria-controls="nav-group-' + id + '">' +
-        icon(groupIcon) + '<span>' + groupLabels[id] + '</span>' +
+        '<span>' + groupLabels[id] + '</span>' +
         '<span class="nav-tree-chevron" aria-hidden="true"></span>' +
       '</button>' +
       '<div class="nav-tree-items" id="nav-group-' + id + '">' + children + '</div>' +
@@ -1187,15 +1205,16 @@ PGRE.buildNav = function () {
   var topicItems = '';
   PGRE.TOPICS.forEach(function (t) {
     topicItems += '<a href="#/topic/' + t.id + '" data-nav="topic-' + t.id + '">' +
-      icon('atom') + '<span class="nav-label"><span class="nav-mono">' + t.short +
-      '</span>' + t.name + '</span><span class="nav-weight">' + t.weight +
+      '<span class="nav-mono">' + t.short + '</span>' +
+      '<span class="nav-label">' + t.name + '</span><span class="nav-weight">' + t.weight +
       '%</span></a>';
   });
   var html = '<div class="nav-tree">' +
-    renderGroup('workspace', items.workspace.map(renderItem).join(''), 'home') +
-    renderGroup('practice', items.practice.map(renderItem).join(''), 'book') +
-    renderGroup('explore', items.explore.map(renderItem).join(''), 'chart') +
-    renderGroup('topics', topicItems, 'atom') +
+    renderGroup('today', items.today.map(renderItem).join('')) +
+    renderGroup('practice', items.practice.map(renderItem).join('')) +
+    renderGroup('review', items.review.map(renderItem).join('')) +
+    renderGroup('reference', items.reference.map(renderItem).join('')) +
+    renderGroup('topics', topicItems) +
     '</div>';
   el.innerHTML = html;
   el.querySelectorAll('.nav-tree-toggle').forEach(function (toggle) {
@@ -1324,7 +1343,24 @@ PGRE.updateOriginLine = function () {
   var origin = (window.location && window.location.origin !== 'null')
     ? window.location.origin
     : 'file://';
-  el.textContent = 'Profile: ' + origin;
+  // The chip shows the short form (host for a served copy, plain words for a
+  // file opened from disk); the tooltip and the label keep the full origin.
+  var served = !/^file:/.test(origin);
+  var name = served ? origin.replace(/^https?:\/\//, '') : 'Local file';
+  // The pill is one wrapping item of #origin-line, so the chip is shown whole
+  // or not at all (see .origin-line in css/style.css).
+  el.innerHTML = '<span class="origin-pill">' +
+    '<svg class="origin-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+      '<ellipse cx="12" cy="6" rx="7" ry="2.8"/>' +
+      '<path d="M5 6v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8V6"/>' +
+      '<path d="M5 12v6c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-6"/></svg>' +
+    '<span class="origin-kicker">Profile</span>' +
+    '<span class="origin-name' + (served ? ' is-host' : '') + '">' + PGRE.ui.esc(name) + '</span>' +
+    '</span>';
+  // role="img" makes a screen reader announce the label (the full origin) in
+  // place of the short text; a plain span's label is not announced reliably.
+  el.setAttribute('role', 'img');
+  el.setAttribute('aria-label', 'Profile: ' + origin);
   el.title = 'Progress is stored separately for each browser origin. This profile is ' +
     origin + '.';
 };

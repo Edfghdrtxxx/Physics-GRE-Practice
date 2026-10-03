@@ -65,6 +65,12 @@ var server = http.createServer(function (req, res) {
 
 function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
+// The Dashboard counts #today-formulas up from 0 (countUp in js/motion.js
+// holds its frame id in el._cu until the last frame), so the text is final
+// only when the placeholder is gone and that tween has ended.
+var TODAY_FORMULAS_READY = "(function () { var el = document.getElementById('today-formulas'); " +
+  "return !!el && el.textContent !== '…' && !el._cu; })()";
+
 // SIGTERM Chrome, wait (bounded) for it to exit so its profile dir is
 // released before we rm it; escalate to SIGKILL if it hangs.
 function stopChrome(proc) {
@@ -214,7 +220,7 @@ async function main() {
   })()`);
   await sleep(500);
   for (var realPickupWait = 0; realPickupWait < 30; realPickupWait++) {
-    if (await evaluate("document.getElementById('today-formulas') && document.getElementById('today-formulas').textContent !== '…'")) break;
+    if (await evaluate(TODAY_FORMULAS_READY)) break;
     await sleep(150);
   }
   var realPickupUi = await evaluate(`({
@@ -452,7 +458,7 @@ async function main() {
   })()`);
   await sleep(500);
   for (var da = 0; da < 30; da++) {
-    if (await evaluate("document.getElementById('today-formulas') && document.getElementById('today-formulas').textContent !== '…'")) break;
+    if (await evaluate(TODAY_FORMULAS_READY)) break;
     await sleep(150);
   }
   var dueUi = await evaluate(`({
@@ -550,7 +556,7 @@ async function main() {
   })()`);
   await sleep(500);
   for (var completedOnly = 0; completedOnly < 30; completedOnly++) {
-    if (await evaluate("document.getElementById('today-formulas') && document.getElementById('today-formulas').textContent !== '…'")) break;
+    if (await evaluate(TODAY_FORMULAS_READY)) break;
     await sleep(150);
   }
   await evaluate("document.getElementById('today-formulas-btn').click()");
@@ -580,7 +586,7 @@ async function main() {
   })()`);
   await sleep(500);
   for (var db = 0; db < 30; db++) {
-    if (await evaluate("document.getElementById('today-formulas') && document.getElementById('today-formulas').textContent !== '…'")) break;
+    if (await evaluate(TODAY_FORMULAS_READY)) break;
     await sleep(150);
   }
   var activeDueCopy = await evaluate("(document.getElementById('today-formulas') || {}).textContent || ''");
@@ -616,7 +622,7 @@ async function main() {
   })()`);
   await sleep(500);
   for (var roll = 0; roll < 30; roll++) {
-    if (await evaluate("document.getElementById('today-formulas') && document.getElementById('today-formulas').textContent !== '…'")) break;
+    if (await evaluate(TODAY_FORMULAS_READY)) break;
     await sleep(150);
   }
   var rollover = await evaluate(`({
@@ -647,7 +653,7 @@ async function main() {
   })()`);
   await sleep(500);
   for (var fill = 0; fill < 30; fill++) {
-    if (await evaluate("document.getElementById('today-formulas') && document.getElementById('today-formulas').textContent !== '…'")) break;
+    if (await evaluate(TODAY_FORMULAS_READY)) break;
     await sleep(150);
   }
   await evaluate("document.getElementById('today-formulas-btn').click()");
@@ -679,7 +685,7 @@ async function main() {
   })()`);
   await sleep(500);
   for (var mixWait = 0; mixWait < 30; mixWait++) {
-    if (await evaluate("document.getElementById('today-formulas') && document.getElementById('today-formulas').textContent !== '…'")) break;
+    if (await evaluate(TODAY_FORMULAS_READY)) break;
     await sleep(150);
   }
   var mixUi = await evaluate(`({
@@ -794,7 +800,7 @@ async function main() {
   })()`);
   await sleep(500);
   for (var fpWait = 0; fpWait < 30; fpWait++) {
-    if (await evaluate("document.getElementById('today-formulas') && document.getElementById('today-formulas').textContent !== '…'")) break;
+    if (await evaluate(TODAY_FORMULAS_READY)) break;
     await sleep(150);
   }
   var fpUi = await evaluate(`({
@@ -865,7 +871,7 @@ async function main() {
   })()`);
   await sleep(500);
   for (var fpNewWait = 0; fpNewWait < 30; fpNewWait++) {
-    if (await evaluate("document.getElementById('today-formulas') && document.getElementById('today-formulas').textContent !== '…'")) break;
+    if (await evaluate(TODAY_FORMULAS_READY)) break;
     await sleep(150);
   }
   var fpNewOnlyUi = await evaluate(`({

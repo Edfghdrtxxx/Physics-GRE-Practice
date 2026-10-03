@@ -1,8 +1,10 @@
-/* Dashboard — the home view. Today is the first card (greeting + exam
-   countdown + four launchers). This week is card two. Level/XP, stat tiles,
-   challenges, QOTD, readiness and achievements sit behind a Progress
-   disclosure. Knowledge portals, mock teaser, study time and recent activity
-   stay as cards below. */
+/* Dashboard — the home view. Today is the first card (greeting, exam
+   countdown, prep runway, the Mixed practice launcher, then three equal
+   tiles: Mistake book, Recall, Mock exam). This week is card two. Level/XP,
+   stat tiles, challenges, QOTD, readiness and achievements sit behind a
+   Progress disclosure whose summary line carries level, streak and accuracy.
+   Study time and recent activity share a row; knowledge portals close the
+   page. */
 window.PGRE = window.PGRE || {};
 PGRE.views = PGRE.views || {};
 
@@ -263,7 +265,7 @@ PGRE.views.dashboard = (function () {
       spark = '<svg class="dash-spark" viewBox="0 0 168 50" role="img" ' +
         'aria-label="Active minutes over the last 7 days">' + bars + '</svg>';
     } else {
-      spark = '<p class="muted">No active time logged yet — the timer starts as you use the app.</p>';
+      spark = '<p class="muted dash-spark-empty">No active time yet. The timer starts as you use the app.</p>';
     }
 
     return '<div class="card dash-study-card"><h2>Study time</h2>' +
@@ -276,10 +278,8 @@ PGRE.views.dashboard = (function () {
       PGRE.ui.meter(pct, 'meter-thin', {
         word: 'this week', meta: weekH.toFixed(1) + ' of ' + WEEK_TARGET_H + ' h'
       }) +
-      '<div class="challenge-prog">' + weekH.toFixed(1) + ' of ' + WEEK_TARGET_H + ' h weekly target</div>' +
       spark +
-      '<p class="muted dash-study-note">Counts active time in this tab only — a heartbeat while you interact. ' +
-      'Reading on paper or in another tab isn’t tracked.</p>' +
+      '<p class="muted dash-study-note">Active time in this tab only. Paper and other tabs are not counted.</p>' +
       '<a class="btn btn-ghost btn-sm dash-study-more" href="#/study-time">Details →</a>' +
     '</div>';
   }
@@ -458,13 +458,55 @@ PGRE.views.dashboard = (function () {
   }
   PGRE.nextMockPointer = nextMockPointer;
 
-  /* One "today" decision surface: mixed practice, SRS dues (mistakes +
-     formulas), and the next intact mock. */
+  /* Prep runway: one segment per plan week from the first plan week to exam
+     week. Past weeks are solid, the current week fills by the day, later
+     weeks are track. Each segment carries a chart-tip with its dates and
+     focus. */
+  function runwayHTML() {
+    var ui = PGRE.ui;
+    var weeks = PGRE.planWeeks ? PGRE.planWeeks() : [];
+    if (!weeks.length) return '';
+    var today = PGRE.store.today();
+    var nowIdx = -1;
+    var segs = '';
+    weeks.forEach(function (pw, i) {
+      var w = pw.week;
+      var cls = 'runway-wk';
+      var fill = '';
+      if (today > w.end) cls += ' is-past';
+      else if (today >= w.start) {
+        cls += ' is-now';
+        nowIdx = i;
+        var day = Math.round((new Date(today + 'T12:00:00') - new Date(w.start + 'T12:00:00')) / 86400000);
+        fill = ' style="--wk-fill:' + Math.round(100 * (day + 1) / 7) + '%"';
+      }
+      segs += '<span class="' + cls + '"' + fill + ' tabindex="0" data-tip="' +
+        ui.esc(ui.dateRange(w.start, w.end) + '\n' + w.title) + '"></span>';
+    });
+    var short = function (iso) {
+      return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+    var last = weeks[weeks.length - 1].week;
+    var meta = nowIdx >= 0
+      ? 'Week ' + (nowIdx + 1) + ' of ' + weeks.length
+      : (today < weeks[0].week.start ? 'Plan starts ' + short(weeks[0].week.start) : 'Plan complete');
+    var side = (nowIdx >= 0 && nowIdx < weeks.length - 1) ? 'Exam week starts ' + short(last.start) : '';
+    return '<div class="runway">' +
+      '<div class="runway-track" role="img" aria-label="' + ui.esc(meta + (side ? ', ' + side : '')) + '">' + segs + '</div>' +
+      '<div class="runway-meta"><span>' + meta + '</span>' + (side ? '<span>' + side + '</span>' : '') + '</div>' +
+    '</div>';
+  }
+
+  /* One "today" decision surface: the next move (mixed practice) on its own
+     row, then three equal tiles for the SRS dues (mistakes, recall) and the
+     next intact mock. Each tile reads label, status line, detail, action. */
   function todayAgendaHTML() {
     var ui = PGRE.ui;
     var s = PGRE.store.state;
     var mock = nextMockPointer();
     var dueM = PGRE.srs.dueMistakes().length;
+    var openM = PGRE.srs.openMistakes ? PGRE.srs.openMistakes() : [];
+    var stuckM = openM.filter(function (e) { return e.mk && e.mk.stuck; }).length;
     var mixedCount = Math.min(10, PGRE.allQuestions().length);
     var mixedCopy = mixedCount
       ? mixedCount + ' question' + (mixedCount === 1 ? '' : 's') + ' from the daily pool · about ' + Math.max(2, mixedCount * 2) + ' min'
@@ -479,39 +521,55 @@ PGRE.views.dashboard = (function () {
     var dateLine = new Date().toLocaleDateString('en-US', {
       weekday: 'long', month: 'long', day: 'numeric'
     });
+    var streak = PGRE.store.liveStreak ? PGRE.store.liveStreak() : 0;
+    var lead = streak
+      ? streak + '-day streak. One focused set keeps it moving.'
+      : 'One focused set starts a streak.';
+    var mistakeDetail = openM.length
+      ? openM.length + ' open' + (stuckM ? ' · ' + stuckM + ' keep failing' : '')
+      : 'Missed questions land here for spaced retakes.';
     var html = '<div class="card review-queue today-agenda-shell" id="today-agenda">' +
       '<div class="hero">' +
         '<div class="hero-left">' +
-          '<p class="today-kicker">Today · ' + ui.esc(dateLine) + '</p>' +
+          '<p class="today-kicker">' + ui.esc(dateLine) + '</p>' +
           '<h1 class="today-greet">' + ui.esc(greet) + '.</h1>' +
-          '<p class="today-lead">One focused set keeps your streak moving.</p>' +
+          '<p class="today-lead">' + ui.esc(lead) + '</p>' +
         '</div>' +
         '<div class="hero-right">' +
           '<div class="countdown"><div class="countdown-num">' + days + '</div>' +
-          '<div class="countdown-label">day' + (days === 1 ? '' : 's') + ' until the exam<br>' +
+          '<div class="countdown-label">day' + (days === 1 ? '' : 's') + ' to the exam<br>' +
             examDateLabel() + '</div></div>' +
         '</div>' +
       '</div>' +
+      runwayHTML() +
       '<div class="rq-rows">' +
-      '<div class="rq-row rq-primary"><div class="rq-row-copy"><span class="rq-label">Mixed practice</span>' +
+      '<div class="rq-row rq-primary"><div class="rq-row-copy"><span class="rq-kicker">Next up</span>' +
+        '<span class="rq-label">Mixed practice</span>' +
         '<span class="rq-count">' + ui.esc(mixedCopy) + '</span></div>' +
-        '<a class="btn btn-primary btn-sm" href="#/practice/all">' + ui.esc(mixedLabel) + '</a></div>' +
-      '<div class="rq-row"><div class="rq-row-copy"><span class="rq-label">Mistake book</span>' +
-        '<span class="rq-count">' + (dueM ? dueM + ' due now' : 'nothing due') + '</span></div>' +
+        '<a class="btn btn-primary" href="#/practice/all">' + ui.esc(mixedLabel) + '</a></div>' +
+      '<div class="rq-row rq-tile"><div class="rq-row-copy"><span class="rq-kicker">Mistake book</span>' +
+        '<span class="rq-label rq-status">' + (dueM ? dueM + ' due now' : 'Nothing due') + '</span>' +
+        '<span class="rq-count">' + ui.esc(mistakeDetail) + '</span></div>' +
         '<a class="btn ' + (dueM ? 'btn-primary' : 'btn-ghost') + ' btn-sm" href="#/mistakes">' +
           (dueM ? 'Drill →' : 'Open →') + '</a></div>' +
-      '<div class="rq-row"><div class="rq-row-copy"><span class="rq-label">Recall review</span>' +
-        '<span class="rq-count" id="today-formulas">…</span>' +
-        '<p class="muted" id="formula-readiness" hidden></p></div>' +
+      '<div class="rq-row rq-tile"><div class="rq-row-copy"><span class="rq-kicker">Recall review</span>' +
+        '<span class="rq-label rq-status" id="today-formulas">…</span>' +
+        '<p class="rq-count" id="formula-readiness" hidden></p></div>' +
         '<button type="button" class="btn btn-ghost btn-sm" id="today-formulas-btn">Study →</button></div>';
     if (mock) {
-      var mockSchedule = mock.scheduledFor
-        ? ' · scheduled ' + new Date(mock.scheduledFor + 'T12:00:00').toLocaleDateString('en-US', {
+      var mockWhen = mock.scheduledFor
+        ? 'Scheduled ' + new Date(mock.scheduledFor + 'T12:00:00').toLocaleDateString('en-US', {
           month: 'short', day: 'numeric'
         })
-        : '';
-      html += '<div class="rq-row"><div class="rq-row-copy"><span class="rq-label">Mock exam</span>' +
-        '<span class="rq-count">Next planned intact mock: ' + ui.esc(mock.title) + ui.esc(mockSchedule) + '</span></div>' +
+        : 'Next intact form';
+      html += '<div class="rq-row rq-tile"><div class="rq-row-copy"><span class="rq-kicker">Mock exam</span>' +
+        '<span class="rq-label rq-status">' + ui.esc(mockWhen) + '</span>' +
+        '<span class="rq-count">' + ui.esc(mock.title) + '</span></div>' +
+        '<a class="btn btn-ghost btn-sm" href="#/exam">Open →</a></div>';
+    } else {
+      html += '<div class="rq-row rq-tile"><div class="rq-row-copy"><span class="rq-kicker">Mock exam</span>' +
+        '<span class="rq-label rq-status">Every form sat</span>' +
+        '<span class="rq-count">Review past sittings or run a weighted draw.</span></div>' +
         '<a class="btn btn-ghost btn-sm" href="#/exam">Open →</a></div>';
     }
     html += '</div></div>';
@@ -589,11 +647,13 @@ PGRE.views.dashboard = (function () {
     var introDays = (typeof days === 'number' && days > 7) ? (days - 7) : 0;
     var target = srs.clampTarget(settings.formulaDailyTarget);
     var postponed = typeof srs.formulaDayPostponed === 'function' ? srs.formulaDayPostponed(deck) : 0;
-    var line = unseen + ' not yet introduced. ' +
-      introDays + ' day' + (introDays === 1 ? '' : 's') + ' before the final week. ' +
-      'Daily target ' + target + '. ' +
+    // Pieces are joined with ' · ' so the mount can drop the leading count
+    // when the tile's status line already shows the same words.
+    var line = unseen + ' not yet introduced · ' +
+      introDays + ' day' + (introDays === 1 ? '' : 's') + ' before the final week · ' +
+      target + ' a day · ' +
       postponed + ' due review' + (postponed === 1 ? '' : 's') + ' waiting. ' +
-      'Choose them in Recall — this does not change today’s list.';
+      'To cover more, add cards in Recall.';
     if (note) line += ' ' + note;
     return line;
   }
@@ -635,8 +695,11 @@ PGRE.views.dashboard = (function () {
     var firstLaunch = weekTasks.filter(function (t) {
       return (t.kind === 'timed' || t.kind === 'extra-set') && !g.taskDone(t.id);
     })[0];
-    html += '<div class="card"><h2>This week — ' + ui.esc(cw.week.title) + '</h2>' +
-      '<div class="muted">' + ui.dateRange(cw.week.start, cw.week.end) + ' · ' + ui.esc(cw.phase.name) + ' · ~' + cw.week.hours + ' h</div>' +
+    html += '<div class="card dash-week">' +
+      '<div class="band-head"><div class="band-head-copy">' +
+        '<p class="kicker">This week · ' + ui.dateRange(cw.week.start, cw.week.end) + ' · ~' + cw.week.hours + ' h</p>' +
+        '<h2>' + ui.esc(cw.week.title) + '</h2></div>' +
+        '<a class="btn btn-ghost btn-sm band-head-link" href="#/plan">Study plan →</a></div>' +
       ui.meter(100 * doneCount / Math.max(1, weekTasks.length), 'meter-thin', {
         word: 'complete', meta: doneCount + ' of ' + weekTasks.length + ' tasks'
       });
@@ -647,17 +710,26 @@ PGRE.views.dashboard = (function () {
           ? ' <button class="btn btn-primary btn-sm" data-launch-set="' +
               ui.esc(String(t.id || '').replace(/^set-/, '')) + '">Start →</button>'
           : '';
-        html += '<li>' + ui.esc(t.label) + launch + '</li>';
+        // "Set 11 · Induction … (n=8) — ~100 min": the time estimate becomes
+        // its own quiet column so the task names line up.
+        var label = String(t.label || '');
+        var mins = label.match(/\s+—\s+(~?\d+\s*min)$/);
+        if (mins) label = label.slice(0, mins.index);
+        html += '<li><span class="next-task-label">' + ui.esc(label) + '</span>' +
+          (mins ? '<span class="next-task-time">' + ui.esc(mins[1]) + '</span>' : '') + launch + '</li>';
       });
       html += '</ul>';
     } else {
       html += '<p class="muted">Everything for this week is done. Get ahead or rest — both count.</p>';
     }
-    html += '<a class="btn btn-ghost" href="#/plan">Open study plan →</a></div>';
+    html += '</div>';
 
     var progressOpen = !!(s.settings && s.settings.dashboardProgressOpen);
+    var liveStreak = PGRE.store.liveStreak();
     html += '<details class="card dashboard-progress"' + (progressOpen ? ' open' : '') + '>' +
-      '<summary>Progress</summary>';
+      '<summary><span>Progress</span><span class="prog-sum-stats">' +
+        'Level ' + lvl.level + ' · ' + liveStreak + '-day streak · ' + accuracy +
+        (accuracy === '—' ? ' accuracy' : ' correct') + '</span></summary>';
 
     html += '<div class="hero">' +
       '<div class="hero-left">' +
@@ -726,12 +798,28 @@ PGRE.views.dashboard = (function () {
     html += '<a class="btn btn-ghost" href="#/achievements">All achievements →</a></div>';
     html += '</details>';
 
-    html += studyCard();
+    html += '<div class="dash-pair">' + studyCard();
 
-    html += '<h2 class="section-title">Knowledge portals</h2><div class="topic-grid">';
+    html += '<div class="card dash-activity"><h2>Recent activity</h2>';
+    if (s.log.length === 0) {
+      html += '<p class="muted">Your activity will appear here.</p>';
+    } else {
+      html += '<ul class="activity-list">';
+      s.log.slice(0, 6).forEach(function (e) {
+        html += '<li><span class="act-dot act-' + ui.esc(e.kind) + '" aria-hidden="true"></span>' +
+          '<span class="act-text">' + ui.esc(e.text) + '</span>' +
+          (e.xp ? '<span class="act-xp">+' + e.xp + ' XP</span>' : '') +
+          '<span class="act-time">' + ui.timeAgo(e.ts) + '</span></li>';
+      });
+      html += '</ul>';
+    }
+    html += '</div></div>';
+
+    html += '<div class="band-head section-head"><h2 class="section-title">Knowledge portals</h2>' +
+      '<span class="band-head-note">Exam weight · mastery</span></div><div class="topic-grid">';
     PGRE.TOPICS.forEach(function (t) {
       var rec = s.topics[t.id] || { attempted: 0, correct: 0 };
-      var acc = rec.attempted ? Math.round(100 * rec.correct / rec.attempted) + '% acc.' : 'not started';
+      var acc = rec.attempted ? Math.round(100 * rec.correct / rec.attempted) + '% correct' : 'not started';
       var mastery = g.mastery(t.id);
       html += '<a class="topic-card card" href="#/topic/' + t.id + '">' +
         '<div class="topic-card-head">' + ui.monogram(t) +
@@ -741,29 +829,6 @@ PGRE.views.dashboard = (function () {
         '<div class="topic-card-sub">' + mastery + '% mastery · ' + acc + '</div>' +
       '</a>';
     });
-    html += '</div>';
-
-    html += '<div class="card exam-teaser"><h2>Timed mock exam</h2>' +
-      '<p class="muted">A full timed simulation of the test — 70 questions in 2 hours, or a ' +
-      '100-question legacy sitting of a real sample exam, with a scaled-score estimate ' +
-      'and per-topic breakdown.</p>' +
-      '<a class="btn btn-primary" href="#/exam">Start a simulation →</a></div>';
-
-    html += '<div class="card"><h2>Recent activity</h2>';
-    if (s.log.length === 0) {
-      html += '<p class="muted">Your activity will appear here.</p>';
-    } else {
-      html += '<ul class="activity-list">';
-      s.log.slice(0, 8).forEach(function (e) {
-        var icon = { practice: '✎', achievement: '★', plan: '☑', level: '↑', challenge: '◎',
-                   import: '⤓', mistake: '✗', review: '⟳' }[e.kind] || '·';
-        html += '<li><span class="act-icon act-' + ui.esc(e.kind) + '">' + icon + '</span>' +
-          '<span class="act-text">' + ui.esc(e.text) + '</span>' +
-          (e.xp ? '<span class="act-xp">+' + e.xp + ' XP</span>' : '') +
-          '<span class="act-time">' + ui.timeAgo(e.ts) + '</span></li>';
-      });
-      html += '</ul>';
-    }
     html += '</div>';
 
     return html;
@@ -859,7 +924,8 @@ PGRE.views.dashboard = (function () {
         var cascade = 0;
         Array.prototype.forEach.call(view.children, function (el) {
           if (el.classList.contains('card') || el.classList.contains('stat-row') ||
-              el.classList.contains('two-col') || el.classList.contains('review-queue')) {
+              el.classList.contains('two-col') || el.classList.contains('dash-pair') ||
+              el.classList.contains('review-queue')) {
             el.classList.add('stagger-in');
             el.style.animationDelay = (cascade * 70) + 'ms';
             cascade += 1;
@@ -896,6 +962,7 @@ PGRE.views.dashboard = (function () {
       var readyEl = document.getElementById('formula-readiness');
       if (readyEl) {
         var readyLine = formulaReadinessLine(deck, deckStatus);
+        if (readyLine.indexOf(st.text + ' · ') === 0) readyLine = readyLine.slice(st.text.length + 3);
         if (readyLine) {
           readyEl.hidden = false;
           readyEl.textContent = readyLine + ' ';

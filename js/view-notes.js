@@ -26,8 +26,8 @@ PGRE.views.notes = (function () {
     var c = PGRE.notes.counts();
     root().innerHTML =
       '<div class="card nb-intro page-head"><h1>Notes &amp; bookmarks</h1>' +
-        '<p class="muted">Everything you have starred or annotated while practicing, most recently ' +
-          'updated first. Notes save as you type — clearing one removes it.</p></div>' +
+        '<p class="muted">Starred and annotated questions, newest first. Notes save as you ' +
+          'type; clearing a note removes it.</p></div>' +
       '<div class="nb-stats">' +
         ui.statTile('Notes', '<span id="nb-count-notes">' + c.notes + '</span>') +
         ui.statTile('Bookmarks', '<span id="nb-count-bm">' + c.bookmarks + '</span>') +

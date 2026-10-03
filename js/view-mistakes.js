@@ -13,6 +13,9 @@ PGRE.views.mistakes = (function () {
   var paceTimer = null; // live per-question chip; same contract as view-practice.js
   var topicFilter = 'all'; // additional book filter; 'all' or a PGRE.TOPICS id
   var concernFilter = 'all'; // 'all' or 'stuck' (keep-failing entries only)
+  var BOOK_PAGE = 20;        // open entries rendered per page of the book
+  var bookShown = BOOK_PAGE; // grows with "Show more"; resets when a filter changes
+  var openIds = {};          // qid -> true while an entry's choices + solution are shown
 
   function settings() { return PGRE.store.state.settings || {}; }
 
@@ -211,9 +214,11 @@ PGRE.views.mistakes = (function () {
     if (mk.lucky && !(mk.misses > 0)) metaBits.push('correct but guessed');
     var lastTs = mk.lastMissedAt || mk.lastSolvedAt || mk.lastLuckyAt || mk.lastStuckAt;
     if (lastTs) metaBits.push('last ' + ui.timeAgo(lastTs));
-    var html = '<div class="card miss-card' + (mk.archivedAt ? ' is-archived' : '') + '">' +
+    var isOpen = !!openIds[q.id];
+    var html = '<div class="card miss-card' + (mk.archivedAt ? ' is-archived' : '') +
+      (isOpen ? ' is-open' : '') + '">' +
       '<div class="miss-head">' + ui.monogram(t) + dueChip(mk) + stuckChip(mk) + luckyChip(mk) +
-        '<span class="muted">' + metaBits.join(' · ') + '</span>' +
+        '<span class="muted miss-meta">' + metaBits.join(' · ') + '</span>' +
         '<span class="miss-actions">' +
           // the same Keep failing flag the answer screen's assess chip sets —
           // settable on any existing entry right from the book
@@ -227,7 +232,10 @@ PGRE.views.mistakes = (function () {
               '<button class="btn btn-danger-ghost btn-sm" data-archive="' + q.id + '">Archive</button>') +
         '</span>' +
       '</div>' +
-      '<div class="q-text">' + q.q + '</div>';
+      '<div class="q-text">' + q.q + '</div>' +
+      // Collapsed by default: the stem shows (clamped), the choices, last
+      // self-assessment and solution open with the toggle under the card.
+      '<div class="miss-more">';
     // ITEM 7 — the book (list) page must NOT reveal the answer. Show the five
     // choices as a plain, non-interactive list: disabled .choice buttons (the
     // exact look practice leaves behind after answering) get no hover, no pointer,
@@ -262,8 +270,33 @@ PGRE.views.mistakes = (function () {
     }
     html += '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div></details>' +
     distractorBlock(q) +
+    '</div>' +
+    '<button type="button" class="miss-expand" data-expand="' + q.id + '" aria-expanded="' + isOpen + '">' +
+      (isOpen ? 'Hide choices and solution' : 'Show choices and solution') + '</button>' +
     '</div>';
     return html;
+  }
+
+  function bookStatsHTML(dueN, openN, stuckN, archivedN) {
+    function stat(n, label) {
+      return '<span class="miss-stat"><span class="miss-stat-num">' + n + '</span>' + label + '</span>';
+    }
+    return '<div class="miss-stats">' + stat(dueN, 'due now') + stat(openN, 'open') +
+      stat(stuckN, 'keep failing') + stat(archivedN, 'archived') + '</div>';
+  }
+
+  /* The review ladder on its own line under the intro: small numerals joined
+     by drawn hairline arrows, so the arrow weight does not depend on the
+     text font and the run never breaks mid-sentence. */
+  function ladderHTML() {
+    var steps = PGRE.srs.MISTAKE_LADDER;
+    var arrow = '<svg class="ladder-arrow" viewBox="0 0 12 8" aria-hidden="true" focusable="false">' +
+      '<path d="M0.5 4h10.5M8 1.2 11 4 8 6.8"/></svg>';
+    return '<div class="review-ladder" role="img" aria-label="Review after ' + steps.join(', then ') + ' days">' +
+      '<span class="ladder-kicker">Review after</span>' +
+      '<span class="ladder-run">' +
+        steps.map(function (n) { return '<span class="ladder-step">' + n + '</span>'; }).join(arrow) +
+      '</span><span class="ladder-unit">days</span></div>';
   }
 
   function renderBook() {
@@ -285,10 +318,12 @@ PGRE.views.mistakes = (function () {
       return (a.mk.srs ? a.mk.srs.due : '9999') < (b.mk.srs ? b.mk.srs.due : '9999') ? -1 : 1;
     });
 
+    var stuckAll = openAll.filter(function (e) { return e.mk.stuck; }).length;
     var html = '<div class="card page-head"><h1>Mistake book</h1>' +
-      '<p class="muted">Every question you have missed, kept until <em>you</em> archive it. ' +
-      'Re-solving a mistake never removes it — it schedules the next review further out ' +
-      '(' + PGRE.srs.MISTAKE_LADDER.join(' → ') + ' days). Missing it again resets the ladder.</p>' +
+      '<p class="muted">Every miss stays until <em>you</em> archive it. Each correct re-solve moves ' +
+      'the next review one step out; a new miss starts the ladder again.</p>' +
+      ladderHTML() +
+      (hasBook ? bookStatsHTML(dueAll.length, openAll.length, stuckAll, archivedAll.length) : '') +
       (hasBook ? topicFilterHTML() : '') +
       '<div class="btn-row">' +
         '<button class="btn btn-primary" id="drill-due"' + (due.length ? '' : ' disabled') + '>' +
@@ -337,7 +372,28 @@ PGRE.views.mistakes = (function () {
       }
     }
 
-    open.forEach(function (e) { html += missCard(e); });
+    // Due entries first under their own heading, then the rest; one page at a
+    // time so a long book stays a short page.
+    var dueIds = {};
+    due.forEach(function (e) { dueIds[e.qid] = true; });
+    var shown = open.slice(0, bookShown);
+    var lastGroup = null;
+    shown.forEach(function (e) {
+      var group = dueIds[e.qid] ? 'due' : 'later';
+      if (group !== lastGroup) {
+        var n = group === 'due' ? due.length : open.length - due.length;
+        html += '<h2 class="miss-group-head">' + (group === 'due' ? 'Due now' : 'Coming up') +
+          ' <span class="miss-group-count">' + n + '</span></h2>';
+        lastGroup = group;
+      }
+      html += missCard(e);
+    });
+    if (open.length > shown.length) {
+      var left = open.length - shown.length;
+      html += '<div class="miss-pager"><button type="button" class="btn btn-ghost" id="miss-show-more">' +
+        'Show ' + Math.min(BOOK_PAGE, left) + ' more</button>' +
+        '<span class="muted">' + shown.length + ' of ' + open.length + ' shown</span></div>';
+    }
 
     if (archived.length) {
       html += '<details class="card archived-block"><summary>Archived (' + archived.length +
@@ -348,6 +404,10 @@ PGRE.views.mistakes = (function () {
 
     root().innerHTML = html + PGRE.assess.stuckConfirmHTML();
     PGRE.typesetMath(root());
+    // Fade the stem's last line only when the collapsed height cuts it off.
+    root().querySelectorAll('.miss-card .q-text').forEach(function (qt) {
+      if (qt.scrollHeight > qt.clientHeight + 2) qt.classList.add('is-clamped');
+    });
     PGRE.refreshNavBadges(); // due counts change without a route change
 
     var dd = document.getElementById('drill-due');
@@ -361,13 +421,33 @@ PGRE.views.mistakes = (function () {
     var topicSel = document.getElementById('miss-topic');
     if (topicSel) topicSel.addEventListener('change', function () {
       topicFilter = topicSel.value || 'all';
+      bookShown = BOOK_PAGE;
       renderBook();
     });
     root().querySelectorAll('[data-concern]').forEach(function (b) {
       b.addEventListener('click', function () {
         concernFilter = concernFilter === b.getAttribute('data-concern')
           ? 'all' : b.getAttribute('data-concern');
+        bookShown = BOOK_PAGE;
         renderBook();
+      });
+    });
+    var moreBtn = document.getElementById('miss-show-more');
+    if (moreBtn) moreBtn.addEventListener('click', function () {
+      bookShown += BOOK_PAGE;
+      var y = window.scrollY;
+      renderBook();
+      window.scrollTo(0, y);
+    });
+    root().querySelectorAll('[data-expand]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var card = b.closest('.miss-card');
+        var qid = b.getAttribute('data-expand');
+        var open = !card.classList.contains('is-open');
+        card.classList.toggle('is-open', open);
+        if (open) openIds[qid] = true; else delete openIds[qid];
+        b.setAttribute('aria-expanded', open ? 'true' : 'false');
+        b.textContent = open ? 'Hide choices and solution' : 'Show choices and solution';
       });
     });
 
@@ -1182,6 +1262,7 @@ PGRE.views.mistakes = (function () {
       if (drill) drill.assess = null;   // the chip row it was bound to is gone
       topicFilter = 'all';
       concernFilter = 'all';
+      bookShown = BOOK_PAGE;
       if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
       if (params && params.sub === 'drill') {
         // Same-tab resume keeps the LIVE drill (its st rows still reference the

@@ -308,6 +308,19 @@
   white-space: nowrap;
   pointer-events: none;
 }
+/* Page titles: one unbreakable box per word with ordinary spaces between
+   them, so a long title wraps at its spaces instead of widening the page. */
+.letter-swap-wrap {
+  display: inline;
+  width: auto;
+  white-space: normal;
+}
+.letter-swap-word {
+  display: inline-flex;
+  flex-flow: row nowrap;
+  align-items: baseline;
+  white-space: nowrap;
+}
 .letter-swap-cell {
   position: relative;
   display: inline-block;

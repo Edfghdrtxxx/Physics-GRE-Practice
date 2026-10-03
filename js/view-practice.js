@@ -250,7 +250,7 @@ PGRE.views.practice = (function () {
     });
     return '<div class="drill-palette practice-palette">' +
       '<div class="exam-palette-title">' +
-        (results ? 'How this drill went' : 'Questions in this drill') + '</div>' +
+        (results ? 'How this set went' : 'Questions in this set') + '</div>' +
       '<div class="exam-palette-grid">' + cells + '</div>' +
       '<div class="exam-legend drill-legend">' +
         (results
