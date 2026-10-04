@@ -17,7 +17,9 @@ window.PGRE = window.PGRE || {};
    flatten in the INTACT exam questions (book sample exams + kept released
    ETS exams) — only the exam simulator's draw and by-id lookups may do that,
    so those exams stay unspoiled for verbatim simulation. Each question is
-   tagged with its src at merge time, so data files stay untouched. */
+   tagged with its src at merge time, so data files stay untouched.
+   The copy also runs PGRE.bankHTML, so a later innerHTML assignment cannot
+   read a LaTeX '<' as a tag. */
 var _allQuestionsCache = {};
 var _topicQuestionsCache = {};
 var _questionByIdIndex = null;
@@ -26,6 +28,65 @@ PGRE._resetBankCache = function () {
   _allQuestionsCache = {};
   _topicQuestionsCache = {};
   _questionByIdIndex = null;
+};
+
+/* Views assign q.q / q.sol / choices with innerHTML. In HTML, '<' followed by
+   a letter opens a tag even when the name is not a real element: $r<R$ is a
+   tag that runs until the next '>', the '>' in $r>R$. The parser deletes the
+   enclosed-charge sentence and leaves a stray '$', so KaTeX then sets the
+   following prose as one math span — italic, spaces dropped, commands raw.
+   Keep a real tag (allowlisted name, then '>', '/', or whitespace, quotes
+   honored). Escape every other '<'. $r<R$ and $a<r<b$ fail the test and stay
+   text; <p>, <em>, <img ...> pass through. */
+var BANK_TAGS = {
+  a: 1, b: 1, blockquote: 1, br: 1, caption: 1, code: 1, col: 1, colgroup: 1,
+  del: 1, details: 1, div: 1, em: 1, figcaption: 1, figure: 1,
+  h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1, hr: 1, i: 1, img: 1, li: 1,
+  mark: 1, ol: 1, p: 1, pre: 1, s: 1, small: 1, span: 1, strong: 1,
+  sub: 1, summary: 1, sup: 1, table: 1, tbody: 1, td: 1, tfoot: 1, th: 1,
+  thead: 1, tr: 1, u: 1, ul: 1, wbr: 1
+};
+
+function bankTagEnd(html, lt) {
+  var n = html.length;
+  var j = lt + 1;
+  if (j < n && html.charAt(j) === '/') j++;
+  if (j >= n || !/[A-Za-z]/.test(html.charAt(j))) return -1;
+  var nameStart = j;
+  j++;
+  while (j < n && /[A-Za-z0-9]/.test(html.charAt(j))) j++;
+  if (!BANK_TAGS[html.slice(nameStart, j).toLowerCase()]) return -1;
+  if (j >= n) return -1;
+  var ch = html.charAt(j);
+  if (ch !== '>' && ch !== '/' && !/\s/.test(ch)) return -1;
+  var quote = '';
+  for (; j < n; j++) {
+    ch = html.charAt(j);
+    if (quote) {
+      if (ch === quote) quote = '';
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === '>') return j + 1;
+  }
+  return -1;
+}
+
+PGRE.bankHTML = function (html) {
+  if (typeof html !== 'string' || html.indexOf('<') < 0) return html;
+  var out = '';
+  var i = 0;
+  var n = html.length;
+  while (i < n) {
+    var lt = html.indexOf('<', i);
+    if (lt < 0) { out += html.slice(i); break; }
+    out += html.slice(i, lt);
+    var end = bankTagEnd(html, lt);
+    if (end < 0) { out += '&lt;'; i = lt + 1; continue; }
+    out += html.slice(lt, end);
+    i = end;
+  }
+  return out;
 };
 
 PGRE.allQuestions = function (opts) {
@@ -37,14 +98,24 @@ PGRE.allQuestions = function (opts) {
     (list || []).forEach(function (q) {
       if (!q || !q.id || seen[q.id]) return;
       seen[q.id] = true;
-      // Tag a shallow copy rather than the bank's own object: the merge never
-      // writes back into the static data arrays. A question that already
-      // carries a src passes through by reference, untouched.
-      if (q.src) { out.push(q); return; }
-      var tagged = {};
-      for (var k in q) tagged[k] = q[k];
-      tagged.src = src;
-      out.push(tagged);
+      // Shallow copy, never the bank's own object: static data stays raw.
+      // String fields views inject are shielded here; see PGRE.bankHTML.
+      var copy = {};
+      for (var k in q) copy[k] = q[k];
+      if (!copy.src) copy.src = src;
+      if (typeof copy.q === 'string') copy.q = PGRE.bankHTML(copy.q);
+      if (typeof copy.sol === 'string') copy.sol = PGRE.bankHTML(copy.sol);
+      if (Array.isArray(q.choices)) {
+        copy.choices = q.choices.map(function (c) {
+          return typeof c === 'string' ? PGRE.bankHTML(c) : c;
+        });
+      }
+      if (Array.isArray(q.choiceSols)) {
+        copy.choiceSols = q.choiceSols.map(function (c) {
+          return typeof c === 'string' ? PGRE.bankHTML(c) : c;
+        });
+      }
+      out.push(copy);
     });
   }
   add(PGRE.QUESTIONS, 'preview');
