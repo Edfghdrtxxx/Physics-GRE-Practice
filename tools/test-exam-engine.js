@@ -12,6 +12,7 @@ var vm = require('vm');
 var root = path.resolve(__dirname, '..');
 var storeSrc = fs.readFileSync(path.join(root, 'js', 'store.js'), 'utf8');
 var bankSrc = fs.readFileSync(path.join(root, 'js', 'bank.js'), 'utf8');
+var srsSrc = fs.readFileSync(path.join(root, 'js', 'srs.js'), 'utf8');
 var engineSrc = fs.readFileSync(path.join(root, 'js', 'exam-engine.js'), 'utf8');
 
 var window = { PGRE: {} };
@@ -262,6 +263,106 @@ var e3 = engine.create({});
 engine.discard(e3);
 assert(store.state.exams.indexOf(e3) === -1, 'discard removes the sitting from state');
 assert(engine.byId(e2.id) === e2, 'byId finds a submitted exam by id');
+
+console.log('\nguess marks on exam results');
+vm.runInContext(srsSrc, sandbox);
+resetState();
+if (typeof PGRE._resetBankCache === 'function') PGRE._resetBankCache();
+var guessExam = engine.create({ source: 'gr8677' });
+assert(!!guessExam, 'guess-mark fixture exam was created');
+var gRight = guessExam.order[0];
+var gWrong = guessExam.order[1];
+var gBlank = guessExam.order[2];
+var gExisting = guessExam.order[3];
+var gAlready = guessExam.order[4];
+var gFlaggedRight = guessExam.order[5];
+var gUnflaggedRight = guessExam.order[6];
+function gAns(id) { return PGRE.questionById(id).answer; }
+guessExam.answers[gRight] = gAns(gRight);
+guessExam.answers[gWrong] = (gAns(gWrong) + 1) % 5;
+guessExam.answers[gExisting] = gAns(gExisting);
+guessExam.answers[gAlready] = gAns(gAlready);
+guessExam.answers[gFlaggedRight] = gAns(gFlaggedRight);
+guessExam.answers[gUnflaggedRight] = gAns(gUnflaggedRight);
+guessExam.flags = [gRight, gWrong, gBlank, gFlaggedRight];
+guessExam.submittedAt = '2026-10-05T00:00:00.000Z';
+[gRight, gWrong, gExisting, gAlready, gFlaggedRight, gUnflaggedRight].forEach(function (id) {
+  store.state.attempts.push({
+    ts: '2026-10-05T00:00:00.000Z', qid: id, topic: 'cm',
+    picked: guessExam.answers[id], answer: gAns(id),
+    correct: guessExam.answers[id] === gAns(id),
+    ms: null, sid: guessExam.id, mode: 'exam', confidence: null
+  });
+});
+store.state.mistakes[gExisting] = {
+  firstMissedAt: '2026-01-01T00:00:00.000Z', misses: 2, solves: 1, wrongPicks: [1],
+  archivedAt: null, srs: { step: 3, due: '2099-01-01', baseDue: '2099-01-01' }
+};
+store.state.mistakes[gAlready] = {
+  firstMissedAt: '2026-01-01T00:00:00.000Z', misses: 0, solves: 0, wrongPicks: [],
+  archivedAt: null, lucky: true, srs: { step: 0, due: '2099-02-01', baseDue: '2099-02-01' }
+};
+var oldExam = { id: 'ex-old', submittedAt: '2020-01-01T00:00:00.000Z', answers: {}, flags: [], order: [] };
+assert(engine.isMarkedGuess(oldExam, gRight) === false, 'an old exam without guessed is not marked');
+assert(!Object.prototype.hasOwnProperty.call(oldExam, 'guessed'), 'reading an old exam does not add a guessed field');
+assert(engine.markGuessed(guessExam, gWrong) === false, 'a wrong answer cannot be marked guessed');
+assert(engine.markGuessed(guessExam, gBlank) === false, 'a blank answer cannot be marked guessed');
+assert(!guessExam.guessed, 'rejected marks do not create the guessed list');
+assert(engine.markGuessed(guessExam, gRight) === true, 'a correct answer can be marked guessed');
+assert(engine.isMarkedGuess(guessExam, gRight) === true, 'the mark is recorded on the exam');
+var created = store.state.mistakes[gRight];
+assert(!!created && created.lucky === true && created.misses === 0, 'a new guess files a lucky-guess entry, not a miss');
+assert(created.srs && created.srs.step === 0 && created.srs.due === PGRE.srs.addDays(1),
+  'a new guess is due tomorrow, the same first rung as a practice lucky guess');
+var rightRow = store.state.attempts.filter(function (a) { return a.qid === gRight && a.sid === guessExam.id; })[0];
+assert(rightRow.confidence === 'guess', 'the exam attempt row is stamped guessed');
+assert(engine.markGuessed(guessExam, gRight) === true && guessExam.guessed.length === 1,
+  'marking the same question again does not duplicate it');
+assert(engine.unmarkGuessed(guessExam, gRight) === true, 'the guess mark can be removed');
+assert(engine.isMarkedGuess(guessExam, gRight) === false, 'unmark clears the exam mark');
+assert(!store.state.mistakes[gRight], 'unmark removes the lucky-guess entry it created');
+assert(rightRow.confidence === null, 'unmark clears the exam attempt stamp');
+
+assert(engine.markGuessed(guessExam, gExisting) === true, 'a correct answer already in the book can be marked');
+var existing = store.state.mistakes[gExisting];
+assert(existing.lucky === true && existing.misses === 2 && existing.solves === 1,
+  'marking an older entry adds the lucky flag and leaves its miss record');
+assert(existing.srs.step === 3 && existing.srs.due !== '2099-01-01',
+  'Guessed halves the remaining wait on an entry that already had a schedule');
+assert(engine.unmarkGuessed(guessExam, gExisting) === true, 'unmark of an older entry succeeds');
+existing = store.state.mistakes[gExisting];
+assert(!!existing && existing.misses === 2 && !existing.lucky && existing.srs.due === '2099-01-01',
+  'unmark drops only the lucky flag and restores the earlier review date');
+
+assert(engine.markGuessed(guessExam, gAlready) === true, 'a question that was already a lucky guess can be marked on the exam');
+assert(engine.unmarkGuessed(guessExam, gAlready) === true, 'unmark of an already-lucky question succeeds');
+var already = store.state.mistakes[gAlready];
+assert(!!already && already.lucky === true && already.srs.due === '2099-02-01',
+  'unmark leaves a lucky-guess entry that existed before this exam');
+
+var beforeBulk = guessExam.guessed.slice();
+var bulkN = engine.markFlaggedGuessed(guessExam);
+assert(bulkN === 2, 'mark all flagged files the two flagged correct questions, got ' + bulkN);
+assert(engine.isMarkedGuess(guessExam, gRight) && engine.isMarkedGuess(guessExam, gFlaggedRight),
+  'both flagged correct questions are marked');
+assert(!engine.isMarkedGuess(guessExam, gWrong) && !engine.isMarkedGuess(guessExam, gBlank),
+  'flagged wrong and blank questions are not marked');
+assert(!engine.isMarkedGuess(guessExam, gUnflaggedRight), 'an unflagged correct question is not swept in');
+assert(!!store.state.mistakes[gRight] && store.state.mistakes[gRight].lucky === true, 'the swept correct question is a lucky guess');
+assert(!store.state.mistakes[gWrong], 'a flagged wrong question is not given a lucky-guess entry by the sweep');
+assert(engine.markFlaggedGuessed(guessExam) === 0, 'a second sweep marks nothing new');
+assert(beforeBulk.length === 0, 'the sweep started from a cleared list');
+
+var plain = { id: 'ex-plain', submittedAt: '2020-01-01T00:00:00.000Z', answers: {}, order: [], flags: [] };
+var roundTrip = JSON.parse(JSON.stringify(guessExam));
+assert(Array.isArray(roundTrip.guessed) && roundTrip.guessed.indexOf(gRight) !== -1,
+  'the guess mark survives a save/load round trip');
+assert(!Object.prototype.hasOwnProperty.call(plain, 'guessed'), 'a saved exam with no marks still has no guessed field');
+store._persistFailed = true;
+var refused = engine.markGuessed(guessExam, gUnflaggedRight);
+assert(refused === false && !engine.isMarkedGuess(guessExam, gUnflaggedRight),
+  'a refused save does not record a guess mark');
+store._persistFailed = false;
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

@@ -2347,6 +2347,21 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
   align-self: center; justify-self: end; text-align: right;
   font-size: 12px; line-height: 1.35; color: var(--ink-3);
 }
+/* One Guessed tile on a mock-exam result. Same tile and panel as practice. */
+.assess-row.is-exam-guess {
+  grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
+  align-items: center;
+}
+.assess-row.is-exam-guess .assess-chip { grid-column: 1; grid-row: 1; }
+.assess-row.is-exam-guess .assess-note {
+  grid-column: 2; grid-row: 1;
+  justify-self: start; text-align: left;
+  padding-left: 4px;
+}
+@media (max-width: 640px) {
+  .assess-row.is-exam-guess { grid-template-columns: 1fr; }
+  .assess-row.is-exam-guess .assess-note { grid-column: 1; grid-row: 2; padding-left: 0; }
+}
 .assess-row .assess-chip {
   --tone: var(--ink-2); --tone-tint: var(--ivory);
   display: flex; align-items: center; gap: 9px;

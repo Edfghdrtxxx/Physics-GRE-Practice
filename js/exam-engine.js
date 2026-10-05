@@ -314,6 +314,108 @@ PGRE.examEngine = (function () {
     return exam;
   }
 
+  /* ——— Guess marks on a submitted exam's results ———
+     A correct answer the sitter marks as guessed files through the same
+     lucky-guess path practice uses (srs.markLucky / unmarkLucky), so the
+     mistake book gets one kind of entry. The mark itself lives on the exam
+     (`guessed` qid list). Absence means not marked — old sittings have no
+     field and stay unmarked. `guessOrigin` remembers whether this mark
+     created the book entry, only added the lucky flag, or found the flag
+     already set, so unmark can drop the filing it created and leave an
+     older entry alone. */
+  function guessIds(exam) {
+    return (exam && Array.isArray(exam.guessed)) ? exam.guessed : [];
+  }
+
+  function isMarkedGuess(exam, qid) {
+    return guessIds(exam).indexOf(qid) !== -1;
+  }
+
+  function correctOnExam(exam, qid) {
+    var q = PGRE.questionById(qid);
+    if (!exam || !q || !exam.answers) return false;
+    var picked = exam.answers[qid] != null ? exam.answers[qid] : null;
+    return picked === q.answer;
+  }
+
+  function flaggedCorrectIds(exam) {
+    if (!exam || !exam.flags) return [];
+    return exam.flags.filter(function (qid) { return correctOnExam(exam, qid); });
+  }
+
+  function examAttemptRow(exam, qid) {
+    var arr = (PGRE.store.state && PGRE.store.state.attempts) || [];
+    for (var i = arr.length - 1; i >= 0; i--) {
+      var a = arr[i];
+      if (a && a.qid === qid && a.sid === exam.id && a.mode === 'exam') return a;
+    }
+    return null;
+  }
+
+  function writeRefused() {
+    if (typeof PGRE.store.canWrite === 'function' && !PGRE.store.canWrite()) {
+      if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
+      return true;
+    }
+    return false;
+  }
+
+  function markGuessed(exam, qid) {
+    if (!exam || !exam.submittedAt || !qid) return false;
+    if (writeRefused()) return false;
+    if (!correctOnExam(exam, qid)) return false;
+    if (isMarkedGuess(exam, qid)) return true;
+    if (!Array.isArray(exam.guessed)) exam.guessed = [];
+    if (!exam.guessOrigin || typeof exam.guessOrigin !== 'object' || Array.isArray(exam.guessOrigin)) {
+      exam.guessOrigin = {};
+    }
+    var mk = PGRE.store.state.mistakes[qid];
+    var origin = !mk ? 'created' : (mk.lucky ? 'already' : 'existing');
+    exam.guessOrigin[qid] = origin;
+    exam.guessed.push(qid);
+    if (origin !== 'already' && PGRE.srs && typeof PGRE.srs.markLucky === 'function') {
+      PGRE.srs.markLucky(qid);
+      if (typeof PGRE.srs.applyAssessSchedule === 'function') {
+        PGRE.srs.applyAssessSchedule(qid, { guess: true });
+      }
+    }
+    var row = examAttemptRow(exam, qid);
+    if (row) row.confidence = 'guess';
+    PGRE.store.save();
+    return true;
+  }
+
+  function unmarkGuessed(exam, qid) {
+    if (!exam || !exam.submittedAt || !qid) return false;
+    if (writeRefused()) return false;
+    if (!isMarkedGuess(exam, qid)) return false;
+    var origin = exam.guessOrigin && exam.guessOrigin[qid];
+    exam.guessed.splice(exam.guessed.indexOf(qid), 1);
+    if (exam.guessOrigin) delete exam.guessOrigin[qid];
+    if (origin !== 'already' && PGRE.srs && typeof PGRE.srs.unmarkLucky === 'function') {
+      PGRE.srs.unmarkLucky(qid);
+      if (typeof PGRE.srs.applyAssessSchedule === 'function') {
+        PGRE.srs.applyAssessSchedule(qid, {});
+      }
+    }
+    var row = examAttemptRow(exam, qid);
+    if (row && row.confidence === 'guess') row.confidence = null;
+    PGRE.store.save();
+    return true;
+  }
+
+  /* One action: every flagged question that was also answered correctly.
+     Wrong and blank flags are not guesses. Already-marked questions stay. */
+  function markFlaggedGuessed(exam) {
+    if (!exam) return 0;
+    var n = 0;
+    flaggedCorrectIds(exam).forEach(function (qid) {
+      if (isMarkedGuess(exam, qid)) return;
+      if (markGuessed(exam, qid)) n += 1;
+    });
+    return n;
+  }
+
   return {
     FORMAT_META: FORMAT_META,
     WEIGHTS: WEIGHTS,
@@ -328,7 +430,12 @@ PGRE.examEngine = (function () {
     history: history,
     submit: submit,
     persistAnswer: persistAnswer,
-    discard: discard
+    discard: discard,
+    isMarkedGuess: isMarkedGuess,
+    flaggedCorrectIds: flaggedCorrectIds,
+    markGuessed: markGuessed,
+    unmarkGuessed: unmarkGuessed,
+    markFlaggedGuessed: markFlaggedGuessed
   };
 })();
 
