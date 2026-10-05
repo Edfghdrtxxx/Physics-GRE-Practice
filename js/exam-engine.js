@@ -261,14 +261,47 @@ PGRE.examEngine = (function () {
   }
 
 
+  function diskBlob() {
+    try { return localStorage.getItem(PGRE.store.KEY); } catch (e) { return null; }
+  }
+
+  /* Put the pre-submit heap back, on the same exam object the room holds,
+     so submittedAt stays empty and a later Submit files the answers once. */
+  function undoFailedSubmit(exam, snap) {
+    var prior = null;
+    var i;
+    var snapExams = snap.exams || [];
+    for (i = 0; i < snapExams.length; i++) {
+      if (snapExams[i] && exam && snapExams[i].id === exam.id) prior = snapExams[i];
+    }
+    var restored = JSON.parse(JSON.stringify(snap));
+    if (exam && prior) {
+      var keys = Object.keys(exam);
+      for (i = 0; i < keys.length; i++) delete exam[keys[i]];
+      keys = Object.keys(prior);
+      for (i = 0; i < keys.length; i++) exam[keys[i]] = prior[keys[i]];
+      var list = restored.exams || [];
+      for (i = 0; i < list.length; i++) {
+        if (list[i] && list[i].id === exam.id) list[i] = exam;
+      }
+    }
+    PGRE.store.state = restored;
+  }
+
   /* Score, commit every question to the log + mistake book (no per-answer XP),
      award the flat completion bonus, and finalize the record. */
   function submit(exam) {
-    if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
-      PGRE.persistWarning(true);
-      return exam;
-    }
+    var retrying = false;
     if (!exam || exam.submittedAt) return exam;
+    if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
+      // This sitting is still unsubmitted, so Submit is asking to record it.
+      // The study-time flush on the same click can fail the write before
+      // this runs. Try again, including that case.
+      retrying = true;
+      PGRE.store._persistFailed = false;
+    }
+    var snap = JSON.parse(JSON.stringify(PGRE.store.state));
+    var diskBefore = diskBlob();
     var perTopic = {}, raw = 0, missing = 0, answered = 0;
     exam.order.forEach(function (qid) {
       var q = PGRE.questionById(qid);
@@ -310,8 +343,130 @@ PGRE.examEngine = (function () {
     PGRE.store.log('exam', 'Mock exam: ' + raw + ' / ' + exam.total + ' (' +
       FORMAT_META[exam.format].label + ')', 150 + raw);
     PGRE.gamify.checkAchievements();
+    // A retry sets the flag so a successful save clears the failure toast.
+    if (retrying) PGRE.store._persistFailed = true;
     PGRE.store.save();
+    if (typeof PGRE.store.canWrite === 'function' && !PGRE.store.canWrite() &&
+        diskBlob() === diskBefore) {
+      undoFailedSubmit(exam, snap);
+      // save() skips the toast when the flag was already set for this retry.
+      if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
+      return exam;
+    }
     return exam;
+  }
+
+  /* ——— Guess marks on a submitted exam's results ———
+     A correct answer the sitter marks as guessed files through the same
+     lucky-guess path practice uses (srs.markLucky / unmarkLucky), so the
+     mistake book gets one kind of entry. The mark itself lives on the exam
+     (`guessed` qid list). Absence means not marked — old sittings have no
+     field and stay unmarked. `guessOrigin` remembers whether this mark
+     created the book entry, reopened or flagged an older one, or found an
+     open lucky guess already filed. Unmark drops a filing this screen
+     created and restores the review date. An open lucky guess keeps its
+     flag; its date still moves, the way a practice Guessed chip does. An
+     archived lucky guess is reopened, not left in the archive. */
+  function guessIds(exam) {
+    return (exam && Array.isArray(exam.guessed)) ? exam.guessed : [];
+  }
+
+  function isMarkedGuess(exam, qid) {
+    return guessIds(exam).indexOf(qid) !== -1;
+  }
+
+  function correctOnExam(exam, qid) {
+    var q = PGRE.questionById(qid);
+    if (!exam || !q || !exam.answers) return false;
+    var picked = exam.answers[qid] != null ? exam.answers[qid] : null;
+    return picked === q.answer;
+  }
+
+  function flaggedCorrectIds(exam) {
+    if (!exam || !exam.flags) return [];
+    return exam.flags.filter(function (qid) { return correctOnExam(exam, qid); });
+  }
+
+  function examAttemptRow(exam, qid) {
+    var arr = (PGRE.store.state && PGRE.store.state.attempts) || [];
+    for (var i = arr.length - 1; i >= 0; i--) {
+      var a = arr[i];
+      if (a && a.qid === qid && a.sid === exam.id && a.mode === 'exam') return a;
+    }
+    return null;
+  }
+
+  function writeRefused() {
+    if (typeof PGRE.store.canWrite === 'function' && !PGRE.store.canWrite()) {
+      if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
+      return true;
+    }
+    return false;
+  }
+
+  function markGuessed(exam, qid) {
+    if (!exam || !exam.submittedAt || !qid) return false;
+    if (writeRefused()) return false;
+    if (!correctOnExam(exam, qid)) return false;
+    if (isMarkedGuess(exam, qid)) return true;
+    if (!Array.isArray(exam.guessed)) exam.guessed = [];
+    if (!exam.guessOrigin || typeof exam.guessOrigin !== 'object' || Array.isArray(exam.guessOrigin)) {
+      exam.guessOrigin = {};
+    }
+    var mk = PGRE.store.state.mistakes[qid];
+    // 'already' only when the open book already shows this lucky guess.
+    // An archived one is 'existing' so markLucky takes it out of the archive.
+    var origin = !mk ? 'created' : (mk.lucky && !mk.archivedAt ? 'already' : 'existing');
+    exam.guessOrigin[qid] = origin;
+    exam.guessed.push(qid);
+    if (PGRE.srs) {
+      if (origin !== 'already' && typeof PGRE.srs.markLucky === 'function') {
+        PGRE.srs.markLucky(qid);
+      }
+      // Practice always rewrites the date, including a guess that was already lucky.
+      if (typeof PGRE.srs.applyAssessSchedule === 'function') {
+        PGRE.srs.applyAssessSchedule(qid, { guess: true });
+      }
+    }
+    var row = examAttemptRow(exam, qid);
+    if (row) row.confidence = 'guess';
+    PGRE.store.save();
+    return true;
+  }
+
+  function unmarkGuessed(exam, qid) {
+    if (!exam || !exam.submittedAt || !qid) return false;
+    if (writeRefused()) return false;
+    if (!isMarkedGuess(exam, qid)) return false;
+    var origin = exam.guessOrigin && exam.guessOrigin[qid];
+    exam.guessed.splice(exam.guessed.indexOf(qid), 1);
+    if (exam.guessOrigin) delete exam.guessOrigin[qid];
+    if (PGRE.srs) {
+      if (origin !== 'already' && typeof PGRE.srs.unmarkLucky === 'function') {
+        PGRE.srs.unmarkLucky(qid);
+      }
+      // Restores baseDue. A created entry is already gone, so this is a no-op there.
+      // An already-lucky entry keeps the flag and only gets its date back.
+      if (typeof PGRE.srs.applyAssessSchedule === 'function') {
+        PGRE.srs.applyAssessSchedule(qid, {});
+      }
+    }
+    var row = examAttemptRow(exam, qid);
+    if (row && row.confidence === 'guess') row.confidence = null;
+    PGRE.store.save();
+    return true;
+  }
+
+  /* One action: every flagged question that was also answered correctly.
+     Wrong and blank flags are not guesses. Already-marked questions stay. */
+  function markFlaggedGuessed(exam) {
+    if (!exam) return 0;
+    var n = 0;
+    flaggedCorrectIds(exam).forEach(function (qid) {
+      if (isMarkedGuess(exam, qid)) return;
+      if (markGuessed(exam, qid)) n += 1;
+    });
+    return n;
   }
 
   return {
@@ -328,7 +483,12 @@ PGRE.examEngine = (function () {
     history: history,
     submit: submit,
     persistAnswer: persistAnswer,
-    discard: discard
+    discard: discard,
+    isMarkedGuess: isMarkedGuess,
+    flaggedCorrectIds: flaggedCorrectIds,
+    markGuessed: markGuessed,
+    unmarkGuessed: unmarkGuessed,
+    markFlaggedGuessed: markFlaggedGuessed
   };
 })();
 

@@ -716,9 +716,20 @@ PGRE.views.exam = (function () {
       '<a href="#/analytics">analytics</a>.</p></div>';
 
     // Question-by-question review
+    var flaggedRight = eng.flaggedCorrectIds ? eng.flaggedCorrectIds(exam) : [];
+    var pendingGuess = flaggedRight.filter(function (qid) { return !eng.isMarkedGuess(exam, qid); });
     html += '<div class="card"><h2>Question-by-question review</h2>' +
       '<p class="muted">Your pick beside the correct answer, with the full solution. ' +
-      'Questions you flagged are marked.</p></div>';
+      'Questions you flagged are marked. On a question you got right, Guessed files it in the mistake book.</p>' +
+      (flaggedRight.length
+        ? '<div class="btn-row"><button type="button" class="btn btn-ghost btn-sm" id="exam-guess-flagged"' +
+            (pendingGuess.length ? '' : ' disabled') + '>' +
+            (pendingGuess.length
+              ? 'Mark flagged correct as guessed'
+              : 'Flagged correct answers are marked as guessed') +
+          '</button></div>'
+        : '') +
+      '</div>';
     exam.order.forEach(function (qid, i) {
       html += reviewCard(exam, qid, i);
     });
@@ -731,6 +742,7 @@ PGRE.views.exam = (function () {
     root().innerHTML = html;
     PGRE.typesetMath(root());
     bindReviewNotes();
+    bindGuesses(exam);
     if (window.PGRE && PGRE.motion) {
       var pctEl = root().querySelector('.summary-pct');
       if (pctEl && PGRE.motion.countUp) PGRE.motion.countUp(pctEl, pct, { duration: 900, format: function (n) { return Math.round(n) + '%'; } });
@@ -861,6 +873,69 @@ PGRE.views.exam = (function () {
     });
   });
 
+  /* Correct answers only. Wrong and blank questions are already in the book. */
+  function guessNote(on, origin) {
+    if (!on) return 'Mark this correct answer as a guess';
+    if (origin === 'already') return 'already filed as a lucky guess in your mistake book';
+    return 'filed as a lucky guess in your mistake book';
+  }
+
+  function guessControl(exam, qid) {
+    var eng = PGRE.examEngine;
+    var on = eng.isMarkedGuess(exam, qid);
+    var origin = exam.guessOrigin && exam.guessOrigin[qid];
+    return '<div class="conf-row assess-row is-exam-guess">' +
+      '<button type="button" class="focus-chip assess-chip' + (on ? ' active' : '') +
+      '" data-assess="guess" data-exam-guess="' + PGRE.ui.esc(qid) +
+      '" aria-pressed="' + (on ? 'true' : 'false') + '">Guessed</button>' +
+      '<span class="assess-note muted" data-guess-note>' + guessNote(on, origin) + '</span></div>';
+  }
+
+  function paintGuess(btn, exam) {
+    var qid = btn.getAttribute('data-exam-guess');
+    var on = PGRE.examEngine.isMarkedGuess(exam, qid);
+    var origin = exam.guessOrigin && exam.guessOrigin[qid];
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    var note = btn.parentNode && btn.parentNode.querySelector('[data-guess-note]');
+    if (note) note.textContent = guessNote(on, origin);
+  }
+
+  function refreshGuessBulk(exam) {
+    var bulk = document.getElementById('exam-guess-flagged');
+    if (!bulk || !PGRE.examEngine.flaggedCorrectIds) return;
+    var pending = PGRE.examEngine.flaggedCorrectIds(exam).filter(function (qid) {
+      return !PGRE.examEngine.isMarkedGuess(exam, qid);
+    });
+    bulk.disabled = pending.length === 0;
+    bulk.textContent = pending.length
+      ? 'Mark flagged correct as guessed'
+      : 'Flagged correct answers are marked as guessed';
+  }
+
+  function bindGuesses(exam) {
+    var rootEl = root();
+    if (!rootEl || !PGRE.examEngine || !PGRE.examEngine.markGuessed) return;
+    rootEl.querySelectorAll('[data-exam-guess]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var qid = btn.getAttribute('data-exam-guess');
+        var on = PGRE.examEngine.isMarkedGuess(exam, qid);
+        var ok = on ? PGRE.examEngine.unmarkGuessed(exam, qid) : PGRE.examEngine.markGuessed(exam, qid);
+        if (!ok) return;
+        paintGuess(btn, exam);
+        refreshGuessBulk(exam);
+        if (PGRE.refreshNavBadges) PGRE.refreshNavBadges();
+      });
+    });
+    var bulk = document.getElementById('exam-guess-flagged');
+    if (bulk) bulk.addEventListener('click', function () {
+      PGRE.examEngine.markFlaggedGuessed(exam);
+      rootEl.querySelectorAll('[data-exam-guess]').forEach(function (btn) { paintGuess(btn, exam); });
+      refreshGuessBulk(exam);
+      if (PGRE.refreshNavBadges) PGRE.refreshNavBadges();
+    });
+  }
+
   function reviewCard(exam, qid, i) {
     var ui = PGRE.ui, q = PGRE.questionById(qid);
     var flagged = exam.flags.indexOf(qid) !== -1;
@@ -890,6 +965,7 @@ PGRE.views.exam = (function () {
       (correct ? 'You picked ' : 'Correct: ') + LETTERS[q.answer] + '</strong> — ' +
       '<span class="miss-pick-body">' + q.choices[q.answer] + '</span></div>' +
     '</div>' +
+    (correct ? guessControl(exam, qid) : '') +
     '<details class="miss"><summary>Solution</summary>' +
       '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div></details>' +
     distractorBlock(q) +
