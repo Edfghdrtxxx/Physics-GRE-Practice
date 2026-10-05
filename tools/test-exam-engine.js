@@ -472,5 +472,52 @@ assert(store.canWrite() === true, 'a successful retry can write again');
 engine.submit(failExam);
 assert(store.state.mistakes[failMiss].misses === 1, 'a second submit does not file the miss again');
 
+/* A throwing save before submit stands in for the study-time capture-phase
+   flush: that click sets the failure flag, then submit runs. */
+resetState();
+var flushExam = engine.create({ source: 'gr8677' });
+var flushMiss = flushExam.order[0];
+var flushRight = flushExam.order[1];
+flushExam.answers[flushMiss] = (ansOf(flushMiss) + 1) % 5;
+flushExam.answers[flushRight] = ansOf(flushRight);
+store.state.notes['keep-note'] = { text: 'do not drop', at: '2026-09-01T00:00:00.000Z' };
+store.save();
+var flushDisk = localStorage.getItem(store.KEY);
+var flushXp = store.state.xp;
+var flushAttempts = store.state.attempts.length;
+var flushSetItem = localStorage.setItem;
+localStorage.setItem = function (k, v) {
+  if (k === store.KEY) throw new Error('quota');
+  return flushSetItem.call(localStorage, k, v);
+};
+store.save();
+assert(store.canWrite() === false, 'a flush before submit reports that writing failed');
+assert(localStorage.getItem(store.KEY) === flushDisk, 'a flush before submit leaves the stored blob unchanged');
+var flushed = engine.submit(flushExam);
+assert(flushed === flushExam && !flushExam.submittedAt, 'a flush-blocked submit leaves the sitting unsubmitted');
+assert(engine.active() === flushExam, 'the room still has the sitting after a flush-blocked submit');
+assert(localStorage.getItem(store.KEY) === flushDisk, 'a flush-blocked submit leaves the stored blob unchanged');
+assert(!store.state.mistakes[flushMiss], 'a flush-blocked submit does not keep the miss in memory');
+assert(store.state.attempts.length === flushAttempts, 'a flush-blocked submit does not keep the new attempt rows');
+assert(store.state.xp === flushXp, 'a flush-blocked submit does not keep the completion XP');
+assert(store.state.notes['keep-note'] && store.state.notes['keep-note'].text === 'do not drop',
+  'a flush-blocked submit leaves an existing note');
+var flushedAgain = engine.submit(flushExam);
+assert(flushedAgain === flushExam && !flushExam.submittedAt,
+  'a second submit while the write still fails stays unsubmitted');
+assert(localStorage.getItem(store.KEY) === flushDisk, 'a second failed submit leaves the stored blob unchanged');
+assert(!store.state.mistakes[flushMiss], 'a second failed submit does not file the miss');
+assert(store.canWrite() === false, 'a still-failing submit reports that writing failed');
+localStorage.setItem = flushSetItem;
+var flushRetried = engine.submit(flushExam);
+assert(!!flushRetried.submittedAt, 'Submit after the flush failure records the sitting once storage works');
+assert(store.state.mistakes[flushMiss] && store.state.mistakes[flushMiss].misses === 1,
+  'the retried submit after a flush files the wrong answer once');
+assert(!store.state.mistakes[flushRight], 'the retried submit after a flush does not file a right answer');
+assert(store.canWrite() === true, 'a successful retry after a flush can write again');
+assert(store.state.notes['keep-note'].text === 'do not drop', 'the retry leaves the existing note');
+engine.submit(flushExam);
+assert(store.state.mistakes[flushMiss].misses === 1, 'a second submit after a flush does not file the miss again');
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

@@ -261,11 +261,6 @@ PGRE.examEngine = (function () {
   }
 
 
-  /* Set when submit's own save did not land and the sitting was put back.
-     The next Submit tries the write again. A store that cannot write for any
-     other reason still refuses, the same as before. */
-  var submitSaveFailed = false;
-
   function diskBlob() {
     try { return localStorage.getItem(PGRE.store.KEY); } catch (e) { return null; }
   }
@@ -297,16 +292,14 @@ PGRE.examEngine = (function () {
      award the flat completion bonus, and finalize the record. */
   function submit(exam) {
     var retrying = false;
+    if (!exam || exam.submittedAt) return exam;
     if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
-      if (!submitSaveFailed) {
-        PGRE.persistWarning(true);
-        return exam;
-      }
-      // The previous attempt rolled its edits back. Try the write again.
+      // This sitting is still unsubmitted, so Submit is asking to record it.
+      // The study-time flush on the same click can fail the write before
+      // this runs. Try again, including that case.
       retrying = true;
       PGRE.store._persistFailed = false;
     }
-    if (!exam || exam.submittedAt) return exam;
     var snap = JSON.parse(JSON.stringify(PGRE.store.state));
     var diskBefore = diskBlob();
     var perTopic = {}, raw = 0, missing = 0, answered = 0;
@@ -356,10 +349,10 @@ PGRE.examEngine = (function () {
     if (typeof PGRE.store.canWrite === 'function' && !PGRE.store.canWrite() &&
         diskBlob() === diskBefore) {
       undoFailedSubmit(exam, snap);
-      submitSaveFailed = true;
+      // save() skips the toast when the flag was already set for this retry.
+      if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
       return exam;
     }
-    submitSaveFailed = false;
     return exam;
   }
 
