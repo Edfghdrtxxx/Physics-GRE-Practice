@@ -12,6 +12,7 @@ var vm = require('vm');
 var root = path.resolve(__dirname, '..');
 var storeSrc = fs.readFileSync(path.join(root, 'js', 'store.js'), 'utf8');
 var bankSrc = fs.readFileSync(path.join(root, 'js', 'bank.js'), 'utf8');
+var srsSrc = fs.readFileSync(path.join(root, 'js', 'srs.js'), 'utf8');
 var engineSrc = fs.readFileSync(path.join(root, 'js', 'exam-engine.js'), 'utf8');
 
 var window = { PGRE: {} };
@@ -262,6 +263,261 @@ var e3 = engine.create({});
 engine.discard(e3);
 assert(store.state.exams.indexOf(e3) === -1, 'discard removes the sitting from state');
 assert(engine.byId(e2.id) === e2, 'byId finds a submitted exam by id');
+
+console.log('\nguess marks on exam results');
+vm.runInContext(srsSrc, sandbox);
+resetState();
+if (typeof PGRE._resetBankCache === 'function') PGRE._resetBankCache();
+var guessExam = engine.create({ source: 'gr8677' });
+assert(!!guessExam, 'guess-mark fixture exam was created');
+var gRight = guessExam.order[0];
+var gWrong = guessExam.order[1];
+var gBlank = guessExam.order[2];
+var gExisting = guessExam.order[3];
+var gAlready = guessExam.order[4];
+var gFlaggedRight = guessExam.order[5];
+var gUnflaggedRight = guessExam.order[6];
+function gAns(id) { return PGRE.questionById(id).answer; }
+guessExam.answers[gRight] = gAns(gRight);
+guessExam.answers[gWrong] = (gAns(gWrong) + 1) % 5;
+guessExam.answers[gExisting] = gAns(gExisting);
+guessExam.answers[gAlready] = gAns(gAlready);
+guessExam.answers[gFlaggedRight] = gAns(gFlaggedRight);
+guessExam.answers[gUnflaggedRight] = gAns(gUnflaggedRight);
+guessExam.flags = [gRight, gWrong, gBlank, gFlaggedRight];
+guessExam.submittedAt = '2026-10-05T00:00:00.000Z';
+[gRight, gWrong, gExisting, gAlready, gFlaggedRight, gUnflaggedRight].forEach(function (id) {
+  store.state.attempts.push({
+    ts: '2026-10-05T00:00:00.000Z', qid: id, topic: 'cm',
+    picked: guessExam.answers[id], answer: gAns(id),
+    correct: guessExam.answers[id] === gAns(id),
+    ms: null, sid: guessExam.id, mode: 'exam', confidence: null
+  });
+});
+store.state.mistakes[gExisting] = {
+  firstMissedAt: '2026-01-01T00:00:00.000Z', misses: 2, solves: 1, wrongPicks: [1],
+  archivedAt: null, srs: { step: 3, due: '2099-01-01', baseDue: '2099-01-01' }
+};
+store.state.mistakes[gAlready] = {
+  firstMissedAt: '2026-01-01T00:00:00.000Z', misses: 0, solves: 0, wrongPicks: [],
+  archivedAt: null, lucky: true, srs: { step: 0, due: '2099-02-01', baseDue: '2099-02-01' }
+};
+var oldExam = { id: 'ex-old', submittedAt: '2020-01-01T00:00:00.000Z', answers: {}, flags: [], order: [] };
+assert(engine.isMarkedGuess(oldExam, gRight) === false, 'an old exam without guessed is not marked');
+assert(!Object.prototype.hasOwnProperty.call(oldExam, 'guessed'), 'reading an old exam does not add a guessed field');
+assert(engine.markGuessed(guessExam, gWrong) === false, 'a wrong answer cannot be marked guessed');
+assert(engine.markGuessed(guessExam, gBlank) === false, 'a blank answer cannot be marked guessed');
+assert(!guessExam.guessed, 'rejected marks do not create the guessed list');
+assert(engine.markGuessed(guessExam, gRight) === true, 'a correct answer can be marked guessed');
+assert(engine.isMarkedGuess(guessExam, gRight) === true, 'the mark is recorded on the exam');
+var created = store.state.mistakes[gRight];
+assert(!!created && created.lucky === true && created.misses === 0, 'a new guess files a lucky-guess entry, not a miss');
+assert(created.srs && created.srs.step === 0 && created.srs.due === PGRE.srs.addDays(1),
+  'a new guess is due tomorrow, the same first rung as a practice lucky guess');
+var rightRow = store.state.attempts.filter(function (a) { return a.qid === gRight && a.sid === guessExam.id; })[0];
+assert(rightRow.confidence === 'guess', 'the exam attempt row is stamped guessed');
+assert(engine.markGuessed(guessExam, gRight) === true && guessExam.guessed.length === 1,
+  'marking the same question again does not duplicate it');
+assert(engine.unmarkGuessed(guessExam, gRight) === true, 'the guess mark can be removed');
+assert(engine.isMarkedGuess(guessExam, gRight) === false, 'unmark clears the exam mark');
+assert(!store.state.mistakes[gRight], 'unmark removes the lucky-guess entry it created');
+assert(rightRow.confidence === null, 'unmark clears the exam attempt stamp');
+
+assert(engine.markGuessed(guessExam, gExisting) === true, 'a correct answer already in the book can be marked');
+var existing = store.state.mistakes[gExisting];
+assert(existing.lucky === true && existing.misses === 2 && existing.solves === 1,
+  'marking an older entry adds the lucky flag and leaves its miss record');
+assert(existing.srs.step === 3 && existing.srs.due !== '2099-01-01',
+  'Guessed halves the remaining wait on an entry that already had a schedule');
+assert(engine.unmarkGuessed(guessExam, gExisting) === true, 'unmark of an older entry succeeds');
+existing = store.state.mistakes[gExisting];
+assert(!!existing && existing.misses === 2 && !existing.lucky && existing.srs.due === '2099-01-01',
+  'unmark drops only the lucky flag and restores the earlier review date');
+
+assert(engine.markGuessed(guessExam, gAlready) === true, 'a question that was already a lucky guess can be marked on the exam');
+var alreadyMarked = store.state.mistakes[gAlready];
+var alreadyBaseDays = PGRE.srs.daysUntil('2099-02-01');
+var alreadyWait = PGRE.srs.assessWaitDays(alreadyBaseDays, { guess: true });
+var alreadyExpect = alreadyWait === alreadyBaseDays ? '2099-02-01' : PGRE.srs.addDays(alreadyWait);
+assert(!!alreadyMarked && alreadyMarked.lucky === true && alreadyMarked.misses === 0 &&
+  alreadyMarked.srs.step === 0, 'an already-lucky entry keeps its flag, misses, and step');
+assert(alreadyMarked.srs.due === alreadyExpect && alreadyExpect !== '2099-02-01',
+  'Guessed on an already-lucky entry halves the wait the way practice does');
+assert(engine.unmarkGuessed(guessExam, gAlready) === true, 'unmark of an already-lucky question succeeds');
+var already = store.state.mistakes[gAlready];
+assert(!!already && already.lucky === true && already.srs.due === '2099-02-01' && already.misses === 0,
+  'unmark restores the earlier review date and leaves the lucky flag');
+
+var beforeBulk = guessExam.guessed.slice();
+var bulkN = engine.markFlaggedGuessed(guessExam);
+assert(bulkN === 2, 'mark all flagged files the two flagged correct questions, got ' + bulkN);
+assert(engine.isMarkedGuess(guessExam, gRight) && engine.isMarkedGuess(guessExam, gFlaggedRight),
+  'both flagged correct questions are marked');
+assert(!engine.isMarkedGuess(guessExam, gWrong) && !engine.isMarkedGuess(guessExam, gBlank),
+  'flagged wrong and blank questions are not marked');
+assert(!engine.isMarkedGuess(guessExam, gUnflaggedRight), 'an unflagged correct question is not swept in');
+assert(!!store.state.mistakes[gRight] && store.state.mistakes[gRight].lucky === true, 'the swept correct question is a lucky guess');
+assert(!store.state.mistakes[gWrong], 'a flagged wrong question is not given a lucky-guess entry by the sweep');
+assert(engine.markFlaggedGuessed(guessExam) === 0, 'a second sweep marks nothing new');
+assert(beforeBulk.length === 0, 'the sweep started from a cleared list');
+
+var plain = { id: 'ex-plain', submittedAt: '2020-01-01T00:00:00.000Z', answers: {}, order: [], flags: [] };
+var roundTrip = JSON.parse(JSON.stringify(guessExam));
+assert(Array.isArray(roundTrip.guessed) && roundTrip.guessed.indexOf(gRight) !== -1,
+  'the guess mark survives a save/load round trip');
+assert(!Object.prototype.hasOwnProperty.call(plain, 'guessed'), 'a saved exam with no marks still has no guessed field');
+store._persistFailed = true;
+var refused = engine.markGuessed(guessExam, gUnflaggedRight);
+assert(refused === false && !engine.isMarkedGuess(guessExam, gUnflaggedRight),
+  'a refused save does not record a guess mark');
+store._persistFailed = false;
+
+console.log('\nreal submit: archived lucky guess and a failed save');
+var gamifySrc = fs.readFileSync(path.join(root, 'js', 'gamify.js'), 'utf8');
+sandbox.document = { querySelector: function () { return null; } };
+vm.runInContext(gamifySrc, sandbox);
+/* recordExamAnswer is the real one. Achievement metrics need the plan catalog,
+   which this regression does not exercise. */
+PGRE.gamify.checkAchievements = function () { return []; };
+
+function openIds() {
+  return PGRE.srs.openMistakes().map(function (e) { return e.qid; });
+}
+
+resetState();
+var realExam = engine.create({ source: 'gr8677' });
+assert(!!realExam, 'real-submit fixture exam was created');
+var archQ = realExam.order[0];
+var openLuckyQ = realExam.order[1];
+var missQ = realExam.order[2];
+function ansOf(id) { return PGRE.questionById(id).answer; }
+realExam.answers[archQ] = ansOf(archQ);
+realExam.answers[openLuckyQ] = ansOf(openLuckyQ);
+realExam.answers[missQ] = (ansOf(missQ) + 1) % 5;
+store.state.mistakes[archQ] = {
+  firstMissedAt: '2026-04-01T00:00:00.000Z', misses: 0, solves: 0, wrongPicks: [],
+  archivedAt: '2026-04-01T00:00:00.000Z', lucky: true,
+  srs: { step: 2, due: '2099-04-01', baseDue: '2099-04-01' }
+};
+store.state.mistakes[openLuckyQ] = {
+  firstMissedAt: '2026-01-01T00:00:00.000Z', misses: 1, solves: 1, wrongPicks: [0],
+  archivedAt: null, lucky: true,
+  srs: { step: 3, due: '2099-06-01', baseDue: '2099-06-01' }
+};
+store.save();
+engine.submit(realExam);
+var archAfter = store.state.mistakes[archQ];
+assert(!!realExam.submittedAt, 'real submit sets submittedAt');
+assert(!!archAfter && !!archAfter.archivedAt && archAfter.lucky === true && archAfter.solves === 1,
+  'a correct submit leaves an archived lucky guess archived and counts the solve');
+assert(openIds().indexOf(archQ) === -1, 'an archived lucky guess is not in the open book after submit alone');
+assert(engine.markGuessed(realExam, archQ) === true, 'Guessed on an archived lucky guess succeeds');
+assert(realExam.guessOrigin[archQ] === 'existing', 'an archived lucky guess is reopened, not treated as already filed');
+archAfter = store.state.mistakes[archQ];
+assert(!!archAfter && !archAfter.archivedAt && archAfter.lucky === true,
+  'Guessed clears the archive on an already-lucky entry');
+assert(openIds().indexOf(archQ) !== -1, 'the reopened lucky guess is in the open mistake book');
+assert(engine.unmarkGuessed(realExam, archQ) === true, 'unmark of the reopened lucky guess succeeds');
+archAfter = store.state.mistakes[archQ];
+assert(!!archAfter && archAfter.solves === 1 && !archAfter.lucky && archAfter.srs.due === '2099-04-01',
+  'unmark clears the lucky flag and restores the review date');
+
+var climbed = store.state.mistakes[openLuckyQ];
+var climbedDue = PGRE.srs.addDays(PGRE.srs.MISTAKE_LADDER[4]);
+assert(climbed.srs.step === 4 && climbed.srs.due === climbedDue && climbed.lucky === true,
+  'a correct submit climbs an open lucky guess and leaves it lucky');
+assert(engine.markGuessed(realExam, openLuckyQ) === true, 'Guessed on an open lucky guess succeeds');
+assert(realExam.guessOrigin[openLuckyQ] === 'already', 'an open lucky guess keeps the already origin');
+var halvedDays = PGRE.srs.assessWaitDays(PGRE.srs.daysUntil(climbedDue), { guess: true });
+var halvedDue = PGRE.srs.addDays(halvedDays);
+climbed = store.state.mistakes[openLuckyQ];
+assert(climbed.lucky === true && climbed.srs.step === 4 && climbed.misses === 1 && climbed.solves === 2 &&
+  climbed.srs.due === halvedDue && halvedDue !== climbedDue,
+  'Guessed halves the post-submit wait and leaves step, misses, and solves');
+assert(engine.unmarkGuessed(realExam, openLuckyQ) === true, 'unmark of the open lucky guess succeeds');
+climbed = store.state.mistakes[openLuckyQ];
+assert(!!climbed && climbed.lucky === true && climbed.srs.due === climbedDue && climbed.srs.step === 4,
+  'unmark restores the post-submit review date and leaves the lucky flag');
+
+resetState();
+var failExam = engine.create({ source: 'gr8677' });
+var failMiss = failExam.order[0];
+var failRight = failExam.order[1];
+failExam.answers[failMiss] = (ansOf(failMiss) + 1) % 5;
+failExam.answers[failRight] = ansOf(failRight);
+store.save();
+var diskBefore = localStorage.getItem(store.KEY);
+var xpBefore = store.state.xp;
+var attemptsBefore = store.state.attempts.length;
+var realSetItem = localStorage.setItem;
+localStorage.setItem = function (k, v) {
+  if (k === store.KEY) throw new Error('quota');
+  return realSetItem.call(localStorage, k, v);
+};
+var failedSubmit = engine.submit(failExam);
+assert(failedSubmit === failExam && !failExam.submittedAt, 'a failed save does not leave the sitting submitted');
+assert(engine.active() === failExam, 'the room still has the unsubmitted sitting');
+assert(localStorage.getItem(store.KEY) === diskBefore, 'a failed save leaves the stored blob unchanged');
+assert(!store.state.mistakes[failMiss], 'a failed save does not keep the miss in memory');
+assert(store.state.attempts.length === attemptsBefore, 'a failed save does not keep the new attempt rows');
+assert(store.state.xp === xpBefore, 'a failed save does not keep the completion XP');
+assert(store.canWrite() === false, 'a failed save still reports that writing failed');
+localStorage.setItem = realSetItem;
+var retried = engine.submit(failExam);
+assert(!!retried.submittedAt, 'Submit after the write works records the sitting');
+assert(store.state.mistakes[failMiss] && store.state.mistakes[failMiss].misses === 1,
+  'the retried submit files the wrong answer once');
+assert(!store.state.mistakes[failRight], 'the retried submit does not file a right answer');
+assert(store.canWrite() === true, 'a successful retry can write again');
+engine.submit(failExam);
+assert(store.state.mistakes[failMiss].misses === 1, 'a second submit does not file the miss again');
+
+/* A throwing save before submit stands in for the study-time capture-phase
+   flush: that click sets the failure flag, then submit runs. */
+resetState();
+var flushExam = engine.create({ source: 'gr8677' });
+var flushMiss = flushExam.order[0];
+var flushRight = flushExam.order[1];
+flushExam.answers[flushMiss] = (ansOf(flushMiss) + 1) % 5;
+flushExam.answers[flushRight] = ansOf(flushRight);
+store.state.notes['keep-note'] = { text: 'do not drop', at: '2026-09-01T00:00:00.000Z' };
+store.save();
+var flushDisk = localStorage.getItem(store.KEY);
+var flushXp = store.state.xp;
+var flushAttempts = store.state.attempts.length;
+var flushSetItem = localStorage.setItem;
+localStorage.setItem = function (k, v) {
+  if (k === store.KEY) throw new Error('quota');
+  return flushSetItem.call(localStorage, k, v);
+};
+store.save();
+assert(store.canWrite() === false, 'a flush before submit reports that writing failed');
+assert(localStorage.getItem(store.KEY) === flushDisk, 'a flush before submit leaves the stored blob unchanged');
+var flushed = engine.submit(flushExam);
+assert(flushed === flushExam && !flushExam.submittedAt, 'a flush-blocked submit leaves the sitting unsubmitted');
+assert(engine.active() === flushExam, 'the room still has the sitting after a flush-blocked submit');
+assert(localStorage.getItem(store.KEY) === flushDisk, 'a flush-blocked submit leaves the stored blob unchanged');
+assert(!store.state.mistakes[flushMiss], 'a flush-blocked submit does not keep the miss in memory');
+assert(store.state.attempts.length === flushAttempts, 'a flush-blocked submit does not keep the new attempt rows');
+assert(store.state.xp === flushXp, 'a flush-blocked submit does not keep the completion XP');
+assert(store.state.notes['keep-note'] && store.state.notes['keep-note'].text === 'do not drop',
+  'a flush-blocked submit leaves an existing note');
+var flushedAgain = engine.submit(flushExam);
+assert(flushedAgain === flushExam && !flushExam.submittedAt,
+  'a second submit while the write still fails stays unsubmitted');
+assert(localStorage.getItem(store.KEY) === flushDisk, 'a second failed submit leaves the stored blob unchanged');
+assert(!store.state.mistakes[flushMiss], 'a second failed submit does not file the miss');
+assert(store.canWrite() === false, 'a still-failing submit reports that writing failed');
+localStorage.setItem = flushSetItem;
+var flushRetried = engine.submit(flushExam);
+assert(!!flushRetried.submittedAt, 'Submit after the flush failure records the sitting once storage works');
+assert(store.state.mistakes[flushMiss] && store.state.mistakes[flushMiss].misses === 1,
+  'the retried submit after a flush files the wrong answer once');
+assert(!store.state.mistakes[flushRight], 'the retried submit after a flush does not file a right answer');
+assert(store.canWrite() === true, 'a successful retry after a flush can write again');
+assert(store.state.notes['keep-note'].text === 'do not drop', 'the retry leaves the existing note');
+engine.submit(flushExam);
+assert(store.state.mistakes[flushMiss].misses === 1, 'a second submit after a flush does not file the miss again');
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);
