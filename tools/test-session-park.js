@@ -638,6 +638,62 @@ clicked({ target: { closest: function (sel) {
 } } });
 assert(locationStub.hash === '#/exam/run', 'exam band opens the room directly');
 
+console.log('\nIgnore takes a session off the drawer and keeps its progress');
+
+// the rendered band carries Continue, the caret, and the Ignore item
+btn.listeners.click({ target: btn });
+assert(/data-park-act="continue"/.test(panel.innerHTML) &&
+       /data-park-act="menu"/.test(panel.innerHTML) &&
+       /data-park-act="ignore"/.test(panel.innerHTML),
+  'each band renders Continue, the caret, and Ignore');
+
+function actTarget(kind, act) {
+  return { closest: function (sel) {
+    if (sel === '.parked-band') return { getAttribute: function () { return kind; } };
+    if (sel === '[data-park-act]') return { getAttribute: function () { return act; } };
+    return null;
+  } };
+}
+var drillBefore = sessionStorage.getItem(park.DRILL_KEY);
+var hashBefore = locationStub.hash;
+var savesOnIgnore = (function () {
+  var n = 0, orig = PGRE.store.save;
+  PGRE.store.save = function () { n++; return orig.apply(PGRE.store, arguments); };
+  clicked({ target: actTarget('mistakes', 'ignore') });
+  PGRE.store.save = orig;
+  return n;
+})();
+assert(savesOnIgnore === 0, 'Ignore never writes the durable store');
+assert(sessionStorage.getItem(park.DRILL_KEY) === drillBefore, 'Ignore keeps the drill snapshot (progress preserved)');
+assert(locationStub.hash === hashBefore, 'Ignore does not navigate');
+assert(parkedNow().length === 3 && parkedNow().every(function (b) { return b.kind !== 'mistakes'; }),
+  'the ignored session leaves the drawer list');
+assert(park.collectAll().length === 4, 'collectAll still sees the ignored session');
+assert(btn.textContent === '3 unfinished', 'the count drops by one');
+assert(!/Mistake drill/.test(panel.innerHTML), 'the open drawer repaints without the ignored band');
+assert(JSON.parse(localStorage.getItem(park.IGNORE_KEY)).join() === 'mistakes:s-d', 'the ignore is keyed to kind + session id');
+assert(!/Mistake drill/.test(park.reminderHTML()) && /3 sessions/.test(park.reminderHTML()),
+  'the dashboard reminder stops counting the ignored session');
+
+// Continue through the explicit button still resumes
+clicked({ target: actTarget('exam', 'continue') });
+assert(locationStub.hash === '#/exam/run', 'the Continue button resumes its session');
+
+// a replacement session of the same kind (new id) lists again
+put(park.DRILL_KEY, { ids: ['m1', 'm2'], i: 0, skipped: 0, sid: 's-d2', results: [] });
+assert(parkedNow().some(function (b) { return b.kind === 'mistakes'; }),
+  'a new drill with a different id lists again');
+// ignoring another band drops the key of the session that no longer exists
+park.ignoreBand(parkedNow().filter(function (b) { return b.kind === 'exam'; })[0]);
+assert(JSON.parse(localStorage.getItem(park.IGNORE_KEY)).join() === 'exam:ex-1',
+  'keys of sessions that no longer exist are pruned');
+
+// ignoring everything hides the button
+parkedNow().forEach(function (b) { park.ignoreBand(b); });
+assert(parkedNow().length === 0 && wrap.hidden === true, 'the button hides when every session is ignored');
+assert(park.reminderHTML() === '', 'no dashboard reminder when every session is ignored');
+localStorage.removeItem(park.IGNORE_KEY);
+
 console.log('\nshell cache tokens for the review-date scripts');
 
 var indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -647,7 +703,7 @@ function scriptToken(file) {
 }
 assert(scriptToken('js/srs.js') === '20261002c', 'srs.js cache token is 20261002c, got ' + scriptToken('js/srs.js'));
 assert(scriptToken('js/gamify.js') === '20261002b', 'gamify.js cache token is 20261002b, got ' + scriptToken('js/gamify.js'));
-assert(scriptToken('js/view-practice.js') === '20261003a', 'view-practice.js cache token is 20261003a, got ' + scriptToken('js/view-practice.js'));
+assert(scriptToken('js/view-practice.js') === '20261004b', 'view-practice.js cache token is 20261004b, got ' + scriptToken('js/view-practice.js'));
 assert(scriptToken('js/view-mistakes.js') === '20261003a', 'view-mistakes.js cache token is 20261003a, got ' + scriptToken('js/view-mistakes.js'));
 assert(scriptToken('js/app.js') === '20261003a', 'app.js cache token is 20261003a, got ' + scriptToken('js/app.js'));
 assert(indexHtml.indexOf('js/srs.js?v=20261001j') < 0 &&

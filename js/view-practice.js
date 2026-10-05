@@ -1308,7 +1308,9 @@ PGRE.views.practice = (function () {
     if (misses.length) {
       html += '<h2>Review your misses</h2>';
       misses.forEach(function (a) {
-        html += '<details class="miss"><summary>' + a.q.q + '</summary>' +
+        // One wrapper child: the summary is a flex row, so bare text runs and
+        // math spans would each become their own column.
+        html += '<details class="miss"><summary><span class="miss-title">' + a.q.q + '</span></summary>' +
           '<div class="solution"><div class="solution-label">Solution</div>' + a.q.sol + '</div></details>';
       });
     }

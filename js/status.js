@@ -6,6 +6,7 @@ window.PGRE = window.PGRE || {};
 
   var ENDPOINT = 'http://127.0.0.1:4789/pgre-status';
   var PUSH_INTERVAL_MS = 30000;
+  var MAX_BODY_CHARS = 300000; // worst case 3 UTF-8 bytes per char stays under the bridge's 1 MiB
   var lastPushAt = 0;
   var pendingPush = null;
 
@@ -61,6 +62,93 @@ window.PGRE = window.PGRE || {};
     return counts;
   }
 
+  /* Today's attempt rows (state.attempts), one object per answered question,
+     oldest first. `picked` and `answer` are 0-based choice indexes (`picked`
+     null = blank); `tags` are the self-assessment chips: knew-it / guessed
+     (row.confidence), too-slow / forgot-something (row.tags), keep-failing
+     (the question's current mistake-book flag, which is not stored per
+     attempt). Prompt and choices go into `texts` once per qid, and only for
+     the default practice pool: intact exam questions stay qid-only (spoiler
+     rule, AGENTS.md → Content Rules). */
+  function attemptResults(state, date, texts) {
+    var mistakes = state.mistakes || {};
+    var pool = {};
+    if (typeof PGRE.allQuestions === 'function') {
+      (PGRE.allQuestions() || []).forEach(function (q) { if (q && q.id) pool[q.id] = q; });
+    }
+    return (Array.isArray(state.attempts) ? state.attempts : [])
+      .filter(function (row) { return row && row.qid && localDay(row.ts) === date; })
+      .map(function (row) {
+        var q = pool[row.qid] ||
+          (typeof PGRE.questionById === 'function' ? PGRE.questionById(row.qid) : null) || {};
+        var tags = [];
+        if (row.confidence === 'sure') tags.push('knew-it');
+        if (row.confidence === 'guess') tags.push('guessed');
+        (Array.isArray(row.tags) ? row.tags : []).forEach(function (tag) {
+          if (tag === 'slow') tags.push('too-slow');
+          else if (tag === 'forgot') tags.push('forgot-something');
+        });
+        if (mistakes[row.qid] && mistakes[row.qid].stuck) tags.push('keep-failing');
+        var isExam = q.src === 'ets-exam' || q.src === 'cpg-exam';
+        if (pool[row.qid] && !isExam && !texts[row.qid]) {
+          texts[row.qid] = {
+            prompt: typeof q.q === 'string' ? q.q : '',
+            choices: Array.isArray(q.choices) ? q.choices.slice() : []
+          };
+        }
+        return {
+          ts: row.ts,
+          sessionId: row.sid || null,
+          mode: row.mode || null,
+          qid: row.qid,
+          topic: row.topic || q.topic || null,
+          subtopic: q.subtopic || null,
+          src: q.src || null,
+          correct: !!row.correct,
+          picked: typeof row.picked === 'number' ? row.picked : null,
+          answer: typeof row.answer === 'number' ? row.answer : null,
+          seconds: typeof row.ms === 'number' ? Math.round(row.ms / 100) / 10 : null,
+          tags: tags
+        };
+      });
+  }
+
+  /* Mistake book: open (not archived) and due counts, plus every entry whose
+     record changed today (missed, solved, flagged, or rescheduled). */
+  function mistakeBookSummary(state, date) {
+    var mistakes = state.mistakes || {};
+    var out = { active: 0, due: 0, today: [] };
+    Object.keys(mistakes).forEach(function (qid) {
+      var mk = mistakes[qid];
+      if (!mk) return;
+      var due = (mk.srs && mk.srs.due) || null;
+      if (!mk.archivedAt) {
+        out.active++;
+        if (due && due <= date) out.due++;
+      }
+      var touched = ['firstMissedAt', 'lastMissedAt', 'lastSolvedAt', 'lastLuckyAt',
+        'lastStuckAt', 'lastTouchedAt'].some(function (field) {
+        return mk[field] && localDay(mk[field]) === date;
+      });
+      if (!touched) return;
+      var q = (typeof PGRE.questionById === 'function' ? PGRE.questionById(qid) : null) || {};
+      out.today.push({
+        qid: qid,
+        topic: q.topic || null,
+        added: localDay(mk.firstMissedAt) === date,
+        misses: nonNegative(mk.misses),
+        solves: nonNegative(mk.solves),
+        lastPick: typeof mk.lastPick === 'number' ? mk.lastPick : null,
+        wrongPicks: Array.isArray(mk.wrongPicks) ? mk.wrongPicks.slice() : [],
+        luckyGuess: !!mk.lucky,
+        keepFailing: !!mk.stuck,
+        due: due,
+        archived: !!mk.archivedAt
+      });
+    });
+    return out;
+  }
+
   PGRE.buildStatusSummary = function () {
     var store = PGRE.store || {};
     var state = store.state || {};
@@ -104,6 +192,9 @@ window.PGRE = window.PGRE || {};
       .slice(0, 10)
       .map(function (entry) { return entry.text; });
 
+    var questionTexts = {};
+    var attempts = attemptResults(state, date, questionTexts);
+
     return {
       date: date,
       streak: {
@@ -124,7 +215,10 @@ window.PGRE = window.PGRE || {};
         return counts;
       })(),
       mistakesAdded: mistakesAdded,
-      recentLog: recentLog
+      recentLog: recentLog,
+      attempts: attempts,
+      questions: questionTexts,
+      mistakeBook: mistakeBookSummary(state, date)
     };
   };
 
@@ -136,7 +230,14 @@ window.PGRE = window.PGRE || {};
 
     var body;
     try {
-      body = JSON.stringify(PGRE.buildStatusSummary());
+      var summary = PGRE.buildStatusSummary();
+      body = JSON.stringify(summary);
+      // The bridge rejects bodies over 1 MiB; question text is the only large
+      // part, so drop it before the per-question results are lost with it.
+      if (body.length > MAX_BODY_CHARS) {
+        summary.questions = {};
+        body = JSON.stringify(summary);
+      }
     } catch (e) {
       return Promise.resolve(false);
     }

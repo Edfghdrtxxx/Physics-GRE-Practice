@@ -6,12 +6,16 @@
 
    Everything here is READ-ONLY with respect to the durable store and every
    snapshot: painting must never write — notably it must not call
-   view-formulas' rehydrateSavedStudy, which reconciles and saves. Each kind
+   view-formulas' rehydrateSavedStudy, which reconciles and saves. The one
+   thing this module writes is its own localStorage['pgre-park-ignored'] list
+   (see ignoreBand): Ignore takes a session off the drawer and the dashboard
+   reminder and leaves its snapshot — the progress — untouched. Each kind
    has at most one slot; starting a new session of a kind replaces that kind's
    slot (handled by the owning view), so nothing accumulates.
 
-   The drawer lists one band per parked session and clicking a band goes to
-   that session's route (the practice band first arms 'pgre-practice-resume' so
+   The drawer lists one band per parked session. Continue (or the band itself)
+   goes to that session's route; the caret beside Continue opens a one-item
+   menu, Ignore (the practice band first arms 'pgre-practice-resume' so
    view-practice resumes onto the exact question instead of showing its resume
    card). The Home dashboard shows a dismissible reminder line fed by the same
    collect() data; dismissing is keyed to the parked-set signature, so a
@@ -24,6 +28,7 @@ PGRE.sessionPark = (function () {
   var PRACTICE_KEY = 'pgre-practice-session';
   var RESUME_KEY = 'pgre-practice-resume';   // one-shot flag consumed by view-practice
   var DISMISS_KEY = 'pgre-park-dismissed';
+  var IGNORE_KEY = 'pgre-park-ignored';      // localStorage: ["kind:id", ...]
 
   var bound = false;
 
@@ -40,8 +45,46 @@ PGRE.sessionPark = (function () {
     return n;
   }
 
-  /* One band per real parked slot, or none. Read-only. */
+  function bandKey(b) { return b.kind + ':' + b.id; }
+
+  function ignoredKeys() {
+    var raw = null;
+    try { raw = localStorage.getItem(IGNORE_KEY); } catch (e) { return []; }
+    if (!raw) return [];
+    try {
+      var list = JSON.parse(raw);
+      return Array.isArray(list) ? list : [];
+    } catch (e2) { return []; }
+  }
+
+  /* The bands the captain has not ignored. An ignore is keyed to the session's
+     own id, so a replaced or newly parked session of that kind lists again. */
   function collect() {
+    var ignored = ignoredKeys();
+    if (!ignored.length) return collectAll();
+    return collectAll().filter(function (b) { return ignored.indexOf(bandKey(b)) < 0; });
+  }
+
+  /* Stop listing and reminding about one parked session. Its snapshot is not
+     touched: the session's own page still offers to resume it. Keys of
+     sessions that no longer exist are dropped here so the list cannot grow. */
+  function ignoreBand(b) {
+    var live = collectAll().map(bandKey);
+    var keep = ignoredKeys().filter(function (k) { return live.indexOf(k) >= 0; });
+    if (keep.indexOf(bandKey(b)) < 0) keep.push(bandKey(b));
+    try { localStorage.setItem(IGNORE_KEY, JSON.stringify(keep)); } catch (e) { return false; }
+    paint();
+    var line = document.getElementById('parked-reminder');
+    if (line) {
+      var fresh = reminderHTML();
+      if (fresh) line.outerHTML = fresh;
+      else if (line.remove) line.remove();
+    }
+    return true;
+  }
+
+  /* One band per real parked slot, or none. Read-only. */
+  function collectAll() {
     var bands = [];
 
     var drill = read(DRILL_KEY);
@@ -113,8 +156,7 @@ PGRE.sessionPark = (function () {
      same signature (a dismissed line stays dismissed), while a replaced or
      newly parked session changes it and brings the reminder back. */
   function signature(bands) {
-    return (bands || collect()).map(function (b) { return b.kind + ':' + b.id; })
-      .sort().join('|');
+    return (bands || collect()).map(bandKey).sort().join('|');
   }
 
   function dismissedSig() {
@@ -137,7 +179,7 @@ PGRE.sessionPark = (function () {
     paintBands(collect());
     panel.hidden = false;
     btn.setAttribute('aria-expanded', 'true');
-    var first = panel.querySelector('.parked-band');
+    var first = panel.querySelector('.parked-continue');
     if (first) first.focus();
   }
 
@@ -146,10 +188,23 @@ PGRE.sessionPark = (function () {
     if (!panel) return;
     var h = '<div class="parked-panel-title">Unfinished sessions</div>';
     bands.forEach(function (b) {
-      h += '<button type="button" class="parked-band" data-kind="' + b.kind + '">' +
-        '<span class="parked-band-label">' + PGRE.ui.esc(b.label) + '</span>' +
-        '<span class="parked-band-detail">' + PGRE.ui.esc(b.detail) + '</span>' +
-        '</button>';
+      var name = PGRE.ui.esc(b.label);
+      h += '<div class="parked-band" data-kind="' + b.kind + '">' +
+        '<span class="parked-band-text">' +
+          '<span class="parked-band-label">' + name + '</span>' +
+          '<span class="parked-band-detail">' + PGRE.ui.esc(b.detail) + '</span>' +
+        '</span>' +
+        '<span class="parked-split">' +
+          '<button type="button" class="parked-continue" data-park-act="continue">Continue</button>' +
+          '<button type="button" class="parked-caret" data-park-act="menu" aria-haspopup="true" ' +
+            'aria-expanded="false" aria-label="More options for ' + name + '"></button>' +
+          '<span class="parked-menu">' +
+            '<button type="button" class="parked-ignore" data-park-act="ignore" ' +
+              'title="Stop listing and reminding about this session. Its progress is kept.">' +
+              'Ignore</button>' +
+          '</span>' +
+        '</span>' +
+        '</div>';
     });
     panel.innerHTML = h;
   }
@@ -220,14 +275,33 @@ PGRE.sessionPark = (function () {
       panel.addEventListener('click', function (e) {
         var t = e.target && e.target.closest ? e.target.closest('.parked-band') : null;
         if (!t || !panel.contains(t)) return;
+        var actEl = e.target.closest('[data-park-act]');
+        var act = actEl ? actEl.getAttribute('data-park-act') : 'continue';
+        if (act === 'menu') {
+          // Hover opens the menu through CSS; a click pins it open for touch
+          // and keyboard.
+          var menu = actEl.parentNode.querySelector('.parked-menu');
+          var open = menu.classList.toggle('is-open');
+          actEl.setAttribute('aria-expanded', open ? 'true' : 'false');
+          return;
+        }
         var bands = collect();
         for (var i = 0; i < bands.length; i++) {
-          if (bands[i].kind === t.getAttribute('data-kind')) { goBand(bands[i]); return; }
+          if (bands[i].kind !== t.getAttribute('data-kind')) continue;
+          if (act === 'ignore') {
+            ignoreBand(bands[i]);
+            var next = panel.querySelector('.parked-continue') || btnEl();
+            if (next && !panel.hidden) next.focus();
+          } else goBand(bands[i]);
+          return;
         }
       });
     }
     document.addEventListener('click', function (e) {
       var w = wrapEl();
+      // Ignore repaints the drawer, which detaches the clicked button before
+      // this runs; a detached target is not a click outside.
+      if (e.target && e.target.isConnected === false) return;
       if (w && !w.contains(e.target)) closePanel();
     });
     document.addEventListener('keydown', function (e) {
@@ -263,7 +337,10 @@ PGRE.sessionPark = (function () {
     DRILL_KEY: DRILL_KEY,
     PRACTICE_KEY: PRACTICE_KEY,
     RESUME_KEY: RESUME_KEY,
+    IGNORE_KEY: IGNORE_KEY,
     collect: collect,
+    collectAll: collectAll,
+    ignoreBand: ignoreBand,
     signature: signature,
     paint: paint,
     closePanel: closePanel,

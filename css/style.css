@@ -456,8 +456,9 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
   left: 50%;
   transform: translateX(-50%);
   z-index: 20;
-  min-width: 232px;
-  max-width: min(300px, calc(100vw - 24px));
+  width: max-content;
+  min-width: 280px;
+  max-width: min(360px, calc(100vw - 24px));
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -474,17 +475,68 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
   padding: 4px 8px 6px;
 }
 .parked-band {
-  display: block;
-  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   text-align: left;
   font-family: var(--sans);
   padding: 8px 10px;
-  border: 0;
   border-radius: var(--ctl-r);
-  background: transparent;
   cursor: pointer;
 }
-.parked-band:hover, .parked-band:focus-visible { background: var(--ivory); }
+.parked-band:hover, .parked-band:focus-within { background: var(--ivory); }
+.parked-band-text { flex: 1 1 auto; min-width: 0; }
+/* Continue + caret read as one split button; the caret's menu holds Ignore.
+   The menu opens on caret hover and stays while the pointer is on it; a
+   click pins it (.is-open) for touch and keyboard. */
+.parked-split { position: relative; flex: none; display: inline-flex; }
+.parked-continue, .parked-caret, .parked-ignore {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  height: 26px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.parked-continue { padding: 0 10px; border-radius: var(--ctl-r) 0 0 var(--ctl-r); }
+.parked-caret {
+  width: 24px;
+  padding: 0;
+  margin-left: -1px;
+  border-radius: 0 var(--ctl-r) var(--ctl-r) 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.parked-caret::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  margin-top: -3px;
+  border-right: 1.5px solid var(--ink-2);
+  border-bottom: 1.5px solid var(--ink-2);
+  transform: rotate(45deg);
+}
+.parked-continue:hover, .parked-caret:hover, .parked-ignore:hover { border-color: var(--ink-3); background: var(--ivory); }
+.parked-caret[aria-expanded="true"] { border-color: var(--accent); }
+.parked-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 1;
+  padding-top: 3px;
+}
+.parked-caret:hover + .parked-menu, .parked-menu:hover, .parked-menu.is-open { display: block; }
+.parked-ignore {
+  padding: 0 12px;
+  border-radius: var(--ctl-r);
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: var(--shadow);
+}
 .parked-band-label { display: block; font-size: 13px; font-weight: 600; color: var(--ink); }
 .parked-band-detail { display: block; font-size: 11.5px; color: var(--ink-3); margin-top: 1px; }
 
@@ -6169,6 +6221,7 @@ details.miss > summary {
   font-weight: 500;
 }
 details.miss > summary::-webkit-details-marker { display: none; }
+details.miss > summary > .miss-title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 details.miss > summary::before {
   content: "";
   width: 6px;

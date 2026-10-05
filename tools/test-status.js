@@ -65,11 +65,43 @@ var state = {
     { d: yesterday, id: 'f1' }
   ],
   mistakes: {
-    q1: { firstMissedAt: localIso(0, 9) },
-    q2: { firstMissedAt: localIso(-1, 9) }
+    q1: { firstMissedAt: localIso(0, 9), lastMissedAt: localIso(0, 10), misses: 1, solves: 0,
+      lastPick: 2, wrongPicks: [2], archivedAt: null, stuck: true, lastStuckAt: localIso(0, 10),
+      srs: { step: 0, due: localDay(1) } },
+    q2: { firstMissedAt: localIso(-1, 9), misses: 1, solves: 0, wrongPicks: [0],
+      archivedAt: null, srs: { step: 0, due: today } },
+    q3: { firstMissedAt: localIso(-1, 9), misses: 0, solves: 0, wrongPicks: [],
+      archivedAt: null, lucky: true, lastLuckyAt: localIso(0, 10),
+      lastTouchedAt: localIso(0, 10), srs: { step: 0, due: localDay(1) } },
+    q4: { firstMissedAt: localIso(-3, 9), misses: 2, solves: 3, wrongPicks: [1],
+      archivedAt: localIso(-1, 9), srs: { step: 4, due: yesterday } }
   },
+  attempts: [
+    { ts: localIso(-1, 10), qid: 'q2', topic: 'cm', picked: 0, answer: 1, correct: false,
+      ms: 50000, sid: 'old', mode: 'practice', confidence: null },
+    { ts: localIso(0, 10), qid: 'q1', topic: 'cm', picked: 2, answer: 3, correct: false,
+      ms: 95449, sid: 'done', mode: 'practice', confidence: null, tags: ['slow', 'forgot'] },
+    { ts: localIso(0, 10), qid: 'q3', topic: 'em', picked: 1, answer: 1, correct: true,
+      ms: 30000, sid: 'done', mode: 'practice', confidence: 'guess' },
+    { ts: localIso(0, 14), qid: 'x1', topic: 'qm', picked: null, answer: 4, correct: false,
+      ms: null, sid: 'exam-today', mode: 'exam', confidence: null },
+    { ts: localIso(0, 14), qid: 'x2', topic: 'qm', picked: 0, answer: 0, correct: true,
+      ms: 1000, sid: 'exam-today', mode: 'exam', confidence: 'sure' }
+  ],
   log: []
 };
+var practicePool = [
+  { id: 'q1', topic: 'cm', subtopic: 'Lagrangians', src: 'cpg', q: 'Prompt one $x<y$',
+    choices: ['a', 'b', 'c', 'd', 'e'], answer: 3, sol: 'SECRET-SOLUTION' },
+  { id: 'q3', topic: 'em', subtopic: 'Gauss', src: 'ets-drill', q: 'Prompt three',
+    choices: ['a', 'b', 'c', 'd', 'e'], answer: 1 }
+];
+var examPool = [
+  { id: 'x1', topic: 'qm', subtopic: 'Spin', src: 'ets-exam', q: 'EXAM-PROMPT-1',
+    choices: ['EXAM-CHOICE'], answer: 4 },
+  { id: 'x2', topic: 'qm', src: 'cpg-exam', q: 'EXAM-PROMPT-2',
+    choices: ['EXAM-CHOICE'], answer: 0 }
+];
 state.studyLog[today] = 2520;
 for (var i = 0; i < 12; i++) state.log.push({ text: 'activity-' + i, ts: String(12 - i) });
 
@@ -96,7 +128,13 @@ sandbox.window.PGRE = {
   },
   BOOK_FORMULAS: [{ id: 'f1' }, { id: 'f2' }],
   FORMULAS: [{ id: 'f2' }, { id: 'f3' }],
-  BOOK_LISTS: [{ id: 'cpgl-1.02' }, { id: 'cpgl-2.01' }]
+  BOOK_LISTS: [{ id: 'cpgl-1.02' }, { id: 'cpgl-2.01' }],
+  allQuestions: function (opts) {
+    return (opts && opts.includeExam) ? practicePool.concat(examPool) : practicePool;
+  },
+  questionById: function (id) {
+    return practicePool.concat(examPool).filter(function (q) { return q.id === id; })[0] || null;
+  }
 };
 state.cards['cpgl-2.01'] = { due: today };
 sandbox.PGRE = sandbox.window.PGRE;
@@ -108,7 +146,8 @@ var summary = sandbox.PGRE.buildStatusSummary();
 
 console.log('summary contract');
 assert(Object.keys(summary).join(',') ===
-  'date,streak,today,sessions,exams,formulaCards,mistakesAdded,recentLog',
+  'date,streak,today,sessions,exams,formulaCards,mistakesAdded,recentLog,' +
+  'attempts,questions,mistakeBook',
   'top-level fields match the bridge contract');
 assert(summary.date === today, 'date uses the local studio day');
 assert(summary.streak.current === 5 && summary.streak.best === 12,
@@ -136,6 +175,52 @@ assert(summary.formulaCards.orphaned === 1,
   'card records with no deck card count as orphaned, not due');
 assert(summary.recentLog.length === 10 && summary.recentLog[0] === 'activity-0' &&
   summary.recentLog[9] === 'activity-9', 'recent activity stays newest-first and capped at ten');
+assert(summary.mistakesAdded === 1, 'mistakesAdded still counts first-missed-today entries');
+
+console.log('\nper-question results');
+var a1 = summary.attempts[0];
+assert(summary.attempts.length === 4 &&
+  summary.attempts.map(function (a) { return a.qid; }).join(',') === 'q1,q3,x1,x2',
+  'attempts list today\'s rows only, oldest first');
+assert(Object.keys(a1).join(',') ===
+  'ts,sessionId,mode,qid,topic,subtopic,src,correct,picked,answer,seconds,tags',
+  'attempt rows carry the documented fields');
+assert(a1.sessionId === 'done' && a1.mode === 'practice' && a1.topic === 'cm' &&
+  a1.subtopic === 'Lagrangians' && a1.src === 'cpg' && a1.correct === false &&
+  a1.picked === 2 && a1.answer === 3 && a1.seconds === 95.4,
+  'a miss reports session, topic, subtopic, picked and correct index, and seconds');
+assert(a1.tags.join(',') === 'too-slow,forgot-something,keep-failing',
+  'tags map slow/forgot chips and the mistake-book keep-failing flag');
+assert(summary.attempts[1].correct === true && summary.attempts[1].tags.join(',') === 'guessed',
+  'a guessed correct answer is tagged guessed');
+assert(summary.attempts[2].picked === null && summary.attempts[2].seconds === null &&
+  summary.attempts[2].mode === 'exam' && summary.attempts[2].src === 'ets-exam',
+  'a blank exam answer keeps picked and seconds null');
+assert(summary.attempts[3].tags.join(',') === 'knew-it', 'a sure answer is tagged knew-it');
+assert(Object.keys(summary.questions).sort().join(',') === 'q1,q3' &&
+  summary.questions.q1.prompt === 'Prompt one $x<y$' &&
+  summary.questions.q1.choices.length === 5 &&
+  Object.keys(summary.questions.q1).join(',') === 'prompt,choices',
+  'practice-pool questions carry prompt and choices only');
+var serialized = JSON.stringify(summary);
+assert(serialized.indexOf('EXAM-PROMPT') === -1 && serialized.indexOf('EXAM-CHOICE') === -1,
+  'intact exam questions never contribute text');
+assert(serialized.indexOf('SECRET-SOLUTION') === -1, 'solutions are not published');
+
+console.log('\nmistake book');
+var book = summary.mistakeBook;
+assert(book.active === 3 && book.due === 1,
+  'active counts open entries; due counts open entries due by today');
+assert(book.today.map(function (m) { return m.qid; }).join(',') === 'q1,q3',
+  'today lists entries added or updated today');
+assert(book.today[0].added === true && book.today[0].keepFailing === true &&
+  book.today[0].luckyGuess === false && book.today[0].misses === 1 &&
+  book.today[0].lastPick === 2 && book.today[0].wrongPicks.join(',') === '2' &&
+  book.today[0].due === localDay(1) && book.today[0].topic === 'cm' &&
+  book.today[0].archived === false,
+  'a new miss reports its counts, picks, due date, and keep-failing flag');
+assert(book.today[1].added === false && book.today[1].luckyGuess === true,
+  'a lucky-guess filing on an older entry is an update, not an addition');
 assert(JSON.stringify(state) === before, 'building a summary does not mutate study state');
 
 sandbox.PGRE.pushStatus().then(function (ok) {
@@ -148,6 +233,9 @@ sandbox.PGRE.pushStatus().then(function (ok) {
     'push uses a JSON POST');
   assert(JSON.parse(fetchCall.options.body).today.minutesStudied === 42,
     'push body is the current status summary');
+  assert(JSON.parse(fetchCall.options.body).attempts.length === 4 &&
+    JSON.parse(fetchCall.options.body).mistakeBook.active === 3,
+    'push body carries per-question results and the mistake-book summary');
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
   if (failed) process.exitCode = 1;
