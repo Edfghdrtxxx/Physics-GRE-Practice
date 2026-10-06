@@ -2398,6 +2398,7 @@ PGRE.views.formulas = (function () {
         (t ? '<span class="chip">' + t.name + '</span>' : '') +
         learnChip +
         '<button class="btn btn-ghost btn-sm session-export-btn" id="session-export-btn" title="Export learning status for agent">Export status</button>' +
+        '<button class="btn btn-ghost btn-sm" id="session-shuffle-btn">Shuffle</button>' +
       '</div>' +
       PGRE.ui.meter(100 * study.done / (study.done + study.queue.length), 'meter-thin') +
       '<div class="fcard" id="fcard">' +
@@ -2439,6 +2440,8 @@ PGRE.views.formulas = (function () {
     if (pa) pa.addEventListener('click', function (e) { e.stopPropagation(); putAwayCard(); });
     var eb = document.getElementById('session-export-btn');
     if (eb) eb.addEventListener('click', function (e) { e.stopPropagation(); openFormulaExportModal(); });
+    var shuf = document.getElementById('session-shuffle-btn');
+    if (shuf) shuf.addEventListener('click', function (e) { e.stopPropagation(); shuffleRemaining(); });
     wireVizNav(body());
     wireSimilar(body());
   }
@@ -2735,6 +2738,41 @@ PGRE.views.formulas = (function () {
     if (study.pendingOverlays.length) runNextOverlay();
     else if (study.queue.length) renderCard();
     else renderStudySummary();
+  }
+
+  /* Reorder cards still to come. Once the answer is on screen the current
+     card stays and only the cards behind it move; otherwise the current card
+     joins the shuffle and a different card is shown. Grades, streaks,
+     schedules, mistakes and notes are untouched. The saved session queue
+     keeps the new order so a resume matches the screen. */
+  function shuffleRemaining() {
+    if (!study || study.overlay || !study.queue || study.queue.length < 2) return;
+    var keep = !!study.flipped;
+    var cur = study.queue[0];
+    var next;
+    if (keep) {
+      var tail = study.queue.slice(1);
+      if (tail.length < 2) return;
+      var beforeTail = tail.map(function (c) { return c.id; }).join('\n');
+      var shuffledTail = tail;
+      var guard = 0;
+      do {
+        shuffledTail = shuffle(tail);
+        guard++;
+      } while (guard < 8 && shuffledTail.map(function (c) { return c.id; }).join('\n') === beforeTail);
+      if (shuffledTail.map(function (c) { return c.id; }).join('\n') === beforeTail) return;
+      next = [cur].concat(shuffledTail);
+    } else {
+      var others = shuffle(study.queue.slice(1));
+      var rest = shuffle(others.slice(1).concat([cur]));
+      next = [others[0]].concat(rest);
+    }
+    if (next.map(function (c) { return c.id; }).join('\n') ===
+        study.queue.map(function (c) { return c.id; }).join('\n')) return;
+    study.queue = next;
+    persistStudy();
+    PGRE.store.save();
+    if (!keep) renderCard();
   }
 
   /* F7: pull the current card off the front and reinsert it a few cards back so a
