@@ -217,3 +217,118 @@
 @media (prefers-reduced-motion: reduce) {
   .cv-door-card { transition: none; }
 }
+
+/* Single-slit teaching page. Diagram hues have no studio token; ink, type,
+   surfaces, and hairlines use the studio tokens so light and dark follow
+   [data-theme]. Diagram hues switch with that same attribute. */
+.cv-slit {
+  --ray: #2F7BD6;
+  --extra: #D1512A;
+  --curve: #6A61D1;
+  --dark: #B42E2E;
+  --wall: #535867;
+  max-width: 760px;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+}
+[data-theme="dark"] .cv-slit {
+  --ray: #6FA8EC;
+  --extra: #F08A62;
+  --curve: #A39CF0;
+  --dark: #F08A8A;
+  --wall: #AEB2BE;
+}
+.cv-slit h1 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  line-height: 1.2;
+  margin: 0 0 0.4rem;
+}
+.cv-slit .formula {
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  margin: 0 0 1.5rem;
+  color: var(--ink-2);
+}
+.cv-slit .formula i { color: var(--ink); }
+.cv-slit .fig {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  overflow-x: auto;
+  background: var(--bg);
+}
+.cv-slit svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  min-width: 480px;
+}
+.cv-slit .row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 12px;
+}
+.cv-slit .row label { font-size: 14px; color: var(--ink-2); }
+.cv-slit input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--ray);
+}
+.cv-slit .val {
+  font-size: 15px;
+  font-weight: 500;
+  min-width: 56px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cv-slit .btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.cv-slit button {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.cv-slit button:hover { background: var(--ivory); }
+.cv-slit .stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+.cv-slit .stat {
+  background: var(--ivory);
+  border-radius: 8px;
+  padding: 1rem;
+}
+.cv-slit .stat span {
+  display: block;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.cv-slit .stat b {
+  display: block;
+  font-size: 22px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.cv-slit .note {
+  font-size: 14px;
+  color: var(--ink-3);
+  margin: 12px 0 0;
+}
+.cv-slit .explain { margin-top: 2rem; max-width: 68ch; }
+.cv-slit .explain p { margin: 0 0 1rem; }

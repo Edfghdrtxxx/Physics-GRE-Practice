@@ -335,6 +335,23 @@ PGRE.views.concepts = (function () {
     '</div>';
   }
 
+  function renderSingleSlit() {
+    return '<div id="cv-root" class="cv-root">' +
+      subnav('visualizers') +
+      '<div id="cv-teach" class="cv-teach"></div>' +
+    '</div>';
+  }
+
+  function wireSingleSlit() {
+    var host = document.getElementById('cv-teach');
+    var rec = PGRE.conceptVisualizers && PGRE.conceptVisualizers['single-slit'];
+    if (host && rec && typeof rec.mount === 'function') {
+      teachApi = rec.mount(host, {});
+    } else if (host) {
+      host.innerHTML = '<p class="muted">Single-slit teaching widget did not load.</p>';
+    }
+  }
+
   function wireAzimuthTeach() {
     var host = document.getElementById('cv-teach');
     var rec = PGRE.conceptVisualizers && PGRE.conceptVisualizers.azimuth;
@@ -512,6 +529,7 @@ PGRE.views.concepts = (function () {
       if (s === 'visualizers') return renderGallery();
       if (s === 'spherical') return renderTeach();
       if (s === 'azimuth') return renderAzimuthTeach();
+      if (s === 'single-slit') return renderSingleSlit();
       return renderDoor();
     },
     mount: function (params) {
@@ -529,6 +547,7 @@ PGRE.views.concepts = (function () {
       else if (s === 'visualizers') wireGallery();
       else if (s === 'spherical') wireTeach();
       else if (s === 'azimuth') wireAzimuthTeach();
+      else if (s === 'single-slit') wireSingleSlit();
       if (root && PGRE.typesetMath) PGRE.typesetMath(root);
       var sub = root && root.querySelector ? root.querySelector('.cv-subnav') : document.querySelector('.cv-subnav');
       if (sub && PGRE.motion && typeof PGRE.motion.letterSwapNav === 'function') {

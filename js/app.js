@@ -1009,6 +1009,10 @@ PGRE.nav = (function () {
           if (params.sub === 'azimuth') trail.push({ label: 'Direction of azimuth' });
           else trail.push({ label: 'Spherical coordinates' });
         }
+        else if (view === 'concepts' && params.sub === 'single-slit') {
+          trail.push({ label: 'Visualizers', href: '#/concepts/visualizers' });
+          trail.push({ label: 'Single-slit diffraction: what is θ?' });
+        }
       }
       base = trail;
       paint(base);
