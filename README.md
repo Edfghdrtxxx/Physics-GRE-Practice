@@ -31,7 +31,7 @@ on `file://` pages — the local server is the reliable way.)
 | **Library** | Import the *Conquering the Physics GRE* markdown (drag & drop), map its sections to topics, export/restore/reset all progress, restore the last automatic backup (written every 20th save) |
 | **Mock exam** | Timed simulator: weighted 70-question/120-minute draw, or verbatim replay of the 5 released ETS exams (incl. the 70-question 2024 form) and the book's 3 sample exams. Official scale tables where published |
 | **Focus timer** | Pomodoro-style focus sessions with ambient sound, session log, and per-day study-time totals |
-| **Concept visualization** | Interactive teaching widgets (10 trio visualizers + spherical harmonics) under `#/concepts`, plus a Formula Lab |
+| **Concept visualization** | Interactive teaching widgets (11 trio visualizer files + spherical harmonics) under `#/concepts`, plus a Formula Lab |
 | **Analytics & tools** | Study-time page, per-topic analytics, custom quiz builder, global search, notes & bookmarks |
 
 ## Content
