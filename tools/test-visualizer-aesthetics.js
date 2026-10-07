@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Gating tests for the 39 formula visualizers — loads the SHIPPED engine +
+/* Gating tests for the 44 formula visualizers — loads the SHIPPED engine +
    trio scripts (no re-implementation of chrome/draw). Run from repo root:
      node tools/test-visualizer-aesthetics.js
 */
@@ -22,11 +22,13 @@ var EXPECTED_IDS = [
   'cpgf-1.9', 'cpgf-2.4', 'cpgf-2.6', 'cpgf-2.8', 'cpgf-2.14', 'cpgf-2.15', 'cpgf-2.32', 'cpgf-2.33', 'cpgf-2.43',
   'cpgf-2.70', 'cpgf-4.14', 'cpgf-4.32', 'cpgf-5.18',
   'cpgf-5.27', 'cpgf-6.18', 'cpgf-7.17',
+  'cpgf-3.26', 'cpgf-6.1', 'cpgf-2.42', 'cpgf-4.42', 'cpgf-3.32',
   'supp-moment-of-inertia'
 ];
 
+var TRIO_COUNT = 11;
 var TRIO_FILES = [];
-for (var gi = 1; gi <= 10; gi++) TRIO_FILES.push('js/visualizers/trio-g' + gi + '.js');
+for (var gi = 1; gi <= TRIO_COUNT; gi++) TRIO_FILES.push('js/visualizers/trio-g' + gi + '.js');
 
 var CREAM = '#faf9f5';
 var LAB_W = 640;
@@ -756,7 +758,7 @@ function cssRuleBody(css, selector) {
 /* Tests                                                                      */
 /* -------------------------------------------------------------------------- */
 
-console.log('formula visualizer aesthetics (shipped engine + trio-g1…g10)\n');
+console.log('formula visualizer aesthetics (shipped engine + trio-g1…g' + TRIO_COUNT + ')\n');
 
 console.log('index.html classic script tags');
 var indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -769,7 +771,7 @@ assert(!/<script[^>]*type\s*=\s*["']module["'][^>]*visualizer-engine/.test(index
 var engineIdx = indexHtml.search(/<script src="js\/visualizer-engine\.js/);
 var lastTrioIdx = engineIdx;
 var triosInOrder = true;
-for (var n = 1; n <= 10; n++) {
+for (var n = 1; n <= TRIO_COUNT; n++) {
   var tagRe = new RegExp('<script src="js/visualizers/trio-g' + n + '\\.js[^"]*"(?: defer)?><\\/script>');
   assert(tagRe.test(indexHtml), 'index.html loads trio-g' + n + '.js as classic <script src>');
   assert(!(new RegExp('<script[^>]*type\\s*=\\s*["\']module["\'][^>]*trio-g' + n)).test(indexHtml),
@@ -779,7 +781,7 @@ for (var n = 1; n <= 10; n++) {
   lastTrioIdx = idx;
 }
 assert(triosInOrder && engineIdx >= 0 && engineIdx < lastTrioIdx,
-  'engine loads before trio-g1…g10 (classic script order)');
+  'engine loads before trio-g1…g' + TRIO_COUNT + ' (classic script order)');
 
 console.log('\nload shipped engine + trios into window sandbox');
 var loaded = loadShipped();
@@ -787,7 +789,7 @@ assert(!loaded.loadError, loaded.loadError ? loaded.loadError : 'visualizer-engi
 assert(loaded.trioErrors.length === 0,
   loaded.trioErrors.length
     ? ('trio eval errors: ' + loaded.trioErrors.join(' | '))
-    : 'all 10 trio files evaluated without error');
+    : 'all ' + TRIO_COUNT + ' trio files evaluated without error');
 
 var PGRE = loaded.sandbox.PGRE || (loaded.sandbox.window && loaded.sandbox.window.PGRE) || {};
 assert(!!PGRE, 'sandbox exports PGRE');
