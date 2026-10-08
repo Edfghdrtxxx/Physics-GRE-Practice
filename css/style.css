@@ -3913,7 +3913,7 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .dash-study-fig { line-height: 1.2; }
 .dash-study-big { font-size: 26px; font-weight: 500; letter-spacing: -0.01em; }
 .dash-study-big .stat-unit { font-size: 13px; font-weight: 400; color: var(--ink-3); }
-.dash-spark { display: block; width: 100%; max-width: 240px; height: 50px; margin: 14px 0 4px; overflow: visible; }
+.dash-spark { display: block; width: 100%; max-width: 188px; height: 50px; margin: 14px 0 4px; overflow: visible; }
 /* Chart marks are ink, not coral: the analytics band spends its one coral on
    the practice heatmap, and a 7-bar spark would otherwise repeat it seven
    times in the same scroll. Today reads by weight and value, not by hue. */
@@ -5930,14 +5930,7 @@ button.btn-ok {
   transform: none;
 }
 
-/* Study time + recent activity share a row. */
-.dash-pair {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
-}
-.dash-pair > .card { margin-bottom: 0; }
+/* Study time is a full-width card above This week. Recent activity is its own card. */
 .dash-spark-empty { margin: 14px 0 0; }
 .activity-list li { align-items: center; gap: 12px; padding: 9px 0; }
 .act-dot {
@@ -5955,9 +5948,6 @@ button.btn-ok {
 .act-dot.act-review { background: var(--platinum); }
 .act-text { min-width: 0; }
 .act-time { font-variant-numeric: tabular-nums; }
-@media (max-width: 860px) {
-  .dash-pair { grid-template-columns: minmax(0, 1fr); }
-}
 
 /* Knowledge portals */
 .topic-grid { gap: 12px; }

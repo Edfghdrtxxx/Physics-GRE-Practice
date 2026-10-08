@@ -1,10 +1,10 @@
 /* Dashboard — the home view. Today is the first card (greeting, exam
    countdown, prep runway, the Mixed practice launcher, then three equal
-   tiles: Mistake book, Recall, Mock exam). This week is card two. Level/XP,
-   stat tiles, challenges, QOTD, readiness and achievements sit behind a
-   Progress disclosure whose summary line carries level, streak and accuracy.
-   Study time and recent activity share a row; knowledge portals close the
-   page. */
+   tiles: Mistake book, Recall, Mock exam). Study time is the next card, then
+   This week. Level/XP, stat tiles, challenges, QOTD, readiness and
+   achievements sit behind a Progress disclosure whose summary line carries
+   level, streak and accuracy. Recent activity follows Progress on its own
+   row; knowledge portals close the page. */
 window.PGRE = window.PGRE || {};
 PGRE.views = PGRE.views || {};
 
@@ -234,7 +234,9 @@ PGRE.views.dashboard = (function () {
     // meter fills toward 20 h
     var pct = Math.min(100, 100 * weekH / WEEK_TARGET_H);
 
-    // last 7 days (oldest → today) as a tiny inline SVG bar row
+    // last 7 days (oldest → today) as a tiny inline SVG bar row.
+    // 20-unit bars in a 188-wide viewBox leave an 8-unit gap. CSS height
+    // matches the viewBox height, so one unit is one pixel.
     var days = [];
     var maxSec = 1;
     for (var i = 6; i >= 0; i--) {
@@ -247,7 +249,7 @@ PGRE.views.dashboard = (function () {
 
     var spark = '';
     if (total7 > 0) {
-      var W = 168, BH = 36, bw = 16, gap = (W - 7 * bw) / 6;
+      var W = 188, BH = 36, bw = 20, gap = (W - 7 * bw) / 6;
       var bars = '';
       days.forEach(function (d, i) {
         var x = i * (bw + gap);
@@ -262,7 +264,7 @@ PGRE.views.dashboard = (function () {
                 '<text x="' + (x + bw / 2).toFixed(1) + '" y="47" text-anchor="middle" class="dash-spark-lbl' +
                 (d.today ? ' dash-spark-lbl-today' : '') + '">' + lbl + '</text>';
       });
-      spark = '<svg class="dash-spark" viewBox="0 0 168 50" role="img" ' +
+      spark = '<svg class="dash-spark" viewBox="0 0 ' + W + ' 50" role="img" ' +
         'aria-label="Active minutes over the last 7 days">' + bars + '</svg>';
     } else {
       spark = '<p class="muted dash-spark-empty">No active time yet. The timer starts as you use the app.</p>';
@@ -688,6 +690,8 @@ PGRE.views.dashboard = (function () {
 
     var html = (PGRE.sessionPark ? PGRE.sessionPark.reminderHTML() : '') + todayAgendaHTML();
 
+    html += studyCard();
+
     var cw = PGRE.currentWeek();
     var weekTasks = PGRE.weekTasks(cw.week);
     var doneCount = weekTasks.filter(function (t) { return g.taskDone(t.id); }).length;
@@ -798,8 +802,6 @@ PGRE.views.dashboard = (function () {
     html += '<a class="btn btn-ghost" href="#/achievements">All achievements →</a></div>';
     html += '</details>';
 
-    html += '<div class="dash-pair">' + studyCard();
-
     html += '<div class="card dash-activity"><h2>Recent activity</h2>';
     if (s.log.length === 0) {
       html += '<p class="muted">Your activity will appear here.</p>';
@@ -813,7 +815,7 @@ PGRE.views.dashboard = (function () {
       });
       html += '</ul>';
     }
-    html += '</div></div>';
+    html += '</div>';
 
     html += '<div class="band-head section-head"><h2 class="section-title">Knowledge portals</h2>' +
       '<span class="band-head-note">Exam weight · mastery</span></div><div class="topic-grid">';
@@ -924,7 +926,7 @@ PGRE.views.dashboard = (function () {
         var cascade = 0;
         Array.prototype.forEach.call(view.children, function (el) {
           if (el.classList.contains('card') || el.classList.contains('stat-row') ||
-              el.classList.contains('two-col') || el.classList.contains('dash-pair') ||
+              el.classList.contains('two-col') ||
               el.classList.contains('review-queue')) {
             el.classList.add('stagger-in');
             el.style.animationDelay = (cascade * 70) + 'ms';
