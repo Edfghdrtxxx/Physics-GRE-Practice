@@ -236,7 +236,8 @@ PGRE.views.dashboard = (function () {
 
     // last 7 days (oldest → today) as a tiny inline SVG bar row.
     // 20-unit bars in a 188-wide viewBox leave an 8-unit gap. CSS height
-    // matches the viewBox height, so one unit is one pixel.
+    // matches the viewBox height, so one unit is one pixel. Every day
+    // gets a full-height track; a day with no time is that track alone.
     var days = [];
     var maxSec = 1;
     for (var i = 6; i >= 0; i--) {
@@ -253,15 +254,21 @@ PGRE.views.dashboard = (function () {
       var bars = '';
       days.forEach(function (d, i) {
         var x = i * (bw + gap);
-        var h = d.sec > 0 ? Math.max(3, Math.round(BH * d.sec / maxSec)) : 2;
-        var cls = d.sec > 0 ? (d.today ? 'dash-bar dash-bar-today' : 'dash-bar') : 'dash-bar dash-bar-zero';
+        var h = d.sec > 0 ? Math.max(3, Math.round(BH * d.sec / maxSec)) : 0;
         var mins = Math.round(d.sec / 60);
         var dt = new Date(d.key + 'T12:00:00');
         var dayLbl = dt.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
         var lbl = ['S', 'M', 'T', 'W', 'T', 'F', 'S'][dt.getDay()];
-        bars += '<rect x="' + x.toFixed(1) + '" y="' + (BH - h) + '" width="' + bw + '" height="' + h +
-                '" rx="2" class="' + cls + '" data-tip="' + PGRE.ui.esc(dayLbl + '\\n' + mins + ' min active') + '"></rect>' +
-                '<text x="' + (x + bw / 2).toFixed(1) + '" y="47" text-anchor="middle" class="dash-spark-lbl' +
+        var tip = PGRE.ui.esc(dayLbl + '\\n' + mins + ' min active');
+        var xf = x.toFixed(1);
+        bars += '<rect x="' + xf + '" y="0" width="' + bw + '" height="' + BH +
+                '" rx="2" class="dash-bar-track" data-tip="' + tip + '"></rect>';
+        if (h > 0) {
+          var cls = d.today ? 'dash-bar dash-bar-today' : 'dash-bar';
+          bars += '<rect x="' + xf + '" y="' + (BH - h) + '" width="' + bw + '" height="' + h +
+                  '" rx="2" class="' + cls + '" data-tip="' + tip + '"></rect>';
+        }
+        bars += '<text x="' + (x + bw / 2).toFixed(1) + '" y="47" text-anchor="middle" class="dash-spark-lbl' +
                 (d.today ? ' dash-spark-lbl-today' : '') + '">' + lbl + '</text>';
       });
       spark = '<svg class="dash-spark" viewBox="0 0 ' + W + ' 50" role="img" ' +
