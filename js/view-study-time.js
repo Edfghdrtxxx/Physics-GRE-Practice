@@ -622,5 +622,5 @@ PGRE.views.studytime = (function () {
   }
 
 
-  return { render: render, mount: mount };
+  return { render: render, mount: mount, activityTargetHTML: activityTargetHTML };
 })();

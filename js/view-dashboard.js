@@ -1,16 +1,16 @@
 /* Dashboard — the home view. Today is the first card (greeting, exam
    countdown, prep runway, the Mixed practice launcher, then three equal
-   tiles: Mistake book, Recall, Mock exam). This week is card two. Level/XP,
-   stat tiles, challenges, QOTD, readiness and achievements sit behind a
-   Progress disclosure whose summary line carries level, streak and accuracy.
-   Study time and recent activity share a row; knowledge portals close the
-   page. */
+   tiles: Mistake book, Recall, Mock exam). The next card is the same Daily
+   activity target card as the Study time page, then This week. Level/XP,
+   stat tiles, challenges, QOTD, readiness and
+   achievements sit behind a Progress disclosure whose summary line carries
+   level, streak and accuracy. Recent activity follows Progress on its own
+   row; knowledge portals close the page. */
 window.PGRE = window.PGRE || {};
 PGRE.views = PGRE.views || {};
 
 PGRE.views.dashboard = (function () {
   var LETTERS = ['A', 'B', 'C', 'D', 'E'];
-  var WEEK_TARGET_H = 20;   // intensive weekly target (hours)
 
   /* F4: where each daily challenge is actually completed, so its card offers a
      one-click jump there (keyed by CHALLENGE_POOL id). Answering-based challenges
@@ -27,19 +27,6 @@ PGRE.views.dashboard = (function () {
   var qotdBoundDate = null;                       // today.date when the card was wired
   var keyBound = false;                           // the document keydown listener is installed once
   var qotdCommit = null;                          // select-then-confirm controller for today's Q
-
-  /* Local YYYY-MM-DD for an offset from the 03:00 study-day (same window as
-     todaySec / studyLog keys). Before 03:00, offset 0 is yesterday's date. */
-  function dayKey(offset) {
-    var now = new Date();
-    var d = new Date(now.getTime());
-    d.setHours(3, 0, 0, 0);
-    if (now.getTime() < d.getTime()) d.setDate(d.getDate() - 1);
-    d.setDate(d.getDate() + (offset || 0));
-    return d.getFullYear() + '-' +
-      String(d.getMonth() + 1).padStart(2, '0') + '-' +
-      String(d.getDate()).padStart(2, '0');
-  }
 
   /* ————————————————————————————————————————————————————————————
      #7 Question of the day
@@ -216,72 +203,6 @@ PGRE.views.dashboard = (function () {
     if (!q || idx >= q.choices.length) return;
     e.preventDefault();
     if (qotdCommit) qotdCommit.select(idx);
-  }
-
-  /* ————————————————————————————————————————————————————————————
-     #11 Study-time card
-     Today's active minutes and this week's hours against the 20 h target,
-     plus a last-7-days mini bar row. "Active minutes" are the passive
-     heartbeat seconds (PGRE.studyTime) — honest about tab-only semantics.
-     ———————————————————————————————————————————————————————————— */
-  function studyCard() {
-    var st = PGRE.studyTime;
-    var todaySec = st.todaySec();
-    var weekH = st.weekSec() / 3600;
-    var todayMin = Math.round(todaySec / 60);
-    var todayDisp = todaySec > 0 && todayMin === 0 ? '<1' : String(todayMin);
-
-    // meter fills toward 20 h
-    var pct = Math.min(100, 100 * weekH / WEEK_TARGET_H);
-
-    // last 7 days (oldest → today) as a tiny inline SVG bar row
-    var days = [];
-    var maxSec = 1;
-    for (var i = 6; i >= 0; i--) {
-      var key = dayKey(-i);
-      var sec = st.daySec(key);
-      if (sec > maxSec) maxSec = sec;
-      days.push({ key: key, sec: sec, today: i === 0 });
-    }
-    var total7 = days.reduce(function (a, d) { return a + d.sec; }, 0);
-
-    var spark = '';
-    if (total7 > 0) {
-      var W = 168, BH = 36, bw = 16, gap = (W - 7 * bw) / 6;
-      var bars = '';
-      days.forEach(function (d, i) {
-        var x = i * (bw + gap);
-        var h = d.sec > 0 ? Math.max(3, Math.round(BH * d.sec / maxSec)) : 2;
-        var cls = d.sec > 0 ? (d.today ? 'dash-bar dash-bar-today' : 'dash-bar') : 'dash-bar dash-bar-zero';
-        var mins = Math.round(d.sec / 60);
-        var dt = new Date(d.key + 'T12:00:00');
-        var dayLbl = dt.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-        var lbl = ['S', 'M', 'T', 'W', 'T', 'F', 'S'][dt.getDay()];
-        bars += '<rect x="' + x.toFixed(1) + '" y="' + (BH - h) + '" width="' + bw + '" height="' + h +
-                '" rx="2" class="' + cls + '" data-tip="' + PGRE.ui.esc(dayLbl + '\\n' + mins + ' min active') + '"></rect>' +
-                '<text x="' + (x + bw / 2).toFixed(1) + '" y="47" text-anchor="middle" class="dash-spark-lbl' +
-                (d.today ? ' dash-spark-lbl-today' : '') + '">' + lbl + '</text>';
-      });
-      spark = '<svg class="dash-spark" viewBox="0 0 168 50" role="img" ' +
-        'aria-label="Active minutes over the last 7 days">' + bars + '</svg>';
-    } else {
-      spark = '<p class="muted dash-spark-empty">No active time yet. The timer starts as you use the app.</p>';
-    }
-
-    return '<div class="card dash-study-card"><h2>Study time</h2>' +
-      '<div class="dash-study-top">' +
-        '<div class="dash-study-fig"><div class="dash-study-big">' + todayDisp +
-          '<span class="stat-unit"> min</span></div><div class="muted">active today</div></div>' +
-        '<div class="dash-study-fig"><div class="dash-study-big">' + weekH.toFixed(1) +
-          '<span class="stat-unit"> h</span></div><div class="muted">this week</div></div>' +
-      '</div>' +
-      PGRE.ui.meter(pct, 'meter-thin', {
-        word: 'this week', meta: weekH.toFixed(1) + ' of ' + WEEK_TARGET_H + ' h'
-      }) +
-      spark +
-      '<p class="muted dash-study-note">Active time in this tab only. Paper and other tabs are not counted.</p>' +
-      '<a class="btn btn-ghost btn-sm dash-study-more" href="#/study-time">Details →</a>' +
-    '</div>';
   }
 
   /* ————————————————————————————————————————————————————————————
@@ -688,6 +609,10 @@ PGRE.views.dashboard = (function () {
 
     var html = (PGRE.sessionPark ? PGRE.sessionPark.reminderHTML() : '') + todayAgendaHTML();
 
+    html += (PGRE.views.studytime && PGRE.views.studytime.activityTargetHTML)
+      ? PGRE.views.studytime.activityTargetHTML()
+      : '';
+
     var cw = PGRE.currentWeek();
     var weekTasks = PGRE.weekTasks(cw.week);
     var doneCount = weekTasks.filter(function (t) { return g.taskDone(t.id); }).length;
@@ -798,8 +723,6 @@ PGRE.views.dashboard = (function () {
     html += '<a class="btn btn-ghost" href="#/achievements">All achievements →</a></div>';
     html += '</details>';
 
-    html += '<div class="dash-pair">' + studyCard();
-
     html += '<div class="card dash-activity"><h2>Recent activity</h2>';
     if (s.log.length === 0) {
       html += '<p class="muted">Your activity will appear here.</p>';
@@ -813,7 +736,7 @@ PGRE.views.dashboard = (function () {
       });
       html += '</ul>';
     }
-    html += '</div></div>';
+    html += '</div>';
 
     html += '<div class="band-head section-head"><h2 class="section-title">Knowledge portals</h2>' +
       '<span class="band-head-note">Exam weight · mastery</span></div><div class="topic-grid">';
@@ -898,6 +821,9 @@ PGRE.views.dashboard = (function () {
   function mount() {
     if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
     if (PGRE.sessionPark) PGRE.sessionPark.wireDashboard();
+    // Same Daily activity target card as #/study-time, including its chips
+    // and focus button. studytime.mount no-ops when that card is absent.
+    if (PGRE.views.studytime && PGRE.views.studytime.mount) PGRE.views.studytime.mount();
     // #7 QOTD: typeset the math and wire up the one-tap choices
     bindQotd();
     // Views-A: entry motion — numbers count up, meters fill, challenges cascade
@@ -908,7 +834,7 @@ PGRE.views.dashboard = (function () {
       document.querySelectorAll('.stat-tile .stat-value').forEach(function (el) {
         countUpText(el, 700);
       });
-      document.querySelectorAll('.challenge-prog').forEach(function (el) {
+      document.querySelectorAll('.challenge-list .challenge-prog').forEach(function (el) {
         countUpText(el, 700);
       });
       animateMeters(document.getElementById('view'));
@@ -924,7 +850,7 @@ PGRE.views.dashboard = (function () {
         var cascade = 0;
         Array.prototype.forEach.call(view.children, function (el) {
           if (el.classList.contains('card') || el.classList.contains('stat-row') ||
-              el.classList.contains('two-col') || el.classList.contains('dash-pair') ||
+              el.classList.contains('two-col') ||
               el.classList.contains('review-queue')) {
             el.classList.add('stagger-in');
             el.style.animationDelay = (cascade * 70) + 'ms';

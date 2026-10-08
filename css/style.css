@@ -4904,6 +4904,10 @@ a.focus-mode-page:hover { color: var(--ink); text-decoration: underline; }
 
 .st-at-meter { position: relative; margin-top: 8px; }
 .st-at-meter .meter-thin { margin-top: 0; }
+/* Today, this week, and until exam. One step thicker than the 6px
+   meter-thin used on the rest of the studio. The dashboard card is this
+   same #st-active-target, so both pages share the height. */
+#st-active-target .meter-thin { height: 10px; }
 /* Single-target tick on the week meter (at 20 h). */
 .st-at-mark {
   position: absolute;
@@ -5930,14 +5934,7 @@ button.btn-ok {
   transform: none;
 }
 
-/* Study time + recent activity share a row. */
-.dash-pair {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
-}
-.dash-pair > .card { margin-bottom: 0; }
+/* Study time is a full-width card above This week. Recent activity is its own card. */
 .dash-spark-empty { margin: 14px 0 0; }
 .activity-list li { align-items: center; gap: 12px; padding: 9px 0; }
 .act-dot {
@@ -5955,9 +5952,6 @@ button.btn-ok {
 .act-dot.act-review { background: var(--platinum); }
 .act-text { min-width: 0; }
 .act-time { font-variant-numeric: tabular-nums; }
-@media (max-width: 860px) {
-  .dash-pair { grid-template-columns: minmax(0, 1fr); }
-}
 
 /* Knowledge portals */
 .topic-grid { gap: 12px; }
