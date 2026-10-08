@@ -3913,14 +3913,13 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .dash-study-fig { line-height: 1.2; }
 .dash-study-big { font-size: 26px; font-weight: 500; letter-spacing: -0.01em; }
 .dash-study-big .stat-unit { font-size: 13px; font-weight: 400; color: var(--ink-3); }
-.dash-spark { display: block; width: 100%; max-width: 188px; height: 50px; margin: 14px 0 4px; overflow: visible; }
+.dash-spark { display: block; width: 100%; max-width: 240px; height: 50px; margin: 14px 0 4px; overflow: visible; }
 /* Chart marks are ink, not coral: the analytics band spends its one coral on
    the practice heatmap, and a 7-bar spark would otherwise repeat it seven
    times in the same scroll. Today reads by weight and value, not by hue. */
 .dash-bar { fill: var(--ink-2); }
 .dash-bar-today { fill: var(--ink); }
 .dash-bar-zero { fill: var(--line); }
-.dash-bar-track { fill: var(--ivory); }
 .dash-spark-lbl { fill: var(--ink-3); font-size: 9px; font-family: var(--sans); }
 .dash-spark-lbl-today { fill: var(--ink); font-weight: 500; }
 .dash-study-note { margin-top: 8px; }
@@ -4905,6 +4904,10 @@ a.focus-mode-page:hover { color: var(--ink); text-decoration: underline; }
 
 .st-at-meter { position: relative; margin-top: 8px; }
 .st-at-meter .meter-thin { margin-top: 0; }
+/* Today, this week, and until exam. One step thicker than the 6px
+   meter-thin used on the rest of the studio. The dashboard card is this
+   same #st-active-target, so both pages share the height. */
+#st-active-target .meter-thin { height: 10px; }
 /* Single-target tick on the week meter (at 20 h). */
 .st-at-mark {
   position: absolute;
