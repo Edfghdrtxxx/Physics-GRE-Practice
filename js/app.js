@@ -466,7 +466,8 @@ PGRE.formulaTextHTML = function (text) {
         return mathToken(greek[name] + (sub ? '_' + sub : '') + (sup ? '^' + sup : '') + (tick || '') + (frac || ''));
       });
     // A subscript/superscript makes a one-letter token unambiguously mathematical.
-    part = part.replace(/\b([A-Za-z])(_(?:[A-Za-z0-9]+|\{[^}]+\})|\^(?:[A-Za-z0-9]+|\{[^}]+\}))('?)(\/\d+)?\b/g,
+    // A chain such as Y_l^m takes both scripts; stopping after the first leaves "^m" as prose.
+    part = part.replace(/\b([A-Za-z])((?:_(?:[A-Za-z0-9]+|\{[^}]+\})|\^(?:[A-Za-z0-9]+|\{[^}]+\}))+)('?)(\/\d+)?\b/g,
       function (_, base, decoration, tick, frac) { return mathToken(base + decoration + (tick || '') + (frac || '')); });
     // These are common standalone physics variables; omit prose words such as a,
     // an, and I so the formula-card prompt remains readable. Sentence-initial
