@@ -169,6 +169,23 @@ DROPPED.forEach(function (id) {
 });
 
 var conductor = byId['cpgf-2.15a'];
+var transients = byId['supp-rc-rl-transients'];
+var discharge = transients.back.split('<li>')[2].split('</li>')[0];
+assert(transients.kind === 'list' && transients.topic === 'em' && transients.tag === 'Transients',
+  'the transient card keeps its list kind, topic, and tag');
+assert(discharge.indexOf('from charge $Q_0$ at $t=0$') !== -1 &&
+  discharge.indexOf('$Q$ is charge, $Q_0$ initial charge, $R$ resistance, $C$ capacitance, and $t$ elapsed time') !== -1,
+  'discharge defines the initial condition and every variable');
+assert(discharge.indexOf('$Q(t) = Q_0 e^{-t/RC}$.') !== -1 &&
+  discharge.indexOf('$I(t) = |dQ/dt| = (Q_0/RC)e^{-t/RC}$') !== -1 &&
+  discharge.indexOf('$V(t) = Q(t)/C = (Q_0/C)e^{-t/RC}$') !== -1,
+  'discharge states charge, current magnitude, and capacitor voltage without a trailing comma');
+assert(discharge.indexOf('$\\tau = RC$') !== -1 &&
+  discharge.indexOf('$Q(\\tau) = Q_0/e \\approx 0.37Q_0$') !== -1 &&
+  discharge.indexOf('$37\\%$') !== -1 && discharge.indexOf('$e^{-2t/RC}$') !== -1,
+  'discharge keeps the time constant, remaining charge, and energy decay');
+assert((transients.back.match(/Q_f\(1-e\^\{-t\/RC\}\)/g) || []).length === 1,
+  'the charging relation appears once');
 assert(!!conductor && conductor.kind !== 'list', 'cpgf-2.15a is still a formula card');
 assert(!!conductor && conductor.back.indexOf('D = \\sigma') !== -1,
   'cpgf-2.15a still states the conductor surface result');
