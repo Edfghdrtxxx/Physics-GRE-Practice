@@ -1,0 +1,31 @@
+test-agent-receipt                     rc=0  25 passed, 0 failed
+test-bank                              rc=0  60 passed, 0 failed
+test-dashboard-qotd                    rc=0  11 passed, 0 failed
+test-exam-engine                       rc=0  132 passed, 0 failed
+test-file-structure                    rc=1  AssertionError [ERR_ASSERTION]: Unexpected top-level entry found: .claude
+test-focus-sound                       rc=0  ALL OK
+test-formula-checkin                   rc=0  passed: 71  failed: 0
+test-formula-consumers                 rc=0  13 passed, 0 failed
+test-formula-export                    rc=0  65 passed, 0 failed
+test-formula-picker                    rc=0  34 passed, 0 failed
+test-intensity-chrome                  rc=0  128 passed, 0 failed
+test-keep-failing-confirm-chrome       rc=0  PASS: Confirm reopens only the selected archived problem for retakes
+test-mem-history                       rc=0  ALL PASS
+test-mistakes-srs                      rc=0  96 passed, 0 failed
+test-oscillator-chrome                 rc=0  Dynamic Chrome CDP testing completed successfully!
+test-pack-launch-chrome                rc=0  chrome pack launch ok: 03 n=8  07 n=4
+test-pack-launch                       rc=0  45 passed, 0 failed
+test-packs                             rc=0  212 passed, 0 failed
+test-plan                              rc=0  All 37 assertions passed.
+test-practice-scroll-stem-chrome       rc=0  finished stem scrolls into view, overlap=84
+test-public-formulas                   rc=0  1004 passed, 0 failed
+test-recall-lists                      rc=0  14 passed, 0 failed
+test-review-regrade-chrome             rc=0  ALL OK
+test-session-park                      rc=0  100 passed, 0 failed
+test-srs-anki-chrome                   rc=0  PASS — Anki grades + end-to-end Today due pickup, backlog cap, mixed due+new auto-pick, repeat-click safety, persistence, delibera
+test-srs-intervals                     rc=0  222 passed, 0 failed
+test-status                            rc=0  55 passed, 0 failed
+test-store-persist                     rc=0  63 passed, 0 failed
+test-ux-interaction                    rc=0  ALL OK
+test-visualizer-aesthetics             rc=0  passed: 1820  failed: 0
+check-katex-latex                      rc=0  All math parses cleanly.

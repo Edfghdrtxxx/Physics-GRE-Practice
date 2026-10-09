@@ -1,0 +1,21 @@
+{
+ "cards": 16,
+ "noteDelta": 831,
+ "hPhoneB": 9517,
+ "hPhoneA": 6305,
+ "hDeskB": 4558,
+ "hDeskA": 3313,
+ "maxAfter": 380,
+ "screenB": 9381,
+ "screenA": 4469,
+ "over400After": [
+  "supp-moment-of-inertia 481"
+ ],
+ "over400Before": 17,
+ "katexErrorsAfter": 0,
+ "tallerOnPhone": [],
+ "tallerOnDesktop": [
+  "supp-lattice-heat-capacity 189->190",
+  "supp-qm-length-scales 216->220"
+ ]
+}

@@ -1,0 +1,39 @@
+# supp-parallel-wire-force
+desktop {"step":"search","open":true,"katexErrors":0}
+desktop {"step":"complete","dialog":null,"katexErrors":0}
+desktop {"step":"close","stillOpen":false}
+desktop {"step":"study","started":true,"label":"Study 1 card","katexErrors":0}
+desktop {"step":"flip","back":true,"backPx":423,"katexErrors":0}
+desktop console: console: Emulating viewport: {"deviceScaleFactor":1,"isMobile":false,"hasTouch":false,"isLandscape":false,"width":1280,"height":900} ## Console messages <no console messages found> 
+phone {"step":"search","open":true,"katexErrors":0}
+phone {"step":"complete","dialog":null,"katexErrors":0}
+phone {"step":"close","stillOpen":false}
+phone {"step":"study","started":true,"label":"Study 1 card","katexErrors":0}
+phone {"step":"flip","back":true,"backPx":1165,"katexErrors":0}
+phone console: console: Emulating viewport: {"deviceScaleFactor":2,"isMobile":true,"hasTouch":true,"isLandscape":false,"width":390,"height":844} ## Console messages <no console messages found> 
+# supp-drift-current
+desktop {"step":"search","open":true,"katexErrors":0}
+desktop {"step":"complete","dialog":null,"katexErrors":0}
+desktop {"step":"close","stillOpen":false}
+desktop {"step":"study","started":true,"label":"Study 1 card","katexErrors":0}
+desktop {"step":"flip","back":true,"backPx":255,"katexErrors":0}
+desktop console: console: Emulating viewport: {"deviceScaleFactor":1,"isMobile":false,"hasTouch":false,"isLandscape":false,"width":1280,"height":900} ## Console messages <no console messages found> 
+phone {"step":"search","open":true,"katexErrors":0}
+phone {"step":"complete","dialog":null,"katexErrors":0}
+phone {"step":"close","stillOpen":false}
+phone {"step":"study","started":true,"label":"Study 1 card","katexErrors":0}
+phone {"step":"flip","back":true,"backPx":604,"katexErrors":0}
+phone console: console: Emulating viewport: {"deviceScaleFactor":2,"isMobile":true,"hasTouch":true,"isLandscape":false,"width":390,"height":844} ## Console messages <no console messages found> 
+# supp-radiation-field
+desktop {"step":"search","open":true,"katexErrors":0}
+desktop {"step":"complete","dialog":null,"katexErrors":0}
+desktop {"step":"close","stillOpen":false}
+desktop {"step":"study","started":true,"label":"Study 1 card","katexErrors":0}
+desktop {"step":"flip","back":true,"backPx":321,"katexErrors":0}
+desktop console: console: Emulating viewport: {"deviceScaleFactor":1,"isMobile":false,"hasTouch":false,"isLandscape":false,"width":1280,"height":900} ## Console messages <no console messages found> 
+phone {"step":"search","open":true,"katexErrors":0}
+phone {"step":"complete","dialog":null,"katexErrors":0}
+phone {"step":"close","stillOpen":false}
+phone {"step":"study","started":true,"label":"Study 1 card","katexErrors":0}
+phone {"step":"flip","back":true,"backPx":889,"katexErrors":0}
+phone console: console: Emulating viewport: {"deviceScaleFactor":2,"isMobile":true,"hasTouch":true,"isLandscape":false,"width":390,"height":844} ## Console messages <no console messages found> 
