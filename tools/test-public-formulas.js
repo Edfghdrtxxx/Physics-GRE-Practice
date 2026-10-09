@@ -224,6 +224,28 @@ function cross(a, b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[
 var zphi = cross([0, 0, 1], [0, 1, 0]);
 assert(zphi[0] === -1 && zphi[1] === 0 && zphi[2] === 0,
   'z-hat cross phi-hat is minus r-hat, so parallel currents attract');
+var coax = byId['supp-coaxial'];
+var coaxBack = coax ? coax.back : '';
+assert(!!coax && coax.topic === 'em' && coax.tag === 'Coaxial cable' && coax.kind === undefined &&
+  coaxBack.indexOf('$$a < r < b:') === 0 && coaxBack.indexOf('\\frac{L}{\\ell}') !== -1,
+  'the coaxial card keeps its id, topic, tag, and original field, C, L, Z0 lines');
+assert(coaxBack.indexOf('$E_r\\,2\\pi r L = \\lambda L/\\epsilon_0$') !== -1 &&
+  coaxBack.indexOf('$$V = V_a - V_b = \\int_a^b E_r\\,dr = \\frac{\\lambda}{2\\pi\\epsilon_0}\\ln\\frac{b}{a},$$') !== -1 &&
+  coaxBack.indexOf('$C/\\ell = \\lambda/V = 2\\pi\\epsilon_0/\\ln(b/a)$') !== -1 &&
+  coaxBack.indexOf('$C = Q/V = 2\\pi\\epsilon_0 L/\\ln(b/a)$') !== -1 &&
+  coaxBack.indexOf('reference radius $r_0$') !== -1 && /Inside a shell[^.]*E = 0/.test(coaxBack),
+  'the coaxial card derives E, V, C per length, the log-reference radius, and the shell rules');
+// numeric check: integral of lambda/(2 pi eps0 r) from a to b equals (lambda/2 pi eps0) ln(b/a), so C/l = lambda/V
+var eps0 = 8.8541878128e-12, lam = 3e-9, ra = 0.002, rb = 0.007, steps = 200000, vsum = 0;
+for (var k = 0; k < steps; k++) {
+  var rmid = ra + (rb - ra) * (k + 0.5) / steps;
+  vsum += lam / (2 * Math.PI * eps0 * rmid) * (rb - ra) / steps;
+}
+var vExact = lam / (2 * Math.PI * eps0) * Math.log(rb / ra);
+assert(Math.abs(vsum / vExact - 1) < 1e-9 &&
+  Math.abs(lam / vExact / (2 * Math.PI * eps0 / Math.log(rb / ra)) - 1) < 1e-12 &&
+  Math.abs(2 * Math.PI * eps0 * 1e12 - 55.6) < 0.05,
+  'the integral of E gives the logarithm, C/l = lambda/V = 2 pi eps0/ln(b/a), and 2 pi eps0 is 55.6 pF/m');
 var drift = byId['supp-drift-current'];
 var driftItems = drift ? drift.back.split('<li>').slice(1) : [];
 assert(!!drift && drift.kind === 'list' && drift.topic === 'em' && drift.tag === 'Current density' &&
