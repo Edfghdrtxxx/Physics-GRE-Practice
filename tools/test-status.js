@@ -8,6 +8,8 @@ var vm = require('vm');
 
 var root = path.resolve(__dirname, '..');
 var statusSrc = fs.readFileSync(path.join(root, 'js', 'status.js'), 'utf8');
+var intensitySrc = fs.readFileSync(path.join(root, 'js', 'intensity.js'), 'utf8');
+var topicsSrc = fs.readFileSync(path.join(root, 'js', 'data-topics.js'), 'utf8');
 var passed = 0;
 var failed = 0;
 
@@ -33,10 +35,13 @@ function localIso(offset, hour) {
 var today = localDay(0);
 var yesterday = localDay(-1);
 var fetchCall = null;
+// Exam date 13 days out puts the last pack day (exam minus 3) 10 days out,
+// so the coverage numbers do not depend on the calendar date of the run.
+var examDate = localDay(13);
 var state = {
   streak: { current: 5, best: 12, lastDay: today },
   today: { date: today, answered: 30, correct: 24 },
-  settings: { dailyTargetMin: 60 },
+  settings: { dailyTargetMin: 60, examDate: examDate },
   studyLog: {},
   sessions: [
     { id: 'done', mode: 'practice', topicId: 'cm', startedAt: localIso(0, 10),
@@ -129,6 +134,8 @@ sandbox.window.PGRE = {
   BOOK_FORMULAS: [{ id: 'f1' }, { id: 'f2' }],
   FORMULAS: [{ id: 'f2' }, { id: 'f3' }],
   BOOK_LISTS: [{ id: 'cpgl-1.02' }, { id: 'cpgl-2.01' }],
+  // pack questions: q1, q2 and x1 have attempts; p3 and p4 do not
+  PACKS: { '01': { id: '01', n: 3, ids: ['q1', 'q2', 'p3'] }, '02': { id: '02', n: 3, ids: ['p3', 'p4', 'x1'] } },
   allQuestions: function (opts) {
     return (opts && opts.includeExam) ? practicePool.concat(examPool) : practicePool;
   },
@@ -139,6 +146,8 @@ sandbox.window.PGRE = {
 state.cards['cpgl-2.01'] = { due: today };
 sandbox.PGRE = sandbox.window.PGRE;
 vm.createContext(sandbox);
+vm.runInContext(topicsSrc, sandbox);
+vm.runInContext(intensitySrc, sandbox);
 vm.runInContext(statusSrc, sandbox);
 
 var before = JSON.stringify(state);
@@ -147,8 +156,8 @@ var summary = sandbox.PGRE.buildStatusSummary();
 console.log('summary contract');
 assert(Object.keys(summary).join(',') ===
   'date,streak,today,sessions,exams,formulaCards,mistakesAdded,recentLog,' +
-  'attempts,questions,mistakeBook',
-  'top-level fields match the bridge contract');
+  'attempts,questions,mistakeBook,intensity',
+  'top-level fields match the bridge contract, with intensity appended last');
 assert(summary.date === today, 'date uses the local studio day');
 assert(summary.streak.current === 5 && summary.streak.best === 12,
   'streak reports current and best');
@@ -221,6 +230,52 @@ assert(book.today[0].added === true && book.today[0].keepFailing === true &&
   'a new miss reports its counts, picks, due date, and keep-failing flag');
 assert(book.today[1].added === false && book.today[1].luckyGuess === true,
   'a lucky-guess filing on an older entry is an update, not an addition');
+console.log('\nintensity');
+var it = summary.intensity;
+function workingDays(from, to) {
+  var n = 0;
+  var d = new Date(from + 'T12:00:00');
+  var end = new Date(to + 'T12:00:00');
+  while (d <= end) { if (d.getDay() !== 0) n++; d.setDate(d.getDate() + 1); }
+  return n;
+}
+var lastPack = localDay(10);
+var wdl = workingDays(today, lastPack);
+assert(it && it.date === today, 'intensity uses the summary date');
+assert(Object.keys(it).join(',') ===
+  'date,newQuestions,paceSec,firstAttemptAccuracy,repeatMinutes,coverage,topics,days',
+  'intensity carries the five metrics, the topic rows and the 7-day trend');
+['newQuestions', 'paceSec', 'firstAttemptAccuracy', 'repeatMinutes', 'coverage'].forEach(function (k) {
+  assert('value' in it[k] && 'threshold' in it[k] && 'band' in it[k],
+    k + ' reports value, threshold and band');
+});
+assert(it.newQuestions.value === 2 && it.newQuestions.threshold === 15 && it.newQuestions.band === 'red',
+  'new questions today count first practice tries only (exam rows are not new): 2 / 15, red');
+assert(it.paceSec.value === 63 && it.paceSec.threshold === 103 && it.paceSec.band === 'green',
+  'pace is the median of today\'s new-question times in whole seconds: 63 / 103, green');
+assert(it.firstAttemptAccuracy.value === 33 && it.firstAttemptAccuracy.n === 3 &&
+  it.firstAttemptAccuracy.correct === 1 && it.firstAttemptAccuracy.band === 'red',
+  'first-try accuracy over 7 days: 1 of 3 = 33%, red');
+assert(it.repeatMinutes.value === 0 && it.repeatMinutes.band === 'green',
+  'no mistake-book retakes: 0 minutes, green');
+assert(it.coverage.remaining === 2 && it.coverage.packQuestions === 5,
+  'coverage counts pack questions (union of pack ids) with no attempt of any mode');
+assert(it.coverage.lastPackDay === lastPack && it.coverage.examDate === examDate,
+  'last pack day is the exam date minus 3 days');
+assert(it.coverage.workingDaysLeft === wdl,
+  'working days run from today through the last pack day, Sundays excluded (' + wdl + ')');
+assert(it.coverage.required === Math.round(10 * 2 / wdl) / 10 && it.coverage.actual === 0.5 &&
+  it.coverage.band === 'green',
+  'required = remaining / working days; actual = 3 new in 7 days / 6 working days = 0.5; green');
+assert(it.topics.length === 9 && it.topics.every(function (t) { return !t.judged && t.band === null; }),
+  'every topic has fewer than 5 new questions, so none gets a band');
+assert(it.topics.map(function (t) { return t.topic; }).join(',') === 'cm,em,qm,th,at,sp,ow,sr,lb',
+  'too-few topics sort by exam weight, heaviest first');
+assert(it.topics[0].newQuestions === 2 && it.topics[0].weight === 20 && it.topics[1].newQuestions === 1,
+  'topic rows count new questions by row topic and carry the ETS weight');
+assert(it.days.length === 7 && it.days[6].date === today && it.days[6].newQuestions === 2 &&
+  it.days[6].paceSec === 63 && it.days[5].newQuestions === 1 && it.days[5].paceSec === 50,
+  'the 7-day trend ends today with per-day new questions and median pace');
 assert(JSON.stringify(state) === before, 'building a summary does not mutate study state');
 
 sandbox.PGRE.pushStatus().then(function (ok) {

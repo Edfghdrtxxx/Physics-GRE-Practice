@@ -1025,6 +1025,8 @@ PGRE.views.practice = (function () {
       label: session.label || null,
       score: { correct: correct, n: n, pct: pct },
       durationMin: durationMin,
+      // median seconds per answered question in this sitting (js/intensity.js)
+      medianSec: PGRE.intensity ? PGRE.intensity.sessionMedianSec(session.answers) : null,
       missQids: miss.map(function (m) { return m.qid; }),
       misses: miss,
       ids: ids,
@@ -1244,6 +1246,36 @@ PGRE.views.practice = (function () {
     bindReviewJumps();
   }
 
+  /* ——— Summary: instant intensity feedback ———
+     Two banded lines (js/intensity.js): this sitting's median seconds per
+     answered question against the 103 s exam pace, and today's new
+     questions against the daily target. The second line reads the same
+     PGRE.intensity.compute() as the dashboard Intensity card, after this
+     sitting's attempts are already in the log. */
+  function intensityLineHTML(key, label, note, value, bandName) {
+    return '<div class="intensity-line" data-line="' + key + '" data-band="' + (bandName || 'none') + '">' +
+      '<span class="intensity-line-label">' + label +
+        (note ? ' <span class="intensity-line-note">' + PGRE.ui.esc(note) + '</span>' : '') + '</span>' +
+      '<span class="intensity-line-value">' + value + '</span>' +
+      PGRE.intensity.chipHTML(bandName) +
+    '</div>';
+  }
+
+  function intensitySummaryHTML(isPack) {
+    var I = PGRE.intensity;
+    if (!I) return '';
+    var med = I.sessionMedianSec(session.answers);
+    var today = I.compute(PGRE.store.state);
+    var nq = today.newQuestions;
+    return '<div class="intensity-summary" id="intensity-summary">' +
+      intensityLineHTML('pace', 'Median seconds per question', isPack ? 'this pack' : 'this set',
+        (med == null ? '—' : med) + ' / ' + I.THRESHOLDS.paceSec.green, I.band('paceSec', med)) +
+      intensityLineHTML('new', 'New questions today', 'first tries in practice',
+        nq.value + ' / ' + nq.threshold, nq.band) +
+      '<a class="intensity-summary-link" href="#/">Intensity on the dashboard →</a>' +
+    '</div>';
+  }
+
   /* ——— Summary ——— */
   function renderSummary() {
     clearPace();
@@ -1302,6 +1334,7 @@ PGRE.views.practice = (function () {
         '<span class="summary-pct">' + pct + '%</span></div>' +
       '<p class="muted">' + verdict + ' You earned <strong>' + session.xpEarned + ' XP</strong> this session.</p>';
     if (planLine) html += '<p class="muted">' + planLine + '</p>';
+    html += intensitySummaryHTML(isPack);
     html += paletteHTML(true);
 
     var misses = session.answers.filter(function (a) { return !a.correct; });
