@@ -2401,7 +2401,7 @@ PGRE.views.formulas = (function () {
         '<button class="btn btn-ghost" id="putaway-btn">Put away</button>' +
         similarButton(c, 'btn-sm') +
       '</div>' +
-      reviewHistoryHTML(c.id) +
+      '<div class="card-review-hist-wrap" hidden>' + reviewHistoryHTML(c.id) + '</div>' +
       '</div>';
     body().innerHTML = html;
     PGRE.typesetMath(body());
@@ -2552,6 +2552,8 @@ PGRE.views.formulas = (function () {
     html += similarButton(c, 'btn-sm');
     var box = document.getElementById('fcard-actions');
     box.innerHTML = html;
+    var histWrap = body().querySelector('.card-review-hist-wrap');
+    if (histWrap) histWrap.hidden = false;
     box.querySelectorAll('[data-grade]').forEach(function (b, i) {
       b.addEventListener('click', function () { grade(b.getAttribute('data-grade')); });
       if (PGRE.motion && !PGRE.motion.reduced) {
@@ -4132,7 +4134,8 @@ PGRE.views.formulas = (function () {
         '</span>' +
         '<span class="fs-chips">' + searchChipsHTML(c) + '</span>' +
       '</div>' +
-      reviewHistoryHTML(c.id) +
+      '<div class="card-review-hist-wrap"' + (open ? '' : ' hidden') + '>' +
+        reviewHistoryHTML(c.id) + '</div>' +
     '</article>';
   }
 
@@ -4265,6 +4268,8 @@ PGRE.views.formulas = (function () {
     if (open) fillSearchBack(art);
     back.hidden = !open;
     art.classList.toggle('is-open', open);
+    var histWrap = art.querySelector('.card-review-hist-wrap');
+    if (histWrap) histWrap.hidden = !open;
     var btn = art.querySelector('.fs-flip');
     if (btn) {
       btn.textContent = open ? 'Hide formula' : 'Show formula';

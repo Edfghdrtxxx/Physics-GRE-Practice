@@ -3128,6 +3128,7 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 
 /* Per-card review history — date + grade list, newest first */
 .peek-history:empty { display: none; }
+.card-review-hist-wrap[hidden] { display: none; }
 .card-review-hist {
   margin: 12px 0 0;
   padding-top: 10px;

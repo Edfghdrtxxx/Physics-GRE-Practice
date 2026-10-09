@@ -3033,8 +3033,12 @@ function consumerCases() {
       return wait(0).then(function () {
         var art = doc.querySelector('.fs-card[data-fsid="cpgf-2.1"]');
         assert(!!art, 'search lists cpgf-2.1');
-        var hist = art && art.querySelector('.card-review-hist');
-        assert(!!hist, 'search card shows review history');
+        var wrap = art && art.querySelector('.card-review-hist-wrap');
+        assert(!!wrap && wrap.hidden, 'search history stays hidden until Show formula');
+        art.querySelector('.fs-flip').click();
+        assert(!wrap.hidden, 'search history appears after Show formula');
+        var hist = art.querySelector('.card-review-hist');
+        assert(!!hist, 'search card shows review history after reveal');
         var items = [].map.call((hist && hist.querySelectorAll('li')) || [], function (li) {
           return li.textContent.replace(/\s+/g, ' ').trim();
         });
@@ -3048,7 +3052,12 @@ function consumerCases() {
         assert(hist.textContent.indexOf('Newest first') !== -1,
           'the list says newest first');
         var emptyArt = doc.querySelector('.fs-card[data-fsid="cpgf-2.2"]');
-        var empty = emptyArt && emptyArt.querySelector('.card-review-hist');
+        var emptyWrap = emptyArt && emptyArt.querySelector('.card-review-hist-wrap');
+        assert(!!emptyWrap && emptyWrap.hidden,
+          'empty-card history stays hidden until Show formula');
+        emptyArt.querySelector('.fs-flip').click();
+        assert(!emptyWrap.hidden, 'empty-card history appears after Show formula');
+        var empty = emptyArt.querySelector('.card-review-hist');
         assert(empty && empty.textContent.indexOf('No reviews recorded') !== -1 &&
           empty.textContent.indexOf('cannot be recovered') !== -1,
           'a card with no log shows the empty line, got: ' + (empty && empty.textContent));
@@ -3058,8 +3067,13 @@ function consumerCases() {
         doc.querySelector('.flash-tab[data-mode="study"]').click();
         doc.getElementById('study-btn').click();
         var liveId = (P.store.state.formulaStudy && P.store.state.formulaStudy.queueIds || [])[0];
+        var liveWrap = doc.querySelector('.card-review-hist-wrap');
+        assert(!!liveWrap && liveWrap.hidden,
+          'study history stays hidden until Show answer');
+        doc.getElementById('flip-btn').click();
+        assert(!liveWrap.hidden, 'study history appears after Show answer');
         var live = doc.querySelector('.card-review-hist');
-        assert(!!live, 'study card shows review history');
+        assert(!!live, 'study card shows review history after reveal');
         assert(live.getAttribute('data-card-hist') === liveId,
           'study history is for the live card, got ' + live.getAttribute('data-card-hist'));
       });
