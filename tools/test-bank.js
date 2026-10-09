@@ -155,5 +155,54 @@ console.log('\nguarded reads when bank files are absent');
   assert(P.questionById('p1') !== null, 'questionById still works with missing banks');
 })();
 
+console.log('\ngraph choices');
+var graphHeading = '<em>Graph of $v$ vs $t$:</em> ';
+var graphDescriptions = [
+  'decays exponentially to zero; at $t_1$ it dips to a small negative value',
+  'decays exponentially to zero; at $t_1$ it drops sharply to a large negative value',
+  'rises rapidly to a positive plateau; at $t_1$ it decays gradually back toward zero',
+  'rises gradually to a positive plateau; at $t_1$ it drops steeply back to zero',
+  'rises with a damped oscillation to a positive plateau; at $t_1$ it drops with a damped oscillation to a negative value'
+];
+var graphOutputs = graphDescriptions.map(function (description) {
+  var original = graphHeading + description;
+  var output = PGRE.graphChoiceHTML(original);
+  assert(output.indexOf('<svg ') >= 0, 'recognized curve has an SVG');
+  assert(output.endsWith(original), 'graph preserves the original choice text');
+  assert(PGRE.graphChoiceHTML(output) === output, 'graph augmentation is idempotent');
+  assert(output.indexOf('NaN') < 0 && output.indexOf('Infinity') < 0, 'curve coordinates are finite');
+  return output;
+});
+var graphPaths = graphOutputs.map(function (output) {
+  return output.match(/class="choice-graph-curve" d="([^"]+)"/)[1];
+});
+assert(new Set(graphPaths).size === 5, 'five descriptions produce distinct curve geometry');
+var graphPoints = graphPaths.map(function (curve) {
+  return curve.split(' ').reduce(function (points, coordinate, index, coordinates) {
+    if (index % 2 === 0) points.push([Number(coordinate.slice(1)), Number(coordinates[index + 1])]);
+    return points;
+  }, []);
+});
+assert(graphPoints[0][0][1] < graphPoints[1][0][1], 'large initial voltage exceeds moderate initial voltage');
+assert(graphPoints[0][148][1] > 70 && graphPoints[1][148][1] > graphPoints[0][148][1],
+  'both decays jump negative at the switch time, with a larger dip for the second curve');
+assert(graphPoints[2][0][1] === 70 && graphPoints[3][0][1] === 70 && graphPoints[4][0][1] === 70,
+  'rising curves begin at zero');
+assert(graphPoints[3].slice(148).every(function (point) { return point[1] === 70; }),
+  'abrupt-end curve remains zero after the switch time');
+assert(PGRE.graphChoiceHTML(graphHeading + 'an unsupported shape at $t_1$') ===
+  graphHeading + 'an unsupported shape at $t_1$', 'unknown shapes remain unchanged');
+assert(PGRE.graphChoiceHTML('ordinary choice') === 'ordinary choice', 'ordinary choices remain unchanged');
+assert(PGRE.graphChoiceHTML(null) === null, 'non-string choices remain unchanged');
+PGRE.QUESTIONS = [{ id: 'graph-test', answer: 1, choices: graphDescriptions.map(function (description) {
+  return graphHeading + description;
+}) }];
+PGRE._resetBankCache();
+var graphQuestion = PGRE.questionById('graph-test');
+assert(graphQuestion.choices.every(function (choice) { return choice.indexOf('<svg ') >= 0; }),
+  'question lookup delivers graphs to every view');
+assert(graphQuestion.answer === 1, 'graph augmentation preserves the answer index');
+assert(PGRE.QUESTIONS[0].choices[0].indexOf('<svg ') < 0, 'raw bank data remains unchanged');
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);
