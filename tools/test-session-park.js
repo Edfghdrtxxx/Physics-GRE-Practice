@@ -701,9 +701,9 @@ function scriptToken(file) {
   var m = indexHtml.match(new RegExp('<script src="' + file.replace(/\./g, '\\.') + '\\?v=([^"]+)"'));
   return m ? m[1] : '';
 }
-assert(scriptToken('js/srs.js') === '20261002c', 'srs.js cache token is 20261002c, got ' + scriptToken('js/srs.js'));
+assert(scriptToken('js/srs.js') === '20261009a', 'srs.js cache token is 20261009a, got ' + scriptToken('js/srs.js'));
 assert(scriptToken('js/gamify.js') === '20261002b', 'gamify.js cache token is 20261002b, got ' + scriptToken('js/gamify.js'));
-assert(scriptToken('js/view-practice.js') === '20261009a', 'view-practice.js cache token is 20261009a, got ' + scriptToken('js/view-practice.js'));
+assert(scriptToken('js/view-practice.js') === '20261009b', 'view-practice.js cache token is 20261009b, got ' + scriptToken('js/view-practice.js'));
 assert(scriptToken('js/view-mistakes.js') === '20261003a', 'view-mistakes.js cache token is 20261003a, got ' + scriptToken('js/view-mistakes.js'));
 assert(scriptToken('js/app.js') === '20261008a', 'app.js cache token is 20261008a, got ' + scriptToken('js/app.js'));
 assert(indexHtml.indexOf('js/srs.js?v=20261001j') < 0 &&

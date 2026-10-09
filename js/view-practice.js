@@ -1272,7 +1272,8 @@ PGRE.views.practice = (function () {
         (med == null ? '—' : med) + ' / ' + I.THRESHOLDS.paceSec.green, I.band('paceSec', med)) +
       intensityLineHTML('new', 'New questions today', 'first tries in practice',
         nq.value + ' / ' + nq.threshold, nq.band) +
-      '<a class="intensity-summary-link" href="#/">Intensity on the dashboard →</a>' +
+      // data-dash-focus: the dashboard lands on this card, not on its first card
+      '<a class="intensity-summary-link" href="#/" data-dash-focus="intensity-card">Intensity on the dashboard →</a>' +
     '</div>';
   }
 

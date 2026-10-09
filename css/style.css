@@ -6281,49 +6281,227 @@ details.miss[open] > summary::before { transform: rotate(45deg) translate(-1px, 
 .band-none { color: var(--ink-meta); background: var(--ivory); font-weight: 500; }
 .band-none::before { background: transparent; border: 1.5px solid currentColor; border-radius: 50%; }
 
-.intensity-lead { margin-top: 8px; }
-.intensity-rows { list-style: none; margin: 14px 0 0; padding: 0; border-top: 1px solid var(--line); }
-.intensity-row {
+/* The band shape without the pill: the tally, the headline, a day's pace. */
+.band-dot { display: inline-block; flex: none; width: 8px; height: 8px; background: currentColor; }
+.band-dot.band-green { color: var(--good); background: currentColor; border-radius: 50%; }
+.band-dot.band-amber { color: var(--amber); background: currentColor; transform: rotate(45deg) scale(.9); }
+.band-dot.band-red { color: var(--bad); background: currentColor; }
+.band-dot.band-none {
+  color: var(--ink-meta);
+  background: transparent;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+/* Read by screen readers, not drawn. */
+.ivh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Dashboard card. Top to bottom: tally, headline with one button, five
+   readings (each a button that opens its panel), the 7-day strip, the topic
+   to work on. scroll-margin keeps the card clear of the sticky top bar when
+   a link lands on it. The card is a size container: its rows stack by the
+   card's own width, which the sidebar narrows well before the window does. */
+.intensity-card { scroll-margin-top: 64px; container: intensity / inline-size; }
+#intensity-title:focus { outline: none; }
+.intensity-card .band-head { align-items: flex-end; flex-wrap: wrap; row-gap: 8px; }
+.intensity-tally {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: var(--fs-cap);
+  color: var(--ink-2);
+}
+.intensity-tally-item { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+
+.intensity-verdict {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: var(--ivory);
+  border-radius: var(--ctl-r);
+}
+.intensity-verdict-copy { min-width: 0; }
+.intensity-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.intensity-headline .band-dot { position: relative; top: -1px; }
+.intensity-detail { margin: 4px 0 0; font-size: var(--fs-sm); color: var(--ink-2); max-width: 72ch; }
+.intensity-verdict .intensity-detail { padding-left: 18px; }
+.intensity-card .intensity-verdict .btn,
+.intensity-card .intensity-next .btn,
+.intensity-card .intensity-links .btn,
+.intensity-card .intensity-focus .btn { margin: 0; flex: none; white-space: nowrap; }
+
+.intensity-rows { list-style: none; margin: 6px 0 0; padding: 0; }
+.intensity-row { border-bottom: 1px solid var(--line); }
+.intensity-toggle {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  grid-template-areas: "name value chip" "hint hint hint";
+  /* fixed tracks: the five meters and the five values line up down the card */
+  grid-template-columns: minmax(0, 1fr) minmax(64px, 1fr) 172px 112px 12px;
+  grid-template-areas: "name meter read chip chev";
   align-items: center;
   column-gap: 18px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--line);
+  width: calc(100% + 16px);
+  margin: 0 -8px;
+  padding: 12px 8px;
+  border: 0;
+  border-radius: var(--ctl-r);
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
+.intensity-toggle:hover,
+.intensity-toggle[aria-expanded="true"] { background: var(--ivory); }
+.intensity-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .intensity-name { grid-area: name; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .intensity-label { font-size: 15px; font-weight: 500; color: var(--ink); }
 .intensity-window { font-size: var(--fs-cap); color: var(--ink-meta); }
+.imeter {
+  grid-area: meter;
+  position: relative;
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent-track);
+}
+.imeter-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  max-width: 100%;
+  border-radius: 999px;
+  background: var(--ink-2);
+}
+.imeter-empty .imeter-fill { display: none; }
+/* Less is better: the stretch past the target is over the limit. It is
+   hatched on the track (::before, under the fill) and on the fill that
+   runs into it (::after, card-surface stripes over the fill). */
+.imeter-limit::before,
+.imeter-limit::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 0 var(--imeter-mark);
+  border-radius: 0 999px 999px 0;
+}
+.imeter-limit::before {
+  background: repeating-linear-gradient(135deg, var(--ink-meta) 0 1px, transparent 1px 4px);
+  opacity: .55;
+}
+.imeter-limit::after {
+  z-index: 2;
+  background: repeating-linear-gradient(135deg, transparent 0 2px, var(--surface) 2px 3.5px, transparent 3.5px 4px);
+}
+.imeter-fill { z-index: 1; }
+.imeter-mark { z-index: 3; }
+/* The target: a tick that stands clear of the track above and below. */
+.imeter-mark {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--ink);
+}
+.intensity-read {
+  grid-area: read;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
 .intensity-value {
-  grid-area: value;
-  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+  font-size: var(--fs-cap);
   color: var(--ink-meta);
   white-space: nowrap;
-  text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.intensity-value strong { font-size: 19px; font-weight: 600; color: var(--ink); }
-.intensity-row > .band-chip { grid-area: chip; justify-self: end; }
-.intensity-hint { grid-area: hint; margin: 6px 0 0; font-size: var(--fs-sm); color: var(--ink-2); max-width: 72ch; }
-
-.intensity-trends {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-  margin-top: 20px;
+.intensity-value strong { font-size: 19px; font-weight: 600; line-height: 1.25; color: var(--ink); }
+/* The change since this tab last showed the reading, beside the value. */
+.intensity-delta {
+  margin-top: 4px;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--ctl-r-pill);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-.itrend { margin: 0; min-width: 0; }
-.itrend-cap {
+.intensity-toggle > .band-chip { grid-area: chip; justify-self: end; }
+.intensity-preview { grid-column: 2 / 5; justify-self: end; font-size: var(--fs-sm); color: var(--ink-2); text-align: right; }
+.intensity-chev {
+  grid-area: chev;
+  justify-self: center;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--ink-2);
+  border-bottom: 1.5px solid var(--ink-2);
+  transform: rotate(45deg) translateY(-2px);
+}
+.intensity-toggle[aria-expanded="true"] .intensity-chev { transform: rotate(-135deg) translate(-2px, -1px); }
+.intensity-next {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 0 0 12px;
+}
+.intensity-hint { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); max-width: 72ch; }
+.intensity-more { padding: 10px 0 14px; font-size: var(--fs-sm); color: var(--ink-2); }
+.intensity-next + .intensity-more { padding-top: 0; }
+.intensity-toggle[aria-expanded="true"] + .intensity-next { padding-top: 10px; }
+.intensity-toggle[aria-expanded="true"] + .intensity-more { padding-top: 12px; }
+.intensity-more p { margin: 0 0 6px; max-width: 78ch; }
+.intensity-cuts { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0 0; padding: 0; }
+.intensity-cuts li { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-cap); color: var(--ink-meta); }
+.intensity-cuts li.is-now { color: var(--ink); font-weight: 500; }
+.intensity-cuts .band-chip { min-width: 0; padding: 2px 9px; }
+.intensity-cuts li:not(.is-now) .band-chip { background: transparent; padding-left: 0; }
+.intensity-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+/* Last 7 days. One column a day: count, bar against the dashed target,
+   weekday, median pace. Bars are neutral ink with today in --accent-deep,
+   the same rule as the Study time bars. */
+.iweek { margin: 20px 0 0; min-width: 0; }
+.iweek-cap {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 6px;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin-bottom: 8px;
   font-size: var(--fs-cap);
   color: var(--ink-meta);
 }
-.itrend-cap strong { font-size: 13.5px; font-weight: 500; color: var(--ink); }
+.iweek-cap strong { font-size: 13.5px; font-weight: 500; color: var(--ink); }
 .itrend-key {
   display: inline-block;
   width: 14px;
@@ -6331,49 +6509,86 @@ details.miss[open] > summary::before { transform: rotate(45deg) translate(-1px, 
   vertical-align: middle;
   border-top: 1.5px dashed var(--ink-2);
 }
-.itrend-plot {
-  height: 84px;
-  padding: 8px 8px 0;
-  background: var(--ivory);
-  border-radius: var(--ctl-r);
+.iweek-days { list-style: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); margin: 0; padding: 0; }
+.iweek-day { position: relative; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.iweek-n {
+  font-size: var(--fs-cap);
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
-.itrend-area { position: relative; height: 100%; display: flex; align-items: flex-end; gap: 6px; }
-.itrend-col {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
+.iweek-day.is-empty .iweek-n { color: var(--ink-meta); font-weight: 400; }
+.iweek-plot {
+  position: relative;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  border-radius: 4px 4px 0 0;
-  cursor: default;
-}
-.itrend-bar {
   width: 100%;
-  max-width: 22px;
-  background: var(--ink-2);
-  border-radius: 4px 4px 0 0;
-  transition: opacity .12s ease;
+  height: 56px;
+  margin-top: 2px;
+  background: var(--ivory);
 }
-.itrend-today .itrend-bar { background: var(--accent-deep); }
-.itrend-empty .itrend-bar { height: 2px !important; background: var(--line); }
-.itrend-col:hover .itrend-bar,
-.itrend-col:focus-visible .itrend-bar { opacity: .72; }
-.itrend-col:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.itrend-mark {
+.iweek-day:first-child .iweek-plot { border-radius: var(--ctl-r) 0 0 var(--ctl-r); }
+.iweek-day:last-child .iweek-plot { border-radius: 0 var(--ctl-r) var(--ctl-r) 0; }
+/* A no-pack weekday steps back to the card surface inside the strip. */
+.iweek-day.is-rest .iweek-plot { background: var(--surface); box-shadow: inset 0 0 0 1px var(--ivory); }
+.iweek-bar { width: 44%; max-width: 26px; min-width: 10px; border-radius: 4px 4px 0 0; background: var(--ink-2); }
+.iweek-day.is-today .iweek-bar { background: var(--accent-deep); }
+.iweek-day.is-empty .iweek-bar { height: 2px !important; border-radius: 0; background: var(--line); }
+.iweek-mark {
   position: absolute;
   left: 0;
   right: 0;
   border-top: 1.5px dashed var(--ink-2);
   pointer-events: none;
-  z-index: 1;
 }
-.itrend-x { display: flex; gap: 6px; padding: 5px 8px 0; }
-.itrend-x span { flex: 1; min-width: 0; text-align: center; font-size: 11px; color: var(--ink-meta); white-space: nowrap; }
-.itrend-x .is-today { color: var(--ink); font-weight: 600; }
+.iweek-wd { margin-top: 5px; font-size: 11.5px; color: var(--ink-meta); white-space: nowrap; }
+.iweek-day.is-today .iweek-wd { color: var(--ink); font-weight: 600; }
+.iweek-pace {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--ink-meta);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.iweek-pace .band-dot { width: 6px; height: 6px; }
 
-.intensity-adjust { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
+.intensity-adjust { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
 .intensity-adjust h3 { font-size: 16px; margin: 0 0 4px; }
+.intensity-focus { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.intensity-focus-copy { min-width: 0; }
+.intensity-focus-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 0; font-size: 15px; font-weight: 500; }
+.intensity-focus-line a { color: var(--ink); text-decoration: none; }
+.intensity-focus-line a:hover { text-decoration: underline; }
+.intensity-topics { margin-top: 10px; }
+.intensity-topics > summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 0 4px;
+  margin-left: -4px;
+  border-radius: var(--ctl-r);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+}
+.intensity-topics > summary::-webkit-details-marker { display: none; }
+.intensity-topics > summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--ink-2);
+  border-bottom: 1.5px solid var(--ink-2);
+  transform: rotate(45deg) translateY(-2px);
+}
+.intensity-topics[open] > summary::after { transform: rotate(-135deg) translate(-2px, -1px); }
+.intensity-topics > .muted { margin-top: 6px; max-width: 78ch; }
 .intensity-table-wrap { margin-top: 10px; }
 .intensity-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .intensity-table th {
@@ -6412,23 +6627,68 @@ details.miss[open] > summary::before { transform: rotate(45deg) translate(-1px, 
 .intensity-line-value { font-size: 15px; font-weight: 600; color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .intensity-summary-link { font-size: var(--fs-cap); color: var(--ink-2); justify-self: start; }
 
-@media (max-width: 560px) {
-  .intensity-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: "name chip" "value value" "hint hint";
-    row-gap: 4px;
+/* Motion only where it is welcome: the meter runs to its new width, an
+   opened panel fades in, the chevrons turn. */
+@media (prefers-reduced-motion: no-preference) {
+  .imeter-fill[data-to] { transition: width .6s var(--ease-standard); }
+  .intensity-more:not([hidden]) { animation: intensity-more-in .16s ease; }
+  .intensity-toggle { transition: background .16s ease; }
+  .intensity-chev,
+  .intensity-topics > summary::after { transition: transform 150ms ease; }
+}
+@keyframes intensity-more-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Touch screens and phone widths: every control in the card is at least
+   44 px tall. */
+@media (pointer: coarse), (max-width: 560px) {
+  .intensity-card .btn,
+  .intensity-topics > summary { min-height: 44px; }
+  .intensity-table td a { display: inline-block; padding: 9px 0; }
+}
+
+/* A card too narrow for five columns (a phone, or a window with the
+   sidebar open up to about 1090 px): name and chip, then the value, then
+   the meter. */
+@container intensity (max-width: 700px) {
+  .intensity-toggle {
+    grid-template-columns: minmax(0, 1fr) auto 12px;
+    grid-template-areas: "name chip chev" "read read read" "meter meter meter";
+    row-gap: 8px;
+    column-gap: 12px;
+    padding-bottom: 16px;
   }
-  .intensity-value { text-align: left; }
-  .intensity-trends { grid-template-columns: minmax(0, 1fr); }
-  .band-chip { min-width: 0; }
+  .intensity-read { justify-content: flex-end; flex-direction: row-reverse; align-items: baseline; }
+  .intensity-value { flex-direction: row; align-items: baseline; gap: 7px; white-space: normal; }
+  .intensity-delta { margin-top: 0; }
+  .intensity-toggle > .band-chip { align-self: start; min-width: 0; }
+  .intensity-chev { align-self: start; margin-top: 8px; }
+  .intensity-preview { grid-column: 1 / -1; justify-self: start; text-align: left; }
+}
+
+/* A card about as wide as a phone screen. */
+@container intensity (max-width: 520px) {
+  .intensity-verdict { flex-direction: column; align-items: stretch; }
+  .intensity-verdict .btn { align-self: flex-start; }
+  .intensity-tally { justify-content: flex-start; }
+  .intensity-next,
+  .intensity-focus { flex-direction: column; align-items: flex-start; }
+  .iweek-wd, .iweek-pace { font-size: 11px; }
+  .iweek-pace { gap: 3px; }
+  /* "no pack" takes two lines in a 48 px column */
+  .iweek-day.is-idle .iweek-pace { white-space: normal; text-align: center; line-height: 1.2; max-width: 4ch; }
   .intensity-table th, .intensity-table td { padding: 7px 4px; }
   .intensity-table { font-size: 12.5px; }
-  /* Phone: weight and band move under the topic name, so three columns
-     (topic, new, accuracy) fit a 375 px screen. */
+  /* Weight and band move under the topic name, so three columns (topic,
+     new, accuracy) fit a 375 px screen. */
   .intensity-table .col-weight,
   .intensity-table .itopic-band,
   .intensity-table th:last-child { display: none; }
   .itopic-sub { display: block; }
+}
+
+/* Practice summary lines at phone width. */
+@media (max-width: 560px) {
+  .band-chip { min-width: 0; }
   .intensity-line { grid-template-columns: minmax(0, 1fr) auto; }
   .intensity-line .band-chip { grid-column: 1 / -1; justify-self: start; }
 }

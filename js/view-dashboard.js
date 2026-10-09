@@ -316,111 +316,262 @@ PGRE.views.dashboard = (function () {
   }
 
   /* ————————————————————————————————————————————————————————————
-     Intensity card. Five banded rows from PGRE.intensity.compute()
-     (js/intensity.js holds the definitions and the thresholds), a 7-day
-     trend for new questions and pace, and "Where to adjust": the per-topic
-     14-day table in priority order. Bands carry a word as well as a colour.
-     Trend bars are neutral ink with today in the accent; the dashed line is
-     the target, and each bar's value is in its tooltip and aria-label.
+     Intensity card. PGRE.intensity.compute() gives the five banded
+     readings and PGRE.intensity.review() their words, their order and the
+     next action (js/intensity.js holds both, with the definitions and the
+     thresholds). Top to bottom: one headline with one button; the five
+     readings, each a button that opens how the number is computed, its
+     band limits and what moves it; the last 7 days with every number
+     printed; then the topic to work on, with the 14-day table behind a
+     disclosure. A band is a word and a shape as well as a colour. Actions
+     are plain links into the practice mode that moves the reading.
      ———————————————————————————————————————————————————————————— */
-  function shortDay(key) {
-    return new Date(key + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
-
-  function weekdayDay(key) {
-    return new Date(key + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  }
+  var INTENSITY_SEEN_KEY = 'pgre-intensity-seen';   // sessionStorage: the readings this tab last showed
+  var DASH_FOCUS_KEY = 'pgre-dash-focus';           // sessionStorage: '<card id>|<click time>' to land on after routing home
+  var DASH_FOCUS_MS = 5000;                         // a note older than this is from a click that never arrived
+  var intensitySig = null;                          // what the card on screen was built from
+  var intensityLast = null;                         // render()'s build, handed to mount()
+  var intensityBound = false;                       // the delegated listeners are installed once
 
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
-  /* " (no timed packs on Sundays or Thursdays)" from the coverage payload's
-     noPackWeekdays (0 = Sunday); empty when every weekday is a working day. */
-  function noPackDaysText(days) {
-    var names = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
-    var list = (days || []).map(function (d) { return names[d]; }).filter(Boolean);
-    if (!list.length) return '';
-    var last = list.pop();
-    return ' (no timed packs on ' + (list.length ? list.join(', ') + ' or ' : '') + last + ')';
+
+  /* The next timed pack that still has untried questions: this week's plan
+     order first (the task the This week card launches), then the lowest
+     pack number. fresh counts only questions this page can load. */
+  function nextFreshPack(tried) {
+    var packs = PGRE.PACKS || {};
+    function info(id) {
+      var p = packs[id];
+      if (!p || !Array.isArray(p.ids)) return null;
+      var fresh = 0;
+      p.ids.forEach(function (qid) {
+        if (!tried[qid] && (typeof PGRE.questionById !== 'function' || PGRE.questionById(qid))) fresh++;
+      });
+      return fresh ? { id: id, title: p.title || '', n: p.ids.length, fresh: fresh } : null;
+    }
+    var order = [];
+    try {
+      var cw = PGRE.currentWeek && PGRE.currentWeek();
+      (cw ? PGRE.weekTasks(cw.week) : []).forEach(function (t) {
+        if ((t.kind !== 'timed' && t.kind !== 'extra-set') || PGRE.gamify.taskDone(t.id)) return;
+        var id = PGRE.packId ? PGRE.packId(t.id) : null;
+        if (id && order.indexOf(id) < 0) order.push(id);
+      });
+    } catch (e) { /* no plan data: pack order alone decides */ }
+    Object.keys(packs).sort().forEach(function (id) { if (order.indexOf(id) < 0) order.push(id); });
+    for (var i = 0; i < order.length; i++) {
+      var hit = info(order[i]);
+      if (hit) return hit;
+    }
+    return null;
   }
 
-  /* One row: name + window, "value / target", band chip, and a plain hint
-     for amber and red. */
-  function intensityRow(key, label, windowText, valueHTML, bandName, hint) {
-    var I = PGRE.intensity;
-    return '<li class="intensity-row" data-metric="' + key + '" data-band="' + (bandName || 'none') + '">' +
-      '<div class="intensity-name"><span class="intensity-label">' + label + '</span>' +
-        '<span class="intensity-window">' + windowText + '</span></div>' +
-      '<div class="intensity-value">' + valueHTML + '</div>' +
-      I.chipHTML(bandName) +
-      (hint ? '<p class="intensity-hint">' + hint + '</p>' : '') +
+  /* The facts review() cannot read from a readout: whether anything was
+     ever answered, what is still untried, and the next pack. "Tried" is
+     any attempt row, the same rule compute() uses for coverage. */
+  function intensityContext() {
+    var s = PGRE.store.state;
+    var rows = Array.isArray(s.attempts) ? s.attempts : [];
+    var tried = Object.create(null);
+    var any = false;
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i] && rows[i].qid) { tried[rows[i].qid] = true; any = true; }
+    }
+    var pool = typeof PGRE.allQuestions === 'function' ? PGRE.allQuestions() : [];
+    var unseen = 0, byTopic = {};
+    pool.forEach(function (q) {
+      if (!q || !q.id || tried[q.id]) return;
+      unseen++;
+      byTopic[q.topic] = (byTopic[q.topic] || 0) + 1;
+    });
+    return {
+      hasHistory: any,
+      unseen: pool.length ? unseen : null,          // an empty pool is "not loaded", not "all tried"
+      unseenByTopic: pool.length ? byTopic : null,
+      nextPack: nextFreshPack(tried)
+    };
+  }
+
+  /* The readings this tab showed last, for "+11" beside a value after a
+     practice set. Session-only and per tab; never part of the saved state. */
+  function intensitySeen(date) {
+    try {
+      var seen = JSON.parse(sessionStorage.getItem(INTENSITY_SEEN_KEY) || 'null');
+      return seen && seen.date === date && seen.v && seen.m ? seen : null;
+    } catch (e) { return null; }
+  }
+
+  function intensityRemember(d, r) {
+    var v = {}, m = {};
+    r.rows.forEach(function (row) { v[row.key] = d[row.key].value; m[row.key] = row.meter.pct; });
+    try { sessionStorage.setItem(INTENSITY_SEEN_KEY, JSON.stringify({ date: d.date, v: v, m: m })); }
+    catch (e) { /* storage blocked: no deltas, nothing else changes */ }
+  }
+
+  /* "+11", "−6 s": the change in a reading since this tab last showed it. */
+  function intensityDelta(key, now, before) {
+    if (typeof now !== 'number' || typeof before !== 'number') return '';
+    var diff = Math.round((now - before) * 10) / 10;
+    if (!diff) return '';
+    var unit = key === 'paceSec' ? ' s' : key === 'firstAttemptAccuracy' ? ' points'
+      : key === 'repeatMinutes' ? ' min' : '';
+    var size = key === 'coverage' ? Math.abs(diff).toFixed(1) : String(Math.abs(diff));
+    return (diff > 0 ? '+' : '−') + size + unit;
+  }
+
+  function intensityAction(a, cls) {
+    if (!a || !a.href) return '';
+    return '<a class="btn ' + cls + '" href="' + PGRE.ui.esc(a.href) + '">' + PGRE.ui.esc(a.label) + ' →</a>';
+  }
+
+  /* Neutral fill against a tick at the target. Where less is better (pace,
+     repeat time) the track past the tick is hatched: that stretch is over
+     the limit. `from` starts the fill at the width this tab showed before,
+     so mount can run it to the new one. */
+  function intensityMeter(m, from) {
+    var start = (typeof from === 'number' && from !== m.pct) ? from : null;
+    return '<span class="imeter' + (m.empty ? ' imeter-empty' : '') +
+        (m.lowIsGood && m.mark != null ? ' imeter-limit" style="--imeter-mark:' + m.mark + '%' : '') +
+        '" aria-hidden="true">' +
+      '<span class="imeter-fill" style="width:' + (start == null ? m.pct : start) + '%"' +
+        (start == null ? '' : ' data-to="' + m.pct + '"') + '></span>' +
+      (m.mark == null ? '' : '<span class="imeter-mark" style="left:' + m.mark + '%"></span>') +
+    '</span>';
+  }
+
+  /* One reading: a button (name, meter, value against its target in words,
+     band chip) that opens the panel under it; a hint with its own link
+     when the reading needs attention and the headline has not said it.
+     preview = the new-user list: targets only, no value and no judgement. */
+  function intensityRowHTML(r, o) {
+    var ui = PGRE.ui, I = PGRE.intensity;
+    var panelId = 'intensity-more-' + r.key;
+    var open = !!(o.open && o.open[r.key]);
+    var seen = o.seen;
+    var delta = seen ? intensityDelta(r.key, o.d[r.key].value, seen.v[r.key]) : '';
+    // The limit the row is shown in; none when it is shown without a judgement.
+    var cuts = r.cuts.map(function (c) {
+      return '<li' + (!o.preview && c.band === r.show ? ' class="is-now"' : '') + '>' + I.chipHTML(c.band) +
+        '<span>' + ui.esc(c.text) + '</span></li>';
+    }).join('');
+    var links = r.links.map(function (a) { return intensityAction(a, 'btn-ghost btn-sm'); }).join('');
+    var head = '<span class="intensity-name"><span class="intensity-label">' + ui.esc(r.label) + '</span>' +
+      '<span class="intensity-window">' + ui.esc(r.window) + '</span></span>';
+    if (o.preview) {
+      head += '<span class="intensity-preview">' + ui.esc(r.preview) + '</span>';
+    } else {
+      head += intensityMeter(r.meter, seen ? seen.m[r.key] : null) +
+        '<span class="intensity-read">' +
+          (delta ? '<span class="intensity-delta">' + delta + '<span class="ivh"> since your last look,</span></span>' : '') +
+          '<span class="intensity-value"><strong>' + ui.esc(r.value + r.unit) + '</strong> ' +
+            '<span class="intensity-target">' + ui.esc(r.target) + '</span></span></span>' +
+        I.chipHTML(r.show, r.chip);
+    }
+    return '<li class="intensity-row' + (o.preview ? ' is-preview' : '') + '" data-metric="' + r.key +
+        '" data-band="' + (r.band || 'none') + '" data-show="' + r.show + '">' +
+      '<button type="button" class="intensity-toggle" aria-expanded="' + open + '" aria-controls="' + panelId + '">' +
+        head + '<span class="intensity-chev" aria-hidden="true"></span></button>' +
+      // The leading reading's hint is the headline block above the list.
+      (!o.preview && r.hint && !r.lead
+        ? '<div class="intensity-next"><p class="intensity-hint">' + ui.esc(r.hint) + '</p>' +
+            intensityAction(r.action, 'btn-ghost btn-sm') + '</div>'
+        : '') +
+      '<div class="intensity-more" id="' + panelId + '"' + (open ? '' : ' hidden') + '>' +
+        r.how.map(function (line) { return '<p>' + ui.esc(line) + '</p>'; }).join('') +
+        '<ul class="intensity-cuts" aria-label="Band limits">' + cuts + '</ul>' +
+        (links ? '<div class="intensity-links">' + links + '</div>' : '') +
+      '</div>' +
     '</li>';
   }
 
-  function intensityHints(d) {
-    var h = {};
-    var nq = d.newQuestions, pace = d.paceSec, acc = d.firstAttemptAccuracy,
-        rep = d.repeatMinutes, cov = d.coverage;
-    if (nq.band === 'amber' || nq.band === 'red') {
-      var more = nq.threshold - nq.value;
-      h.newQuestions = 'Answer ' + plural(more, 'more new question') + ' to reach ' + nq.threshold + '.' +
-        (nq.band === 'red' ? ' Start the next pack.' : '');
-    }
-    if (pace.value == null) h.paceSec = 'No new questions yet today.';
-    else if (pace.band === 'amber' || pace.band === 'red') {
-      h.paceSec = 'Slower than the exam pace of ' + pace.threshold + ' s a question. ' +
-        'When a question passes ' + pace.threshold + ' s, pick your best guess and move on.';
-    }
-    if (acc.value == null) h.firstAttemptAccuracy = 'No new questions in the last 7 days.';
-    else if (acc.band === 'amber' || acc.band === 'red') {
-      h.firstAttemptAccuracy = 'Under ' + acc.threshold + '% on first tries. ' +
-        'Read every solution of the last set before you start the next one.';
-    }
-    if (rep.band === 'amber' || rep.band === 'red') {
-      h.repeatMinutes = 'More than ' + rep.threshold + ' min in the mistake book today. ' +
-        'Spend the rest of today on new questions.';
-    }
-    if (cov.band === 'amber' || cov.band === 'red') {
-      h.coverage = cov.required == null
-        ? 'The last pack day has passed with ' + plural(cov.remaining, 'pack question') + ' not started.'
-        : 'To finish every pack by ' + shortDay(cov.lastPackDay) + ', answer ' + cov.required.toFixed(1) +
-          ' new questions each working day; the last 7 days averaged ' + cov.actual.toFixed(1) + '.';
-    }
-    return h;
+  /* Headline, the other readings that need attention, and the one button. */
+  function intensityVerdictHTML(v) {
+    var ui = PGRE.ui;
+    var mark = (v.mark === 'green' || v.mark === 'amber' || v.mark === 'red') ? v.mark : 'none';
+    return '<div class="intensity-verdict" data-tone="' + v.tone + '" data-mark="' + mark + '"' +
+        (v.focus ? ' data-focus="' + v.focus + '"' : '') + '>' +
+      '<div class="intensity-verdict-copy">' +
+        '<p class="intensity-headline"><span class="band-dot band-' + mark + '" aria-hidden="true"></span>' +
+          '<span id="intensity-headline">' + ui.esc(v.headline) + '</span></p>' +
+        (v.detail ? '<p class="intensity-detail">' + ui.esc(v.detail) + '</p>' : '') +
+      '</div>' +
+      intensityAction(v.action, v.tone === 'attention' || v.tone === 'empty' ? 'btn-primary' : 'btn-ghost') +
+    '</div>';
   }
 
-  /* Seven bars with a dashed target line. Scale: the larger of 1.25 x the
-     target and the tallest bar, so the target line always sits inside. */
-  function intensityTrend(key, title, target, unit, days, valueOf, tipOf) {
-    var ui = PGRE.ui;
+  /* "3 on target · 1 close · 1 off target", each with its band shape. The
+     five readings always add up: one shown without a target (a no-pack
+     day, or nothing left to try) is counted as that. */
+  function intensityTallyHTML(tally) {
+    var I = PGRE.intensity;
+    var parts = [['green', I.LABELS.green], ['amber', I.LABELS.amber], ['red', I.LABELS.red],
+                 ['none', 'No data'], ['rest', 'Without a target']]
+      .filter(function (p) { return tally[p[0]]; })
+      .map(function (p) {
+        return '<span class="intensity-tally-item" data-band="' + p[0] + '">' +
+          '<span class="band-dot band-' + (p[0] === 'rest' ? 'none' : p[0]) + '" aria-hidden="true"></span>' +
+          tally[p[0]] + ' ' + p[1].toLowerCase() + '</span>';
+      });
+    return '<p class="intensity-tally">' + parts.join('') + '</p>';
+  }
+
+  /* Last 7 days in one strip: the count of new questions over its bar, the
+     weekday, then the median pace with its band shape. Scale: the larger
+     of 1.25 x the target and the tallest bar, so the dashed target line
+     always sits inside. A no-pack weekday with nothing answered reads
+     "no pack", not as a missed day. Every value is printed and each day
+     carries one sentence for screen readers, so nothing needs hover. */
+  function intensityWeekHTML(r, T) {
+    var ui = PGRE.ui, LABELS = PGRE.intensity.LABELS;
+    var target = T.newQuestions.green;
     var max = target * 1.25;
-    days.forEach(function (day) { var v = valueOf(day); if (v != null && v > max) max = v; });
-    var cols = '', xs = '', aria = [];
-    days.forEach(function (day, i) {
-      var v = valueOf(day);
-      var isToday = i === days.length - 1;
-      var h = v == null ? 0 : Math.max(v > 0 ? 4 : 0, Math.round(100 * v / max));
-      var cls = 'itrend-col' + (isToday ? ' itrend-today' : '') + (v == null || v === 0 ? ' itrend-empty' : '');
-      var tip = weekdayDay(day.date) + '\\n' + tipOf(day);
-      aria.push(weekdayDay(day.date) + ': ' + (v == null ? 'none' : v + ' ' + unit));
-      cols += '<div class="' + cls + '" tabindex="0" data-tip="' + ui.esc(tip) + '" data-day="' + day.date + '"' +
-        ' data-value="' + (v == null ? '' : v) + '">' +
-        '<div class="itrend-bar" style="height:' + h + '%"></div></div>';
-      var wd = new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' });
-      xs += '<span' + (isToday ? ' class="is-today"' : '') + '>' + (isToday ? 'Today' : wd) + '</span>';
-    });
+    r.days.forEach(function (day) { if (day.newQuestions > max) max = day.newQuestions; });
     var markPct = (100 * target / max).toFixed(1);
-    return '<figure class="itrend" data-trend="' + key + '">' +
-      '<figcaption class="itrend-cap"><strong>' + title + '</strong>' +
-        '<span><span class="itrend-key" aria-hidden="true"></span>target ' + target + (unit === 's' ? ' s' : '') + '</span></figcaption>' +
-      '<div class="itrend-plot" role="img" aria-label="' + ui.esc(title + ', last 7 days. ' + aria.join('; ')) + '">' +
-        '<div class="itrend-area">' +
-          '<div class="itrend-mark" style="bottom:' + markPct + '%"></div>' + cols +
-        '</div></div>' +
-      '<div class="itrend-x" aria-hidden="true">' + xs + '</div>' +
+    var cells = r.days.map(function (day) {
+      var n = day.newQuestions;
+      var idle = !day.workingDay && n === 0;
+      var h = n > 0 ? Math.max(4, Math.round(100 * n / max)) : 0;
+      var paceText = day.paceSec == null ? (idle ? 'no pack' : '—') : day.paceSec + ' s';
+      var say = day.full + ': ' + (idle ? 'no timed pack planned, ' : '') + plural(n, 'new question') +
+        (day.paceSec == null ? '' : ', median pace ' + day.paceSec + ' seconds' +
+          (day.paceBand ? ' (' + LABELS[day.paceBand].toLowerCase() + ')' : '')) + '.';
+      return '<li class="iweek-day' + (day.isToday ? ' is-today' : '') + (day.workingDay ? '' : ' is-rest') +
+          (idle ? ' is-idle' : '') + (n ? '' : ' is-empty') + '" data-day="' + day.date + '" data-new="' + n + '" data-pace="' +
+          (day.paceSec == null ? '' : day.paceSec) + '" data-tip="' + ui.esc(say.replace(': ', '\\n')) + '">' +
+        '<span class="iweek-n" aria-hidden="true">' + (idle ? '—' : n) + '</span>' +
+        '<span class="iweek-plot" aria-hidden="true"><span class="iweek-mark" style="bottom:' + markPct + '%"></span>' +
+          '<span class="iweek-bar" style="height:' + h + '%"></span></span>' +
+        '<span class="iweek-wd" aria-hidden="true">' + (day.isToday ? 'Today' : ui.esc(day.short)) + '</span>' +
+        '<span class="iweek-pace" aria-hidden="true">' +
+          (day.paceBand ? '<span class="band-dot band-' + day.paceBand + '"></span>' : '') + paceText + '</span>' +
+        '<span class="ivh">' + ui.esc(say) + '</span>' +
+      '</li>';
+    }).join('');
+    return '<figure class="iweek" id="intensity-week">' +
+      '<figcaption class="iweek-cap"><strong>Last 7 days</strong>' +
+        '<span><span class="itrend-key" aria-hidden="true"></span>target ' + target + ' new questions · pace ' +
+          T.paceSec.green + ' s or under</span></figcaption>' +
+      '<ol class="iweek-days">' + cells + '</ol>' +
     '</figure>';
   }
 
-  function intensityTopicsHTML(d) {
+  /* "Where to adjust": the first judged topic that is not on target, with a
+     link into its untried questions; the full 14-day table opens below
+     (settings.intensityTopicsOpen keeps the choice). */
+  function intensityTopicsHTML(d, r, tableOpen) {
     var ui = PGRE.ui, I = PGRE.intensity, T = I.THRESHOLDS;
+    var focus;
+    if (r.topic) {
+      focus = '<p class="intensity-focus-line"><a href="#/topic/' + ui.esc(r.topic.topic) + '">' +
+          ui.esc(r.topic.name) + '</a> ' + I.chipHTML(r.topic.band) + '</p>' +
+        '<p class="intensity-detail">' + ui.esc(r.topic.text) + '</p>';
+    } else {
+      focus = '<p class="intensity-detail">' + (r.judgedTopics
+        ? 'Every topic with ' + T.topicMinNew + ' or more new questions in the last ' + T.topicDays +
+          ' days is on target.'
+        : 'No topic has ' + T.topicMinNew + ' new questions in the last ' + T.topicDays +
+          ' days yet, so none has a band.') + '</p>';
+    }
     var rows = d.topics.map(function (t) {
       var acc = t.judged ? t.accuracy + '%' : '—';
       var bandCell = t.judged ? I.chipHTML(t.band) : '<span class="itopic-few">too few to judge</span>';
@@ -435,73 +586,202 @@ PGRE.views.dashboard = (function () {
         '<td class="itopic-band">' + bandCell + '</td></tr>';
     }).join('');
     return '<div class="intensity-adjust" id="intensity-adjust">' +
-      '<h3>Where to adjust</h3>' +
-      '<p class="muted">New questions per topic in the last 14 days and their first-try accuracy. ' +
-        'The top row is the topic where better accuracy is worth the most exam points ' +
-        '(exam weight times the gap to ' + Math.round(100 * T.topicTargetAcc) + '%). ' +
-        'A topic needs ' + T.topicMinNew + ' new questions before it gets a band.</p>' +
-      '<div class="intensity-table-wrap"><table class="intensity-table">' +
-        '<thead><tr><th scope="col">Topic</th><th scope="col" class="num col-weight">Weight</th>' +
-          '<th scope="col" class="num">New, 14 days</th><th scope="col" class="num">Accuracy</th>' +
-          '<th scope="col">Band</th></tr></thead>' +
-        '<tbody>' + rows + '</tbody></table></div>' +
+      '<div class="intensity-focus"><div class="intensity-focus-copy"><h3>Where to adjust</h3>' + focus + '</div>' +
+        (r.topic ? intensityAction(r.topic.action, 'btn-ghost btn-sm') : '') + '</div>' +
+      '<details class="intensity-topics" id="intensity-topics"' + (tableOpen ? ' open' : '') + '>' +
+        '<summary>All ' + d.topics.length + ' topics, last ' + T.topicDays + ' days</summary>' +
+        '<p class="muted">New questions per topic and their first-try accuracy. ' +
+          'The top row is the topic where better accuracy is worth the most exam points ' +
+          '(exam weight times the gap to ' + Math.round(100 * T.topicTargetAcc) + '%). ' +
+          'A topic needs ' + T.topicMinNew + ' new questions before it gets a band.</p>' +
+        '<div class="intensity-table-wrap"><table class="intensity-table">' +
+          '<thead><tr><th scope="col">Topic</th><th scope="col" class="num col-weight">Weight</th>' +
+            '<th scope="col" class="num">New, ' + T.topicDays + ' days</th><th scope="col" class="num">Accuracy</th>' +
+            '<th scope="col">Band</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody></table></div>' +
+      '</details>' +
     '</div>';
   }
 
-  function intensityCardHTML() {
+  /* The card's inner HTML and the string it was built from. o.open keeps
+     opened readings open across an in-place refresh. */
+  function intensityBuild(o) {
     var I = PGRE.intensity;
-    if (!I || typeof I.compute !== 'function') return '';
-    var d = I.compute(PGRE.store.state);
-    var T = I.THRESHOLDS;
-    var h = intensityHints(d);
-    var nq = d.newQuestions, pace = d.paceSec, acc = d.firstAttemptAccuracy,
-        rep = d.repeatMinutes, cov = d.coverage;
-
-    var rows = '' +
-      intensityRow('newQuestions', 'New questions', 'today · first tries in practice',
-        '<strong>' + nq.value + '</strong> / ' + nq.threshold, nq.band, h.newQuestions) +
-      intensityRow('paceSec', 'Pace', 'today · median seconds per new question',
-        '<strong>' + (pace.value == null ? '—' : pace.value + ' s') + '</strong> / ' + pace.threshold,
-        pace.band, h.paceSec) +
-      intensityRow('firstAttemptAccuracy', 'First-try accuracy',
-        'last 7 days · ' + (acc.n ? acc.correct + ' of ' + acc.n + ' new questions' : 'no new questions'),
-        '<strong>' + (acc.value == null ? '—' : acc.value + '%') + '</strong> / ' + acc.threshold + '%',
-        acc.band, h.firstAttemptAccuracy) +
-      intensityRow('repeatMinutes', 'Repeat time', 'today · minutes on mistake-book retakes',
-        '<strong>' + rep.value + ' min</strong> / ' + rep.threshold, rep.band, h.repeatMinutes) +
-      intensityRow('coverage', 'Coverage',
-        'last 7 days · new questions per working day, against the rate that finishes every pack by ' +
-          shortDay(cov.lastPackDay) + ' · ' + plural(cov.remaining, 'pack question') + ' not started, ' +
-          plural(cov.workingDaysLeft, 'working day') + ' left' + noPackDaysText(cov.noPackWeekdays),
-        '<strong>' + cov.actual.toFixed(1) + '</strong> / ' + (cov.required == null ? '—' : cov.required.toFixed(1)),
-        cov.band, h.coverage);
-
-    var trends = '<div class="intensity-trends">' +
-      intensityTrend('newQuestions', 'New questions per day', T.newQuestions.green, 'new', d.days,
-        function (day) { return day.newQuestions; },
-        function (day) { return plural(day.newQuestions, 'new question'); }) +
-      intensityTrend('paceSec', 'Median pace per day', T.paceSec.green, 's', d.days,
-        function (day) { return day.paceSec; },
-        function (day) {
-          return day.paceSec == null ? 'no new questions'
-            : 'median ' + day.paceSec + ' s over ' + plural(day.newQuestions, 'new question');
-        }) +
-    '</div>';
-
+    if (!I || typeof I.compute !== 'function' || typeof I.review !== 'function') return null;
+    o = o || {};
+    var s = PGRE.store.state;
+    var d = I.compute(s);
+    var ctx = intensityContext();
+    var r = I.review(d, ctx);
+    var seen = intensitySeen(d.date);
+    var tableOpen = !!(s.settings && s.settings.intensityTopicsOpen);
+    var rowOpts = { d: d, open: o.open, seen: seen, preview: r.empty };
+    var rows = r.rows.map(function (row) { return intensityRowHTML(row, rowOpts); }).join('');
     var dateLine = new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', {
       weekday: 'long', month: 'short', day: 'numeric'
     });
-    return '<div class="card intensity-card" id="intensity-card">' +
-      '<div class="band-head"><div class="band-head-copy">' +
-        '<p class="kicker">' + PGRE.ui.esc(dateLine) + '</p><h2>Intensity</h2></div>' +
-        '<span class="band-head-note">value / target</span></div>' +
-      '<p class="muted intensity-lead">Measured from your answers. A new question is your first try at a ' +
-        'question, in practice. A repeat is a mistake-book retake. Each band reads ' +
-        I.LABELS.green + ', ' + I.LABELS.amber + ' or ' + I.LABELS.red + '.</p>' +
-      '<ul class="intensity-rows">' + rows + '</ul>' +
-      trends +
-      intensityTopicsHTML(d) +
-    '</div>';
+    var html = '<div class="band-head"><div class="band-head-copy">' +
+        '<p class="kicker">' + PGRE.ui.esc(dateLine) + '</p>' +
+        '<h2 id="intensity-title" tabindex="-1">Intensity</h2></div>' +
+        (r.empty ? '' : intensityTallyHTML(r.tally)) + '</div>' +
+      intensityVerdictHTML(r.verdict) +
+      '<ul class="intensity-rows" aria-label="' + (r.empty ? 'The five readings and their targets' : 'The five readings') + '">' +
+        rows + '</ul>' +
+      (r.empty ? '' : intensityWeekHTML(r, I.THRESHOLDS) + intensityTopicsHTML(d, r, tableOpen));
+    // Everything the readings depend on. Which readings are open and whether
+    // the topic table is open are the reader's choices, not part of it.
+    var sig = JSON.stringify([d, ctx.nextPack, ctx.unseen, ctx.hasHistory]);
+    return { html: html, sig: sig, d: d, r: r, empty: r.empty };
+  }
+
+  function intensityCardHTML() {
+    var built = intensityBuild();
+    intensityLast = built;
+    if (!built) return '';
+    intensitySig = built.sig;
+    return '<section class="card intensity-card' + (built.empty ? ' is-empty' : '') + '" id="intensity-card"' +
+      ' aria-labelledby="intensity-title">' + built.html + '</section>';
+  }
+
+  /* After the card is in the page: run each meter from the width this tab
+     showed before to the new one, then remember what is on screen now. */
+  function intensitySettle(built) {
+    var card = document.getElementById('intensity-card');
+    if (!card || !built) return;
+    var fills = card.querySelectorAll('.imeter-fill[data-to]');
+    var run = function () {
+      Array.prototype.forEach.call(fills, function (f) { f.style.width = f.getAttribute('data-to') + '%'; });
+    };
+    if (fills.length) {
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { requestAnimationFrame(run); });
+      else run();
+    }
+    intensityRemember(built.d, built.r);
+  }
+
+  /* Where keyboard focus sits in the card, in terms that outlive a rebuild:
+     an id, or the part of the card plus the kind of control and its link. */
+  function intensityFocusPlace(card, el) {
+    if (!el || el === card || !card.contains(el)) return null;
+    var row = el.closest('.intensity-row');
+    return {
+      id: el.id || '',
+      scope: row ? '.intensity-row[data-metric="' + row.getAttribute('data-metric') + '"]'
+        : el.closest('.intensity-verdict') ? '.intensity-verdict'
+        : el.closest('.intensity-adjust') ? '.intensity-adjust' : '',
+      tag: el.tagName,
+      href: el.getAttribute('href')
+    };
+  }
+
+  /* Back to the same control; failing that, to its neighbour of the same
+     kind, its reading's button, or the card's heading, so focus never drops
+     out of the card. */
+  function intensityRefocus(card, place) {
+    if (!place) return;
+    var el = place.id ? document.getElementById(place.id) : null;
+    if (!el) {
+      var scope = place.scope ? card.querySelector(place.scope) : card;
+      var kin = scope ? Array.prototype.filter.call(scope.querySelectorAll(place.tag), function (c) {
+        return !c.closest('[hidden]');
+      }) : [];
+      el = kin.filter(function (c) { return c.getAttribute('href') === place.href; })[0] || kin[0] ||
+        (scope && scope.querySelector('.intensity-toggle')) || document.getElementById('intensity-title');
+    }
+    if (el && typeof el.focus === 'function') el.focus({ preventScroll: true });
+  }
+
+  /* Rebuild the card where it stands when the answers changed under it (a
+     sibling tab recorded a set, or the tab was left open past midnight).
+     Opened readings stay open and keyboard focus stays on its control. */
+  function intensityRefresh() {
+    var card = document.getElementById('intensity-card');
+    if (!card) return;
+    var open = {};
+    Array.prototype.forEach.call(card.querySelectorAll('.intensity-toggle[aria-expanded="true"]'), function (b) {
+      var row = b.closest('.intensity-row');
+      if (row) open[row.getAttribute('data-metric')] = true;
+    });
+    var built = intensityBuild({ open: open });
+    if (!built || built.sig === intensitySig) return;
+    var place = intensityFocusPlace(card, document.activeElement);
+    intensitySig = built.sig;
+    card.innerHTML = built.html;
+    card.classList.toggle('is-empty', built.empty);
+    intensityRefocus(card, place);
+    intensitySettle(built);
+  }
+
+  /* One reading open or shut. The panel is a sibling of the button, so the
+     hint and its link stay between them. */
+  function intensityToggle(btn) {
+    var panel = document.getElementById(btn.getAttribute('aria-controls'));
+    if (!panel) return;
+    var open = btn.getAttribute('aria-expanded') !== 'true';
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    panel.hidden = !open;
+  }
+
+  function bindIntensity() {
+    if (intensityBound) return;
+    intensityBound = true;
+    // A test sandbox may offer a document or a window without events.
+    if (typeof document.addEventListener !== 'function') return;
+    document.addEventListener('click', function (e) {
+      var btn = e.target && e.target.closest ? e.target.closest('#intensity-card .intensity-toggle') : null;
+      if (btn) intensityToggle(btn);
+    });
+    // <details> toggle does not bubble: capture it.
+    document.addEventListener('toggle', function (e) {
+      var t = e.target;
+      if (!t || t.id !== 'intensity-topics') return;
+      var settings = PGRE.store.state.settings;
+      if (!settings || !!settings.intensityTopicsOpen === !!t.open) return;
+      settings.intensityTopicsOpen = !!t.open;
+      PGRE.store.save();
+    }, true);
+    // Coming back to a tab that stayed open: by tab switch, by window focus
+    // (a window that was never hidden), or from the back/forward cache.
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') intensityRefresh();
+    });
+    if (typeof window.addEventListener === 'function') {
+      window.addEventListener('focus', intensityRefresh);
+      window.addEventListener('pageshow', function (e) { if (e.persisted) intensityRefresh(); });
+    }
+    if (typeof PGRE.subscribeStateAdopted === 'function') PGRE.subscribeStateAdopted(intensityRefresh);
+  }
+
+  /* A link that carries data-dash-focus="<card id>" (the practice summary's
+     "Intensity on the dashboard") lands on that card, not on the top of the
+     page: the click leaves a one-shot note that the next mount reads. */
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('click', function (e) {
+      var link = e.target && e.target.closest ? e.target.closest('a[data-dash-focus]') : null;
+      if (!link) return;
+      try { sessionStorage.setItem(DASH_FOCUS_KEY, link.getAttribute('data-dash-focus') + '|' + Date.now()); }
+      catch (err) { /* lands on top */ }
+    });
+  }
+
+  function landOnRequestedCard() {
+    var note = null;
+    try {
+      note = sessionStorage.getItem(DASH_FOCUS_KEY);
+      if (note) sessionStorage.removeItem(DASH_FOCUS_KEY);
+    } catch (e) { note = null; }
+    var parts = String(note || '').split('|');
+    var id = parts[0];
+    var age = Date.now() - Number(parts[1]);
+    if (id !== 'intensity-card' || !(age >= 0 && age <= DASH_FOCUS_MS)) return;
+    // After the router's own scroll-to-top, which follows mount().
+    setTimeout(function () {
+      var card = document.getElementById(id);
+      var title = document.getElementById('intensity-title');
+      if (!card) return;
+      card.scrollIntoView({ block: 'start' });
+      if (title) title.focus({ preventScroll: true });
+    }, 0);
   }
 
   /* ———————————————————————————————————————————————————————————— */
@@ -1016,6 +1296,10 @@ PGRE.views.dashboard = (function () {
     // Same Daily activity target card as #/study-time, including its chips
     // and focus button. studytime.mount no-ops when that card is absent.
     if (PGRE.views.studytime && PGRE.views.studytime.mount) PGRE.views.studytime.mount();
+    // Intensity: open/shut readings, in-place refresh, meters, landing from a link
+    bindIntensity();
+    intensitySettle(intensityLast);
+    landOnRequestedCard();
     // #7 QOTD: typeset the math and wire up the one-tap choices
     bindQotd();
     // Views-A: entry motion — numbers count up, meters fill, challenges cascade
