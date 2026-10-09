@@ -175,17 +175,30 @@ var transients = byId['supp-rc-rl-transients'];
 var discharge = transients.back.split('<li>')[2].split('</li>')[0];
 assert(transients.kind === 'list' && transients.topic === 'em' && transients.tag === 'Transients',
   'the transient card keeps its list kind, topic, and tag');
-assert(discharge.indexOf('from charge $Q_0$ at $t=0$') !== -1 &&
-  discharge.indexOf('$Q$ is charge, $Q_0$ initial charge, $R$ resistance, $C$ capacitance, and $t$ elapsed time') !== -1,
-  'discharge defines the initial condition and every variable');
-assert(discharge.indexOf('$Q(t) = Q_0 e^{-t/RC}$.') !== -1 &&
-  discharge.indexOf('$I(t) = |dQ/dt| = (Q_0/RC)e^{-t/RC}$') !== -1 &&
-  discharge.indexOf('$V(t) = Q(t)/C = (Q_0/C)e^{-t/RC}$') !== -1,
-  'discharge states charge, current magnitude, and capacitor voltage without a trailing comma');
-assert(discharge.indexOf('$\\tau = RC$') !== -1 &&
-  discharge.indexOf('$Q(\\tau) = Q_0/e \\approx 0.37Q_0$') !== -1 &&
-  discharge.indexOf('$37\\%$') !== -1 && discharge.indexOf('$e^{-2t/RC}$') !== -1,
-  'discharge keeps the time constant, remaining charge, and energy decay');
+assert(discharge.indexOf('discharging from $Q_0$') !== -1 &&
+  discharge.indexOf('$Q = Q_0 e^{-t/RC}$') !== -1 &&
+  discharge.indexOf('$I = (Q_0/RC)e^{-t/RC}$') !== -1 &&
+  discharge.indexOf('$V_C = Q/C$') !== -1,
+  'discharge states the initial charge, the charge, the current, and the capacitor voltage');
+var transientItems = transients.back.split('<li>').slice(1);
+assert(transientItems.length === 5 && /\(5\)\s*$/.test(transients.front) &&
+  transientItems[0].indexOf('charging from zero toward $Q_f = CV$') !== -1 &&
+  transientItems[2].indexOf('rising from zero toward $I_f = V/R$') !== -1 &&
+  transientItems[2].indexOf('$I = I_f\\left(1-e^{-(R/L)t}\\right)$') !== -1 &&
+  transientItems[3].indexOf('$I = I_0 e^{-(R/L)t}$') !== -1,
+  'the transient card keeps five items with the inductor rise and decay');
+assert(transientItems[4].indexOf('$e^{-2t/\\tau}$') !== -1 &&
+  transientItems[4].indexOf('$(1-e^{-t/\\tau})^2$') !== -1 &&
+  transientItems[4].indexOf('$\\tau = RC$ or $L/R$') !== -1,
+  'the stored energy decays as the square of the decay factor and rises as the square of the approach factor');
+assert(transients.note.indexOf('$1/e \\approx 37\\%$') !== -1 &&
+  Math.abs(Math.exp(-1) - 0.37) < 0.005,
+  'the note keeps the fraction left after one time constant');
+// numeric check: U = Q^2/(2C) with Q = Q0 e^{-t/RC} or Q = Qf (1 - e^{-t/RC})
+var tOverTau = 0.7;
+assert(Math.abs(Math.pow(Math.exp(-tOverTau), 2) - Math.exp(-2 * tOverTau)) < 1e-12 &&
+  Math.abs(Math.pow(1 - Math.exp(-tOverTau), 2) - (1 - 2 * Math.exp(-tOverTau) + Math.exp(-2 * tOverTau))) < 1e-12,
+  'the energy factors are the squares of the charge factors');
 assert((transients.back.match(/Q_f\(1-e\^\{-t\/RC\}\)/g) || []).length === 1,
   'the charging relation appears once');
 var halving = byId['supp-capacitor-energy-halving'];
@@ -227,14 +240,21 @@ assert(zphi[0] === -1 && zphi[1] === 0 && zphi[2] === 0,
 var coax = byId['supp-coaxial'];
 var coaxBack = coax ? coax.back : '';
 assert(!!coax && coax.topic === 'em' && coax.tag === 'Coaxial cable' && coax.kind === undefined &&
-  coaxBack.indexOf('$$a < r < b:') === 0 && coaxBack.indexOf('\\frac{L}{\\ell}') !== -1,
-  'the coaxial card keeps its id, topic, tag, and original field, C, L, Z0 lines');
-assert(coaxBack.indexOf('$E_r\\,2\\pi r L = \\lambda L/\\epsilon_0$') !== -1 &&
-  coaxBack.indexOf('$$V = V_a - V_b = \\int_a^b E_r\\,dr = \\frac{\\lambda}{2\\pi\\epsilon_0}\\ln\\frac{b}{a},$$') !== -1 &&
-  coaxBack.indexOf('$C/\\ell = \\lambda/V = 2\\pi\\epsilon_0/\\ln(b/a)$') !== -1 &&
-  coaxBack.indexOf('$C = Q/V = 2\\pi\\epsilon_0 L/\\ln(b/a)$') !== -1 &&
-  coaxBack.indexOf('reference radius $r_0$') !== -1 && /Inside a shell[^.]*E = 0/.test(coaxBack),
-  'the coaxial card derives E, V, C per length, the log-reference radius, and the shell rules');
+  coaxBack.indexOf('$$a < r < b:\\quad E_r = \\frac{\\lambda}{2\\pi\\epsilon r},\\quad B_\\phi = \\frac{\\mu I}{2\\pi r}$$') === 0 &&
+  coaxBack.indexOf('\\dfrac{C}{\\ell} = \\dfrac{2\\pi\\epsilon}{\\ln(b/a)}') !== -1 &&
+  coaxBack.indexOf('\\dfrac{L}{\\ell} = \\dfrac{\\mu}{2\\pi}\\ln\\dfrac{b}{a}') !== -1 &&
+  coaxBack.indexOf('Z_0 = \\sqrt{\\dfrac{L}{C}} = \\dfrac{1}{2\\pi}\\sqrt{\\dfrac{\\mu}{\\epsilon}}\\ln\\dfrac{b}{a}') !== -1,
+  'the coaxial card keeps its id, topic, tag, and its field, C, L, Z0 lines');
+assert(coaxBack.indexOf('V_a - V_b = \\dfrac{\\lambda}{2\\pi\\epsilon}\\ln\\dfrac{b}{a}') !== -1 &&
+  coaxBack.indexOf('zero for $r \\gt b$') !== -1 && /shell of charge[^.]*\$E = 0\$ inside/.test(coaxBack) &&
+  coax.note.indexOf('$C/\\ell = \\lambda/(V_a - V_b)$') !== -1 &&
+  /inner conductor of radius \$a\$/.test(coax.front) && /return current and \$-\\lambda\$ on its outer conductor/.test(coax.front) &&
+  coax.note.indexOf('$V(r) = -(\\lambda/2\\pi\\epsilon)\\ln(r/r_0)$') !== -1 &&
+  coax.note.indexOf('chosen radius $r_0$') !== -1,
+  'the coaxial card states V, the outside field, the shell rule, and names the Gauss route and the log reference radius in its note');
+assert(coaxBack.indexOf('Gaussian cylinder') === -1 && coaxBack.indexOf('\\int_a^b') === -1 &&
+  coaxBack.indexOf('55.6') === -1,
+  'the coaxial back carries no derivation or worked number');
 // numeric check: integral of lambda/(2 pi eps0 r) from a to b equals (lambda/2 pi eps0) ln(b/a), so C/l = lambda/V
 var eps0 = 8.8541878128e-12, lam = 3e-9, ra = 0.002, rb = 0.007, steps = 200000, vsum = 0;
 for (var k = 0; k < steps; k++) {
@@ -243,9 +263,15 @@ for (var k = 0; k < steps; k++) {
 }
 var vExact = lam / (2 * Math.PI * eps0) * Math.log(rb / ra);
 assert(Math.abs(vsum / vExact - 1) < 1e-9 &&
-  Math.abs(lam / vExact / (2 * Math.PI * eps0 / Math.log(rb / ra)) - 1) < 1e-12 &&
-  Math.abs(2 * Math.PI * eps0 * 1e12 - 55.6) < 0.05,
-  'the integral of E gives the logarithm, C/l = lambda/V = 2 pi eps0/ln(b/a), and 2 pi eps0 is 55.6 pF/m');
+  Math.abs(lam / vExact / (2 * Math.PI * eps0 / Math.log(rb / ra)) - 1) < 1e-12,
+  'the integral of E gives the logarithm, and C/l = lambda/V = 2 pi eps0/ln(b/a)');
+// numeric check: Z0 = sqrt((L/l)/(C/l)) equals (1/2 pi) sqrt(mu/eps) ln(b/a)
+var mu0c = 4 * Math.PI * 1e-7;
+var cPerLen = 2 * Math.PI * eps0 / Math.log(rb / ra);
+var lPerLen = mu0c / (2 * Math.PI) * Math.log(rb / ra);
+assert(Math.abs(Math.sqrt(lPerLen / cPerLen) /
+  (Math.sqrt(mu0c / eps0) * Math.log(rb / ra) / (2 * Math.PI)) - 1) < 1e-12,
+  'Z0 = sqrt(L/C) equals (1/2 pi) sqrt(mu/eps) ln(b/a)');
 var drift = byId['supp-drift-current'];
 var driftItems = drift ? drift.back.split('<li>').slice(1) : [];
 assert(!!drift && drift.kind === 'list' && drift.topic === 'em' && drift.tag === 'Current density' &&
@@ -259,14 +285,18 @@ assert(driftItems[2].indexOf('$v_d = I/(n|q|A)$') !== -1 && driftItems[2].indexO
 assert(driftItems[3].indexOf('$\\mathbf{J} = \\sigma\\mathbf{E}$') !== -1 &&
   driftItems[3].indexOf('$\\rho = 1/\\sigma$') !== -1,
   'the drift card states the microscopic Ohm law with resistivity');
-assert(driftItems[4].indexOf('10^{28}') !== -1 && driftItems[4].indexOf('1.6\\times10^{-19}') !== -1 &&
-  driftItems[4].indexOf('2\\times10^{-4}') !== -1 && driftItems[4].indexOf('below $1\\ \\mathrm{mm/s}$') !== -1,
-  'the drift card gives the metal carrier density, the charge, and the sub-mm/s magnitude');
-// the worked example: 100 A, r = 0.01 m, n = 1e28 m^-3, e = 1.6e-19 C
+assert(driftItems[4].indexOf('10^{28}') !== -1 && driftItems[4].indexOf('$|q| = e$') !== -1 &&
+  driftItems[4].indexOf('$J = 3\\times10^{5}\\ \\mathrm{A/m^2}$') !== -1 &&
+  driftItems[4].indexOf('$v_d = J/(ne) \\approx 2\\times10^{-4}\\ \\mathrm{m/s}$') !== -1 &&
+  driftItems[4].indexOf('below $1\\ \\mathrm{mm/s}$') !== -1,
+  'the drift card gives the metal carrier density, the charge, the current density, and the sub-mm/s magnitude');
+assert(drift.back.indexOf('Example:') === -1 && drift.back.indexOf('100\\ \\mathrm{A}') === -1,
+  'the drift back carries no worked wire example');
+// numeric check: J = 3e5 A/m^2 (100 A through r = 0.01 m), n = 1e28 m^-3, e = 1.6e-19 C
 var driftA = Math.PI * 0.01 * 0.01;
-var driftV = 100 / (1e28 * 1.6e-19 * driftA);
-assert(Math.abs(driftA - 3.1e-4) < 0.05e-4 && driftV > 1.9e-4 && driftV < 2.1e-4,
-  'the worked drift example reproduces A = 3.1e-4 m^2 and v_d = 2e-4 m/s');
+var driftV = 3e5 / (1e28 * 1.6e-19);
+assert(Math.abs(100 / driftA / 3e5 - 1) < 0.07 && driftV > 1.8e-4 && driftV < 2.0e-4 && driftV < 1e-3,
+  'J = 3e5 A/m^2 in a metal gives v_d = 2e-4 m/s, below 1 mm/s');
 assert(!!conductor && conductor.kind !== 'list', 'cpgf-2.15a is still a formula card');
 assert(!!conductor && conductor.back.indexOf('D = \\sigma') !== -1,
   'cpgf-2.15a still states the conductor surface result');
@@ -305,13 +335,21 @@ assert(film && filmBack.indexOf('one flip and $m = 0$, is dark') === -1,
 var power = byId['supp-max-power-match'];
 var powerBack = power ? power.back : '';
 var powerItems = powerBack.match(/<li>/g);
-var powerResist = 'If $R_g > 0$ and the loop reactance is zero, $R_L = R_g$. ' +
-  'If only $R_L$ can vary, the best value is $\\sqrt{R_g^2+(X_g+X_L)^2}$; ' +
-  'when $X_L = 0$ that is $|Z_g|$, which is not $R_g$ unless $X_g = 0$.';
 assert(power && powerItems && powerItems.length === 3 && /\(3\)/.test(power.front),
   'supp-max-power-match keeps three graded items');
-assert(power && powerBack.indexOf(powerResist) !== -1,
+assert(power && powerBack.indexOf('$Z_L = Z_g^*$, that is $R_L = R_g$ together with $X_L = -X_g$') !== -1 &&
+  powerBack.indexOf('If only $R_L$ can vary: $R_L = \\sqrt{R_g^2+(X_g+X_L)^2}$, which is $|Z_g|$ when $X_L = 0$') !== -1 &&
+  power.note.indexOf('$|Z_g|$ equals $R_g$ only when $X_g = 0$') !== -1,
   'supp-max-power-match separates R_L = R_g from R_L = |Z_g|');
+// numeric check: P is proportional to R_L / ((R_g+R_L)^2 + (X_g+X_L)^2); scan R_L with X_L fixed
+var pRg = 3, pXg = 4, pXl = 0, pBest = 0, pBestR = 0;
+for (var pr = 0.001; pr < 20; pr += 0.001) {
+  var pw = pr / ((pRg + pr) * (pRg + pr) + (pXg + pXl) * (pXg + pXl));
+  if (pw > pBest) { pBest = pw; pBestR = pr; }
+}
+assert(Math.abs(pBestR - Math.sqrt(pRg * pRg + (pXg + pXl) * (pXg + pXl))) < 0.002 &&
+  Math.abs(pBestR - 5) < 0.002,
+  'with only R_L free and X_L = 0 the best load is |Z_g| = 5, not R_g = 3');
 assert(power && powerBack.indexOf('the resistive match is $R_L = R_g$') === -1,
   'supp-max-power-match does not state R_L = R_g for every positive source resistance');
 
@@ -326,22 +364,31 @@ assert(rad && String(rad.back).indexOf('<ul class="recall-list">') === 0 &&
   radLis === 4 && /\(4\)\s*$/.test(rad.front),
   'supp-radiation-field is four recall-list items');
 assert(rad && /\\hat\{\\mathbf\{r\}\}\\times\(\\hat\{\\mathbf\{r\}\}\\times\\mathbf\{a\}\)/.test(rad.back) &&
-  /-\\mathbf\{a\}_\{\\perp\}/.test(rad.back),
-  'the anchor is r-hat cross (r-hat cross a), equal to minus a_perp');
-assert(rad && /points opposite the sideways acceleration \$\\mathbf\{a\}_\{\\perp\}\$ \(the part of \$\\mathbf\{a\}\$ perpendicular to \$\\hat\{\\mathbf\{r\}\}\$\)/.test(rad.back) &&
-  /negative charge reverses/.test(rad.back),
-  'for q > 0 the field points opposite a_perp, reversed for q < 0');
+  /-q\\,\\mathbf\{a\}_\{\\perp\}/.test(rad.back),
+  'the anchor is q times r-hat cross (r-hat cross a), equal to minus q a_perp');
+assert(rad && /for \$q \\gt 0\$ it points opposite \$\\mathbf\{a\}_\{\\perp\}\$, the part of \$\\mathbf\{a\}\$ perpendicular to \$\\hat\{\\mathbf\{r\}\}\$/.test(rad.back) &&
+  /\\propto q\\,\\hat\{\\mathbf\{r\}\}/.test(rad.back),
+  'for q > 0 the field points opposite a_perp, and the factor q reverses it for q < 0');
 assert(rad && /power per solid angle \$\\propto \\sin\^2\\theta\$/.test(rad.back) &&
   /180\^\\circ/.test(rad.back),
   'power per solid angle follows sin squared, with both axial nulls');
-assert(rad && /leave both directions along that line open/.test(rad.back),
+assert(rad && /fix only the line of/.test(rad.note) && /triple product fixes which way/.test(rad.note),
   'the plane and transversality do not fix the sense');
 assert(rad && !/completely lock/i.test(radText) && !/dipole axis/i.test(radText),
   'the card does not keep the unlocked direction claim');
-assert(rad && rad.back.indexOf('accelerating along') !== -1,
-  'the wire bullet says the charge is accelerating along the wire');
-assert(rad && rad.back.indexOf('from the charge') !== -1,
+assert(rad && rad.back.indexOf('wire on the') === -1,
+  'the back carries no worked wire example');
+assert(rad && rad.note.indexOf('from the charge to the field point') !== -1,
   'r-hat is defined as pointing from the charge to the field point');
+// vector check: r-hat cross (r-hat cross a) equals minus the part of a perpendicular to r-hat
+var radR = [0.6, 0, 0.8], radAcc = [1, 2, 3];
+var radTriple = cross(radR, cross(radR, radAcc));
+var radDot = radR[0] * radAcc[0] + radR[1] * radAcc[1] + radR[2] * radAcc[2];
+var radPerp = [radAcc[0] - radDot * radR[0], radAcc[1] - radDot * radR[1], radAcc[2] - radDot * radR[2]];
+assert(Math.abs(radTriple[0] + radPerp[0]) < 1e-12 && Math.abs(radTriple[1] + radPerp[1]) < 1e-12 &&
+  Math.abs(radTriple[2] + radPerp[2]) < 1e-12 &&
+  Math.abs(radTriple[0] * radR[0] + radTriple[1] * radR[1] + radTriple[2] * radR[2]) < 1e-12,
+  'r-hat cross (r-hat cross a) is minus a_perp and is perpendicular to r-hat');
 
 var ham = byId['supp-hamilton-principle'];
 var hamText = ham ? [ham.front, ham.back, ham.note].join('\n') : '';

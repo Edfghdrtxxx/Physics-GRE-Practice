@@ -98,9 +98,9 @@ PGRE.FORMULAS = [
     topic: "em",
     tag: "Coaxial cable",
     name: "Coaxial cable fields, C, L, and Z0 (supplemental)",
-    front: "For a coaxial cable (inner radius a, outer radius b) carrying current I with line charge lambda, what are E and B in the annulus, and the per-length capacitance, inductance, and characteristic impedance? Also derive E by Gauss's law, the potential difference between the conductors, and the capacitance per length from them.",
-    back: "$$a < r < b:\\quad E_r = \\frac{\\lambda}{2\\pi\\epsilon r},\\quad B_\\phi = \\frac{\\mu I}{2\\pi r}$$\nOutside ($r > b$) both vanish (return current and opposite charge on the shield). Per unit length:\n$$\\frac{C}{\\ell} = \\frac{2\\pi\\epsilon}{\\ln(b/a)},\\quad \\frac{L}{\\ell} = \\frac{\\mu}{2\\pi}\\ln\\frac{b}{a},\\quad Z_0 = \\sqrt{\\frac{L}{C}} = \\frac{1}{2\\pi}\\sqrt{\\frac{\\mu}{\\epsilon}}\\ln\\frac{b}{a}$$\nDerivation in vacuum, $\\epsilon = \\epsilon_0$: take a coaxial Gaussian cylinder of radius $r$ and length $L$ around the inner conductor, which holds charge $\\lambda L$. The field is radial, so the flux is $E_r\\,2\\pi r L = \\lambda L/\\epsilon_0$ and $E_r = \\lambda/(2\\pi\\epsilon_0 r)$, outward for $\\lambda > 0$. Then the potential difference between the conductors is $$V = V_a - V_b = \\int_a^b E_r\\,dr = \\frac{\\lambda}{2\\pi\\epsilon_0}\\ln\\frac{b}{a},$$ positive for $\\lambda > 0$ because the field points from the inner conductor to the outer one. With $Q = \\lambda L$ the capacitance is $C = Q/V = 2\\pi\\epsilon_0 L/\\ln(b/a)$, so $C/\\ell = \\lambda/V = 2\\pi\\epsilon_0/\\ln(b/a)$ in $\\mathrm{F/m}$, with $2\\pi\\epsilon_0 \\approx 55.6\\ \\mathrm{pF/m}$.\nA line charge has no finite potential at infinity: $V(r) = -\\dfrac{\\lambda}{2\\pi\\epsilon_0}\\ln(r/r_0)$ diverges as $r \\to \\infty$, so choose a reference radius $r_0$ where $V = 0$. A difference such as $V_a - V_b$ does not depend on $r_0$.\nOutside ($r > R$) a long uniformly charged cylinder or cylindrical shell of radius $R$ with charge $\\lambda$ per unit length has the same field as the line, $E_r = \\lambda/(2\\pi\\epsilon_0 r)$. Inside a shell ($r < R$) the enclosed charge is zero, so $E = 0$.",
-    note: "Supplemental — not a numbered CPG equation. Kahn works $C/\\ell$ in a cylindrical line-plus-shell example but does not index it. TEM: fields live only in the annulus."
+    front: "A coaxial cable has current $I$ and line charge $\\lambda$ on its inner conductor of radius $a$, and the return current and $-\\lambda$ on its outer conductor of radius $b$. What are $E$ and $B$ between the conductors, the potential difference, $C$ and $L$ per length, and the characteristic impedance $Z_0$?",
+    back: "$$a < r < b:\\quad E_r = \\frac{\\lambda}{2\\pi\\epsilon r},\\quad B_\\phi = \\frac{\\mu I}{2\\pi r}$$\n<ul class=\"recall-list\"><li>Both fields are zero for $r \\gt b$.</li><li>Potential difference: ${V_a - V_b = \\dfrac{\\lambda}{2\\pi\\epsilon}\\ln\\dfrac{b}{a}}$.</li><li>Per length: ${\\dfrac{C}{\\ell} = \\dfrac{2\\pi\\epsilon}{\\ln(b/a)}}$ and ${\\dfrac{L}{\\ell} = \\dfrac{\\mu}{2\\pi}\\ln\\dfrac{b}{a}}$.</li><li>${Z_0 = \\sqrt{\\dfrac{L}{C}} = \\dfrac{1}{2\\pi}\\sqrt{\\dfrac{\\mu}{\\epsilon}}\\ln\\dfrac{b}{a}}$.</li><li>A cylindrical shell of charge on its own has $E = 0$ inside it and the line-charge field outside it.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. $\\epsilon$ and $\\mu$ are those of the material between the conductors. Gauss's law on a coaxial cylinder gives $E_r$, its integral from $a$ to $b$ gives $V_a - V_b$, and $C/\\ell = \\lambda/(V_a - V_b)$. A line charge has $V(r) = -(\\lambda/2\\pi\\epsilon)\\ln(r/r_0)$, so its zero is at a chosen radius $r_0$, not at infinity."
   },
   {
     id: "supp-wave-travel",
@@ -178,9 +178,9 @@ PGRE.FORMULAS = [
     topic: "cm",
     tag: "Oscillations",
     name: "When an inward mass shift raises the pendulum frequency (supplemental)",
-    front: "For a discrete physical pendulum, when does moving mass closer to the pivot raise $\\omega$, and when can the same move lower it?",
-    back: "$$\\frac{\\omega^2}{g} = \\frac{\\sum_i m_i x_i}{\\sum_i m_i x_i^2}$$\nIf every distance from the pivot is scaled by the same factor $\\lambda$ with $0 \\lt \\lambda \\lt 1$, then $\\omega$ rises as $1/\\sqrt{\\lambda}$.\nMoving one mass closer to the pivot does not always raise $\\omega$. That move is not a common scale factor. Two equal masses at distances $1$ and $0.1$, in one length unit, give $\\sum_i x_i/\\sum_i x_i^2 \\approx 1.089$ per that unit. Moving the second mass from $0.1$ to $0.05$ changes the ratio to about $1.047$, so $\\omega$ falls.\nDo not discard an option only because a mass moved toward the pivot.",
-    note: "Supplemental — not a numbered CPG equation. The frequency formula is on supp-discrete-physical-pendulum. A common scale factor $\\lambda$ is not the same operation as moving one mass."
+    front: "For a discrete physical pendulum of point masses $m_i$ at distances $x_i$ from the pivot, when does moving mass closer to the pivot raise $\\omega$, and when can the same move lower it?",
+    back: "$$\\frac{\\omega^2}{g} = \\frac{\\sum_i m_i x_i}{\\sum_i m_i x_i^2}$$\nScaling every distance from the pivot by the same factor $\\lambda \\lt 1$ multiplies $\\omega$ by $1/\\sqrt{\\lambda}$. Moving one mass closer to the pivot does not always raise $\\omega$: it can lower $\\omega$ when that mass is already close to the pivot.",
+    note: "Supplemental — not a numbered CPG equation. Moving one mass is not a common scale factor: equal masses at distances $1$ and $0.1$ give $\\sum_i x_i/\\sum_i x_i^2 \\approx 1.089$, and moving the second mass to $0.05$ gives about $1.047$, so $\\omega$ falls."
   },
   {
     id: "supp-nuclear-force-range",
@@ -199,8 +199,8 @@ PGRE.FORMULAS = [
     tag: "Dimensional analysis",
     name: "QM characteristic length scales (supplemental)",
     front: "What characteristic length does dimensional analysis assign to each QM system — harmonic oscillator, hydrogen atom, and massive particle?",
-    back: "Each QM problem's constants combine into exactly one length:\n- **Oscillator ground-state width**: $\\sqrt{\\hbar/(m\\omega)}$ — the only length from $\\hbar$, $m$, $\\omega$.\n- **Bohr radius**: $a_0 = \\dfrac{4\\pi\\epsilon_0\\hbar^2}{\\mu e^2}$ — only length from $\\mu$, $\\hbar$, $e^2/4\\pi\\epsilon_0$ (eq. 5.44). Positronium has $\\mu = m_e/2$, so its Bohr radius is double hydrogen's.\n- **Compton wavelength**: $\\lambda_C = \\dfrac{h}{mc}$ — depends only on mass, not momentum (eq. 7.15).\n- **de Broglie wavelength**: $\\lambda = h/p$ — momentum-dependent (eq. 5.28, $p = \\hbar k$).",
-    note: "Supplemental — not a numbered CPG equation; Kahn derives the oscillator width, Bohr radius, and Compton wavelength by the same trick: the parameters admit exactly one combination with units of length. The Bohr radius, Compton, and de Broglie formulas already have their own cards (cpgf-5.44, 7.15, 5.28); this card drills the shared dimensional-analysis pattern."
+    back: "Each QM problem's constants combine into exactly one length:<ul class=\"recall-list\"><li>Oscillator ground-state width: $\\sqrt{\\hbar/(m\\omega)}$.</li><li>Bohr radius: $a_0 = \\dfrac{4\\pi\\epsilon_0\\hbar^2}{\\mu e^2}$.</li><li>Compton wavelength: $\\lambda_C = \\dfrac{h}{mc}$, set by the mass alone.</li><li>de Broglie wavelength: $\\lambda = h/p$, set by the momentum $p = \\hbar k$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. Positronium has $\\mu = m_e/2$, so its Bohr radius is twice hydrogen's."
   },
   {
     id: "supp-coulomb-coupling",
@@ -218,9 +218,9 @@ PGRE.FORMULAS = [
     topic: "qm",
     tag: "Schrodinger equation",
     name: "Energy-eigenstate time phase (supplemental)",
-    front: "For a time-independent Hamiltonian, how does an energy eigenstate of energy $E_n$ evolve in time, and what stays constant about the probability of measuring that energy?",
-    back: "$$\\psi_n(t) = \\psi_n\\, e^{-i E_n t/\\hbar}$$\nEach energy eigenstate picks up only this phase. In a superposition the weights stay $|c_n|^2$, so $P(E_n) = |c_n|^2$ does not change with time. Relative phases between different energies do change, so an observable that is not the energy can oscillate.\n\n**Origin of the sign.** Put $\\Psi = \\psi(x)\\, T(t)$ into $i\\hbar\\,\\partial_t\\Psi = \\hat{H}\\Psi$ with $\\hat{H}\\psi = E\\psi$. Then $i\\hbar\\, T' = ET$, so\n$$T = e^{-i Et/\\hbar}$$\n\n**Not the Boltzmann factor.** $e^{-E/k_B T}$ is real: an occupation weight (how likely a level is occupied). $e^{-i Et/\\hbar}$ is imaginary and has modulus 1: a pure phase, and it changes no probability. Same shape, different job.",
-    note: "Supplemental — not a numbered CPG equation. The time-dependent equation is cpgf-5.12 and the definite-energy form is cpgf-5.14. This card is the solution of that ODE, kept with the one-line origin so the sign stays put, and kept apart from $e^{-E/k_B T}$."
+    front: "For a time-independent Hamiltonian, how does an energy eigenstate of energy $E_n$ evolve in time, and what happens to the probability of measuring $E_n$?",
+    back: "$$\\psi_n(t) = \\psi_n\\, e^{-i E_n t/\\hbar}$$\nOnly the phase changes. In a superposition $\\sum_n c_n\\psi_n(t)$, each $P(E_n) = |c_n|^2$ stays constant; the relative phases between different energies change, so other observables can oscillate.",
+    note: "Supplemental — not a numbered CPG equation. The sign comes from $i\\hbar\\,\\partial_t\\Psi = \\hat{H}\\Psi$: with $\\hat{H}\\psi = E\\psi$, the time factor $f(t)$ obeys $i\\hbar\\,f' = Ef$. This factor has modulus $1$ and changes no probability, unlike the real Boltzmann weight $e^{-E/k_B T}$."
   },
   {
     id: "supp-sho-ladder",
@@ -270,9 +270,9 @@ PGRE.FORMULAS = [
     topic: "cm",
     tag: "Momentum",
     name: "Momentum, impulse, and equal-mass collisions (supplemental list)",
-    front: "For a closed system in an inertial frame, state the momentum theorem, the constant-mass law, the impulse, when linear momentum is conserved, the Newtonian internal-force model and why it is not the rocket equation, the power $P = \\mathbf{F}\\cdot\\mathbf{v}$, the one-dimensional equal-mass elastic exchange, and the two-dimensional equal-mass right angle. (8)",
-    back: "<ul class=\"recall-list\"><li>For a closed material system in an inertial frame, $\\dot{\\mathbf{P}} = \\mathbf{F}_{\\mathrm{ext}}$.</li><li>Constant mass: $\\sum\\mathbf{F} = m\\mathbf{a}$.</li><li>Impulse: $\\int\\mathbf{F}\\,dt = \\Delta\\mathbf{p}$.</li><li>Linear momentum is conserved when the net external force vanishes.</li><li>Internal forces cancel in pairs in the Newtonian particle model. Do not apply $\\dot{(m\\mathbf{v})} = \\mathbf{F}_{\\mathrm{ext}}$ to a rocket.</li><li>Instantaneous power: $P = \\mathbf{F}\\cdot\\mathbf{v}$.</li><li>One dimension, elastic collision, equal masses: the two velocities are exchanged.</li><li>Two dimensions, elastic collision, equal masses, target at rest, and both final speeds nonzero: the final velocities are perpendicular.</li></ul>",
-    note: "Supplemental — not a numbered CPG equation. Rotational power $P = \\boldsymbol{\\tau}\\cdot\\boldsymbol{\\omega}$ is not a required line. The general one-dimensional elastic finals follow from momentum and energy; the equal-mass exchange is the required case."
+    front: "State the momentum theorem for a closed system, when momentum is conserved, the constant-mass law, the impulse, the power, and the equal-mass elastic collision results in one and in two dimensions. (7)",
+    back: "<ul class=\"recall-list\"><li>Closed system, inertial frame: the total momentum obeys $\\dot{\\mathbf{P}} = \\mathbf{F}_{\\mathrm{ext}}$, because internal forces cancel in pairs.</li><li>$\\mathbf{P}$ is conserved when $\\mathbf{F}_{\\mathrm{ext}} = 0$.</li><li>Constant mass: $\\sum\\mathbf{F} = m\\mathbf{a}$.</li><li>Impulse: $\\int\\mathbf{F}\\,dt = \\Delta\\mathbf{p}$.</li><li>Power: $\\mathbf{F}\\cdot\\mathbf{v}$, and $\\boldsymbol{\\tau}\\cdot\\boldsymbol{\\omega}$ for rotation.</li><li>Elastic, equal masses, one dimension: the velocities are exchanged.</li><li>Elastic, equal masses, two dimensions, target at rest: the final velocities are perpendicular.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. A rocket alone is not a closed system, because its exhaust carries momentum away, so $\\frac{d}{dt}(m\\mathbf{v}) = \\mathbf{F}_{\\mathrm{ext}}$ does not apply to it. The right angle needs both final speeds to be nonzero."
   },
   {
     id: "supp-friction",
@@ -346,9 +346,9 @@ PGRE.FORMULAS = [
     topic: "em",
     tag: "Current density",
     name: "Drift current density (supplemental list)",
-    front: "State the drift current density with the sign of $q$, the current through an area perpendicular to the drift, the drift speed from the current for a round wire, the microscopic form of Ohm's law, and the size of the drift speed in a metal. (5)",
-    back: "<ul class=\"recall-list\"><li>$\\mathbf{J} = n q \\mathbf{v}_d$, with $q$ signed. Here $n$ is the carrier number density and $\\mathbf{v}_d$ the drift velocity.</li><li>$I = n|q| A v_d$ when $A$ is perpendicular to the drift.</li><li>Solving for the drift speed: $v_d = I/(n|q|A)$. For a round wire of radius $r$, $A = \\pi r^2$.</li><li>Microscopic Ohm's law: $\\mathbf{J} = \\sigma\\mathbf{E}$, with conductivity $\\sigma$ and resistivity $\\rho = 1/\\sigma$.</li><li>In a metal $n \\sim 10^{28}\\ \\mathrm{m^{-3}}$ and $|q| = e = 1.6\\times10^{-19}\\ \\mathrm{C}$, so $ne \\approx 1.6\\times10^{9}\\ \\mathrm{C/m^3}$. Example: $I = 100\\ \\mathrm{A}$, $r = 0.01\\ \\mathrm{m}$ gives $A \\approx 3.1\\times10^{-4}\\ \\mathrm{m^2}$ and $v_d \\approx 100/(5\\times10^{5}) \\approx 2\\times10^{-4}\\ \\mathrm{m/s}$. Drift speeds are of order $10^{-4}\\ \\mathrm{m/s}$, below $1\\ \\mathrm{mm/s}$.</li></ul>",
-    note: "Supplemental — not a numbered CPG equation."
+    front: "State the drift current density, the current through an area, the drift speed in a round wire, the microscopic Ohm's law, and the size of the drift speed in a metal. (5)",
+    back: "<ul class=\"recall-list\"><li>$\\mathbf{J} = n q \\mathbf{v}_d$, with carrier number density $n$ and signed charge $q$.</li><li>$I = n|q| A v_d$ through an area $A$ perpendicular to the drift.</li><li>Drift speed: $v_d = I/(n|q|A)$, with $A = \\pi r^2$ for a round wire.</li><li>Microscopic Ohm's law: $\\mathbf{J} = \\sigma\\mathbf{E}$, with resistivity $\\rho = 1/\\sigma$.</li><li>In a metal $n \\sim 10^{28}\\ \\mathrm{m^{-3}}$ and $|q| = e$: a current density $J = 3\\times10^{5}\\ \\mathrm{A/m^2}$ gives $v_d = J/(ne) \\approx 2\\times10^{-4}\\ \\mathrm{m/s}$, below $1\\ \\mathrm{mm/s}$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. The carriers in a length $v_d\\,\\Delta t$ of wire cross the area in a time $\\Delta t$, which gives $I = n|q|Av_d$."
   },
   {
     id: "supp-material-aux-fields",
@@ -379,9 +379,9 @@ PGRE.FORMULAS = [
     topic: "em",
     tag: "Transients",
     name: "RC and RL transients (supplemental list)",
-    front: "For constant $R$, $C$, and $L$ with no mutual inductance, state the RC charge approach and discharge, the RL current approach and decay, and the two stored-energy time factors. (5)",
-    back: "<ul class=\"recall-list\"><li>Charge from zero toward $Q_f = CV$: $Q = Q_f(1-e^{-t/RC})$.</li><li>Capacitor discharging through a resistor from charge $Q_0$ at $t=0$: $Q(t) = Q_0 e^{-t/RC}$. Here $Q$ is charge, $Q_0$ initial charge, $R$ resistance, $C$ capacitance, and $t$ elapsed time. Current magnitude $I(t) = |dQ/dt| = (Q_0/RC)e^{-t/RC}$; capacitor voltage $V(t) = Q(t)/C = (Q_0/C)e^{-t/RC}$. The time constant $\\tau = RC$ gives $Q(\\tau) = Q_0/e \\approx 0.37Q_0$ (about $37\\%$ of the initial charge). Stored energy falls as $e^{-2t/RC}$.</li><li>Inductor current from zero toward $I_f = V/R$: $I = I_f\\left(1-e^{-(R/L)t}\\right)$.</li><li>Inductor current decaying from $I_0$: $I = I_0 e^{-(R/L)t}$.</li><li>While the capacitor is charging, stored energy approaches its final value as $(1-e^{-t/RC})^2$, not as $e^{-2t/RC}$. Constant-current charging $Q = Q_0+It$ is not this card.</li></ul>",
-    note: "Supplemental — not a numbered CPG equation. The time constants $RC$ and $L/R$ are already on cpgf-2.83 and cpgf-2.84. The pattern is: approach the final value as $1-e^{-t/\\tau}$, and leave the initial value as $e^{-t/\\tau}$."
+    front: "For a constant source voltage $V$, state the RC charging and discharging laws, the RL current rise and decay, and how the stored energy depends on time. (5)",
+    back: "<ul class=\"recall-list\"><li>Capacitor charging from zero toward $Q_f = CV$: $Q = Q_f(1-e^{-t/RC})$.</li><li>Capacitor discharging from $Q_0$: $Q = Q_0 e^{-t/RC}$, current $I = (Q_0/RC)e^{-t/RC}$, capacitor voltage $V_C = Q/C$.</li><li>Inductor current rising from zero toward $I_f = V/R$: $I = I_f\\left(1-e^{-(R/L)t}\\right)$.</li><li>Inductor current decaying from $I_0$: $I = I_0 e^{-(R/L)t}$.</li><li>Stored energy goes as $Q^2$ or $I^2$: it decays as $e^{-2t/\\tau}$ and rises as $(1-e^{-t/\\tau})^2$, with $\\tau = RC$ or $L/R$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. After one time constant, $1/e \\approx 37\\%$ of the initial charge or current is left. A constant charging current, not a constant source voltage, gives the linear law $Q = Q_0 + It$ instead."
   },
   {
     id: "supp-capacitor-energy-halving",
@@ -390,9 +390,9 @@ PGRE.FORMULAS = [
     topic: "em",
     tag: "Transients",
     name: "Capacitor energy and half-times (supplemental list)",
-    front: "State the stored energy of a capacitor in three forms, the energy of a capacitor discharging through a resistor, and the times for its charge and for its energy to fall to half. (4)",
-    back: "<ul class=\"recall-list\"><li>Stored energy: $U = Q^2/(2C) = \\tfrac{1}{2}CV^2 = \\tfrac{1}{2}QV$.</li><li>Discharge through $R$ from charge $Q_0$: $Q = Q_0 e^{-t/RC}$, so $U = U_0 e^{-2t/RC}$ with $U_0 = Q_0^2/(2C)$. The energy decays twice as fast as the charge because $U \\propto Q^2$.</li><li>Time for the charge to fall to half: set $e^{-t/RC} = 1/2$ and take the logarithm, giving $t = RC\\ln 2 \\approx 0.69\\,RC$.</li><li>Time for the energy to fall to half: set $e^{-2t/RC} = 1/2$, giving $t = (RC\\ln 2)/2 \\approx 0.35\\,RC$. The method for any fraction is to set the exponential equal to that fraction and take the logarithm.</li></ul>",
-    note: "Supplemental — not a numbered CPG equation. The charge, current, and voltage decay and the time constant $\\tau = RC$ are also on supp-rc-rl-transients."
+    front: "State a capacitor's stored energy in three forms, its decay during a discharge through a resistor, and the times for the charge and for the energy to fall to half. (4)",
+    back: "<ul class=\"recall-list\"><li>Stored energy: $U = Q^2/(2C) = \\tfrac{1}{2}CV^2 = \\tfrac{1}{2}QV$.</li><li>Discharge through $R$: $Q = Q_0 e^{-t/RC}$ and $U = U_0 e^{-2t/RC}$.</li><li>The charge falls to half at $t = RC\\ln 2 \\approx 0.69\\,RC$.</li><li>The energy falls to half at $t = (RC\\ln 2)/2 \\approx 0.35\\,RC$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. $U \\propto Q^2$, so the energy decays twice as fast as the charge. For any other fraction, set the exponential equal to that fraction and take the logarithm."
   },
   {
     id: "supp-parallel-wire-force",
@@ -401,9 +401,9 @@ PGRE.FORMULAS = [
     topic: "em",
     tag: "Magnetic force",
     name: "Field of a long straight wire and the force between parallel wires (supplemental list)",
-    front: "State the magnetic field of a long straight wire, the force on a straight current-carrying segment in a field, the force per unit length between two long parallel wires, and whether parallel or antiparallel currents attract. (4)",
-    back: "<ul class=\"recall-list\"><li>Long straight wire carrying current $I$: $B = \\mu_0 I/(2\\pi r)$ at perpendicular distance $r$, with $\\mu_0 = 4\\pi\\times10^{-7}\\ \\mathrm{T\\,m/A}$. The field lines are circles around the wire, in the direction of the fingers of the right hand when the thumb points along the current.</li><li>Straight segment of length $L$ carrying current $I$ in a uniform field $\\mathbf{B}$: $\\mathbf{F} = I\\mathbf{L}\\times\\mathbf{B}$, with $\\mathbf{L}$ pointing along the current. Its magnitude is $ILB\\sin\\theta$, with $\\theta$ the angle between $\\mathbf{L}$ and $\\mathbf{B}$.</li><li>Two long parallel wires a distance $d$ apart, carrying currents $I_1$ and $I_2$: the field of wire 1 at wire 2 is $\\mu_0 I_1/(2\\pi d)$, perpendicular to wire 2, so the force per unit length on either wire is $F/L = \\mu_0 I_1 I_2/(2\\pi d)$. For equal currents $I$ this is $\\mu_0 I^2/(2\\pi d)$. The units are $\\mathrm{N/m}$, and $\\mu_0/(2\\pi) = 2\\times10^{-7}\\ \\mathrm{N/A^2}$, so $1\\ \\mathrm{A}$ in each wire at $d = 1\\ \\mathrm{m}$ gives $2\\times10^{-7}\\ \\mathrm{N/m}$.</li><li>Currents in the same direction attract; currents in opposite directions repel. Check: put wire 1 along $\\hat{\\mathbf{z}}$ with the field $\\mathbf{B} = (\\mu_0 I_1/2\\pi d)\\,\\hat{\\boldsymbol{\\phi}}$ at wire 2. Then $\\hat{\\mathbf{z}}\\times\\hat{\\boldsymbol{\\phi}} = -\\hat{\\mathbf{r}}$, so the force on wire 2 points toward wire 1. Reversing $I_2$ reverses the force. The two wires push or pull on each other with equal magnitude and opposite direction.</li></ul>",
-    note: "Supplemental — not a numbered CPG equation. The sign comes from the cross product $I\\mathbf{L}\\times\\mathbf{B}$, so attract versus repel is decided by whether the two currents are parallel or antiparallel."
+    front: "State the magnetic field of a long straight wire, the force on a straight current-carrying segment, the force per length between two parallel wires, and which currents attract. (4)",
+    back: "<ul class=\"recall-list\"><li>Long straight wire: $B = \\mu_0 I/(2\\pi r)$ at distance $r$, circling the wire by the right-hand rule.</li><li>Straight segment $\\mathbf{L}$ along the current in a uniform field: $\\mathbf{F} = I\\mathbf{L}\\times\\mathbf{B}$, of magnitude $ILB\\sin\\theta$ for an angle $\\theta$ between $\\mathbf{L}$ and $\\mathbf{B}$.</li><li>Parallel wires a distance $d$ apart: $F/L = \\mu_0 I_1 I_2/(2\\pi d)$, which is $\\mu_0 I^2/(2\\pi d)$ for equal currents.</li><li>Currents in the same direction attract; currents in opposite directions repel.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. Wire 1 makes the field $\\mu_0 I_1/(2\\pi d)$ at wire 2, and $I\\mathbf{L}\\times\\mathbf{B}$ there points toward wire 1 when the currents are parallel. $\\mu_0/(2\\pi) = 2\\times10^{-7}\\ \\mathrm{N/A^2}$."
   },
   {
     id: "supp-lorentz-fields",
@@ -423,9 +423,9 @@ PGRE.FORMULAS = [
     topic: "em",
     tag: "Maximum power",
     name: "Load match for maximum average power (supplemental list)",
-    front: "For a fixed linear source and a passive load, state the complex match for maximum average power, the resistive special case, and why the reactances must cancel. (3)",
-    back: "<ul class=\"recall-list\"><li>Maximum average power when $Z_L = Z_g^*$. This is not the reflectionless choice $Z_L = Z_0$.</li><li>If $R_g > 0$ and the loop reactance is zero, $R_L = R_g$. If only $R_L$ can vary, the best value is $\\sqrt{R_g^2+(X_g+X_L)^2}$; when $X_L = 0$ that is $|Z_g|$, which is not $R_g$ unless $X_g = 0$.</li><li>Reactances add in series, so the load reactance cancels the source reactance: $X_L = -X_g$. With $R_L$ held fixed, that zeroes the loop reactance and maximises $|I|$, and therefore maximises $P = I_{\\mathrm{rms}}^2 R_L$. $X_L = 0$ is the trap: a purely resistive load, not a purely resistive loop.</li></ul>",
-    note: "Supplemental — not a numbered CPG equation. $Z_L = Z_0$ is the condition on supp-ac-reflection."
+    front: "For a source $Z_g = R_g + iX_g$ and a load $Z_L = R_L + iX_L$, state the match for maximum average power, the best $R_L$ when only $R_L$ can vary, and why the reactances must cancel. (3)",
+    back: "<ul class=\"recall-list\"><li>Maximum average power: $Z_L = Z_g^*$, that is $R_L = R_g$ together with $X_L = -X_g$.</li><li>If only $R_L$ can vary: $R_L = \\sqrt{R_g^2+(X_g+X_L)^2}$, which is $|Z_g|$ when $X_L = 0$.</li><li>$X_L = -X_g$ zeroes the loop reactance, which maximises $|I|$ and therefore $P = I_{\\mathrm{rms}}^2 R_L$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. $|Z_g|$ equals $R_g$ only when $X_g = 0$, and $X_L = 0$ makes the load resistive, not the loop. The reflectionless match $Z_L = Z_0$ to a line of characteristic impedance $Z_0$ is a different condition."
   },
   {
     id: "supp-optical-magnification",
@@ -488,9 +488,9 @@ PGRE.FORMULAS = [
     topic: "th",
     tag: "Heat capacity",
     name: "Einstein and Debye lattice heat capacity (supplemental list)",
-    front: "State the Einstein and Debye pictures, the high-temperature lattice limit, the Einstein low-temperature law, the three-dimensional Debye low-temperature law for $C_V$ and $U$, and a metal's total heat capacity. (5)",
-    back: "<ul class=\"recall-list\"><li>Three vibrational coordinates per atom. Einstein: one frequency. Debye: an acoustic spectrum.</li><li>High temperature: the lattice heat capacity $C_V \\to 3Nk_B$.</li><li>Einstein model at low temperature: $C_V$ falls exponentially in $1/T$.</li><li>Three-dimensional Debye phonons with $T \\ll \\theta_D$: the lattice heat capacity $C_V \\propto T^3$, so the lattice energy $U \\propto T^4$.</li><li>A metal's total heat capacity is $\\gamma T+AT^3$. Do not print $C_V \\propto T^3$ unless the lattice piece is the piece being named.</li></ul>",
-    note: "Supplemental — not a numbered CPG equation. The word Einstein on cpgf-5.29, cpgf-6.8, and cpgl-5.06 is not this model."
+    front: "State the Einstein and Debye pictures, the high-temperature lattice limit, each model's low-temperature law, and a metal's total heat capacity. (5)",
+    back: "<ul class=\"recall-list\"><li>Einstein: one vibration frequency. Debye: an acoustic spectrum.</li><li>High temperature: the lattice $C_V \\to 3Nk_B$.</li><li>Einstein at low temperature: $C_V$ falls exponentially in $1/T$.</li><li>Debye in three dimensions with $T \\ll \\theta_D$: the lattice $C_V \\propto T^3$ and $U \\propto T^4$.</li><li>Metal at low temperature: total heat capacity $\\gamma T+AT^3$, electrons plus lattice.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. Each atom has three vibrational coordinates, and each one contributes $k_B$ at high temperature."
   },
   {
     id: "supp-van-der-waals",
@@ -585,9 +585,9 @@ PGRE.FORMULAS = [
     topic: "at",
     tag: "Hydrogenic atoms",
     name: "Hydrogenic energy and Bohr scale (supplemental list)",
-    front: "State the two-charge Coulomb energy and Bohr scale, the ordinary hydrogenic $Z$ scaling including the $n$th orbit, and the $13.6\\,\\mathrm{eV}$ form that already contains $\\mu_H$. (3)",
-    back: "<ul class=\"recall-list\"><li>Coulomb strength $g = |Q_1 Q_2|/(4\\pi\\epsilon_0)$. Then $E_n = -\\mu g^2/(2\\hbar^2 n^2)$, which is negative, and the Bohr scale is $a = \\hbar^2/(\\mu g)$.</li><li>Ordinary hydrogenic ions use $g = Ze^2/(4\\pi\\epsilon_0)$. The energy scales as $\\mu Z^2$, the Bohr radius as $1/(\\mu Z)$, and the radius of the $n$th orbit also as $n^2$.</li><li>The number $13.6\\,\\mathrm{eV}$ already includes the hydrogen reduced mass $\\mu_H$, so $E_n = -(\\mu/\\mu_H) Z^2 (13.6\\,\\mathrm{eV})/n^2$. There is no multi-electron bare-charge rule on this card.</li></ul>",
-    note: "Supplemental — not a numbered CPG equation. Reduced mass without $Z$ is already on cpgf-5.43 through cpgf-5.47. The product form in $g$ is the one that survives when the orbiting charge changes."
+    front: "For two charges $Q_1$ and $Q_2$ bound with reduced mass $\\mu$, state the energy levels and the Bohr scale, the hydrogenic $Z$ scaling, and the $13.6\\,\\mathrm{eV}$ form. (3)",
+    back: "<ul class=\"recall-list\"><li>With $g = |Q_1 Q_2|/(4\\pi\\epsilon_0)$: $E_n = -\\mu g^2/(2\\hbar^2 n^2)$ and the Bohr scale is $a = \\hbar^2/(\\mu g)$.</li><li>Hydrogenic ion, $g = Ze^2/(4\\pi\\epsilon_0)$: $E_n \\propto \\mu Z^2/n^2$, $a \\propto 1/(\\mu Z)$, and the orbit radius $r_n \\propto n^2/(\\mu Z)$.</li><li>$E_n = -(\\mu/\\mu_H) Z^2 (13.6\\,\\mathrm{eV})/n^2$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. $13.6\\,\\mathrm{eV}$ already contains the hydrogen reduced mass $\\mu_H$, so only the ratio $\\mu/\\mu_H$ appears. The form in $g$ still holds when the orbiting charge changes."
   },
   {
     id: "supp-xray-edges",
@@ -650,9 +650,9 @@ PGRE.FORMULAS = [
     topic: "sp",
     tag: "Nuclear reactions",
     name: "Binding, Q value, and the iron peak (supplemental list)",
-    front: "State the nuclear binding energy, the reaction $Q$ inside one mass table, the atomic-mass $Q$ for $\\beta^-$ and $\\beta^+$, why $B/A$ peaks near iron and nickel, and the atomic-mass-unit conversion. (5)",
-    back: "<ul class=\"recall-list\"><li>$B = [Z m_p+(A-Z)m_n-M_{\\mathrm{nucleus}}]c^2$.</li><li>$Q = (\\sum M_i-\\sum M_f)c^2$ inside one mass table. $Q$ is positive when the reaction releases kinetic energy.</li><li>With atomic masses, and electronic binding neglected: $\\beta^-$ has $Q = (M_P-M_D)c^2$, and $\\beta^+$ has $Q = (M_P-M_D-2m_e)c^2$. Saying only that every mass is atomic, or that every mass is nuclear, does not fix the $\\beta^+$ case.</li><li>$B/A$ is largest near iron and nickel. That is why heavy fission and light fusion release energy.</li><li>$1\\,\\mathrm{u}\\,c^2 \\simeq 931.5\\,\\mathrm{MeV}$.</li></ul>",
-    note: "Supplemental — not a numbered CPG equation. Decay bookkeeping on the numbered decay cards, and the range on supp-nuclear-force-range, stay separate from this card."
+    front: "State the nuclear binding energy, the reaction $Q$, the atomic-mass $Q$ for $\\beta^-$ and $\\beta^+$, where $B/A$ peaks, and the atomic-mass-unit conversion. (5)",
+    back: "<ul class=\"recall-list\"><li>Binding energy: $B = [Z m_p+(A-Z)m_n-M_{\\mathrm{nucleus}}]c^2$.</li><li>$Q = (\\sum M_i-\\sum M_f)c^2$, positive when the reaction releases kinetic energy.</li><li>Atomic masses, parent $P$ and daughter $D$: $\\beta^-$ has $Q = (M_P-M_D)c^2$, and $\\beta^+$ has $Q = (M_P-M_D-2m_e)c^2$.</li><li>$B/A$ is largest near iron and nickel, so heavy fission and light fusion release energy.</li><li>$1\\,\\mathrm{u}\\,c^2 \\simeq 931.5\\,\\mathrm{MeV}$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. Take every mass from one table. Atomic masses already include the electrons, which is why $\\beta^+$ carries the extra $2m_e$; the electron binding energy is neglected."
   },
   {
     id: "supp-magnetons",
@@ -716,9 +716,9 @@ PGRE.FORMULAS = [
     topic: "ow",
     tag: "Thin films",
     name: "Normal-incidence thin-film reflection (supplemental list)",
-    front: "At normal incidence, state the extra optical path, the reflection phase rule, the constructive condition for one phase flip, and the constructive condition for zero or two flips. (3)",
-    back: "<ul class=\"recall-list\"><li>Film index $n$, thickness $t$, vacuum wavelength $\\lambda$: the extra optical path is $2nt$. A reflection from a higher-index medium contributes a phase $\\pi$. A reflection from a lower-index medium does not.</li><li>Net one flip: constructive reflection when $2nt = \\left(m+\\tfrac{1}{2}\\right)\\lambda$, with $m = 0,1,2,\\ldots$. A very thin soap film, $2nt \\to 0$, one phase flip, is dark in reflection, and that limit is $m = 0$ of $2nt = m\\lambda$.</li><li>Net zero flips or two flips: constructive reflection when $2nt = m\\lambda$. Printing $2nt = m\\lambda$ with no phase condition is wrong for an ordinary soap film.</li></ul>",
-    note: "Supplemental — not a numbered CPG equation. The phase rule is the same one as cpgf-3.19 and cpgf-3.20. Oblique path $2nt\\cos\\theta$, with $\\theta$ inside the film, is not a second required recall. cpgf-3.12 through cpgf-3.14 give phase and path, not this $2nt$ condition."
+    front: "For a thin film at normal incidence, state the extra optical path with the reflection phase rule, and the constructive-reflection condition for one phase flip and for zero or two flips. (3)",
+    back: "<ul class=\"recall-list\"><li>Extra optical path $2nt$. A reflection from a higher-index medium adds a phase $\\pi$; one from a lower-index medium adds none.</li><li>One flip: constructive reflection when $2nt = \\left(m+\\tfrac{1}{2}\\right)\\lambda$ and destructive when $2nt = m\\lambda$, with $m = 0,1,2,\\ldots$; a very thin film, $2nt \\to 0$, is dark.</li><li>Zero flips or two flips: constructive reflection when $2nt = m\\lambda$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. $n$ is the film index, $t$ its thickness, and $\\lambda$ the vacuum wavelength; at an angle $\\theta$ inside the film the path is $2nt\\cos\\theta$. One flip swaps the bright and dark conditions, so $2nt = m\\lambda$ is the dark condition, not the bright one, for a soap film in air."
   },
   {
     id: "supp-maxwell-speeds",
@@ -801,8 +801,8 @@ PGRE.FORMULAS = [
     tag: "Polarization",
     name: "Brewster's polarizing angle (supplemental)",
     front: "What is Brewster's angle $\\theta_B$ for light incident from a medium of index $n_1$ onto a medium of index $n_2$, and what are the polarization and angular properties of the reflected beam?",
-    back: "$$\\tan\\theta_B = \\frac{n_2}{n_1}$$\n\n**Key Properties**\n<ul class=\"recall-list\"><li>**Reflected beam**: Completely polarized with electric field perpendicular to the plane of incidence ($s$-polarized / parallel to the interface). The parallel component ($p$-polarization) is completely transmitted with zero reflection ($R_p = 0$).</li><li>**Ray geometry**: The reflected ray and refracted ray are mutually perpendicular:\n$$\\theta_B + \\theta_t = 90^\\circ$$\nFrom Snell's law: $n_1\\sin\\theta_B = n_2\\sin\\theta_t = n_2\\sin(90^\\circ - \\theta_B) = n_2\\cos\\theta_B \\implies \\tan\\theta_B = n_2/n_1$.</li></ul>",
-    note: "Supplemental — not a numbered CPG equation."
+    back: "$$\\tan\\theta_B = \\frac{n_2}{n_1}$$\n<ul class=\"recall-list\"><li>The reflected beam is completely $s$-polarized: its electric field is perpendicular to the plane of incidence.</li><li>The $p$-polarized component is completely transmitted: $R_p = 0$.</li><li>The reflected ray and the refracted ray are perpendicular: $\\theta_B + \\theta_t = 90^\\circ$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. With $\\theta_t = 90^\\circ - \\theta_B$, Snell's law reads $n_1\\sin\\theta_B = n_2\\cos\\theta_B$, which gives the tangent."
   },
   {
     id: "supp-radiation-field",
@@ -811,9 +811,9 @@ PGRE.FORMULAS = [
     topic: "em",
     tag: "Radiation field",
     name: "Nonrelativistic radiation-field direction (supplemental list)",
-    front: "For the nonrelativistic radiation field of a point charge with $q > 0$, give the direction of $\\mathbf{E}_{\\mathrm{rad}}$, the line it lies on, and the angular factors in $|\\mathbf{E}_{\\mathrm{rad}}|$ and in the power per solid angle. (4)",
-    back: "<ul class=\"recall-list\"><li>Radiation zone ($v \\ll c$): $\\mathbf{E}_{\\mathrm{rad}}$ is parallel to $\\hat{\\mathbf{r}}\\times(\\hat{\\mathbf{r}}\\times\\mathbf{a})/R = -\\mathbf{a}_{\\perp}/R$, where $\\hat{\\mathbf{r}}$ points from the charge to the field point and $R$ is that distance. For $q > 0$, $\\mathbf{E}_{\\mathrm{rad}}$ points opposite the sideways acceleration $\\mathbf{a}_{\\perp}$ (the part of $\\mathbf{a}$ perpendicular to $\\hat{\\mathbf{r}}$); a negative charge reverses it.</li><li>$\\mathbf{E}_{\\mathrm{rad}}$ lies in the plane of the line of sight $\\hat{\\mathbf{r}}$ and the acceleration $\\mathbf{a}$. For a charge accelerating along a wire on the $x$-axis, seen from the $xy$-plane, that plane is the $xy$-plane, so the $z$ component is $0$.</li><li>$\\mathbf{E}_{\\mathrm{rad}}$ is perpendicular to the line of sight $\\hat{\\mathbf{r}}$. When $\\mathbf{E}_{\\mathrm{rad}} \\ne 0$, this and the plane fix the line of $\\mathbf{E}_{\\mathrm{rad}}$, but leave both directions along that line open. The triple product gives the direction.</li><li>$|\\mathbf{E}_{\\mathrm{rad}}| \\propto \\sin\\theta$ and the power per solid angle $\\propto \\sin^2\\theta$, where $\\theta$ is the angle from $\\mathbf{a}$. Both are zero both ways along the acceleration axis ($\\theta = 0$ and $\\theta = 180^\\circ$), and both are largest at $\\theta = 90^\\circ$.</li></ul>",
-    note: "Supplemental — not a numbered CPG equation. These statements are for the radiation field at $v \\ll c$. They are not the velocity field, and $\\sin^2\\theta$ is not the total radiated power."
+    front: "For the radiation field of an accelerating point charge with $v \\ll c$, state the direction of $\\mathbf{E}_{\\mathrm{rad}}$, the plane it lies in, its angle to the line of sight, and the angular factors. (4)",
+    back: "<ul class=\"recall-list\"><li>$\\mathbf{E}_{\\mathrm{rad}} \\propto q\\,\\hat{\\mathbf{r}}\\times(\\hat{\\mathbf{r}}\\times\\mathbf{a})/R = -q\\,\\mathbf{a}_{\\perp}/R$: for $q \\gt 0$ it points opposite $\\mathbf{a}_{\\perp}$, the part of $\\mathbf{a}$ perpendicular to $\\hat{\\mathbf{r}}$.</li><li>It lies in the plane of the line of sight $\\hat{\\mathbf{r}}$ and the acceleration $\\mathbf{a}$.</li><li>It is perpendicular to the line of sight $\\hat{\\mathbf{r}}$.</li><li>$|\\mathbf{E}_{\\mathrm{rad}}| \\propto \\sin\\theta$ and the power per solid angle $\\propto \\sin^2\\theta$: both are zero at $\\theta = 0$ and $180^\\circ$, and largest at $90^\\circ$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. $\\hat{\\mathbf{r}}$ points from the charge to the field point a distance $R$ away, and $\\theta$ is the angle between $\\mathbf{a}$ and $\\hat{\\mathbf{r}}$. The plane and the right angle fix only the line of $\\mathbf{E}_{\\mathrm{rad}}$; the triple product fixes which way it points along that line."
   },
   {
     id: "supp-hamilton-principle",
