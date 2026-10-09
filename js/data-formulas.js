@@ -346,8 +346,8 @@ PGRE.FORMULAS = [
     topic: "em",
     tag: "Current density",
     name: "Drift current density (supplemental list)",
-    front: "State the drift current density with the sign of $q$, and the current through an area perpendicular to the drift. (2)",
-    back: "<ul class=\"recall-list\"><li>$\\mathbf{J} = n q \\mathbf{v}_d$, with $q$ signed.</li><li>$I = n|q| A v_d$ when $A$ is perpendicular to the drift.</li></ul>",
+    front: "State the drift current density with the sign of $q$, the current through an area perpendicular to the drift, the drift speed from the current for a round wire, the microscopic form of Ohm's law, and the size of the drift speed in a metal. (5)",
+    back: "<ul class=\"recall-list\"><li>$\\mathbf{J} = n q \\mathbf{v}_d$, with $q$ signed. Here $n$ is the carrier number density and $\\mathbf{v}_d$ the drift velocity.</li><li>$I = n|q| A v_d$ when $A$ is perpendicular to the drift.</li><li>Solving for the drift speed: $v_d = I/(n|q|A)$. For a round wire of radius $r$, $A = \\pi r^2$.</li><li>Microscopic Ohm's law: $\\mathbf{J} = \\sigma\\mathbf{E}$, with conductivity $\\sigma$ and resistivity $\\rho = 1/\\sigma$.</li><li>In a metal $n \\sim 10^{28}\\ \\mathrm{m^{-3}}$ and $|q| = e = 1.6\\times10^{-19}\\ \\mathrm{C}$, so $ne \\approx 1.6\\times10^{9}\\ \\mathrm{C/m^3}$. Example: $I = 100\\ \\mathrm{A}$, $r = 0.01\\ \\mathrm{m}$ gives $A \\approx 3.1\\times10^{-4}\\ \\mathrm{m^2}$ and $v_d \\approx 100/(5\\times10^{5}) \\approx 2\\times10^{-4}\\ \\mathrm{m/s}$. Drift speeds are of order $10^{-4}\\ \\mathrm{m/s}$, below $1\\ \\mathrm{mm/s}$.</li></ul>",
     note: "Supplemental — not a numbered CPG equation."
   },
   {
@@ -382,6 +382,17 @@ PGRE.FORMULAS = [
     front: "For constant $R$, $C$, and $L$ with no mutual inductance, state the RC charge approach and discharge, the RL current approach and decay, and the two stored-energy time factors. (5)",
     back: "<ul class=\"recall-list\"><li>Charge from zero toward $Q_f = CV$: $Q = Q_f(1-e^{-t/RC})$.</li><li>Capacitor discharging through a resistor from charge $Q_0$ at $t=0$: $Q(t) = Q_0 e^{-t/RC}$. Here $Q$ is charge, $Q_0$ initial charge, $R$ resistance, $C$ capacitance, and $t$ elapsed time. Current magnitude $I(t) = |dQ/dt| = (Q_0/RC)e^{-t/RC}$; capacitor voltage $V(t) = Q(t)/C = (Q_0/C)e^{-t/RC}$. The time constant $\\tau = RC$ gives $Q(\\tau) = Q_0/e \\approx 0.37Q_0$ (about $37\\%$ of the initial charge). Stored energy falls as $e^{-2t/RC}$.</li><li>Inductor current from zero toward $I_f = V/R$: $I = I_f\\left(1-e^{-(R/L)t}\\right)$.</li><li>Inductor current decaying from $I_0$: $I = I_0 e^{-(R/L)t}$.</li><li>While the capacitor is charging, stored energy approaches its final value as $(1-e^{-t/RC})^2$, not as $e^{-2t/RC}$. Constant-current charging $Q = Q_0+It$ is not this card.</li></ul>",
     note: "Supplemental — not a numbered CPG equation. The time constants $RC$ and $L/R$ are already on cpgf-2.83 and cpgf-2.84. The pattern is: approach the final value as $1-e^{-t/\\tau}$, and leave the initial value as $e^{-t/\\tau}$."
+  },
+  {
+    id: "supp-capacitor-energy-halving",
+    kind: "list",
+    eq: "supp",
+    topic: "em",
+    tag: "Transients",
+    name: "Capacitor energy and half-times (supplemental list)",
+    front: "State the stored energy of a capacitor in three forms, the energy of a capacitor discharging through a resistor, and the times for its charge and for its energy to fall to half. (4)",
+    back: "<ul class=\"recall-list\"><li>Stored energy: $U = Q^2/(2C) = \\tfrac{1}{2}CV^2 = \\tfrac{1}{2}QV$.</li><li>Discharge through $R$ from charge $Q_0$: $Q = Q_0 e^{-t/RC}$, so $U = U_0 e^{-2t/RC}$ with $U_0 = Q_0^2/(2C)$. The energy decays twice as fast as the charge because $U \\propto Q^2$.</li><li>Time for the charge to fall to half: set $e^{-t/RC} = 1/2$ and take the logarithm, giving $t = RC\\ln 2 \\approx 0.69\\,RC$.</li><li>Time for the energy to fall to half: set $e^{-2t/RC} = 1/2$, giving $t = (RC\\ln 2)/2 \\approx 0.35\\,RC$. The method for any fraction is to set the exponential equal to that fraction and take the logarithm.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. The charge, current, and voltage decay and the time constant $\\tau = RC$ are also on supp-rc-rl-transients."
   },
   {
     id: "supp-lorentz-fields",

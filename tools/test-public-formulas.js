@@ -61,6 +61,7 @@ var EXPECTED = [
   'supp-material-aux-fields',
   'supp-image-plane',
   'supp-rc-rl-transients',
+  'supp-capacitor-energy-halving',
   'supp-lorentz-fields',
   'supp-max-power-match',
   'supp-optical-magnification',
@@ -186,6 +187,41 @@ assert(discharge.indexOf('$\\tau = RC$') !== -1 &&
   'discharge keeps the time constant, remaining charge, and energy decay');
 assert((transients.back.match(/Q_f\(1-e\^\{-t\/RC\}\)/g) || []).length === 1,
   'the charging relation appears once');
+var halving = byId['supp-capacitor-energy-halving'];
+var halvingItems = halving ? halving.back.split('<li>').slice(1) : [];
+assert(!!halving && halving.kind === 'list' && halving.topic === 'em' && halving.tag === 'Transients' &&
+  halvingItems.length === 4 && /\(4\)\s*$/.test(halving.front),
+  'the capacitor half-time card is a four-item em list');
+assert(halvingItems[0].indexOf('$U = Q^2/(2C) = \\tfrac{1}{2}CV^2 = \\tfrac{1}{2}QV$') !== -1 &&
+  halvingItems[1].indexOf('$U = U_0 e^{-2t/RC}$') !== -1 &&
+  halvingItems[2].indexOf('$t = RC\\ln 2 \\approx 0.69\\,RC$') !== -1 &&
+  halvingItems[3].indexOf('$t = (RC\\ln 2)/2 \\approx 0.35\\,RC$') !== -1,
+  'the capacitor half-time card states the energy forms and both half-times');
+// numeric check: at t = RC ln2 the charge is 1/2, at t = RC ln2 / 2 the energy is 1/2
+assert(Math.abs(Math.exp(-Math.LN2) - 0.5) < 1e-12 && Math.abs(Math.exp(-2 * Math.LN2 / 2) - 0.5) < 1e-12 &&
+  Math.abs(Math.LN2 - 0.69) < 0.005 && Math.abs(Math.LN2 / 2 - 0.35) < 0.005,
+  'the half-times satisfy their defining equations and the 0.69 and 0.35 coefficients');
+var drift = byId['supp-drift-current'];
+var driftItems = drift ? drift.back.split('<li>').slice(1) : [];
+assert(!!drift && drift.kind === 'list' && drift.topic === 'em' && drift.tag === 'Current density' &&
+  driftItems.length === 5 && /\(5\)\s*$/.test(drift.front),
+  'the drift card keeps its list kind, topic, and tag, and holds five items');
+assert(driftItems[0].indexOf('$\\mathbf{J} = n q \\mathbf{v}_d$') !== -1 &&
+  driftItems[1].indexOf('$I = n|q| A v_d$') !== -1,
+  'the drift card keeps the current density and the current through an area');
+assert(driftItems[2].indexOf('$v_d = I/(n|q|A)$') !== -1 && driftItems[2].indexOf('$A = \\pi r^2$') !== -1,
+  'the drift card states the drift speed and the round-wire area');
+assert(driftItems[3].indexOf('$\\mathbf{J} = \\sigma\\mathbf{E}$') !== -1 &&
+  driftItems[3].indexOf('$\\rho = 1/\\sigma$') !== -1,
+  'the drift card states the microscopic Ohm law with resistivity');
+assert(driftItems[4].indexOf('10^{28}') !== -1 && driftItems[4].indexOf('1.6\\times10^{-19}') !== -1 &&
+  driftItems[4].indexOf('2\\times10^{-4}') !== -1 && driftItems[4].indexOf('below $1\\ \\mathrm{mm/s}$') !== -1,
+  'the drift card gives the metal carrier density, the charge, and the sub-mm/s magnitude');
+// the worked example: 100 A, r = 0.01 m, n = 1e28 m^-3, e = 1.6e-19 C
+var driftA = Math.PI * 0.01 * 0.01;
+var driftV = 100 / (1e28 * 1.6e-19 * driftA);
+assert(Math.abs(driftA - 3.1e-4) < 0.05e-4 && driftV > 1.9e-4 && driftV < 2.1e-4,
+  'the worked drift example reproduces A = 3.1e-4 m^2 and v_d = 2e-4 m/s');
 assert(!!conductor && conductor.kind !== 'list', 'cpgf-2.15a is still a formula card');
 assert(!!conductor && conductor.back.indexOf('D = \\sigma') !== -1,
   'cpgf-2.15a still states the conductor surface result');
