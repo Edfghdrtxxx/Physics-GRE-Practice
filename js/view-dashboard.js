@@ -1,7 +1,8 @@
 /* Dashboard — the home view. Today is the first card (greeting, exam
    countdown, prep runway, the Mixed practice launcher, then three equal
    tiles: Mistake book, Recall, Mock exam). The next card is the same Daily
-   activity target card as the Study time page, then This week. Level/XP,
+   activity target card as the Study time page, then Intensity (banded
+   study-intensity feedback, js/intensity.js), then This week. Level/XP,
    stat tiles, challenges, QOTD, readiness and
    achievements sit behind a Progress disclosure whose summary line carries
    level, streak and accuracy. Recent activity follows Progress on its own
@@ -314,6 +315,195 @@ PGRE.views.dashboard = (function () {
       '<a class="btn btn-ghost" href="#/exam">Run a full sim →</a></div>';
   }
 
+  /* ————————————————————————————————————————————————————————————
+     Intensity card. Five banded rows from PGRE.intensity.compute()
+     (js/intensity.js holds the definitions and the thresholds), a 7-day
+     trend for new questions and pace, and "Where to adjust": the per-topic
+     14-day table in priority order. Bands carry a word as well as a colour.
+     Trend bars are neutral ink with today in the accent; the dashed line is
+     the target, and each bar's value is in its tooltip and aria-label.
+     ———————————————————————————————————————————————————————————— */
+  function shortDay(key) {
+    return new Date(key + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  function weekdayDay(key) {
+    return new Date(key + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
+  /* " (no timed packs on Sundays or Thursdays)" from the coverage payload's
+     noPackWeekdays (0 = Sunday); empty when every weekday is a working day. */
+  function noPackDaysText(days) {
+    var names = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+    var list = (days || []).map(function (d) { return names[d]; }).filter(Boolean);
+    if (!list.length) return '';
+    var last = list.pop();
+    return ' (no timed packs on ' + (list.length ? list.join(', ') + ' or ' : '') + last + ')';
+  }
+
+  /* One row: name + window, "value / target", band chip, and a plain hint
+     for amber and red. */
+  function intensityRow(key, label, windowText, valueHTML, bandName, hint) {
+    var I = PGRE.intensity;
+    return '<li class="intensity-row" data-metric="' + key + '" data-band="' + (bandName || 'none') + '">' +
+      '<div class="intensity-name"><span class="intensity-label">' + label + '</span>' +
+        '<span class="intensity-window">' + windowText + '</span></div>' +
+      '<div class="intensity-value">' + valueHTML + '</div>' +
+      I.chipHTML(bandName) +
+      (hint ? '<p class="intensity-hint">' + hint + '</p>' : '') +
+    '</li>';
+  }
+
+  function intensityHints(d) {
+    var h = {};
+    var nq = d.newQuestions, pace = d.paceSec, acc = d.firstAttemptAccuracy,
+        rep = d.repeatMinutes, cov = d.coverage;
+    if (nq.band === 'amber' || nq.band === 'red') {
+      var more = nq.threshold - nq.value;
+      h.newQuestions = 'Answer ' + plural(more, 'more new question') + ' to reach ' + nq.threshold + '.' +
+        (nq.band === 'red' ? ' Start the next pack.' : '');
+    }
+    if (pace.value == null) h.paceSec = 'No new questions yet today.';
+    else if (pace.band === 'amber' || pace.band === 'red') {
+      h.paceSec = 'Slower than the exam pace of ' + pace.threshold + ' s a question. ' +
+        'When a question passes ' + pace.threshold + ' s, pick your best guess and move on.';
+    }
+    if (acc.value == null) h.firstAttemptAccuracy = 'No new questions in the last 7 days.';
+    else if (acc.band === 'amber' || acc.band === 'red') {
+      h.firstAttemptAccuracy = 'Under ' + acc.threshold + '% on first tries. ' +
+        'Read every solution of the last set before you start the next one.';
+    }
+    if (rep.band === 'amber' || rep.band === 'red') {
+      h.repeatMinutes = 'More than ' + rep.threshold + ' min in the mistake book today. ' +
+        'Spend the rest of today on new questions.';
+    }
+    if (cov.band === 'amber' || cov.band === 'red') {
+      h.coverage = cov.required == null
+        ? 'The last pack day has passed with ' + plural(cov.remaining, 'pack question') + ' not started.'
+        : 'To finish every pack by ' + shortDay(cov.lastPackDay) + ', answer ' + cov.required.toFixed(1) +
+          ' new questions each working day; the last 7 days averaged ' + cov.actual.toFixed(1) + '.';
+    }
+    return h;
+  }
+
+  /* Seven bars with a dashed target line. Scale: the larger of 1.25 x the
+     target and the tallest bar, so the target line always sits inside. */
+  function intensityTrend(key, title, target, unit, days, valueOf, tipOf) {
+    var ui = PGRE.ui;
+    var max = target * 1.25;
+    days.forEach(function (day) { var v = valueOf(day); if (v != null && v > max) max = v; });
+    var cols = '', xs = '', aria = [];
+    days.forEach(function (day, i) {
+      var v = valueOf(day);
+      var isToday = i === days.length - 1;
+      var h = v == null ? 0 : Math.max(v > 0 ? 4 : 0, Math.round(100 * v / max));
+      var cls = 'itrend-col' + (isToday ? ' itrend-today' : '') + (v == null || v === 0 ? ' itrend-empty' : '');
+      var tip = weekdayDay(day.date) + '\\n' + tipOf(day);
+      aria.push(weekdayDay(day.date) + ': ' + (v == null ? 'none' : v + ' ' + unit));
+      cols += '<div class="' + cls + '" tabindex="0" data-tip="' + ui.esc(tip) + '" data-day="' + day.date + '"' +
+        ' data-value="' + (v == null ? '' : v) + '">' +
+        '<div class="itrend-bar" style="height:' + h + '%"></div></div>';
+      var wd = new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+      xs += '<span' + (isToday ? ' class="is-today"' : '') + '>' + (isToday ? 'Today' : wd) + '</span>';
+    });
+    var markPct = (100 * target / max).toFixed(1);
+    return '<figure class="itrend" data-trend="' + key + '">' +
+      '<figcaption class="itrend-cap"><strong>' + title + '</strong>' +
+        '<span><span class="itrend-key" aria-hidden="true"></span>target ' + target + (unit === 's' ? ' s' : '') + '</span></figcaption>' +
+      '<div class="itrend-plot" role="img" aria-label="' + ui.esc(title + ', last 7 days. ' + aria.join('; ')) + '">' +
+        '<div class="itrend-area">' +
+          '<div class="itrend-mark" style="bottom:' + markPct + '%"></div>' + cols +
+        '</div></div>' +
+      '<div class="itrend-x" aria-hidden="true">' + xs + '</div>' +
+    '</figure>';
+  }
+
+  function intensityTopicsHTML(d) {
+    var ui = PGRE.ui, I = PGRE.intensity, T = I.THRESHOLDS;
+    var rows = d.topics.map(function (t) {
+      var acc = t.judged ? t.accuracy + '%' : '—';
+      var bandCell = t.judged ? I.chipHTML(t.band) : '<span class="itopic-few">too few to judge</span>';
+      return '<tr data-topic="' + ui.esc(t.topic) + '" data-band="' + (t.band || 'none') + '">' +
+        '<td><a href="#/topic/' + ui.esc(t.topic) + '">' + ui.esc(t.name) + '</a>' +
+          // phone layout: weight and band move under the name (css/style.css)
+          '<span class="itopic-sub">' + t.weight + '% of the exam</span>' +
+          '<span class="itopic-sub itopic-sub-band">' + bandCell + '</span></td>' +
+        '<td class="num col-weight">' + t.weight + '%</td>' +
+        '<td class="num">' + t.newQuestions + '</td>' +
+        '<td class="num">' + acc + '</td>' +
+        '<td class="itopic-band">' + bandCell + '</td></tr>';
+    }).join('');
+    return '<div class="intensity-adjust" id="intensity-adjust">' +
+      '<h3>Where to adjust</h3>' +
+      '<p class="muted">New questions per topic in the last 14 days and their first-try accuracy. ' +
+        'The top row is the topic where better accuracy is worth the most exam points ' +
+        '(exam weight times the gap to ' + Math.round(100 * T.topicTargetAcc) + '%). ' +
+        'A topic needs ' + T.topicMinNew + ' new questions before it gets a band.</p>' +
+      '<div class="intensity-table-wrap"><table class="intensity-table">' +
+        '<thead><tr><th scope="col">Topic</th><th scope="col" class="num col-weight">Weight</th>' +
+          '<th scope="col" class="num">New, 14 days</th><th scope="col" class="num">Accuracy</th>' +
+          '<th scope="col">Band</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table></div>' +
+    '</div>';
+  }
+
+  function intensityCardHTML() {
+    var I = PGRE.intensity;
+    if (!I || typeof I.compute !== 'function') return '';
+    var d = I.compute(PGRE.store.state);
+    var T = I.THRESHOLDS;
+    var h = intensityHints(d);
+    var nq = d.newQuestions, pace = d.paceSec, acc = d.firstAttemptAccuracy,
+        rep = d.repeatMinutes, cov = d.coverage;
+
+    var rows = '' +
+      intensityRow('newQuestions', 'New questions', 'today · first tries in practice',
+        '<strong>' + nq.value + '</strong> / ' + nq.threshold, nq.band, h.newQuestions) +
+      intensityRow('paceSec', 'Pace', 'today · median seconds per new question',
+        '<strong>' + (pace.value == null ? '—' : pace.value + ' s') + '</strong> / ' + pace.threshold,
+        pace.band, h.paceSec) +
+      intensityRow('firstAttemptAccuracy', 'First-try accuracy',
+        'last 7 days · ' + (acc.n ? acc.correct + ' of ' + acc.n + ' new questions' : 'no new questions'),
+        '<strong>' + (acc.value == null ? '—' : acc.value + '%') + '</strong> / ' + acc.threshold + '%',
+        acc.band, h.firstAttemptAccuracy) +
+      intensityRow('repeatMinutes', 'Repeat time', 'today · minutes on mistake-book retakes',
+        '<strong>' + rep.value + ' min</strong> / ' + rep.threshold, rep.band, h.repeatMinutes) +
+      intensityRow('coverage', 'Coverage',
+        'last 7 days · new questions per working day, against the rate that finishes every pack by ' +
+          shortDay(cov.lastPackDay) + ' · ' + plural(cov.remaining, 'pack question') + ' not started, ' +
+          plural(cov.workingDaysLeft, 'working day') + ' left' + noPackDaysText(cov.noPackWeekdays),
+        '<strong>' + cov.actual.toFixed(1) + '</strong> / ' + (cov.required == null ? '—' : cov.required.toFixed(1)),
+        cov.band, h.coverage);
+
+    var trends = '<div class="intensity-trends">' +
+      intensityTrend('newQuestions', 'New questions per day', T.newQuestions.green, 'new', d.days,
+        function (day) { return day.newQuestions; },
+        function (day) { return plural(day.newQuestions, 'new question'); }) +
+      intensityTrend('paceSec', 'Median pace per day', T.paceSec.green, 's', d.days,
+        function (day) { return day.paceSec; },
+        function (day) {
+          return day.paceSec == null ? 'no new questions'
+            : 'median ' + day.paceSec + ' s over ' + plural(day.newQuestions, 'new question');
+        }) +
+    '</div>';
+
+    var dateLine = new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', {
+      weekday: 'long', month: 'short', day: 'numeric'
+    });
+    return '<div class="card intensity-card" id="intensity-card">' +
+      '<div class="band-head"><div class="band-head-copy">' +
+        '<p class="kicker">' + PGRE.ui.esc(dateLine) + '</p><h2>Intensity</h2></div>' +
+        '<span class="band-head-note">value / target</span></div>' +
+      '<p class="muted intensity-lead">Measured from your answers. A new question is your first try at a ' +
+        'question, in practice. A repeat is a mistake-book retake. Each band reads ' +
+        I.LABELS.green + ', ' + I.LABELS.amber + ' or ' + I.LABELS.red + '.</p>' +
+      '<ul class="intensity-rows">' + rows + '</ul>' +
+      trends +
+      intensityTopicsHTML(d) +
+    '</div>';
+  }
+
   /* ———————————————————————————————————————————————————————————— */
 
   function examDateStr() {
@@ -612,6 +802,8 @@ PGRE.views.dashboard = (function () {
     html += (PGRE.views.studytime && PGRE.views.studytime.activityTargetHTML)
       ? PGRE.views.studytime.activityTargetHTML()
       : '';
+
+    html += intensityCardHTML();
 
     var cw = PGRE.currentWeek();
     var weekTasks = PGRE.weekTasks(cw.week);

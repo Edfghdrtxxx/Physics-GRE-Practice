@@ -1,4 +1,6 @@
-/* Read-only agent status summary and best-effort localhost publishing. */
+/* Read-only agent status summary and best-effort localhost publishing.
+   `intensity` is PGRE.intensity.compute() (js/intensity.js): the five banded
+   metrics, the coverage inputs, the per-topic rows and the 7-day trend. */
 window.PGRE = window.PGRE || {};
 
 (function () {
@@ -218,7 +220,12 @@ window.PGRE = window.PGRE || {};
       recentLog: recentLog,
       attempts: attempts,
       questions: questionTexts,
-      mistakeBook: mistakeBookSummary(state, date)
+      mistakeBook: mistakeBookSummary(state, date),
+      // Banded study-intensity readout (js/intensity.js) — the same numbers
+      // the dashboard Intensity card and the practice summary show.
+      intensity: (PGRE.intensity && typeof PGRE.intensity.compute === 'function')
+        ? PGRE.intensity.compute(state, { today: date })
+        : null
     };
   };
 
