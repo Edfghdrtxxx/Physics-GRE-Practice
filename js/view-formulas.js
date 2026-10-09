@@ -43,6 +43,7 @@ PGRE.views.formulas = (function () {
     { key: 'good',  label: 'Good',  hint: '3' },
     { key: 'easy',  label: 'Easy',  hint: '4' }
   ];
+  var GRADE_LABEL = { again: 'Again', hard: 'Hard', good: 'Good', easy: 'Easy', mastered: 'Mastered' };
   // F8: generic reconstruction prompts — used by "Rebuild hints" (pre-flip) and
   // the post-Again interstitial. Deriving beats re-reading.
   var SCAFFOLD_PROMPTS = [
@@ -1400,55 +1401,40 @@ PGRE.views.formulas = (function () {
     wireTopicGroups(box);
   }
 
-  /* Read-only memorizing-history strip from cardReviews + current due.
-     Pure model via srs.buildMemHistory; all labels escaped. Empty → ''.
-     Viewing never mutates schedule or the log. */
-  function memHistoryHTML(id) {
-    var st = PGRE.srs.cardState(id);
-    var log = PGRE.store.state.cardReviews || [];
-    var model = PGRE.srs.buildMemHistory(log, id, {
-      due: st && st.due,
-      today: PGRE.srs.today()
-    });
+  /* Date + grade list from the append-only cardReviews log. Newest first.
+     Empty shows a short line (never a blank gap). Viewing never mutates. */
+  function reviewHistoryHTML(id) {
     var ui = PGRE.ui;
-    // Learned card with no surviving log rows (cap eviction / pre-log grades).
-    if (!model) {
-      if (!st) return '';
-      return '<div class="mem-hist mem-hist-empty">' +
-        '<div class="mem-hist-summary">No review history retained in the log.</div></div>';
+    var log = (PGRE.store.state && PGRE.store.state.cardReviews) || [];
+    var rows = [];
+    if (PGRE.srs && typeof PGRE.srs.listCardReviews === 'function') {
+      rows = PGRE.srs.listCardReviews(log, id) || [];
     }
-    var summary = ui.esc(model.firstDay) + ' → ' + ui.esc(model.lastDay) +
-      ' <span class="mem-hist-sep">|</span> ' +
-      model.count + ' review' + (model.count === 1 ? '' : 's');
-    if (model.chipsTruncated) {
-      summary += ' <span class="mem-hist-note">(showing last ' +
-        model.chips.length + ')</span>';
+    var wrap = '<div class="card-review-hist" data-card-hist="' + ui.esc(id) + '">' +
+      '<div class="card-review-hist-head">Review history</div>';
+    if (!rows.length) {
+      return wrap +
+        '<p class="muted card-review-hist-empty-line">No reviews recorded. Reviews from before this log cannot be recovered.</p></div>';
     }
-    // Global FIFO cap honesty: D1 is first *surviving* day, not necessarily life-of-card.
-    if (log.length >= 8000) {
-      summary += '<div class="mem-hist-note">Recent reviews only — global log is capped.</div>';
-    }
-    var chips = '';
-    model.chips.forEach(function (ch) {
-      var g = ch.grade;
-      // Class only via own-key allowlist — never interpolate unknown grades.
-      var cls = PGRE.srs.isMemGrade(g) ? (' grade-' + g) : '';
-      var dayN = (typeof ch.day === 'number' && isFinite(ch.day)) ? String(ch.day | 0) : '?';
-      chips += '<span class="grade-chip mem-hist-chip' + cls + '" title="' +
-        ui.esc(ch.d + ' · ' + g) + '">D' + dayN + '@' + ui.esc(g) + '</span>';
+    var items = '';
+    rows.forEach(function (r) {
+      var g = r.g;
+      var label = Object.prototype.hasOwnProperty.call(GRADE_LABEL, g) ? GRADE_LABEL[g] : g;
+      var cls = (PGRE.srs && typeof PGRE.srs.isMemGrade === 'function' && PGRE.srs.isMemGrade(g))
+        ? (' grade-' + g) : '';
+      items += '<li><time datetime="' + ui.esc(r.d) + '">' + ui.esc(r.d) +
+        '</time> <span class="grade-chip' + cls + '">' + ui.esc(label) + '</span></li>';
     });
-    if (model.pending) {
-      var p = model.pending;
-      var pDay = (typeof p.day === 'number' && isFinite(p.day) && p.day >= 1)
-        ? ('D' + (p.day | 0) + ' ') : '';
-      chips += '<span class="due-chip mem-hist-chip mem-hist-pending' +
-        (p.label === 'due today' ? ' due-now' : '') + '" title="' +
-        ui.esc(p.d + ' · ' + p.label) + '">' + pDay + ui.esc(p.label) + '</span>';
-    }
-    return '<div class="mem-hist" data-mem-hist="' + ui.esc(id) + '">' +
-      '<div class="mem-hist-summary">' + summary + '</div>' +
-      '<div class="mem-hist-chips">' + chips + '</div></div>';
+    var cap = log.length >= 8000
+      ? '<p class="muted card-review-hist-note">Recent reviews only — the log keeps the latest 8000 across all cards.</p>'
+      : '';
+    return wrap +
+      '<p class="muted card-review-hist-order">Newest first.</p>' +
+      cap +
+      '<ol class="card-review-hist-list">' + items + '</ol></div>';
   }
+
+  function memHistoryHTML(id) { return reviewHistoryHTML(id); }
 
   /* Paint (or clear) the history section. Called on every peek open so a
      grade committed elsewhere still shows without re-filling the card body. */
@@ -2414,7 +2400,9 @@ PGRE.views.formulas = (function () {
         '<button class="btn btn-ghost" id="skip-btn">Skip</button>' +
         '<button class="btn btn-ghost" id="putaway-btn">Put away</button>' +
         similarButton(c, 'btn-sm') +
-      '</div></div>';
+      '</div>' +
+      reviewHistoryHTML(c.id) +
+      '</div>';
     body().innerHTML = html;
     PGRE.typesetMath(body());
     if (window.PGRE && PGRE.motion && PGRE.motion.animateMeter) {
@@ -2487,6 +2475,7 @@ PGRE.views.formulas = (function () {
           (c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '') +
           vizNavButtonHTML(c.id, 'btn-sm', 'peek-viz') + '</div>' +
       '</div>' +
+      reviewHistoryHTML(c.id) +
       '<div class="btn-row session-peek-bar">' +
         '<button class="btn btn-ghost" id="peek-older"' + (idx <= 0 ? ' disabled' : '') +
           '>← Older</button>' +
@@ -3932,6 +3921,7 @@ PGRE.views.formulas = (function () {
       // The similar-problem control handles its own click (and the inert
       // "No similar problem" label must not toggle the card either).
       if (e.target.closest('.similar-problem-btn')) return;
+      if (e.target.closest('.card-review-hist')) return;
       // Soft-add one card into today's batch without flipping the card.
       var addBtn = e.target.closest('[data-fs-add]');
       if (addBtn) {
@@ -4142,6 +4132,7 @@ PGRE.views.formulas = (function () {
         '</span>' +
         '<span class="fs-chips">' + searchChipsHTML(c) + '</span>' +
       '</div>' +
+      reviewHistoryHTML(c.id) +
     '</article>';
   }
 

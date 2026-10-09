@@ -244,6 +244,38 @@ var before = JSON.stringify(frozen);
 srs.buildMemHistory(frozen, 'c1', { due: '2026-07-05', today: '2026-07-03' });
 assert(JSON.stringify(frozen) === before, 'reviews array content unchanged after build');
 
+// ——— listCardReviews: newest first, date + grade ———
+console.log('\nlistCardReviews');
+assert(typeof srs.listCardReviews === 'function', 'listCardReviews is exported');
+assert(srs.listCardReviews(null, 'c1').length === 0, 'null reviews → []');
+assert(srs.listCardReviews([], 'c1').length === 0, 'empty log → []');
+assert(srs.listCardReviews([{ d: '2026-07-01', id: 'c1', g: 'good' }], '').length === 0,
+  'empty cardId → []');
+var listed = srs.listCardReviews([
+  { d: '2026-08-01', id: 'c1', g: 'again' },
+  { d: '2026-08-01', id: 'other', g: 'easy' },
+  { d: '2026-09-01', id: 'c1', g: 'hard' },
+  { d: 'bad-date', id: 'c1', g: 'good' },
+  { d: '2026-09-15', id: 'c1', g: 'constructor' },
+  { d: '2026-09-15', id: 'c1', g: 'good' }
+], 'c1');
+assert(listed.length === 3, 'filters other ids, bad days, and prototype grades');
+assert(listed[0].d === '2026-09-15' && listed[0].g === 'good',
+  'newest first: last log row of this card is first');
+assert(listed[1].d === '2026-09-01' && listed[1].g === 'hard',
+  'middle row is the September Hard');
+assert(listed[2].d === '2026-08-01' && listed[2].g === 'again',
+  'oldest surviving row is last');
+var sameDay = srs.listCardReviews([
+  { d: '2026-07-05', id: 'c1', g: 'again' },
+  { d: '2026-07-05', id: 'c1', g: 'good' }
+], 'c1');
+assert(sameDay.length === 2 && sameDay[0].g === 'good' && sameDay[1].g === 'again',
+  'same-day: later log row (newer grade) is first');
+var listedBefore = JSON.stringify(frozen);
+srs.listCardReviews(frozen, 'c1');
+assert(JSON.stringify(frozen) === listedBefore, 'listCardReviews does not mutate the log');
+
 // ——— summary ———
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);

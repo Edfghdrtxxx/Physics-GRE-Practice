@@ -1446,5 +1446,23 @@ PGRE.srs = {
       chipsTruncated: chipsTruncated,
       pending: pending
     };
+  },
+
+  /* Date+grade rows for one card, newest first. Walks the append-only
+     cardReviews log from the end (gradeCard pushes newest last). Skips
+     corrupt rows. Does not mutate reviews. */
+  listCardReviews: function (reviews, cardId) {
+    if (!cardId || !Array.isArray(reviews)) return [];
+    var out = [];
+    var i;
+    for (i = reviews.length - 1; i >= 0; i--) {
+      var r = reviews[i];
+      if (!r || typeof r !== 'object') continue;
+      if (r.id !== cardId) continue;
+      if (!this._isDayStr(r.d)) continue;
+      if (!this.isMemGrade(r.g)) continue;
+      out.push({ d: r.d, g: r.g });
+    }
+    return out;
   }
 };
