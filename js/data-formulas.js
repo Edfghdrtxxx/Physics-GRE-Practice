@@ -395,6 +395,17 @@ PGRE.FORMULAS = [
     note: "Supplemental — not a numbered CPG equation. The charge, current, and voltage decay and the time constant $\\tau = RC$ are also on supp-rc-rl-transients."
   },
   {
+    id: "supp-parallel-wire-force",
+    kind: "list",
+    eq: "supp",
+    topic: "em",
+    tag: "Magnetic force",
+    name: "Field of a long straight wire and the force between parallel wires (supplemental list)",
+    front: "State the magnetic field of a long straight wire, the force on a straight current-carrying segment in a field, the force per unit length between two long parallel wires, and whether parallel or antiparallel currents attract. (4)",
+    back: "<ul class=\"recall-list\"><li>Long straight wire carrying current $I$: $B = \\mu_0 I/(2\\pi r)$ at perpendicular distance $r$, with $\\mu_0 = 4\\pi\\times10^{-7}\\ \\mathrm{T\\,m/A}$. The field lines are circles around the wire, in the direction of the fingers of the right hand when the thumb points along the current.</li><li>Straight segment of length $L$ carrying current $I$ in a uniform field $\\mathbf{B}$: $\\mathbf{F} = I\\mathbf{L}\\times\\mathbf{B}$, with $\\mathbf{L}$ pointing along the current. Its magnitude is $ILB\\sin\\theta$, with $\\theta$ the angle between $\\mathbf{L}$ and $\\mathbf{B}$.</li><li>Two long parallel wires a distance $d$ apart, carrying currents $I_1$ and $I_2$: the field of wire 1 at wire 2 is $\\mu_0 I_1/(2\\pi d)$, perpendicular to wire 2, so the force per unit length on either wire is $F/L = \\mu_0 I_1 I_2/(2\\pi d)$. For equal currents $I$ this is $\\mu_0 I^2/(2\\pi d)$. The units are $\\mathrm{N/m}$, and $\\mu_0/(2\\pi) = 2\\times10^{-7}\\ \\mathrm{N/A^2}$, so $1\\ \\mathrm{A}$ in each wire at $d = 1\\ \\mathrm{m}$ gives $2\\times10^{-7}\\ \\mathrm{N/m}$.</li><li>Currents in the same direction attract; currents in opposite directions repel. Check: put wire 1 along $\\hat{\\mathbf{z}}$ with the field $\\mathbf{B} = (\\mu_0 I_1/2\\pi d)\\,\\hat{\\boldsymbol{\\phi}}$ at wire 2. Then $\\hat{\\mathbf{z}}\\times\\hat{\\boldsymbol{\\phi}} = -\\hat{\\mathbf{r}}$, so the force on wire 2 points toward wire 1. Reversing $I_2$ reverses the force. The two wires push or pull on each other with equal magnitude and opposite direction.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. The sign comes from the cross product $I\\mathbf{L}\\times\\mathbf{B}$, so attract versus repel is decided by whether the two currents are parallel or antiparallel."
+  },
+  {
     id: "supp-lorentz-fields",
     kind: "list",
     eq: "supp",

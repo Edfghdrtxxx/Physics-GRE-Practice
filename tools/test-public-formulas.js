@@ -62,6 +62,7 @@ var EXPECTED = [
   'supp-image-plane',
   'supp-rc-rl-transients',
   'supp-capacitor-energy-halving',
+  'supp-parallel-wire-force',
   'supp-lorentz-fields',
   'supp-max-power-match',
   'supp-optical-magnification',
@@ -201,6 +202,28 @@ assert(halvingItems[0].indexOf('$U = Q^2/(2C) = \\tfrac{1}{2}CV^2 = \\tfrac{1}{2
 assert(Math.abs(Math.exp(-Math.LN2) - 0.5) < 1e-12 && Math.abs(Math.exp(-2 * Math.LN2 / 2) - 0.5) < 1e-12 &&
   Math.abs(Math.LN2 - 0.69) < 0.005 && Math.abs(Math.LN2 / 2 - 0.35) < 0.005,
   'the half-times satisfy their defining equations and the 0.69 and 0.35 coefficients');
+var wire = byId['supp-parallel-wire-force'];
+var wireItems = wire ? wire.back.split('<li>').slice(1) : [];
+assert(!!wire && wire.kind === 'list' && wire.topic === 'em' && wire.tag === 'Magnetic force' &&
+  wireItems.length === 4 && /\(4\)\s*$/.test(wire.front),
+  'the parallel-wire card is a four-item em list');
+assert(wireItems[0].indexOf('$B = \\mu_0 I/(2\\pi r)$') !== -1 &&
+  wireItems[1].indexOf('$\\mathbf{F} = I\\mathbf{L}\\times\\mathbf{B}$') !== -1 &&
+  wireItems[2].indexOf('$F/L = \\mu_0 I_1 I_2/(2\\pi d)$') !== -1 &&
+  wireItems[2].indexOf('$\\mu_0 I^2/(2\\pi d)$') !== -1 &&
+  /same direction attract/.test(wireItems[3]) && /opposite directions repel/.test(wireItems[3]),
+  'the parallel-wire card states the wire field, F = I L x B, the force per length, and attract versus repel');
+// numeric check: mu_0/(2 pi) = 2e-7 N/A^2, so 1 A and 1 A at 1 m give 2e-7 N/m
+var mu0 = 4 * Math.PI * 1e-7;
+assert(Math.abs(mu0 * 1 * 1 / (2 * Math.PI * 1) - 2e-7) < 1e-19 &&
+  Math.abs(mu0 / (2 * Math.PI) - 2e-7) < 1e-19,
+  'the parallel-wire coefficient mu_0/(2 pi) is 2e-7 N/A^2');
+// sign check: z-hat cross phi-hat = -r-hat (force on wire 2 points toward wire 1)
+function cross(a, b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+// wire 1 on the z axis, wire 2 at x = d: r-hat = +x, phi-hat = +y there
+var zphi = cross([0, 0, 1], [0, 1, 0]);
+assert(zphi[0] === -1 && zphi[1] === 0 && zphi[2] === 0,
+  'z-hat cross phi-hat is minus r-hat, so parallel currents attract');
 var drift = byId['supp-drift-current'];
 var driftItems = drift ? drift.back.split('<li>').slice(1) : [];
 assert(!!drift && drift.kind === 'list' && drift.topic === 'em' && drift.tag === 'Current density' &&
