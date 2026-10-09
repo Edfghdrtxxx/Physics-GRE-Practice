@@ -61,14 +61,21 @@ function tsAgo(k, h, m, s) {
   d.setHours(h, m || 0, s || 0, 0);
   return d.toISOString();
 }
-function isSunday(key) { return new Date(key + 'T12:00:00').getDay() === 0; }
-function workingDays(from, to) {
+/* No timed pack on Sunday (0) or Thursday (4), local time. Written out here,
+   not read from js/intensity.js. SUNDAY_ONLY is the rule before Thursdays
+   were added, kept to show that the numbers change. */
+var NO_PACK = [0, 4];
+var SUNDAY_ONLY = [0];
+function workingDays(from, to, noPack) {
+  noPack = noPack || NO_PACK;
   var n = 0;
   var d = new Date(from + 'T12:00:00');
   var end = new Date(to + 'T12:00:00');
-  while (d <= end) { if (d.getDay() !== 0) n++; d.setDate(d.getDate() + 1); }
+  while (d <= end) { if (noPack.indexOf(d.getDay()) < 0) n++; d.setDate(d.getDate() + 1); }
   return n;
 }
+/* How many days ago the Thursday inside the last 7 days was (0 = today). */
+var THU_AGO = (new Date().getDay() - 4 + 7) % 7;
 function round1(x) { return Math.round(x * 10) / 10; }
 function median(list) {
   var a = list.slice().sort(function (x, y) { return x - y; });
@@ -161,9 +168,11 @@ function expectFor(spec, seed) {
   var wdl = workingDays(dayAgo(0), lastPackDay);
   var remaining = PACK_UNION.length - attemptedPackCount(seed);
   var required = round1(remaining / wdl);
-  var working7 = 0;
-  for (var k = 0; k < 7; k++) if (!isSunday(dayAgo(k))) working7++;
+  var working7 = workingDays(dayAgo(6), dayAgo(0));
   var actual = round1(last7.length / working7);
+  var wdlSun = workingDays(dayAgo(0), lastPackDay, SUNDAY_ONLY);
+  var sundayOnly = { workingDaysLeft: wdlSun, required: round1(remaining / wdlSun),
+                     actual: round1(last7.length / workingDays(dayAgo(6), dayAgo(0), SUNDAY_ONLY)) };
   var trendNew = [], trendPace = [];
   for (var d = 6; d >= 0; d--) {
     var rows = news.filter(function (n) { return n[0] === d; });
@@ -179,7 +188,7 @@ function expectFor(spec, seed) {
     coverage: { value: actual, band: bandCoverage(actual, required),
                 text: actual.toFixed(1) + ' / ' + required.toFixed(1),
                 remaining: remaining, workingDaysLeft: wdl, required: required, actual: actual,
-                lastPackDay: lastPackDay },
+                lastPackDay: lastPackDay, working7: working7, new7: last7.length, sundayOnly: sundayOnly },
     trendNew: trendNew, trendPace: trendPace
   };
 }
@@ -229,8 +238,10 @@ var SPECS = [
       var out = [];
       for (var i = 0; i < 16; i++) out.push([0, ['cm', 'em', 'qm', 'th'][i % 4], i < 13, 90]);
       for (var j = 0; j < 20; j++) out.push([1 + (j % 6), ['cm', 'em', 'qm', 'th', 'at'][j % 5], j < 17, 95]);
+      out.push([THU_AGO, 'cm', T, 95]);  // a new question on the Thursday: it still counts
       return out;
     }()),
+    thursdayNew: true,
     repeats: [540, 540],               // 18 min
     bands: { newQuestions: 'green', paceSec: 'green', firstAttemptAccuracy: 'green', repeatMinutes: 'green', coverage: 'green' }
   },
@@ -454,6 +465,31 @@ async function main() {
         payload.coverage.lastPackDay === want.coverage.lastPackDay,
         'status payload coverage inputs: remaining ' + want.coverage.remaining + ', working days ' +
         want.coverage.workingDaysLeft + ', required ' + want.coverage.required + ', actual ' + want.coverage.actual);
+      check(want.coverage.working7 === 5 && payload.coverage.workingDays7 === 5 &&
+        JSON.stringify(payload.coverage.noPackWeekdays) === '[0,4]',
+        'the last 7 days (' + dayAgo(6) + ' to ' + dayAgo(0) + ') hold Thursday ' + dayAgo(THU_AGO) +
+        ' and one Sunday, so actual divides by 5 working days (got ' + payload.coverage.workingDays7 + ')');
+      if (s === 0) {
+        var so = want.coverage.sundayOnly;
+        check(JSON.stringify(await ev('Array.prototype.slice.call(PGRE.intensity.NO_PACK_WEEKDAYS)')) === '[0,4]',
+          'PGRE.intensity.NO_PACK_WEEKDAYS is [0, 4]: Sunday and Thursday');
+        check(want.coverage.actual !== so.actual && payload.coverage.actual === want.coverage.actual,
+          'Thursday changes actual: ' + want.coverage.new7 + ' new / 5 working days = ' + want.coverage.actual +
+          ' (Sundays only: / 6 = ' + so.actual + ')');
+        check(want.coverage.workingDaysLeft < so.workingDaysLeft && want.coverage.required !== so.required &&
+          payload.coverage.required === want.coverage.required,
+          'Thursdays change required: ' + want.coverage.remaining + ' / ' + want.coverage.workingDaysLeft +
+          ' working days = ' + want.coverage.required + ' (Sundays only: / ' + so.workingDaysLeft + ' = ' + so.required + ')');
+        var covWindow = await ev('document.querySelector("#intensity-card [data-metric=\\"coverage\\"] .intensity-window").innerText.trim()');
+        check(/working days? left \(no timed packs on Sundays or Thursdays\)$/.test(covWindow),
+          'the coverage row says there are no timed packs on Sundays or Thursdays (got "' + covWindow + '")');
+      }
+      if (spec.thursdayNew) {
+        check(spec.news.some(function (n) { return n[0] === THU_AGO; }) &&
+          payload.coverage.actual === round1(want.coverage.new7 / 5),
+          'a new question answered on Thursday ' + dayAgo(THU_AGO) + ' still counts: ' + want.coverage.new7 +
+          ' new / 5 working days = ' + payload.coverage.actual);
+      }
       check(payload.firstAttemptAccuracy.n === want.firstAttemptAccuracy.n &&
         payload.firstAttemptAccuracy.correct === want.firstAttemptAccuracy.correct,
         'status payload accuracy counts ' + want.firstAttemptAccuracy.correct + ' of ' + want.firstAttemptAccuracy.n);

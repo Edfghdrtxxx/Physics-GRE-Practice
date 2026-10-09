@@ -23,10 +23,11 @@
      minutes.
    - Coverage: remaining = qids in the union of PGRE.PACKS[*].ids that have
      no attempt at all. lastPackDay = settings.examDate (default 2026-11-01)
-     minus 3 days. workingDaysLeft = the days from today through lastPackDay
-     inclusive, Sundays excluded (Sundays are full-sitting days).
-     required = remaining / workingDaysLeft. actual = new questions in the
-     last 7 days / the non-Sunday days among those 7. Both to one decimal.
+     minus 3 days. A working day is a day whose local weekday is not in
+     NO_PACK_WEEKDAYS (Sunday and Thursday). workingDaysLeft = the working
+     days from today through lastPackDay inclusive. required = remaining /
+     workingDaysLeft. actual = new questions in the last 7 days (any
+     weekday) / the working days among those 7. Both to one decimal.
    - Per topic (14 days): for each ETS topic in PGRE.TOPICS, the new
      questions of the last 14 days (row.topic), their first-attempt accuracy,
      and the ETS weight. Sorted by weight x (0.79 - accuracy), largest first.
@@ -40,7 +41,12 @@ window.PGRE = window.PGRE || {};
 PGRE.intensity = (function () {
   'use strict';
 
-  /* Every tunable number lives here. */
+  /* Local weekdays with no timed pack (0 = Sunday ... 6 = Saturday):
+     Sunday is the full-sitting day, Thursday the weekly group discussion.
+     Coverage counts every other weekday as a working day. */
+  var NO_PACK_WEEKDAYS = Object.freeze([0, 4]);
+
+  /* Every other tunable number lives here. */
   var THRESHOLDS = {
     newQuestions: { green: 15, amber: 8 },   // today: 15+ green, 8-14 amber, under 8 red
     paceSec: { green: 103, amber: 130 },     // median s: 103 or less green, 104-130 amber, over 130 red
@@ -88,7 +94,7 @@ PGRE.intensity = (function () {
     return dayKey(d);
   }
 
-  function isSunday(key) { return parseDay(key).getDay() === 0; }
+  function isWorkingDay(key) { return NO_PACK_WEEKDAYS.indexOf(parseDay(key).getDay()) < 0; }
 
   function round1(x) { return Math.round(x * 10) / 10; }
 
@@ -230,14 +236,14 @@ PGRE.intensity = (function () {
     var workingDaysLeft = 0;
     var guard = 0;
     for (var d = today; d <= lastPackDay && guard < 400; d = addDays(d, 1), guard++) {
-      if (!isSunday(d)) workingDaysLeft++;
+      if (isWorkingDay(d)) workingDaysLeft++;
     }
     var required = remaining === 0 ? 0
       : (workingDaysLeft > 0 ? round1(remaining / workingDaysLeft) : null);
     var coverNews = c.news.filter(inLast(T.coverageDays)).length;
     var coverWorking = 0;
     for (var k = 0; k < T.coverageDays; k++) {
-      if (!isSunday(addDays(today, -k))) coverWorking++;
+      if (isWorkingDay(addDays(today, -k))) coverWorking++;
     }
     var actual = round1(coverNews / Math.max(1, coverWorking));
 
@@ -310,6 +316,7 @@ PGRE.intensity = (function () {
         band: coverageBand(remaining, required, actual),
         unit: 'new questions per working day', window: 'last 7 days',
         remaining: remaining, workingDaysLeft: workingDaysLeft,
+        workingDays7: coverWorking, noPackWeekdays: NO_PACK_WEEKDAYS.slice(),
         required: required, actual: actual,
         lastPackDay: lastPackDay, examDate: examDate,
         packQuestions: packIds.length
@@ -335,6 +342,7 @@ PGRE.intensity = (function () {
   }
 
   return {
+    NO_PACK_WEEKDAYS: NO_PACK_WEEKDAYS,
     THRESHOLDS: THRESHOLDS,
     LABELS: LABELS,
     compute: compute,

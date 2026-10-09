@@ -232,15 +232,17 @@ assert(book.today[1].added === false && book.today[1].luckyGuess === true,
   'a lucky-guess filing on an older entry is an update, not an addition');
 console.log('\nintensity');
 var it = summary.intensity;
+// No timed pack on Sunday (0) or Thursday (4), local time.
 function workingDays(from, to) {
   var n = 0;
   var d = new Date(from + 'T12:00:00');
   var end = new Date(to + 'T12:00:00');
-  while (d <= end) { if (d.getDay() !== 0) n++; d.setDate(d.getDate() + 1); }
+  while (d <= end) { if (d.getDay() !== 0 && d.getDay() !== 4) n++; d.setDate(d.getDate() + 1); }
   return n;
 }
 var lastPack = localDay(10);
 var wdl = workingDays(today, lastPack);
+var wd7 = workingDays(localDay(-6), today);
 assert(it && it.date === today, 'intensity uses the summary date');
 assert(Object.keys(it).join(',') ===
   'date,newQuestions,paceSec,firstAttemptAccuracy,repeatMinutes,coverage,topics,days',
@@ -262,11 +264,16 @@ assert(it.coverage.remaining === 2 && it.coverage.packQuestions === 5,
   'coverage counts pack questions (union of pack ids) with no attempt of any mode');
 assert(it.coverage.lastPackDay === lastPack && it.coverage.examDate === examDate,
   'last pack day is the exam date minus 3 days');
+assert(sandbox.PGRE.intensity.NO_PACK_WEEKDAYS.join(',') === '0,4' &&
+  it.coverage.noPackWeekdays.join(',') === '0,4',
+  'Sunday and Thursday are the no-pack weekdays, in the module and the payload');
 assert(it.coverage.workingDaysLeft === wdl,
-  'working days run from today through the last pack day, Sundays excluded (' + wdl + ')');
-assert(it.coverage.required === Math.round(10 * 2 / wdl) / 10 && it.coverage.actual === 0.5 &&
+  'working days run from today through the last pack day, Sundays and Thursdays excluded (' + wdl + ')');
+assert(wd7 === 5 && it.coverage.workingDays7 === 5,
+  'any 7 days hold one Sunday and one Thursday, so 5 working days');
+assert(it.coverage.required === Math.round(10 * 2 / wdl) / 10 && it.coverage.actual === 0.6 &&
   it.coverage.band === 'green',
-  'required = remaining / working days; actual = 3 new in 7 days / 6 working days = 0.5; green');
+  'required = remaining / working days; actual = 3 new in 7 days / 5 working days = 0.6; green');
 assert(it.topics.length === 9 && it.topics.every(function (t) { return !t.judged && t.band === null; }),
   'every topic has fewer than 5 new questions, so none gets a band');
 assert(it.topics.map(function (t) { return t.topic; }).join(',') === 'cm,em,qm,th,at,sp,ow,sr,lb',

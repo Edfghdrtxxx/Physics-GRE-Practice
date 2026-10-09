@@ -332,6 +332,15 @@ PGRE.views.dashboard = (function () {
   }
 
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
+  /* " (no timed packs on Sundays or Thursdays)" from the coverage payload's
+     noPackWeekdays (0 = Sunday); empty when every weekday is a working day. */
+  function noPackDaysText(days) {
+    var names = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+    var list = (days || []).map(function (d) { return names[d]; }).filter(Boolean);
+    if (!list.length) return '';
+    var last = list.pop();
+    return ' (no timed packs on ' + (list.length ? list.join(', ') + ' or ' : '') + last + ')';
+  }
 
   /* One row: name + window, "value / target", band chip, and a plain hint
      for amber and red. */
@@ -463,7 +472,7 @@ PGRE.views.dashboard = (function () {
       intensityRow('coverage', 'Coverage',
         'last 7 days · new questions per working day, against the rate that finishes every pack by ' +
           shortDay(cov.lastPackDay) + ' · ' + plural(cov.remaining, 'pack question') + ' not started, ' +
-          plural(cov.workingDaysLeft, 'working day') + ' left (Sundays are for full sittings)',
+          plural(cov.workingDaysLeft, 'working day') + ' left' + noPackDaysText(cov.noPackWeekdays),
         '<strong>' + cov.actual.toFixed(1) + '</strong> / ' + (cov.required == null ? '—' : cov.required.toFixed(1)),
         cov.band, h.coverage);
 
