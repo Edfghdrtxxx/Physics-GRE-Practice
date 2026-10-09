@@ -11,7 +11,8 @@
    back from the module under test.
 
    Isolated Chrome profile and ephemeral ports; nothing outside the temp
-   profile is read or written. Run: node tools/test-intensity-chrome.js
+   profile is read or written. Requests to the OrbitOS status bridge
+   (127.0.0.1:4789) are blocked. Run: node tools/test-intensity-chrome.js
    PGRE_ARTIFACT_DIR=<dir> keeps the screenshots (otherwise they are
    written to a temp dir that is removed). PGRE_TEST_PORT / PGRE_CDP_PORT
    pin the ports. */
@@ -28,6 +29,8 @@ var { spawn } = require('child_process');
 var PORT = parseInt(process.env.PGRE_TEST_PORT || '0', 10);
 var CDP_PORT = parseInt(process.env.PGRE_CDP_PORT || '0', 10);
 var ROOT = path.resolve(__dirname, '..');
+var BRIDGE_PORT = 4789; // js/status.js ENDPOINT
+function isBridgeUrl(u) { return /^https?:\/\/(127\.0\.0\.1|localhost):4789\//.test(String(u)); }
 var KEEP_ARTIFACTS = !!process.env.PGRE_ARTIFACT_DIR;
 var ARTIFACT_DIR = process.env.PGRE_ARTIFACT_DIR ||
   fs.mkdtempSync(path.join(os.tmpdir(), 'pgre-intensity-shots-'));
@@ -298,6 +301,7 @@ async function main() {
     base + '/__blank__'], { stdio: 'ignore' });
 
   var pageErrors = [];
+  var bridge = { sent: 0, answered: 0 };
   var ws = null;
   try {
     var wsUrl = null;
@@ -319,6 +323,8 @@ async function main() {
         var d = msg.params && msg.params.exceptionDetails;
         pageErrors.push((d && d.exception && d.exception.description) || (d && d.text) || JSON.stringify(d));
       }
+      if (msg.method === 'Network.requestWillBeSent' && isBridgeUrl(msg.params.request.url)) bridge.sent++;
+      if (msg.method === 'Network.responseReceived' && isBridgeUrl(msg.params.response.url)) bridge.answered++;
       if (msg.id && pending.has(msg.id)) {
         var p = pending.get(msg.id); pending.delete(msg.id);
         if (msg.error) p.reject(new Error(JSON.stringify(msg.error))); else p.resolve(msg.result);
@@ -370,6 +376,11 @@ async function main() {
 
     await send('Runtime.enable', {});
     await send('Page.enable', {});
+    /* js/status.js posts the status summary to the OrbitOS status bridge on
+       127.0.0.1:4789. Block that port, so a seeded test history never
+       replaces the snapshot that agents read for the real study data. */
+    await send('Network.enable', {});
+    await send('Network.setBlockedURLs', { urls: ['*://127.0.0.1:' + BRIDGE_PORT + '/*', '*://localhost:' + BRIDGE_PORT + '/*'] });
 
     /* Seed on a script-free page of the same origin, then open the app. */
     async function seedAndOpen(seed) {
@@ -559,6 +570,8 @@ async function main() {
       }
 
       check(pageErrors.length === 0, 'no page errors' + (pageErrors.length ? ': ' + pageErrors.join(' | ') : ''));
+      check(bridge.answered === 0, 'the status bridge on port ' + BRIDGE_PORT + ' received nothing (' + bridge.sent +
+        ' request(s) blocked, ' + bridge.answered + ' answered)');
     }
   } finally {
     if (ws) try { ws.close(); } catch (e) {}
