@@ -3015,6 +3015,69 @@ function consumerCases() {
       assert(batch.reviewIds.length === 0 && batch.newIds.length === 0 && fills === 0,
         'the warning does not add daily cards, got ' + JSON.stringify(batch) + ' fills ' + fills);
     });
+  }).then(function () {
+    console.log('\nformulas: card review history lists dates and grades');
+    var hx = autoPickEnv();
+    var P = hx.P;
+    P.store.state.cardReviews = [
+      { d: '2026-08-01', id: 'cpgf-2.1', g: 'again' },
+      { d: '2026-09-01', id: 'cpgf-2.1', g: 'hard' },
+      { d: '2026-09-15', id: 'cpgf-2.1', g: 'good' },
+      { d: '2026-09-15', id: 'cpgf-2.3', g: 'easy' }
+    ];
+    vm.runInContext(fs.readFileSync(path.join(root, 'js/formula-search.js'), 'utf8'),
+      hx.env.sandbox, { filename: 'js/formula-search.js' });
+    return mountFormulas(hx).then(function () {
+      var doc = hx.env.document;
+      doc.querySelector('.flash-tab[data-mode="search"]').click();
+      return wait(0).then(function () {
+        var art = doc.querySelector('.fs-card[data-fsid="cpgf-2.1"]');
+        assert(!!art, 'search lists cpgf-2.1');
+        var wrap = art && art.querySelector('.card-review-hist-wrap');
+        assert(!!wrap && wrap.hidden, 'search history stays hidden until Show formula');
+        art.querySelector('.fs-flip').click();
+        assert(!wrap.hidden, 'search history appears after Show formula');
+        var hist = art.querySelector('.card-review-hist');
+        assert(!!hist, 'search card shows review history after reveal');
+        var items = [].map.call((hist && hist.querySelectorAll('li')) || [], function (li) {
+          return li.textContent.replace(/\s+/g, ' ').trim();
+        });
+        assert(items.length === 3, 'only this card’s three reviews, got ' + items.length);
+        assert(items[0].indexOf('2026-09-15') !== -1 && items[0].indexOf('Good') !== -1,
+          'newest first: first row is 2026-09-15 Good, got ' + items[0]);
+        assert(items[1].indexOf('2026-09-01') !== -1 && items[1].indexOf('Hard') !== -1,
+          'second row is 2026-09-01 Hard, got ' + items[1]);
+        assert(items[2].indexOf('2026-08-01') !== -1 && items[2].indexOf('Again') !== -1,
+          'third row is 2026-08-01 Again, got ' + items[2]);
+        assert(hist.textContent.indexOf('Newest first') !== -1,
+          'the list says newest first');
+        var emptyArt = doc.querySelector('.fs-card[data-fsid="cpgf-2.2"]');
+        var emptyWrap = emptyArt && emptyArt.querySelector('.card-review-hist-wrap');
+        assert(!!emptyWrap && emptyWrap.hidden,
+          'empty-card history stays hidden until Show formula');
+        emptyArt.querySelector('.fs-flip').click();
+        assert(!emptyWrap.hidden, 'empty-card history appears after Show formula');
+        var empty = emptyArt.querySelector('.card-review-hist');
+        assert(empty && empty.textContent.indexOf('No reviews recorded') !== -1 &&
+          empty.textContent.indexOf('cannot be recovered') !== -1,
+          'a card with no log shows the empty line, got: ' + (empty && empty.textContent));
+        var emptyItems = empty && empty.querySelectorAll('li');
+        assert(emptyItems && emptyItems.length === 0,
+          'the empty card has no list rows');
+        doc.querySelector('.flash-tab[data-mode="study"]').click();
+        doc.getElementById('study-btn').click();
+        var liveId = (P.store.state.formulaStudy && P.store.state.formulaStudy.queueIds || [])[0];
+        var liveWrap = doc.querySelector('.card-review-hist-wrap');
+        assert(!!liveWrap && liveWrap.hidden,
+          'study history stays hidden until Show answer');
+        doc.getElementById('flip-btn').click();
+        assert(!liveWrap.hidden, 'study history appears after Show answer');
+        var live = doc.querySelector('.card-review-hist');
+        assert(!!live, 'study card shows review history after reveal');
+        assert(live.getAttribute('data-card-hist') === liveId,
+          'study history is for the live card, got ' + live.getAttribute('data-card-hist'));
+      });
+    });
   });
 }
 
