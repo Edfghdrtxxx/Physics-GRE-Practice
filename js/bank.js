@@ -89,6 +89,58 @@ PGRE.bankHTML = function (html) {
   return out;
 };
 
+PGRE.graphChoiceHTML = function (html) {
+  if (typeof html !== 'string' || /<(?:svg|img)\b/i.test(html)) return html;
+  var heading = html.match(/^<em>Graph of (\$[^$]+\$) vs (\$[^$]+\$):<\/em>/);
+  if (!heading || !/\$t_1\$/.test(html)) return html;
+  var decay = /decays exponentially to zero/.test(html);
+  var rapid = /rises rapidly to a positive plateau/.test(html);
+  var gradual = /rises gradually to a positive plateau/.test(html);
+  var oscillation = /rises with a damped oscillation to a positive plateau/.test(html);
+  if (!decay && !rapid && !gradual && !oscillation) return html;
+  var smallDip = /dips to a small negative value/.test(html);
+  var largeDip = /drops sharply to a large negative value/.test(html);
+  var gradualEnd = /decays gradually back toward zero/.test(html);
+  var abruptEnd = /drops steeply back to zero/.test(html);
+  var oscillatingEnd = /drops with a damped oscillation to a negative value/.test(html);
+  if (!(decay && (smallDip || largeDip)) && !(rapid && gradualEnd) &&
+      !(gradual && abruptEnd) && !(oscillation && oscillatingEnd)) return html;
+  var zero = 70;
+  var switchX = 175;
+  var curve = [];
+  function point(horizontal, voltage) {
+    curve.push((curve.length ? 'L' : 'M') + horizontal.toFixed(2) + ' ' +
+      (zero - voltage * 48).toFixed(2));
+  }
+  for (var before = 0; before <= 147; before++) {
+    var elapsed = before / 147;
+    var voltage;
+    if (decay) voltage = (smallDip ? 1 : 0.75) * Math.exp(-9 * elapsed);
+    else if (oscillation) voltage = 0.75 * (1 - Math.exp(-8 * elapsed) * Math.cos(24 * elapsed));
+    else voltage = 0.75 * (1 - Math.exp(-(rapid ? 14 : 7) * elapsed));
+    point(28 + before, voltage);
+  }
+  for (var after = 0; after <= 110; after++) {
+    var time = after / 110;
+    var tail;
+    if (decay) tail = -(smallDip ? 0.35 : 1.35) * Math.exp(-7 * time);
+    else if (oscillation) tail = -0.65 * Math.exp(-6 * time) * Math.cos(20 * time);
+    else tail = abruptEnd ? 0 : 0.75 * Math.exp(-6 * time);
+    point(switchX + after, tail);
+  }
+  return '<div class="choice-graph" style="position:relative;width:300px;max-width:100%;margin:8px 0">' +
+    '<span style="position:absolute;left:0;top:0">' + heading[1] + '</span>' +
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 180" role="img" ' +
+      'aria-label="Curve described in the text below" style="display:block;width:100%;height:auto">' +
+      '<path d="M28 8V155 M20 70H292 M24 14L28 8L32 14 M286 66L292 70L286 74" ' +
+        'fill="none" stroke="currentColor" stroke-width="1.2"/>' +
+      '<path d="M175 16V155" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="3 4"/>' +
+      '<path class="choice-graph-curve" d="' + curve.join(' ') + '" fill="none" ' +
+        'stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>' +
+    '</svg><span style="position:absolute;left:57%;top:87%">$t_1$</span>' +
+    '<span style="position:absolute;right:0;top:40%">' + heading[2] + '</span></div>' + html;
+};
+
 PGRE.allQuestions = function (opts) {
   opts = opts || {};
   var key = !!opts.includeExam;
@@ -107,7 +159,7 @@ PGRE.allQuestions = function (opts) {
       if (typeof copy.sol === 'string') copy.sol = PGRE.bankHTML(copy.sol);
       if (Array.isArray(q.choices)) {
         copy.choices = q.choices.map(function (c) {
-          return typeof c === 'string' ? PGRE.bankHTML(c) : c;
+          return typeof c === 'string' ? PGRE.graphChoiceHTML(PGRE.bankHTML(c)) : c;
         });
       }
       if (Array.isArray(q.choiceSols)) {
