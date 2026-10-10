@@ -857,5 +857,16 @@ PGRE.FORMULAS = [
     front: "Far from a current loop, state the field type, how $B$ scales with $m$ and $r$, and how that compares with the electric field of a point charge. (3)",
     back: "<ul class=\"recall-list\"><li>Far from the loop the field is that of a magnetic dipole.</li><li>$B \\propto m/r^3$ with $m = IA$.</li><li>A point charge's electric field falls as $1/r^2$.</li></ul>",
     note: "Supplemental — not a numbered CPG equation. On the axis of a loop of radius $a$, $z \\gg a$ gives $B = \\mu_0 I a^2/(2z^3) = \\mu_0 m/(2\\pi z^3)$ with $m = I\\pi a^2$."
+  },
+  {
+    id: "supp-parallel-plate-field",
+    kind: "list",
+    eq: "supp",
+    topic: "em",
+    tag: "Capacitors",
+    name: "Parallel-plate electric field (supplemental list)",
+    front: "For a parallel-plate capacitor of charge $Q$ and plate area $A$, state the field $E$ between the plates with $\\varepsilon = \\kappa\\varepsilon_0$, the $\\kappa = 1$ case, and the surface-density form. (3)",
+    back: "<ul class=\"recall-list\"><li>Parallel plates, charge $Q$, area $A$: $E = Q/(\\varepsilon A)$ with $\\varepsilon = \\kappa\\varepsilon_0$.</li><li>$\\kappa = 1$ case: $E = Q/(\\varepsilon_0 A)$.</li><li>With $\\sigma = Q/A$, that $\\kappa = 1$ field is $E = \\sigma/\\varepsilon_0$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. $Q/(\\varepsilon A)$ has the dimensions of electric field. $\\kappa$ is dimensionless, so $\\kappa = 1$ recovers $Q/(\\varepsilon_0 A) = \\sigma/\\varepsilon_0$."
   }
 ];

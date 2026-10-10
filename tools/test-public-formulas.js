@@ -508,6 +508,50 @@ assert(Math.abs(dipBfar - dipBdipole) < 1e-18,
 assert(Math.abs(dipBexact / dipBfar - 1) < 0.0002,
   'the on-axis loop field approaches μ0 I a²/(2z³) for z ≫ a');
 
+var plate = byId['supp-parallel-plate-field'];
+var plateLis = plate ? (String(plate.back).match(/<li>/g) || []).length : 0;
+var plateText = plate ? [plate.front, plate.back, plate.note].join('\n') : '';
+var plateItems = plate ? plate.back.split('<li>').slice(1) : [];
+assert(!!plate && plate.kind === 'list' && plate.eq === 'supp' && plate.topic === 'em' &&
+  plate.tag === 'Capacitors',
+  'supp-parallel-plate-field is an electromagnetism Capacitors list');
+assert(plate && plate.note.indexOf('Supplemental — not a numbered CPG equation.') === 0,
+  'supp-parallel-plate-field note starts with the supplemental sentence');
+assert(plate && String(plate.back).indexOf('<ul class="recall-list">') === 0 &&
+  plateLis === 3 && /\(3\)\s*$/.test(plate.front),
+  'supp-parallel-plate-field is three recall-list items');
+assert(plate && /E = Q\/\(\\varepsilon A\)/.test(plate.back) &&
+  /\\varepsilon = \\kappa\\varepsilon_0/.test(plate.back),
+  'supp-parallel-plate-field states the general line E = Q/(εA) with ε = κε₀');
+assert(plate && /\\kappa = 1/.test(plate.back) &&
+  /E = Q\/\(\\varepsilon_0 A\)/.test(plate.back),
+  'supp-parallel-plate-field states the κ = 1 case E = Q/(ε₀A)');
+assert(plate && /\\sigma = Q\/A/.test(plate.back) &&
+  /E = \\sigma\/\\varepsilon_0/.test(plate.back),
+  'supp-parallel-plate-field links E = σ/ε₀ with σ = Q/A');
+assert(plateItems.length === 3 && /\\kappa = 1/.test(plateItems[1]) &&
+  /\\sigma = Q\/A/.test(plateItems[2]),
+  'the κ = 1 case and the σ = Q/A line occupy the second and third items');
+assert(plate && /dimensions of electric field/.test(plate.note) &&
+  /\\kappa = 1\$ recovers/.test(plate.note),
+  'supp-parallel-plate-field note checks dimensions and the κ = 1 limit');
+assert(plate && !/\b(gr\d{4}-\d+|ets\d{2}-\d+)\b/.test(plateText),
+  'supp-parallel-plate-field has no exam-question id');
+// SI: [Q/(εA)] = C / ((C² N⁻¹ m⁻²) m²) = N/C. κ dimensionless. κ=1 and σ=Q/A recover σ/ε₀.
+var eps0 = 8.854187817e-12;
+var plateQ = 2e-6, plateA = 0.04, plateKappa = 4;
+var plateEgen = plateQ / (plateKappa * eps0 * plateA);
+var plateEk1 = plateQ / (eps0 * plateA);
+var plateSigma = plateQ / plateA;
+assert(Math.abs(plateEgen * plateKappa - plateEk1) < 1e-6,
+  'κ E(κε₀) recovers the κ = 1 field Q/(ε₀A)');
+assert(Math.abs(plateEk1 - plateSigma / eps0) < 1e-6,
+  'Q/(ε₀A) equals σ/ε₀ with σ = Q/A');
+assert(plateKappa === 1 ? false : Math.abs(plateEgen - plateEk1) > 1,
+  'κ = 4 changes the field from the vacuum value');
+assert(Math.abs(1 * plateEk1 - plateQ / ((1) * eps0 * plateA)) < 1e-12,
+  'the κ = 1 substitution ε = κε₀ leaves E = Q/(ε₀A)');
+
 EXPECTED.forEach(function (id) {
   var c = byId[id];
   if (!c) return;
