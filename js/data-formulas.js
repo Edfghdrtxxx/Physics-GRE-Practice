@@ -846,5 +846,16 @@ PGRE.FORMULAS = [
     front: "Over one period of $\\omega t$, state $\\langle\\sin^2\\omega t\\rangle$ and $\\langle\\cos^2\\omega t\\rangle$, the averages of $\\sin$ and $\\cos$, and the average Joule power when $\\mathcal{E} = \\mathcal{E}_0\\sin\\omega t$. (3)",
     back: "<ul class=\"recall-list\"><li>$\\langle\\sin^2\\omega t\\rangle = \\langle\\cos^2\\omega t\\rangle = \\tfrac{1}{2}$.</li><li>$\\langle\\sin\\omega t\\rangle = \\langle\\cos\\omega t\\rangle = 0$.</li><li>If $\\mathcal{E} = \\mathcal{E}_0\\sin\\omega t$, then $\\langle P\\rangle = \\mathcal{E}_0^2/(2R)$. Average emf zero does not make average power zero.</li></ul>",
     note: "Supplemental — not a numbered CPG equation. Instantaneous Joule power is $P = \\mathcal{E}^2/R$. The factor $\\tfrac{1}{2}$ is the cycle average of $\\sin^2$, not a property of $R$."
+  },
+  {
+    id: "supp-magnetic-dipole-far-field",
+    kind: "list",
+    eq: "supp",
+    topic: "em",
+    tag: "Dipoles",
+    name: "Far-field magnetic dipole of a current loop (supplemental list)",
+    front: "Far from a current loop, state the field type, how $B$ scales with $m$ and $r$, and how that compares with the electric field of a point charge. (3)",
+    back: "<ul class=\"recall-list\"><li>Far from the loop the field is that of a magnetic dipole.</li><li>$B \\propto m/r^3$ with $m = IA$.</li><li>A point charge's electric field falls as $1/r^2$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. On the axis of a loop of radius $a$, $z \\gg a$ gives $B = \\mu_0 I a^2/(2z^3) = \\mu_0 m/(2\\pi z^3)$ with $m = I\\pi a^2$."
   }
 ];

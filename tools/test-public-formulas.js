@@ -474,6 +474,40 @@ assert(Math.abs(circP - Math.PI * Math.PI / 4) < 1e-12,
 assert(Math.abs((0 * 0) / (2 * circR)) === 0,
   'ω → 0 gives zero average Joule power');
 
+var magDip = byId['supp-magnetic-dipole-far-field'];
+var magDipLis = magDip ? (String(magDip.back).match(/<li>/g) || []).length : 0;
+var magDipText = magDip ? [magDip.front, magDip.back, magDip.note].join('\n') : '';
+assert(!!magDip && magDip.kind === 'list' && magDip.eq === 'supp' && magDip.topic === 'em' &&
+  magDip.tag === 'Dipoles',
+  'supp-magnetic-dipole-far-field is an electromagnetism Dipoles list');
+assert(magDip && magDip.note.indexOf('Supplemental — not a numbered CPG equation.') === 0,
+  'supp-magnetic-dipole-far-field note starts with the supplemental sentence');
+assert(magDip && String(magDip.back).indexOf('<ul class="recall-list">') === 0 &&
+  magDipLis === 3 && /\(3\)\s*$/.test(magDip.front),
+  'supp-magnetic-dipole-far-field is three recall-list items');
+assert(magDip && /magnetic dipole/.test(magDip.back) &&
+  /B \\propto m\/r\^3/.test(magDip.back) &&
+  /m = IA/.test(magDip.back),
+  'supp-magnetic-dipole-far-field states the far-field dipole and B ∝ m/r³ with m = IA');
+assert(magDip && /1\/r\^2/.test(magDip.back) && /point charge/.test(magDip.back),
+  'supp-magnetic-dipole-far-field contrasts the point-charge electric 1/r²');
+assert(magDip && /\\mu_0 I a\^2\/\(2z\^3\)/.test(magDip.note) &&
+  /\\mu_0 m\/\(2\\pi z\^3\)/.test(magDip.note) &&
+  /m = I\\pi a\^2/.test(magDip.note),
+  'supp-magnetic-dipole-far-field note keeps the on-axis far-field identity');
+assert(magDip && !/\b(gr\d{4}-\d+|ets\d{2}-\d+)\b/.test(magDipText),
+  'supp-magnetic-dipole-far-field has no exam-question id');
+// on-axis loop: B = μ0 I a² / (2 (a²+z²)^{3/2}) → μ0 I a²/(2z³) = μ0 m/(2π z³) for z ≫ a
+var dipA = 0.05, dipZ = 5, dipI = 3;
+var dipBexact = mu0 * dipI * dipA * dipA / (2 * Math.pow(dipA * dipA + dipZ * dipZ, 1.5));
+var dipBfar = mu0 * dipI * dipA * dipA / (2 * dipZ * dipZ * dipZ);
+var dipM = dipI * Math.PI * dipA * dipA;
+var dipBdipole = mu0 * dipM / (2 * Math.PI * dipZ * dipZ * dipZ);
+assert(Math.abs(dipBfar - dipBdipole) < 1e-18,
+  'μ0 I a²/(2z³) equals μ0 m/(2π z³) with m = I π a²');
+assert(Math.abs(dipBexact / dipBfar - 1) < 0.0002,
+  'the on-axis loop field approaches μ0 I a²/(2z³) for z ≫ a');
+
 EXPECTED.forEach(function (id) {
   var c = byId[id];
   if (!c) return;
