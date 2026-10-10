@@ -404,6 +404,76 @@ assert(ham && /T - U/.test(ham.note) && /never \$T \+ U\$/.test(ham.note) &&
   /time \$dt\$/.test(ham.note) && /never spatial coordinate \$dx\$/.test(ham.note),
   'supp-hamilton-principle note highlights T - U and dt traps');
 
+var rot = byId['supp-rotating-loop-emf'];
+var rotLis = rot ? (String(rot.back).match(/<li>/g) || []).length : 0;
+assert(!!rot && rot.kind === 'list' && rot.eq === 'supp' && rot.topic === 'em' && rot.tag === 'Induction',
+  'supp-rotating-loop-emf is an electromagnetism induction list');
+assert(rot && rot.note.indexOf('Supplemental — not a numbered CPG equation.') === 0,
+  'supp-rotating-loop-emf note starts with the supplemental sentence');
+assert(rot && String(rot.back).indexOf('<ul class="recall-list">') === 0 &&
+  rotLis === 3 && /\(3\)\s*$/.test(rot.front),
+  'supp-rotating-loop-emf is three recall-list items');
+assert(rot && /\\Phi_B = NBA\\cos\\omega t/.test(rot.back) &&
+  /\\mathcal\{E\} = NBA\\omega\\sin\\omega t/.test(rot.back) &&
+  /\\mathcal\{E\}_0 = NBA\\omega/.test(rot.back),
+  'supp-rotating-loop-emf states flux NBA cos omega t and peak emf NBA omega');
+assert(rot && /emf is largest when the flux is zero/.test(rot.back),
+  'supp-rotating-loop-emf states that the emf peaks at zero flux');
+assert(rot && rot.note.indexOf('A = \\pi a^2') !== -1 &&
+  rot.note.indexOf('\\mathcal{E} = -d\\Phi_B/dt') !== -1,
+  'supp-rotating-loop-emf note keeps Faraday and the circular-loop area');
+assert(rot && !/\\pi\^2 a\^4/.test([rot.front, rot.back, rot.note].join('\n')),
+  'supp-rotating-loop-emf does not store the circular-loop average-power algebra');
+// Faraday: ε = -dΦ/dt with Φ = NBA cos ωt gives NBA ω sin ωt; peak at flux zero
+var rotN = 2, rotA = 0.01, rotB = 0.5, rotW = 300;
+var rotT = Math.PI / (2 * rotW);
+var rotPhi = rotN * rotA * rotB * Math.cos(rotW * rotT);
+var rotEmf = rotN * rotA * rotB * rotW * Math.sin(rotW * rotT);
+assert(Math.abs(rotPhi) < 1e-12 && Math.abs(rotEmf - rotN * rotA * rotB * rotW) < 1e-12,
+  'at ωt = π/2 the flux is zero and the emf is the peak NBA ω');
+var rotDphiDt = -rotN * rotA * rotB * rotW * Math.sin(rotW * rotT);
+assert(Math.abs(-rotDphiDt - rotEmf) < 1e-12,
+  'minus d(NBA cos ωt)/dt equals NBA ω sin ωt');
+assert(Math.abs(rotN * rotA * rotB * 0) === 0,
+  'ω → 0 gives zero induced emf');
+
+var avg = byId['supp-sin2-cycle-average'];
+var avgLis = avg ? (String(avg.back).match(/<li>/g) || []).length : 0;
+assert(!!avg && avg.kind === 'list' && avg.eq === 'supp' && avg.topic === 'em',
+  'supp-sin2-cycle-average is an electromagnetism recall list');
+assert(avg && avg.note.indexOf('Supplemental — not a numbered CPG equation.') === 0,
+  'supp-sin2-cycle-average note starts with the supplemental sentence');
+assert(avg && String(avg.back).indexOf('<ul class="recall-list">') === 0 &&
+  avgLis === 3 && /\(3\)\s*$/.test(avg.front),
+  'supp-sin2-cycle-average is three recall-list items');
+assert(avg && /\\langle\\sin\^2\\omega t\\rangle = \\langle\\cos\^2\\omega t\\rangle = \\tfrac\{1\}\{2\}/.test(avg.back) &&
+  /\\langle\\sin\\omega t\\rangle = \\langle\\cos\\omega t\\rangle = 0/.test(avg.back),
+  'supp-sin2-cycle-average states the sine-squared and sine averages');
+assert(avg && /\\langle P\\rangle = \\mathcal\{E\}_0\^2\/\(2R\)/.test(avg.back) &&
+  /Average emf zero does not make average power zero/.test(avg.back),
+  'supp-sin2-cycle-average states average Joule power ε0²/(2R)');
+assert(avg && avg.note.indexOf('P = \\mathcal{E}^2/R') !== -1,
+  'supp-sin2-cycle-average note names instantaneous Joule power');
+assert(avg && !/\\pi\^2 a\^4/.test([avg.front, avg.back, avg.note].join('\n')),
+  'supp-sin2-cycle-average does not store the circular-loop average-power algebra');
+// identity and period average
+var avgSteps = 200000, avgSin2 = 0, avgSin = 0, avgPeriod = 2 * Math.PI;
+for (var ai = 0; ai < avgSteps; ai++) {
+  var ax = (ai + 0.5) / avgSteps * avgPeriod;
+  avgSin2 += Math.sin(ax) * Math.sin(ax);
+  avgSin += Math.sin(ax);
+}
+assert(Math.abs(avgSin2 / avgSteps - 0.5) < 1e-4 && Math.abs(avgSin / avgSteps) < 1e-4,
+  'the period averages of sin^2 and sin are 1/2 and 0');
+assert(Math.abs(0.5 * (1 - 0) - 0.5) < 1e-12,
+  'sin^2 θ = (1 - cos 2θ)/2 averages to 1/2');
+var circA = Math.PI, circEmf0 = circA * 1 * 1, circR = 2;
+var circP = circEmf0 * circEmf0 / (2 * circR);
+assert(Math.abs(circP - Math.PI * Math.PI / 4) < 1e-12,
+  'a loop of area π in B=1, ω=1, R=2 has ⟨P⟩ = π²/4');
+assert(Math.abs((0 * 0) / (2 * circR)) === 0,
+  'ω → 0 gives zero average Joule power');
+
 EXPECTED.forEach(function (id) {
   var c = byId[id];
   if (!c) return;
