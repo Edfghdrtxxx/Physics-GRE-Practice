@@ -285,6 +285,18 @@ assert(driftItems[2].indexOf('$v_d = I/(n|q|A)$') !== -1 && driftItems[2].indexO
 assert(driftItems[3].indexOf('$\\mathbf{J} = \\sigma\\mathbf{E}$') !== -1 &&
   driftItems[3].indexOf('$\\rho = 1/\\sigma$') !== -1,
   'the drift card states the microscopic Ohm law with resistivity');
+assert(driftItems[3].indexOf('electrical conductivity') !== -1 &&
+  driftItems[3].indexOf('$J/E$') !== -1 &&
+  driftItems[3].indexOf('\\mathrm{S/m}') !== -1 &&
+  driftItems[3].indexOf('1/(\\Omega\\cdot\\mathrm{m})') !== -1 &&
+  /areal surface charge density/.test(driftItems[3]),
+  'the Ohm item names conductivity, checks J/E as S/m, and distinguishes surface charge density');
+assert(driftItems.length === 5 && drift.front.indexOf('the microscopic Ohm') !== -1,
+  'the conductivity gloss stays on the existing Ohm item');
+// SI: [J/E] = (A/m^2)/(V/m) = A/(V m) = S/m = 1/(Ω m)
+var ohmJ = 3e5, ohmE = 1.5e-2, ohmSigma = ohmJ / ohmE;
+assert(Math.abs(ohmSigma - 2e7) < 1e-6 && Math.abs(1 / ohmSigma - 5e-8) < 1e-20,
+  'J/E has SI unit S/m and inverse Ω·m');
 assert(driftItems[4].indexOf('10^{28}') !== -1 && driftItems[4].indexOf('$|q| = e$') !== -1 &&
   driftItems[4].indexOf('$J = 3\\times10^{5}\\ \\mathrm{A/m^2}$') !== -1 &&
   driftItems[4].indexOf('$v_d = J/(ne) \\approx 2\\times10^{-4}\\ \\mathrm{m/s}$') !== -1 &&
