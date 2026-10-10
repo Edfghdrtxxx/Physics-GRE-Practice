@@ -824,5 +824,27 @@ PGRE.FORMULAS = [
     front: "What is Hamilton's principle for the motion of a system between two fixed times $t_1$ and $t_2$, expressed in terms of the action $S$?",
     back: "The actual path followed by a system between fixed endpoints makes the action $S$ stationary ($\\delta S = 0$):\n$$S = \\int_{t_1}^{t_2} L\\,dt$$\nwhere $L = T - U$ is the Lagrangian ($T$ is kinetic energy and $U$ is potential energy), and the integration variable is time $dt$.",
     note: "Supplemental — not a numbered CPG equation. Two key checks eliminate common GRE traps: the Lagrangian sign is $T - U$ (never $T + U$), and the action integral is over time $dt$ (never spatial coordinate $dx$)."
+  },
+  {
+    id: "supp-rotating-loop-emf",
+    kind: "list",
+    eq: "supp",
+    topic: "em",
+    tag: "Induction",
+    name: "Rotating-loop flux and induced emf (supplemental list)",
+    front: "For an $N$-turn loop of area $A$ rotating at $\\omega$ in uniform $B$, state the flux, the induced emf, and when the emf is largest. (3)",
+    back: "<ul class=\"recall-list\"><li>Flux: $\\Phi_B = NBA\\cos\\omega t$ when the angle between the loop normal and $\\mathbf{B}$ is $\\omega t$.</li><li>Induced emf: $\\mathcal{E} = NBA\\omega\\sin\\omega t$, with peak $\\mathcal{E}_0 = NBA\\omega$.</li><li>The emf is largest when the flux is zero.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. Faraday's law is $\\mathcal{E} = -d\\Phi_B/dt$. The $\\cos$ versus $\\sin$ phase follows the $t = 0$ orientation; the peak is $NBA\\omega$ either way. A single circular loop of radius $a$ has $A = \\pi a^2$."
+  },
+  {
+    id: "supp-sin2-cycle-average",
+    kind: "list",
+    eq: "supp",
+    topic: "em",
+    tag: "AC averages",
+    name: "Cycle average of sine-squared and average Joule power (supplemental list)",
+    front: "Over one period of $\\omega t$, state $\\langle\\sin^2\\omega t\\rangle$ and $\\langle\\cos^2\\omega t\\rangle$, the averages of $\\sin$ and $\\cos$, and the average Joule power when $\\mathcal{E} = \\mathcal{E}_0\\sin\\omega t$. (3)",
+    back: "<ul class=\"recall-list\"><li>$\\langle\\sin^2\\omega t\\rangle = \\langle\\cos^2\\omega t\\rangle = \\tfrac{1}{2}$.</li><li>$\\langle\\sin\\omega t\\rangle = \\langle\\cos\\omega t\\rangle = 0$.</li><li>If $\\mathcal{E} = \\mathcal{E}_0\\sin\\omega t$, then $\\langle P\\rangle = \\mathcal{E}_0^2/(2R)$. Average emf zero does not make average power zero.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. Instantaneous Joule power is $P = \\mathcal{E}^2/R$. The factor $\\tfrac{1}{2}$ is the cycle average of $\\sin^2$, not a property of $R$."
   }
 ];
