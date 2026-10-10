@@ -508,6 +508,48 @@ assert(Math.abs(dipBfar - dipBdipole) < 1e-18,
 assert(Math.abs(dipBexact / dipBfar - 1) < 0.0002,
   'the on-axis loop field approaches μ0 I a²/(2z³) for z ≫ a');
 
+var axis = byId['supp-loop-axis-field'];
+var axisLis = axis ? (String(axis.back).match(/<li>/g) || []).length : 0;
+var axisText = axis ? [axis.front, axis.back, axis.note].join('\n') : '';
+assert(!!axis && axis.kind === 'list' && axis.eq === 'supp' && axis.topic === 'em' &&
+  axis.tag === 'Biot-Savart',
+  'supp-loop-axis-field is an electromagnetism Biot-Savart list');
+assert(axis && axis.note.indexOf('Supplemental — not a numbered CPG equation.') === 0,
+  'supp-loop-axis-field note starts with the supplemental sentence');
+assert(axis && String(axis.back).indexOf('<ul class="recall-list">') === 0 &&
+  axisLis === 3 && /\(3\)\s*$/.test(axis.front),
+  'supp-loop-axis-field is three recall-list items');
+assert(axis && /B\(z\) = \\frac\{\\mu_0 I R\^2\}\{2\(R\^2 \+ z\^2\)\^\{3\/2\}\}/.test(axis.back),
+  'supp-loop-axis-field states the on-axis Biot–Savart formula');
+assert(axis && /z = 0/.test(axis.back) && /\\mu_0 I\/\(2R\)/.test(axis.back),
+  'supp-loop-axis-field states the centre limit μ0 I/(2R)');
+assert(axis && /z \\gg R/.test(axis.back) && /\\mu_0 I R\^2\/\(2z\^3\)/.test(axis.back) &&
+  /m = I\\pi R\^2/.test(axis.back),
+  'supp-loop-axis-field states the far-field limit and m = IπR²');
+assert(axis && /\\mu_0 m\/\(2\\pi z\^3\)/.test(axis.back),
+  'supp-loop-axis-field equates the far field to μ0 m/(2π z³)');
+assert(axis && !/\b(gr\d{4}-\d+|ets\d{2}-\d+)\b/.test(axisText),
+  'supp-loop-axis-field has no exam-question id');
+assert(!byId['supp-dipole-field'],
+  'dropped id supp-dipole-field stays absent');
+// on-axis loop: B(0) = μ0 I/(2R); z ≫ R → μ0 I R²/(2z³) = μ0 m/(2π z³)
+var axR = 0.04, axI = 2;
+var axB0 = mu0 * axI * axR * axR / (2 * Math.pow(axR * axR, 1.5));
+var axBcenter = mu0 * axI / (2 * axR);
+assert(Math.abs(axB0 - axBcenter) < 1e-18,
+  'B(z) at z = 0 equals μ0 I/(2R)');
+var axZ = 8;
+var axBexact = mu0 * axI * axR * axR / (2 * Math.pow(axR * axR + axZ * axZ, 1.5));
+var axBfar = mu0 * axI * axR * axR / (2 * axZ * axZ * axZ);
+var axM = axI * Math.PI * axR * axR;
+var axBdipole = mu0 * axM / (2 * Math.PI * axZ * axZ * axZ);
+assert(Math.abs(axBfar - axBdipole) < 1e-18,
+  'μ0 I R²/(2z³) equals μ0 m/(2π z³) with m = I π R²');
+assert(Math.abs(axBexact / axBfar - 1) < 0.0002,
+  'the on-axis loop field approaches μ0 I R²/(2z³) for z ≫ R');
+assert(Math.abs((mu0 * axI / axR) / axBcenter - 2) < 1e-12,
+  'the centre field has dimensions μ0 I / length');
+
 EXPECTED.forEach(function (id) {
   var c = byId[id];
   if (!c) return;
