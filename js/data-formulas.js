@@ -868,5 +868,16 @@ PGRE.FORMULAS = [
     front: "For a circular loop of radius $R$ carrying current $I$, state the field on the axis at distance $z$ from the centre, the centre value, and the far-field limit. (3)",
     back: "<ul class=\"recall-list\"><li>On axis: $B(z) = \\frac{\\mu_0 I R^2}{2(R^2 + z^2)^{3/2}}$.</li><li>At the centre ($z = 0$): $B = \\mu_0 I/(2R)$.</li><li>Far from the loop ($z \\gg R$): $B \\approx \\mu_0 I R^2/(2z^3) = \\mu_0 m/(2\\pi z^3)$, a dipole field with $m = I\\pi R^2$.</li></ul>",
     note: "Supplemental — not a numbered CPG equation. Biot–Savart on the loop axis. $B$ scales as $\\mu_0 I$ over a length. At $z = 0$ the denominator is $2R^3$; for $z \\gg R$ it is $2z^3$."
+  },
+  {
+    id: "supp-parallel-plate-field",
+    kind: "list",
+    eq: "supp",
+    topic: "em",
+    tag: "Capacitors",
+    name: "Parallel-plate electric field (supplemental list)",
+    front: "For a parallel-plate capacitor of charge $Q$ and plate area $A$, state the field $E$ between the plates with $\\varepsilon = \\kappa\\varepsilon_0$, the $\\kappa = 1$ case, and the surface-density form. (3)",
+    back: "<ul class=\"recall-list\"><li>Parallel plates, charge $Q$, area $A$: $E = Q/(\\varepsilon A)$ with $\\varepsilon = \\kappa\\varepsilon_0$.</li><li>$\\kappa = 1$ case: $E = Q/(\\varepsilon_0 A)$.</li><li>With $\\sigma = Q/A$, that $\\kappa = 1$ field is $E = \\sigma/\\varepsilon_0$.</li></ul>",
+    note: "Supplemental — not a numbered CPG equation. $Q/(\\varepsilon A)$ has the dimensions of electric field. $\\kappa$ is dimensionless, so $\\kappa = 1$ recovers $Q/(\\varepsilon_0 A) = \\sigma/\\varepsilon_0$."
   }
 ];
