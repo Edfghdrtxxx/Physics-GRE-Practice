@@ -204,5 +204,70 @@ assert(graphQuestion.choices.every(function (choice) { return choice.indexOf('<s
 assert(graphQuestion.answer === 1, 'graph augmentation preserves the answer index');
 assert(PGRE.QUESTIONS[0].choices[0].indexOf('<svg ') < 0, 'raw bank data remains unchanged');
 
+console.log('\nwaveform graph choices');
+var waveHeading = 'A graph of $\\varepsilon$ versus $t$: ';
+var waveDescriptions = [
+  'a square wave alternating between a constant positive value and a constant negative value.',
+  'a triangular wave rising linearly to a positive peak, then falling linearly to a negative peak, then repeating.',
+  'a series of identical positive humps (rectified-sine shape) that touch zero periodically, never going negative.',
+  'a damped oscillation starting at a positive maximum and oscillating about zero with steadily decreasing amplitude.',
+  'an exponential decay from a positive initial value asymptotically approaching zero.'
+];
+var waveOutputs = waveDescriptions.map(function (description) {
+  var original = waveHeading + description;
+  var output = PGRE.graphChoiceHTML(original);
+  assert(output.indexOf(original) === 0, 'waveform graph follows the unchanged choice text');
+  assert(output.indexOf('<svg ') > 0, 'recognized waveform has an SVG');
+  assert(output.indexOf('>$\\varepsilon$</span>') > 0 && output.indexOf('$t$</span>') > 0,
+    'axes carry the LaTeX labels from the choice text');
+  assert(PGRE.graphChoiceHTML(output) === output, 'waveform augmentation is idempotent');
+  assert(output.indexOf('NaN') < 0 && output.indexOf('Infinity') < 0, 'waveform coordinates are finite');
+  return output;
+});
+var waveFrames = waveOutputs.map(function (output) {
+  return output.slice(output.indexOf('<div class="choice-graph"'))
+    .replace(/class="choice-graph-curve" d="[^"]+"/, '');
+});
+assert(new Set(waveFrames).size === 1, 'five waveforms share one frame, axes and scale');
+var wavePoints = waveOutputs.map(function (output) {
+  var coordinates = output.match(/class="choice-graph-curve" d="([^"]+)"/)[1].split(' ');
+  return coordinates.reduce(function (points, coordinate, index) {
+    if (index % 2 === 0) points.push([Number(coordinate.slice(1)), Number(coordinates[index + 1])]);
+    return points;
+  }, []);
+});
+function waveHeights(points) { return points.map(function (point) { return point[1]; }); }
+assert(wavePoints.every(function (points) {
+  return points[0][0] === 24 && points[points.length - 1][0] === 212;
+}), 'five waveforms span the same time interval');
+var squareHeights = waveHeights(wavePoints[0]);
+assert(squareHeights[0] === 22 && squareHeights.every(function (y) { return y === 22 || y === 98; }),
+  'square wave starts positive and holds only the two constant levels');
+assert(wavePoints[0].filter(function (point, index, points) {
+  return index && point[0] === points[index - 1][0] && point[1] !== points[index - 1][1];
+}).length === 4, 'square wave switches level with four vertical edges');
+var triangleHeights = waveHeights(wavePoints[1]);
+assert(triangleHeights[0] === 60 && Math.min.apply(null, triangleHeights) === 22 &&
+  Math.max.apply(null, triangleHeights) === 98, 'triangular wave starts at zero and reaches both peaks');
+assert(triangleHeights[25] === 22 && triangleHeights[75] === 98,
+  'triangular wave rises to the positive peak before the negative peak');
+var humpHeights = waveHeights(wavePoints[2]);
+assert(Math.max.apply(null, humpHeights) === 60 && Math.min.apply(null, humpHeights) === 22,
+  'rectified humps never go negative and reach the common amplitude');
+assert(humpHeights[50] === 60 && humpHeights[100] === 60, 'rectified humps touch zero periodically');
+var dampedHeights = waveHeights(wavePoints[3]);
+assert(dampedHeights[0] === 22 && dampedHeights[50] > 60 && dampedHeights[100] < 60,
+  'damped oscillation starts at the positive maximum and crosses zero');
+assert(60 - dampedHeights[100] < 38 && 60 - dampedHeights[200] < 60 - dampedHeights[100],
+  'damped oscillation amplitude decreases');
+var decayHeights = waveHeights(wavePoints[4]);
+assert(decayHeights[0] === 22 && decayHeights.every(function (y, index) {
+  return y <= 60 && (!index || y >= decayHeights[index - 1]);
+}), 'exponential decay falls monotonically from the common amplitude and stays positive');
+assert(PGRE.graphChoiceHTML(waveHeading + 'a sinusoid of constant amplitude.') ===
+  waveHeading + 'a sinusoid of constant amplitude.', 'unknown waveform wording remains unchanged');
+assert(PGRE.graphChoiceHTML('A plot of $V$ versus $t$: ' + waveDescriptions[0]) ===
+  'A plot of $V$ versus $t$: ' + waveDescriptions[0], 'other graph-description headings remain unchanged');
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

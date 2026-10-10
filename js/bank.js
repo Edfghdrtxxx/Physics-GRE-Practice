@@ -89,8 +89,62 @@ PGRE.bankHTML = function (html) {
   return out;
 };
 
+/* Periodic and decaying waveforms described as "A graph of $y$ versus $x$: ...".
+   All five shapes share one frame: zero line at mid-height, unit amplitude of
+   38 px, and a 75.2 px period, so the choices compare on the same scale. The
+   graph goes under the choice text. Returns null for any other wording. */
+function waveChoiceHTML(html) {
+  var heading = html.match(/^A graph of (\$[^$]+\$) versus (\$[^$]+\$): /);
+  if (!heading) return null;
+  var shape;
+  if (/square wave alternating between a constant positive value and a constant negative value/.test(html)) {
+    shape = function (u) { return Math.floor(2 * u) % 2 ? -1 : 1; };
+  } else if (/triangular wave rising linearly to a positive peak, then falling linearly to a negative peak/.test(html)) {
+    shape = function (u) {
+      var phase = u - Math.floor(u);
+      return phase < 0.25 ? 4 * phase : phase < 0.75 ? 2 - 4 * phase : 4 * phase - 4;
+    };
+  } else if (/identical positive humps \(rectified-sine shape\) that touch zero periodically/.test(html)) {
+    shape = function (u) { return Math.abs(Math.sin(2 * Math.PI * u)); };
+  } else if (/damped oscillation starting at a positive maximum and oscillating about zero/.test(html)) {
+    shape = function (u) { return Math.exp(-u / 1.1) * Math.cos(2 * Math.PI * u); };
+  } else if (/exponential decay from a positive initial value asymptotically approaching zero/.test(html)) {
+    shape = function (u) { return Math.exp(-2 * u); };
+  } else {
+    return null;
+  }
+  var zero = 60;
+  var curve = [];
+  function point(u, value) {
+    curve.push((curve.length ? 'L' : 'M') + (24 + 75.2 * u).toFixed(2) + ' ' +
+      (zero - value * 38).toFixed(2));
+  }
+  var last = null;
+  for (var step = 0; step < 250; step++) {
+    var value = shape(step / 100);
+    // A level change gets a vertical edge at the instant it happens.
+    if (last !== null && Math.abs(value - last) > 1) point(step / 100, last);
+    point(step / 100, value);
+    last = value;
+  }
+  point(2.5, last);
+  return html +
+    '<div class="choice-graph" style="position:relative;width:240px;max-width:100%;margin:8px 0 2px">' +
+    '<span style="position:absolute;left:0;top:0">' + heading[1] + '</span>' +
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" role="img" ' +
+      'aria-label="Curve described in the text above" style="display:block;width:100%;height:auto">' +
+      '<path d="M24 8V112 M16 60H224 M20 14L24 8L28 14 M218 56L224 60L218 64" ' +
+        'fill="none" stroke="currentColor" stroke-width="1.2"/>' +
+      '<path class="choice-graph-curve" d="' + curve.join(' ') + '" fill="none" ' +
+        'stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>' +
+    '</svg><span style="position:absolute;right:0;top:50%;transform:translateY(-50%)">' +
+      heading[2] + '</span></div>';
+}
+
 PGRE.graphChoiceHTML = function (html) {
   if (typeof html !== 'string' || /<(?:svg|img)\b/i.test(html)) return html;
+  var wave = waveChoiceHTML(html);
+  if (wave) return wave;
   var heading = html.match(/^<em>Graph of (\$[^$]+\$) vs (\$[^$]+\$):<\/em>/);
   if (!heading || !/\$t_1\$/.test(html)) return html;
   var decay = /decays exponentially to zero/.test(html);
