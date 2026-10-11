@@ -1343,10 +1343,12 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
   grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
   max-width: 420px;
 }
-.drill-palette .pal-cell.is-correct {
+.drill-palette .pal-cell.is-correct,
+.exam-review-nav .pal-cell.is-correct {
   background: var(--good-tint); border-color: var(--good); color: var(--good);
 }
-.drill-palette .pal-cell.is-wrong {
+.drill-palette .pal-cell.is-wrong,
+.exam-review-nav .pal-cell.is-wrong {
   background: var(--bad-tint); border-color: var(--bad); color: var(--bad);
 }
 .drill-palette .pal-cell[data-review]:hover,
@@ -1954,7 +1956,8 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
   box-shadow: none;
 }
 .exam-navrow .exam-navrow-spacer { flex: 1; }
-#exam-flag.is-flagged { border-color: var(--accent); color: var(--accent-deep); background: var(--accent-tint); }
+#exam-flag.is-flagged,
+#exam-nav-flagged[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-deep); background: var(--accent-tint); }
 #exam-next { margin-left: auto; }
 
 /* ——— Palette ——— */
@@ -2246,19 +2249,62 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
    shows the flagged questions only. scroll-margin keeps the review heading
    clear of the sticky top bar when the tile scrolls to it. */
 .stat-tile-btn {
+  /* a column from the top edge: a button centres its content by default,
+     which drops the label below its neighbours' when their tiles are taller */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
   font: inherit;
   color: inherit;
   text-align: left;
   cursor: pointer;
   transition: background .12s, border-color .12s;
 }
-.stat-tile-btn > span { display: block; }
 .stat-tile-btn .stat-sub { color: var(--accent-deep); }
 .stat-tile-btn:hover { background: var(--ivory); border-color: var(--ink-3); }
 .stat-tile-btn[aria-pressed="true"] { background: var(--accent-tint); border-color: var(--accent); }
 #exam-review-head { scroll-margin-top: 64px; }
 #exam-review-title:focus { outline: none; }
 .exam-flagged-only .exam-review-q:not(.is-flagged) { display: none; }
+
+/* Results page layout: the cards beside a sticky question navigator. The
+   navigator reuses the room palette's cells with the drill palette's result
+   tints; under the flagged filter the unflagged cells are disabled. It is
+   hidden when the page is too narrow for both columns. */
+.exam-results { container: exam-results / inline-size; }
+.exam-results-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 232px;
+  gap: 16px;
+  align-items: start;
+}
+.exam-review-nav {
+  position: sticky;
+  top: 72px;
+  max-height: calc(100vh - 88px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.exam-review-nav-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+  margin-bottom: 10px;
+}
+.exam-review-nav-head .exam-palette-title { margin-bottom: 0; }
+.exam-review-nav-head .btn { margin: 0; }
+.exam-review-nav .pal-cell[disabled] { opacity: .35; cursor: default; }
+.exam-review-q { scroll-margin-top: 64px; }
+@container exam-results (max-width: 760px) {
+  .exam-results-grid { grid-template-columns: minmax(0, 1fr); }
+  .exam-review-nav { display: none; }
+}
 
 .exam-review-q { border-left: 1px solid var(--bad); }
 .exam-review-q.is-right { border-left-color: var(--good); }

@@ -864,6 +864,12 @@ PGRE.views.exam = (function () {
     document.getElementById('exam-review-filter').hidden = !on;
     document.getElementById('exam-review-filter-text').textContent = on
       ? 'Showing ' + n + ' flagged question' + (n === 1 ? '' : 's') : '';
+    var navToggle = document.getElementById('exam-nav-flagged');
+    if (navToggle) navToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+    root().querySelectorAll('#exam-review-nav .pal-cell:not(.is-flagged)').forEach(function (cell) {
+      cell.disabled = on;
+    });
+    paintReviewNav();
   }
 
   function bindFlaggedFilter(exam) {
@@ -881,6 +887,119 @@ PGRE.views.exam = (function () {
       setFlaggedOnly(exam, false);
       title.focus({ preventScroll: true });
     });
+  }
+
+  /* Results page, question navigator: a sticky side panel with one cell per
+     question (right or wrong, the flag marker, a ring on the question in
+     view). A cell scrolls to its review card. It reuses the room palette's
+     .pal-cell look and the drill palette's result tints. */
+  var REVIEW_LINE = 96;   // px from the viewport top: under the top bar and the cards' scroll margin
+  var reviewSpy = null;   // scroll listener of the results page on screen
+
+  function reviewNavHTML(exam) {
+    var order = exam.order || [], flags = exam.flags || [];
+    if (!order.length) return '';
+    var cells = '';
+    order.forEach(function (qid, i) {
+      var q = PGRE.questionById(qid);
+      var right = !!q && exam.answers[qid] != null && exam.answers[qid] === q.answer;
+      var flagged = flags.indexOf(qid) !== -1;
+      cells += '<button type="button" class="pal-cell ' + (right ? 'is-correct' : 'is-wrong') +
+        (flagged ? ' is-flagged' : '') + '" data-review-goto="' + i + '" aria-label="Question ' + (i + 1) +
+        (right ? ', right' : ', wrong') + (flagged ? ', flagged' : '') + '">' + (i + 1) + '</button>';
+    });
+    return '<aside class="exam-review-nav" id="exam-review-nav" aria-label="Question navigator">' +
+      '<div class="exam-review-nav-head">' +
+        '<span class="exam-palette-title">Questions</span>' +
+        (flaggedShown(exam)
+          ? '<button type="button" class="btn btn-ghost btn-sm" id="exam-nav-flagged" aria-pressed="false">Flagged only</button>'
+          : '') +
+      '</div>' +
+      '<div class="exam-palette-grid">' + cells + '</div>' +
+      '<div class="exam-legend">' +
+        '<span class="exam-legend-item"><span class="pal-swatch sw-correct"></span>Right</span>' +
+        '<span class="exam-legend-item"><span class="pal-swatch sw-wrong"></span>Wrong</span>' +
+        '<span class="exam-legend-item"><span class="pal-swatch sw-flagged"></span>Flagged</span>' +
+      '</div>' +
+    '</aside>';
+  }
+
+  function reviewCards() {
+    var el = root();
+    return el ? Array.prototype.slice.call(el.querySelectorAll('.exam-review-q')) : [];
+  }
+
+  /* Index of the review card in view: the last shown card whose top has
+     reached REVIEW_LINE, or the last shown card at the end of the page.
+     -1 above the list. Cards hidden by the flagged filter have no box. */
+  function reviewCardInView() {
+    var at = -1, last = -1;
+    reviewCards().forEach(function (card, i) {
+      var box = card.getBoundingClientRect();
+      if (!box.height) return;
+      last = i;
+      if (box.top <= REVIEW_LINE) at = i;
+    });
+    var atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+    return atEnd ? last : at;
+  }
+
+  function stopReviewNav() {
+    if (reviewSpy) { window.removeEventListener('scroll', reviewSpy); reviewSpy = null; }
+  }
+
+  function paintReviewNav() {
+    var nav = document.getElementById('exam-review-nav');
+    if (!nav) { stopReviewNav(); return; }
+    var at = reviewCardInView();
+    nav.querySelectorAll('.pal-cell').forEach(function (cell, i) {
+      var on = i === at;
+      if (cell.classList.contains('is-current') === on) return;
+      cell.classList.toggle('is-current', on);
+      if (!on) { cell.removeAttribute('aria-current'); return; }
+      cell.setAttribute('aria-current', 'true');
+      // keep the ring inside the panel's own scroll area
+      var top = cell.offsetTop, bottom = top + cell.offsetHeight;
+      if (top < nav.scrollTop) nav.scrollTop = top - 8;
+      else if (bottom > nav.scrollTop + nav.clientHeight) nav.scrollTop = bottom - nav.clientHeight + 8;
+    });
+  }
+
+  function bindReviewNav(exam) {
+    stopReviewNav();
+    var nav = document.getElementById('exam-review-nav');
+    if (!nav) return;
+    var queued = false;
+    reviewSpy = function () {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () { queued = false; paintReviewNav(); });
+    };
+    window.addEventListener('scroll', reviewSpy, { passive: true });
+    nav.querySelectorAll('[data-review-goto]').forEach(function (cell) {
+      cell.addEventListener('click', function () {
+        var card = reviewCards()[parseInt(cell.getAttribute('data-review-goto'), 10)];
+        if (!card) return;
+        card.scrollIntoView({ block: 'start' });
+        paintReviewNav();
+      });
+    });
+    var toggle = document.getElementById('exam-nav-flagged');
+    /* The panel's toggle keeps the reader's place: after the switch the page
+       shows the card that was in view, or the next shown card after it. */
+    if (toggle) toggle.addEventListener('click', function () {
+      var on = toggle.getAttribute('aria-pressed') !== 'true';
+      var at = reviewCardInView();
+      setFlaggedOnly(exam, on);
+      var cards = reviewCards(), target = null;
+      for (var i = at; at !== -1 && i < cards.length && !target; i++) {
+        if (cards[i].getBoundingClientRect().height) target = cards[i];
+      }
+      if (target) target.scrollIntoView({ block: 'start' });
+      else if (on) document.getElementById('exam-review-head').scrollIntoView({ block: 'start' });
+      paintReviewNav();
+    });
+    paintReviewNav();
   }
 
   function renderResults(id) {
@@ -972,11 +1091,14 @@ PGRE.views.exam = (function () {
     '</div></div>';
 
     root().classList.remove('exam-flagged-only');
-    root().innerHTML = html;
+    root().innerHTML = '<div class="exam-results"><div class="exam-results-grid">' +
+      '<div class="exam-results-main">' + html + '</div>' + reviewNavHTML(exam) +
+      '</div></div>';
     PGRE.typesetMath(root());
     bindReviewNotes();
     bindGuesses(exam);
     bindFlaggedFilter(exam);
+    bindReviewNav(exam);
     if (window.PGRE && PGRE.motion) {
       var pctEl = root().querySelector('.summary-pct');
       if (pctEl && PGRE.motion.countUp) PGRE.motion.countUp(pctEl, pct, { duration: 900, format: function (n) { return Math.round(n) + '%'; } });
