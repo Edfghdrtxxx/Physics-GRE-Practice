@@ -11,7 +11,9 @@
    what changed, then lets a sibling tab write. Two more loads cover a new
    user and a no-pack Sunday (page clock moved forward). Expected numbers
    are worked out here from the seed, not read back from the module under
-   test.
+   test. The question bank (content/bank/, gitignored) may be absent, as in
+   a fresh worktree: the page then loads only the sample questions in js/,
+   so the counts of untried questions are worked out from what it can load.
 
    Isolated Chrome profile and ephemeral ports; nothing outside the temp
    profile is read or written. Requests to the OrbitOS status bridge
@@ -183,11 +185,23 @@ function leadOf(want) {
   var ambers = LEAD_ORDER.filter(function (m) { return shown[m] === 'amber'; });
   return reds[0] || ambers[0] || null;
 }
-/* Untried questions of one pack in a seed. */
-function freshIn(packId, seed) {
+/* Untried questions of one pack in a seed, among those the page can load
+   (bank.has, from pageBank()). */
+function freshIn(packId, seed, bank) {
   var tried = {};
   seed.attempts.forEach(function (a) { tried[a.qid] = 1; });
-  return PACKS[packId].ids.filter(function (id) { return !tried[id]; }).length;
+  return PACKS[packId].ids.filter(function (id) { return !tried[id] && bank.has[id]; }).length;
+}
+/* The headline when New questions leads and the practice pool (bank.pool)
+   holds fewer untried questions than the gap to 15; null otherwise. A
+   checkout without content/bank/ has a pool this small. */
+function scarceHeadline(n, seed, bank) {
+  var tried = {};
+  seed.attempts.forEach(function (a) { tried[a.qid] = 1; });
+  var unseen = bank.pool.filter(function (id) { return !tried[id]; }).length;
+  if (!(unseen > 0 && unseen < 15 - n)) return null;
+  return 'Only ' + unseen + (unseen === 1 ? ' untried question is' : ' untried questions are') +
+    ' left in the practice pool.';
 }
 
 /* Expected readout for a seed, from the definitions in the spec. */
@@ -462,6 +476,13 @@ async function main() {
       await waitFor('!!document.getElementById("intensity-card")', 'the Intensity card');
       await sleep(300);
     }
+    /* What the page can load: which pack questions, and the ids of its
+       default practice pool. */
+    function pageBank() {
+      return ev('(function(){var has={};Object.keys(PGRE.PACKS).forEach(function(k){' +
+        'PGRE.PACKS[k].ids.forEach(function(id){if(PGRE.questionById(id))has[id]=1;});});' +
+        'return {has:has,pool:PGRE.allQuestions().map(function(q){return q.id;})};})()');
+    }
 
     /* The card as a reader meets it. A row's own chip is the direct child of
        its button (the opened panel lists all three bands). The topic table
@@ -555,6 +576,7 @@ async function main() {
       console.log('\nhistory ' + spec.n + ' (' + spec.name + ')');
       await seedAndOpen(seed);
       var card = await readCard();
+      var bank = await pageBank();
 
       if (s === 0) {
         var at = card.order.indexOf('st-active-target');
@@ -577,14 +599,15 @@ async function main() {
             : (m === lead ? ' is the headline, so it prints no second hint' : ' carries a hint when ' + want[m].band)));
         check(row.meter && row.expanded === 'false', m + ' has a meter and starts closed');
       });
+      var headline = (lead === 'newQuestions' && scarceHeadline(want.newQuestions.value, seed, bank)) || spec.headline;
       check(lead === spec.lead && card.verdict.focus === lead && card.verdict.tone === spec.tone &&
-        card.verdict.headline === spec.headline,
-        'headline: "' + spec.headline + '" (got "' + card.verdict.headline + '", about ' + card.verdict.focus + ')');
+        card.verdict.headline === headline,
+        'headline: "' + headline + '" (got "' + card.verdict.headline + '", about ' + card.verdict.focus + ')');
       check(card.verdict.mark === (lead ? shownAs(lead, want[lead].band).band : 'green'),
         'the headline carries the band shape of the reading it is about (' + card.verdict.mark + ')');
       if (spec.actionIsPack) {
         var packId = (/^#\/practice\/pack\/(\d\d)$/.exec(card.verdict.href || '') || [])[1];
-        var fresh = packId ? freshIn(packId, seed) : 0;
+        var fresh = packId ? freshIn(packId, seed, bank) : 0;
         check(!!packId && fresh > 0 && card.verdict.label === 'Start Set ' + packId + ' →',
           'the one button launches a pack that still has untried questions: ' + card.verdict.href + ', ' + fresh + ' untried');
         check(packId && card.verdict.detail.indexOf('Set ' + packId + ' · ' + PACKS[packId].title) >= 0 &&
