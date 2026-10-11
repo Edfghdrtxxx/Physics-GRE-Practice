@@ -1222,8 +1222,10 @@ PGRE.views.practice = (function () {
         notesBlock(q) +
       '</div>' +
       '<div class="btn-row drill-navrow">' +
-        '<button class="btn btn-ghost" id="review-prev"' + (prev < 0 ? ' disabled' : '') + '>← Back</button>' +
-        '<button class="btn btn-ghost" id="review-next"' + (next < 0 ? ' disabled' : '') + '>Next →</button>' +
+        '<button class="btn btn-ghost" id="review-prev" title="Previous question (Left arrow)"' +
+          (prev < 0 ? ' disabled' : '') + '>← Back</button>' +
+        '<button class="btn btn-ghost" id="review-next" title="Next question (Right arrow or Enter)"' +
+          (next < 0 ? ' disabled' : '') + '>Next →</button>' +
         '<button class="btn btn-primary drill-finish" id="review-summary">Back to results</button>' +
       '</div>' +
       paletteHTML(true, idx) +
@@ -1460,6 +1462,11 @@ PGRE.views.practice = (function () {
       } else if (k === 'ArrowRight') {
         var next = neighborAnswered(session.i, 1);
         if (next >= 0) { e.preventDefault(); renderReview(next); }
+      } else if (k === 'Enter' && !PGRE.enterPressesControl()) {
+        // on the last question too: Enter must not press a tag that a click left focused
+        e.preventDefault();
+        var after = neighborAnswered(session.i, 1);
+        if (after >= 0) renderReview(after);
       } else if (k === 'Escape') {
         e.preventDefault();
         renderSummary();

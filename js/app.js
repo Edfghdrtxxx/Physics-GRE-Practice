@@ -265,6 +265,22 @@ PGRE.renderMarkdown = (function () {
   };
 })();
 
+/* Enter as a page shortcut. A view that gives Enter its own meaning (next
+   question) asks this first: true when the reader has moved focus onto a
+   link, a button, or a band heading with Tab, so Enter must press that
+   control as the browser does. A control that holds focus after a pointer
+   press does not count: Enter after a click on a choice or a toggle is the
+   shortcut, and never presses that control a second time. */
+(function () {
+  var tabbed = false;
+  document.addEventListener('keydown', function (e) { if (e.key === 'Tab') tabbed = true; }, true);
+  document.addEventListener('pointerdown', function () { tabbed = false; }, true);
+  PGRE.enterPressesControl = function () {
+    var ae = document.activeElement;
+    return tabbed && !!ae && /^(A|BUTTON|SUMMARY)$/.test(ae.tagName);
+  };
+})();
+
 PGRE.typesetMath = function (el) {
   if (window.renderMathInElement) {
     try {

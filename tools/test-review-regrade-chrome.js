@@ -372,6 +372,16 @@ var STAGES = [
       'reopening a regraded question paints what was saved');
     h.assert(s.attempts === base.attempts && s.diskAttempts === base.attempts && s.xp === base.xp && s.diskXp === base.xp,
       'after every practice regrade: still four attempts and the same XP, in memory and on disk');
+    // Enter is the Right arrow here, also while a grading chip holds focus: it must not press the chip
+    await page.press('ArrowRight');
+    var byArrow = await h.onScreen();
+    await page.press('ArrowLeft');
+    await page.eval(function () { document.querySelector('[data-assess="guess"]').focus(); });
+    await page.press('Enter');
+    var byEnter = await h.onScreen();
+    await page.press('ArrowLeft');
+    h.assert(byArrow !== 'rr-a' && byEnter === byArrow && await h.onScreen() === 'rr-a' && (await h.panel()).on === p.on,
+      'Enter opens the question the Right arrow opens (' + byArrow + ') and does not press the grading chip that holds focus');
     await h.frame();
   } },
 
