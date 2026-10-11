@@ -607,7 +607,7 @@ var STAGES = [
       ['sbs-live-a', 'sbs-live-b'].forEach(function (id) {
         PGRE.QUESTIONS.push({
           id: id, topic: 'em', difficulty: 1,
-          q: '<p>Choose the first option for this sidebar-search test: ' + id + '.</p>',
+          q: '<p>Choose the first option for this sidebar-search test (zyxwlive): ' + id + '.</p>',
           choices: ['First option', 'Second option'], answer: 0,
           sol: '<p>The first option is the test answer.</p>'
         });
@@ -638,6 +638,9 @@ var STAGES = [
     await page.press('/');
     u = await h.ui();
     h.assert(u.open && u.focus === 'sbs-input', 'once the question is answered the shortcut works again');
+    u = await h.search('zyxwlive');
+    h.assert(u.groups.length === 1 && u.groups[0].label === 'Questions' && u.groups[0].count === 2,
+      'and finds the two questions added after the box was first opened: each open refreshes the index');
     await page.press('Escape');
 
     await h.blur();
