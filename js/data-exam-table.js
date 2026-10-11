@@ -32,7 +32,7 @@ PGRE.EXAM_TABLE = {
     { name: 'Universal gravitational constant', latex: '$G = 6.67 \\times 10^{-11}\\,\\mathrm{m^{3}/(kg \\cdot s^{2})}$' },
     { name: 'Acceleration due to gravity', latex: '$g = 9.80\\,\\mathrm{m/s^{2}}$' },
     { name: '1 atmosphere pressure', latex: '$1\\,\\mathrm{atm} = 1.0 \\times 10^{5}\\,\\mathrm{N/m^{2}} = 1.0 \\times 10^{5}\\,\\mathrm{Pa}$' },
-    { name: '1 angstrom', latex: '$1\\,\\mathrm{\\AA} = 1 \\times 10^{-10}\\,\\mathrm{m} = 0.1\\,\\mathrm{nm}$' }
+    { name: '1 angstrom', latex: '$1\\,$<span class="katex">Å</span>${} = 1 \\times 10^{-10}\\,\\mathrm{m} = 0.1\\,\\mathrm{nm}$' }
   ],
   prefixes: [
     { power: '$10^{-15}$', name: 'femto', symbol: 'f' },
