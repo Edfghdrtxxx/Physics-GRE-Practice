@@ -5,7 +5,9 @@
    closes, checks the question and chosen answer are unchanged, and checks
    the control is absent outside the room. Before leaving the room it flags
    questions with the room's flag button, submits the sitting, and checks
-   the flag list in PGRE.buildStatusSummary().exams.
+   the flag list in PGRE.buildStatusSummary().exams. On the results page it
+   checks that the Flagged tile switches the review list to the flagged
+   questions and back.
    Isolated profile + ephemeral ports. Requests to the OrbitOS status bridge
    (127.0.0.1:4789) are blocked before the page loads. Run:
      node tools/test-exam-table-chrome.js
@@ -481,6 +483,73 @@ async function main() {
       'the exam row carries ids and scores only: no answers map, question text, or choices');
     check(bridge.answered === 0, 'the status bridge on port ' + BRIDGE_PORT + ' received nothing (' + bridge.sent +
       ' request(s) blocked, ' + bridge.answered + ' answered)');
+
+    /* Results page: the Flagged tile switches the review list to the flagged
+       questions and scrolls to it; the tile and "Show all" both switch back. */
+    async function reviewState() {
+      return evaluate(`(function () {
+        function seen(el) { return !!el && el.getClientRects().length > 0; }
+        var cards = Array.prototype.slice.call(document.querySelectorAll('#exam-root .exam-review-q'));
+        var tile = document.getElementById('exam-flagged-tile');
+        var head = document.getElementById('exam-review-head');
+        return {
+          total: cards.length,
+          shown: cards.map(function (c, i) { return seen(c) ? i + 1 : 0; }).filter(Boolean).join(','),
+          chips: cards.filter(function (c) { return seen(c) && !!c.querySelector('.exam-flagchip'); }).length,
+          tag: tile ? tile.tagName : '',
+          pressed: tile ? tile.getAttribute('aria-pressed') : '',
+          value: tile ? tile.querySelector('.stat-value').textContent : '',
+          sub: tile ? tile.querySelector('.stat-sub').textContent : '',
+          bar: seen(document.getElementById('exam-review-filter')),
+          text: document.getElementById('exam-review-filter-text').textContent,
+          all: document.getElementById('exam-review-all').textContent,
+          headTop: Math.round(head.getBoundingClientRect().top),
+          viewport: window.innerHeight,
+          focus: document.activeElement ? document.activeElement.id : ''
+        };
+      })()`);
+    }
+    var everyCard = sitting.order.map(function (qid, i) { return i + 1; }).join(',');
+    await until('!!document.getElementById("exam-flagged-tile")', 'Flagged tile');
+    var review = await reviewState();
+    check(review.tag === 'BUTTON' && review.value === '2' && review.pressed === 'false' &&
+      review.sub === 'Show only these',
+      'the Flagged tile is a button showing 2, not pressed, labelled "Show only these"');
+    check(review.total === sitting.order.length && review.shown === everyCard && !review.bar,
+      'the review list starts with all ' + sitting.order.length + ' questions and no filter line');
+    var startTop = review.headTop;
+
+    await evaluate('document.getElementById("exam-flagged-tile").click()');
+    review = await reviewState();
+    await sleep(500);
+    await shot('20-flagged-only.png');
+    check(review.shown === '2,5' && review.chips === 2,
+      'a click on the tile leaves questions 2 and 5, both with a Flagged chip (shown: ' + review.shown + ')');
+    check(review.pressed === 'true' && review.sub === 'Show all ' + sitting.order.length,
+      'the tile is pressed and labelled "Show all ' + sitting.order.length + '"');
+    check(review.bar && review.text === 'Showing 2 flagged questions' &&
+      review.all === 'Show all ' + sitting.order.length,
+      'the filter line reads "Showing 2 flagged questions" beside "Show all ' + sitting.order.length + '"');
+    check(review.headTop >= 0 && review.headTop < review.viewport && review.headTop < startTop &&
+      review.focus === 'exam-review-title',
+      'the page scrolled to the review heading and moved focus to it (top ' + startTop + ' px, then ' +
+      review.headTop + ' px)');
+
+    await evaluate('document.getElementById("exam-flagged-tile").click()');
+    review = await reviewState();
+    check(review.shown === everyCard && review.pressed === 'false' && !review.bar &&
+      review.sub === 'Show only these' && review.text === '',
+      'a second click on the tile shows every question again');
+
+    await evaluate('document.getElementById("exam-flagged-tile").click()');
+    await evaluate('window.scrollTo(0, 0)');
+    await sleep(300);
+    await shot('21-tile-pressed.png');
+    await evaluate('document.getElementById("exam-review-all").click()');
+    review = await reviewState();
+    check(review.shown === everyCard && review.pressed === 'false' && !review.bar &&
+      review.focus === 'exam-review-title',
+      '"Show all" shows every question again and keeps focus on the review heading');
 
     await evaluate('location.hash = "#/"');
     await until('!document.getElementById("exam-root") && !document.body.classList.contains("exam-fullscreen")', 'dashboard');
