@@ -295,6 +295,30 @@ async function main() {
     check(await evaluate('!document.getElementById("exam-table-host").firstChild'),
       'table panel starts closed');
 
+    /* The weighted 70-draw mixes these fixtures with the gitignored bank.
+       Put the tall fixture first before the scroll steps so a still-
+       typesetting bank stem cannot move .exam-main scrollTop via overflow-
+       anchor during the table-open wait. The check below stays a strict
+       equality on scrollTop; a product that drops the position still fails. */
+    var pinned = await evaluate(`(function () {
+      var exam = PGRE.examEngine.active();
+      var want = 'toi-q0';
+      var i = exam.order.indexOf(want);
+      if (i === -1) exam.order[0] = want;
+      else if (i > 0) {
+        var tmp = exam.order[0];
+        exam.order[0] = exam.order[i];
+        exam.order[i] = tmp;
+      }
+      exam.cursor = 0;
+      PGRE.store.save();
+      var cell = document.querySelector('#exam-palette [data-goto="0"]');
+      if (cell) cell.click();
+      return exam.order[0];
+    })()`);
+    check(pinned === 'toi-q0', 'scroll check uses the tall fixture as question 1 (' + pinned + ')');
+    await sleep(200);
+
     await evaluate(`(function () {
       var choice = document.querySelector('.choice[data-idx="2"]');
       if (choice) choice.click();
