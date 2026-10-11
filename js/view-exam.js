@@ -59,10 +59,11 @@ PGRE.views.exam = (function () {
     if (ex) PGRE.store.save(); // last unsaved seconds survive a reload
   });
 
-  /* Keyboard: A–E / 1–5 to (de)select, ←/→ to navigate, F to flag, P to pause,
-     T to open/close the Table of Information. Registered once; only acts
-     inside the room. Modal keys (Esc / Enter) share the existing
-     hide/resume/confirm handlers. T does not collide with those keys. */
+  /* Keyboard: A–E / 1–5 to (de)select, ←/→ to navigate, Enter for the next
+     question, F to flag, P to pause, T to open/close the Table of
+     Information. Registered once; only acts inside the room. Modal keys
+     (Esc / Enter) share the existing hide/resume/confirm handlers. T does
+     not collide with those keys. */
   document.addEventListener('keydown', function (e) {
     if (!document.body.classList.contains('exam-fullscreen')) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return; // ⌘C / ⌘F etc. must never answer or flag
@@ -113,6 +114,10 @@ PGRE.views.exam = (function () {
       goTo(exam, exam.cursor + 1); e.preventDefault();
     } else if (k === 'ArrowLeft' && exam.cursor > 0) {
       goTo(exam, exam.cursor - 1); e.preventDefault();
+    } else if (k === 'Enter' && !PGRE.enterPressesControl()) {
+      // on the last question too: Enter must not press a clicked choice again, which would clear the answer
+      e.preventDefault();
+      if (exam.cursor < exam.order.length - 1) goTo(exam, exam.cursor + 1);
     } else if (k === 'f' || k === 'F') {
       toggleFlag(exam); e.preventDefault();
     } else if (k === 'p' || k === 'P') {
@@ -394,9 +399,9 @@ PGRE.views.exam = (function () {
           '</aside>' +
         '</div>' +
         '<div class="exam-navrow">' +
-          '<button class="btn btn-ghost" id="exam-prev">Back</button>' +
+          '<button class="btn btn-ghost" id="exam-prev" title="Previous question (Left arrow)">Back</button>' +
           '<button class="btn btn-ghost" id="exam-flag" aria-pressed="false">Flag for review</button>' +
-          '<button class="btn btn-primary" id="exam-next">Next</button>' +
+          '<button class="btn btn-primary" id="exam-next" title="Next question (Right arrow or Enter)">Next</button>' +
         '</div>' +
       '</div>' +
       '<div id="exam-table-host"></div>' +
@@ -869,6 +874,7 @@ PGRE.views.exam = (function () {
     root().querySelectorAll('#exam-review-nav .pal-cell:not(.is-flagged)').forEach(function (cell) {
       cell.disabled = on;
     });
+    reviewAt = null; // the cards moved under the same scroll position
     paintReviewNav();
   }
 
@@ -895,6 +901,7 @@ PGRE.views.exam = (function () {
      .pal-cell look and the drill palette's result tints. */
   var REVIEW_LINE = 96;   // px from the viewport top: under the top bar and the cards' scroll margin
   var reviewSpy = null;   // scroll listener of the results page on screen
+  var reviewAt = null;    // { i, y }: the card last asked for by a key or a cell, and the scroll position that left
 
   function reviewNavHTML(exam) {
     var order = exam.order || [], flags = exam.flags || [];
@@ -921,6 +928,8 @@ PGRE.views.exam = (function () {
         '<span class="exam-legend-item"><span class="pal-swatch sw-wrong"></span>Wrong</span>' +
         '<span class="exam-legend-item"><span class="pal-swatch sw-flagged"></span>Flagged</span>' +
       '</div>' +
+      '<div class="practice-keys"><span class="key-hint">←</span> previous ' +
+        '<span class="key-hint">→</span> or <span class="key-hint">Enter</span> next</div>' +
     '</aside>';
   }
 
@@ -944,6 +953,57 @@ PGRE.views.exam = (function () {
     return atEnd ? last : at;
   }
 
+  /* The card the reader is on: the one last asked for by a key or a cell while
+     the page has not scrolled since, else the card in view. A card near the end
+     of the page cannot reach REVIEW_LINE, so the scroll position alone would
+     name a later card there, and the Left key would never leave the last one. */
+  function reviewCurrent() {
+    if (reviewAt && Math.abs(window.scrollY - reviewAt.y) < 2) {
+      var card = reviewCards()[reviewAt.i];
+      if (card && card.getBoundingClientRect().height) return reviewAt.i;
+    }
+    return reviewCardInView();
+  }
+
+  function goReviewCard(i) {
+    var card = reviewCards()[i];
+    if (!card) return;
+    card.scrollIntoView({ block: 'start' });
+    reviewAt = { i: i, y: window.scrollY };
+    paintReviewNav();
+  }
+
+  /* The next (dir 1) or the previous (dir -1) shown card from the one the
+     reader is on. Focus follows, so Tab continues from that card and no
+     control of an earlier card keeps the keys. */
+  function stepReview(dir) {
+    var cards = reviewCards();
+    for (var i = reviewCurrent() + dir; i >= 0 && i < cards.length; i += dir) {
+      if (!cards[i].getBoundingClientRect().height) continue;
+      goReviewCard(i);
+      cards[i].setAttribute('tabindex', '-1');
+      cards[i].focus({ preventScroll: true });
+      return;
+    }
+  }
+
+  /* Results page keys: Right arrow or Enter for the next shown review card,
+     Left arrow for the previous one. Registered once; acts only while the
+     results page is on screen, outside a text field, and with no dialog up. */
+  document.addEventListener('keydown', function (e) {
+    var k = e.key;
+    if (k !== 'ArrowRight' && k !== 'ArrowLeft' && k !== 'Enter') return;
+    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+    var el = root();
+    if (!el || !el.querySelector('.exam-results')) return;
+    var t = e.target, tag = (t && t.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+    if (document.querySelector('#viz-modal-backdrop, [aria-modal="true"]')) return;
+    if (k === 'Enter' && PGRE.enterPressesControl()) return;
+    e.preventDefault();
+    stepReview(k === 'ArrowLeft' ? -1 : 1);
+  });
+
   function stopReviewNav() {
     if (reviewSpy) { window.removeEventListener('scroll', reviewSpy); reviewSpy = null; }
   }
@@ -951,7 +1011,7 @@ PGRE.views.exam = (function () {
   function paintReviewNav() {
     var nav = document.getElementById('exam-review-nav');
     if (!nav) { stopReviewNav(); return; }
-    var at = reviewCardInView();
+    var at = reviewCurrent();
     nav.querySelectorAll('.pal-cell').forEach(function (cell, i) {
       var on = i === at;
       if (cell.classList.contains('is-current') === on) return;
@@ -978,10 +1038,7 @@ PGRE.views.exam = (function () {
     window.addEventListener('scroll', reviewSpy, { passive: true });
     nav.querySelectorAll('[data-review-goto]').forEach(function (cell) {
       cell.addEventListener('click', function () {
-        var card = reviewCards()[parseInt(cell.getAttribute('data-review-goto'), 10)];
-        if (!card) return;
-        card.scrollIntoView({ block: 'start' });
-        paintReviewNav();
+        goReviewCard(parseInt(cell.getAttribute('data-review-goto'), 10));
       });
     });
     var toggle = document.getElementById('exam-nav-flagged');
@@ -989,13 +1046,13 @@ PGRE.views.exam = (function () {
        shows the card that was in view, or the next shown card after it. */
     if (toggle) toggle.addEventListener('click', function () {
       var on = toggle.getAttribute('aria-pressed') !== 'true';
-      var at = reviewCardInView();
+      var at = reviewCurrent();
       setFlaggedOnly(exam, on);
-      var cards = reviewCards(), target = null;
-      for (var i = at; at !== -1 && i < cards.length && !target; i++) {
-        if (cards[i].getBoundingClientRect().height) target = cards[i];
+      var cards = reviewCards(), to = -1;
+      for (var i = at; at !== -1 && i < cards.length && to === -1; i++) {
+        if (cards[i].getBoundingClientRect().height) to = i;
       }
-      if (target) target.scrollIntoView({ block: 'start' });
+      if (to !== -1) goReviewCard(to);
       else if (on) document.getElementById('exam-review-head').scrollIntoView({ block: 'start' });
       paintReviewNav();
     });
@@ -1091,6 +1148,7 @@ PGRE.views.exam = (function () {
     '</div></div>';
 
     root().classList.remove('exam-flagged-only');
+    reviewAt = null;
     root().innerHTML = '<div class="exam-results"><div class="exam-results-grid">' +
       '<div class="exam-results-main">' + html + '</div>' + reviewNavHTML(exam) +
       '</div></div>';
@@ -1292,6 +1350,24 @@ PGRE.views.exam = (function () {
     });
   }
 
+  /* Every choice as the room showed it, in a closed band above the solution:
+     the card itself prints only the picked and the correct choice. Same
+     markup and marks as the practice review (js/view-practice.js renderReview). */
+  function choicesBlock(q, picked) {
+    var items = '';
+    q.choices.forEach(function (c, idx) {
+      var cls = 'choice';
+      if (idx === q.answer) cls += ' is-answer';
+      if (idx === picked && idx !== q.answer) cls += ' is-wrong';
+      items += '<button class="' + cls + '" disabled aria-pressed="' +
+        (idx === picked ? 'true' : 'false') + '">' +
+        '<span class="choice-letter">' + LETTERS[idx] + '</span>' +
+        '<span class="choice-body">' + c + '</span></button>';
+    });
+    return '<details class="miss exam-review-choices"><summary>All choices</summary>' +
+      '<div class="choices">' + items + '</div></details>';
+  }
+
   function reviewCard(exam, qid, i) {
     var ui = PGRE.ui, q = PGRE.questionById(qid);
     var flagged = exam.flags.indexOf(qid) !== -1;
@@ -1323,6 +1399,7 @@ PGRE.views.exam = (function () {
       '<span class="miss-pick-body">' + q.choices[q.answer] + '</span></div>' +
     '</div>' +
     (correct ? guessControl(exam, qid) : '') +
+    choicesBlock(q, picked) +
     '<details class="miss"><summary>Solution</summary>' +
       '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div></details>' +
     distractorBlock(q) +

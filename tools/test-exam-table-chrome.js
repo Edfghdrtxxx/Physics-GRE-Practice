@@ -212,6 +212,34 @@ async function main() {
       await send('Input.dispatchKeyEvent', payload);
       payload.type = 'keyUp';
       await send('Input.dispatchKeyEvent', payload);
+      await sleep(120);
+    }
+    /* Enter as a keyboard sends it, with its character: the browser presses a
+       focused button or band heading unless the page prevents it. */
+    async function pressEnter() {
+      var payload = {
+        type: 'keyDown', key: 'Enter', code: 'Enter', text: '\r', unmodifiedText: '\r',
+        windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13
+      };
+      await send('Input.dispatchKeyEvent', payload);
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13
+      });
+      await sleep(120);
+    }
+    /* A real pointer click on the element `expr` names: the pressed control
+       takes focus, as it does for a reader. `scroll` first brings it to the
+       middle of its scroll area. */
+    async function clickAt(expr, scroll) {
+      var at = await evaluate('(function () { var el = ' + expr + ';' +
+        (scroll ? ' el.scrollIntoView({ block: "center" });' : '') +
+        ' var r = el.getBoundingClientRect();' +
+        ' return { x: r.left + r.width / 2, y: r.top + r.height / 2, h: window.innerHeight }; })()');
+      if (!(at.y > 0 && at.y < at.h)) throw new Error('clickAt target is off screen: ' + expr);
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at.x, y: at.y });
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: at.x, y: at.y, button: 'left', clickCount: 1 });
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: at.x, y: at.y, button: 'left', clickCount: 1 });
+      await sleep(120);
     }
     async function until(expr, label, n) {
       n = n || 80;
@@ -450,6 +478,59 @@ async function main() {
     })()`);
     check(stillSame, 'question and answer still unchanged after key toggles');
 
+    /* Enter goes to the next question. A choice keeps focus after a real
+       click, and Enter must not press it a second time, which would clear
+       the answer. On a control reached with Tab, Enter presses that control. */
+    async function roomState() {
+      return evaluate(`(function () {
+        var exam = PGRE.examEngine.active(), ae = document.activeElement;
+        function picked(i) { var a = exam.answers[exam.order[i]]; return a == null ? null : a; }
+        return {
+          cursor: exam.cursor, last: exam.order.length - 1,
+          first: picked(0), second: picked(1), final: picked(exam.order.length - 1),
+          focusChoice: ae && ae.classList.contains('choice') ? parseInt(ae.getAttribute('data-idx'), 10) : null,
+          focusId: ae ? ae.id : ''
+        };
+      })()`);
+    }
+    await clickAt('document.querySelector(\'#exam-q .choice[data-idx="1"]\')', true);
+    var room = await roomState();
+    check(room.cursor === 0 && room.first === 1 && room.focusChoice === 1,
+      'a real click on choice B answers question 1 and leaves focus on that choice');
+    await pressEnter();
+    room = await roomState();
+    check(room.cursor === 1 && room.first === 1,
+      'Enter then opens question 2, and question 1 keeps its answer');
+    await press('ArrowLeft', 'ArrowLeft', 37);
+    var wentBack = (await roomState()).cursor;
+    await pressEnter();
+    room = await roomState();
+    check(wentBack === 0 && room.cursor === 1 && room.focusId === 'exam-q-heading',
+      'Left arrow opens question 1 again and Enter opens question 2');
+    // a bank question may hold a focusable box (a wide formula that scrolls) before its choices
+    var tabOn = null;
+    for (var tabPress = 0; tabPress < 6 && tabOn == null; tabPress++) {
+      await press('Tab', 'Tab', 9);
+      tabOn = (await roomState()).focusChoice;
+    }
+    await pressEnter();
+    var afterPick = await roomState();
+    await pressEnter();
+    room = await roomState();
+    check(tabOn === 0 && afterPick.cursor === 1 && afterPick.second === 0 && room.cursor === 1 && room.second === null,
+      'Tab moves focus to choice A of question 2; Enter there presses that choice (picks it, then clears it) and stays on ' +
+      'question 2 (focus on choice ' + tabOn + ', answer ' + afterPick.second + ' then ' + room.second + ')');
+    await evaluate('document.querySelector(\'#exam-palette [data-goto="' + room.last + '"]\').click()');
+    await until('PGRE.examEngine.active().cursor === ' + room.last, 'last question');
+    await clickAt('document.querySelector(\'#exam-q .choice[data-idx="0"]\')', true);
+    await pressEnter();
+    room = await roomState();
+    check(room.cursor === room.last && room.final === 0,
+      'on the last question Enter stays there and keeps the clicked answer');
+    check(await evaluate('document.getElementById("exam-next").title === "Next question (Right arrow or Enter)" && ' +
+      'document.getElementById("exam-prev").title === "Previous question (Left arrow)"'),
+      'the Back and Next buttons name their keys in their tooltips');
+
     /* Flags reach the agent status summary (js/status.js). Flag question 5,
        then question 2, so the stored click order is the reverse of the exam
        order; flag and unflag question 3; submit through the room's dialog. */
@@ -647,6 +728,165 @@ async function main() {
     await sleep(200);
     nav = await navState();
     check(nav.current === '', 'no cell is ringed above the review list');
+
+    /* Results page keys: Right arrow or Enter for the next shown question,
+       Left arrow for the previous one. `ring` is the question number of the
+       ringed navigator cell, 0 when none. */
+    async function keyState() {
+      return evaluate(`(function () {
+        function seen(el) { return !!el && el.getClientRects().length > 0; }
+        var cards = Array.prototype.slice.call(document.querySelectorAll('#exam-root .exam-review-q'));
+        var cells = Array.prototype.slice.call(document.querySelectorAll('#exam-review-nav .pal-cell'));
+        var ring = -1;
+        cells.forEach(function (c, i) { if (c.getAttribute('aria-current') === 'true') ring = i; });
+        var ae = document.activeElement;
+        var band = ae && ae.tagName === 'SUMMARY' ? ae.parentNode : null;
+        return {
+          ring: ring + 1,
+          top: ring >= 0 && seen(cards[ring]) ? Math.round(cards[ring].getBoundingClientRect().top) : null,
+          focusCard: cards.indexOf(ae) + 1,
+          focusTag: ae ? ae.tagName : '',
+          atEnd: window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2,
+          bandFocused: !!band && band.classList.contains('exam-review-choices'),
+          bandOpen: !!band && band.open,
+          bandChoices: band ? band.querySelectorAll('.choice').length : 0,
+          // a closed band keeps boxes for its content, so ask the browser whether a choice is rendered
+          bandSeen: band ? Array.prototype.filter.call(band.querySelectorAll('.choice'),
+            function (row) { return row.checkVisibility(); }).length : 0,
+          solutionsOpen: cards.map(function (c, i) {
+            var d = c.querySelector('details.miss:not(.exam-review-choices):not(.distractors)');
+            return d && d.open ? i + 1 : 0;
+          }).filter(Boolean).join(','),
+          hint: (document.querySelector('#exam-review-nav .practice-keys') || {}).textContent || ''
+        };
+      })()`);
+    }
+    await press('ArrowRight', 'ArrowRight', 39);
+    var keys = await keyState();
+    check(keys.ring === 1 && near(keys.top, 64) && keys.focusCard === 1,
+      'from the top of the page the Right arrow puts question 1 under the top bar and moves focus to its card (top ' +
+      keys.top + ' px)');
+    check(keys.hint === '← previous → or Enter next', 'the navigator names the keys (' + keys.hint + ')');
+    await pressEnter();
+    keys = await keyState();
+    check(keys.ring === 2 && near(keys.top, 64), 'Enter opens question 2 (top ' + keys.top + ' px)');
+    await press('ArrowLeft', 'ArrowLeft', 37);
+    var backTo = (await keyState()).ring;
+    await press('ArrowLeft', 'ArrowLeft', 37);
+    keys = await keyState();
+    check(backTo === 1 && keys.ring === 1 && near(keys.top, 64),
+      'the Left arrow opens question 1 again, and a second press stays on question 1');
+
+    // a real click on a Solution heading leaves focus there; question 1 or 2, whichever is not the tall fixture
+    var base = sitting.order[0] === 'toi-q0' ? 2 : 1;
+    if (base === 2) await press('ArrowRight', 'ArrowRight', 39);
+    await clickAt('document.querySelectorAll("#exam-root .exam-review-q")[' + (base - 1) +
+      '].querySelector("details.miss:not(.exam-review-choices):not(.distractors) > summary")');
+    var opened = await keyState();
+    await pressEnter();
+    keys = await keyState();
+    check(opened.solutionsOpen === String(base) && opened.focusTag === 'SUMMARY' &&
+      keys.ring === base + 1 && keys.solutionsOpen === String(base),
+      'after a real click opens the Solution of question ' + base + ', Enter opens question ' + (base + 1) +
+      ' and leaves that Solution open');
+
+    // inside the note field the keys belong to the text
+    await evaluate('document.querySelectorAll("#exam-root .exam-review-q")[' + base +
+      '].querySelector("textarea[data-note]").focus({ preventScroll: true })');
+    await press('ArrowRight', 'ArrowRight', 39);
+    await press('Enter', 'Enter', 13);
+    keys = await keyState();
+    check(keys.ring === base + 1 && keys.focusTag === 'TEXTAREA',
+      'the Right arrow and Enter move nothing while the note field of question ' + (base + 1) + ' has focus');
+
+    // Tab from the note field reaches the next "All choices" heading; Enter there opens that band
+    for (var tabs = 0; tabs < 4 && !(await keyState()).bandFocused; tabs++) await press('Tab', 'Tab', 9);
+    var onBand = await keyState();
+    await pressEnter();
+    keys = await keyState();
+    await sleep(300);
+    await shot('24-all-choices.png');
+    check(onBand.bandFocused && !onBand.bandOpen && onBand.bandSeen === 0 && keys.bandFocused && keys.bandOpen &&
+      keys.bandChoices > 1 && keys.bandSeen === keys.bandChoices && keys.ring === onBand.ring,
+      'Enter on an "All choices" heading reached with Tab opens that band (' + onBand.bandSeen + ' choices shown before, ' +
+      keys.bandSeen + ' of ' + keys.bandChoices + ' after) and does not move to another question');
+
+    var bands = await evaluate(`(function () {
+      var exam = PGRE.examEngine.byId(${JSON.stringify(sitting.id)});
+      var cards = Array.prototype.slice.call(document.querySelectorAll('#exam-root .exam-review-q'));
+      var bad = [], closed = 0;
+      cards.forEach(function (card, i) {
+        var q = PGRE.questionById(exam.order[i]);
+        var picked = exam.answers[exam.order[i]];
+        var band = card.querySelector('details.exam-review-choices');
+        var rows = band ? Array.prototype.slice.call(band.querySelectorAll('.choice')) : [];
+        var next = band && band.nextElementSibling;
+        if (band && !band.open) closed++;
+        var ok = !!q && !!band && band.querySelector('summary').textContent === 'All choices' &&
+          !!next && next.tagName === 'DETAILS' && next.querySelector('summary').textContent === 'Solution' &&
+          rows.length === q.choices.length &&
+          rows.every(function (row, idx) {
+            return row.disabled && row.querySelector('.choice-letter').textContent === 'ABCDE'.charAt(idx) &&
+              row.classList.contains('is-answer') === (idx === q.answer) &&
+              row.classList.contains('is-wrong') === (idx === picked && idx !== q.answer) &&
+              (row.getAttribute('aria-pressed') === 'true') === (idx === picked);
+          });
+        if (!ok) bad.push(i + 1);
+      });
+      return { cards: cards.length, closed: closed, bad: bad.join(',') };
+    })()`);
+    check(bands.cards === total && bands.bad === '' && bands.closed === total - 1,
+      'every review card has an "All choices" band directly above "Solution": each choice with its letter, the key and ' +
+      'the pick marked as the sitting recorded them, closed until opened (' + bands.closed + ' of ' + bands.cards +
+      ' closed' + (bands.bad ? ', wrong on questions ' + bands.bad : '') + ')');
+    // a dark-theme picture for a human check; transitions are off so the capture shows the final colours
+    await evaluate(`(function () {
+      var off = document.createElement('style');
+      off.id = 'test-no-transition';
+      off.textContent = '*, *::before, *::after { transition: none !important; }';
+      document.head.appendChild(off);
+      PGRE.applyTheme('dark');
+    })()`);
+    await sleep(400);
+    await shot('25-all-choices-dark.png');
+    await evaluate('PGRE.applyTheme(PGRE.store.state.settings.theme)');
+    await sleep(200);
+    await evaluate('document.getElementById("test-no-transition").remove()');
+
+    // with "Flagged only" on, the keys move among questions 2 and 5
+    await evaluate('document.getElementById("exam-nav-flagged").click()');
+    await evaluate('document.querySelector(\'#exam-review-nav [data-review-goto="1"]\').click()');
+    var walk = [(await keyState()).ring];
+    for (var hop = 0; hop < 4; hop++) {
+      await press(hop < 2 ? 'ArrowRight' : 'ArrowLeft', hop < 2 ? 'ArrowRight' : 'ArrowLeft', hop < 2 ? 39 : 37);
+      walk.push((await keyState()).ring);
+    }
+    check(walk.join(',') === '2,5,5,2,2',
+      'with "Flagged only" on: from question 2 the Right arrow opens 5 and stops there, the Left arrow opens 2 and stops there (' +
+      walk.join(', ') + ')');
+    await evaluate('document.getElementById("exam-nav-flagged").click()');
+
+    /* End of the page. The last two cards are made short, so neither can
+       reach the top bar: the ring must still name the question asked for,
+       and the Left arrow must walk back one question at a time. */
+    await evaluate(`Array.prototype.slice.call(document.querySelectorAll('#exam-root .exam-review-q'), -2)
+      .forEach(function (card) { card.style.height = '120px'; card.style.overflow = 'hidden'; })`);
+    await evaluate('document.querySelector(\'#exam-review-nav [data-review-goto="' + (total - 2) + '"]\').click()');
+    await sleep(150);
+    var end = await keyState();
+    walk = [end.ring];
+    for (hop = 0; hop < 5; hop++) {
+      await press(hop < 2 ? 'ArrowRight' : 'ArrowLeft', hop < 2 ? 'ArrowRight' : 'ArrowLeft', hop < 2 ? 39 : 37);
+      walk.push((await keyState()).ring);
+    }
+    check(end.atEnd && end.top > 96,
+      'a click on cell ' + (total - 1) + ' reaches the end of the page before that question reaches the top bar (top ' +
+      end.top + ' px)');
+    check(walk.join(',') === [total - 1, total, total, total - 1, total - 2, total - 3].join(','),
+      'there the ring names question ' + (total - 1) + '; the Right arrow opens ' + total + ' and stops; the Left arrow opens ' +
+      (total - 1) + ', ' + (total - 2) + ', ' + (total - 3) + ' in turn (' + walk.join(', ') + ')');
+    await evaluate('window.scrollTo(0, 0)');
+    await sleep(200);
 
     await send('Emulation.setDeviceMetricsOverride', {
       width: 700, height: 900, deviceScaleFactor: 1, mobile: false

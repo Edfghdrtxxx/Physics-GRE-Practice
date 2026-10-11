@@ -2301,6 +2301,8 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .exam-review-nav-head .btn { margin: 0; }
 .exam-review-nav .pal-cell[disabled] { opacity: .35; cursor: default; }
 .exam-review-q { scroll-margin-top: 64px; }
+.exam-review-q:focus { outline: none; }
+.exam-review-choices .choices { margin-top: 12px; }
 @container exam-results (max-width: 760px) {
   .exam-results-grid { grid-template-columns: minmax(0, 1fr); }
   .exam-review-nav { display: none; }
