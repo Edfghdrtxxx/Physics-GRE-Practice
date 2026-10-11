@@ -1,0 +1,106 @@
+source entries in HTML
+  ok  — name: Rest mass of the electron
+  ok  — Rest mass of the electron has 9.11
+  ok  — Rest mass of the electron has 10^{-31}
+  ok  — Rest mass of the electron has kg
+  ok  — name: Magnitude of the electron charge
+  ok  — Magnitude of the electron charge has 1.60
+  ok  — Magnitude of the electron charge has 10^{-19}
+  ok  — Magnitude of the electron charge has C
+  ok  — name: Avogadro's number
+  ok  — Avogadro's number has 6.02
+  ok  — Avogadro's number has 10^{23}
+  ok  — name: Universal gas constant
+  ok  — Universal gas constant has 8.31
+  ok  — Universal gas constant has J/(mol
+  ok  — Universal gas constant has K
+  ok  — name: Boltzmann's constant
+  ok  — Boltzmann's constant has 1.38
+  ok  — Boltzmann's constant has 10^{-23}
+  ok  — Boltzmann's constant has J/K
+  ok  — name: Speed of light
+  ok  — Speed of light has 3.00
+  ok  — Speed of light has 10^{8}
+  ok  — Speed of light has m/s
+  ok  — name: Planck's constant
+  ok  — Planck's constant has 6.63
+  ok  — Planck's constant has 10^{-34}
+  ok  — Planck's constant has J
+  ok  — Planck's constant has s
+  ok  — Planck's constant has 4.14
+  ok  — Planck's constant has 10^{-15}
+  ok  — Planck's constant has eV
+  ok  — hbar has \hbar
+  ok  — hbar has h/2\pi
+  ok  — hc has hc = 1240
+  ok  — hc has eV
+  ok  — hc has nm
+  ok  — name: Vacuum permittivity
+  ok  — Vacuum permittivity has 8.85
+  ok  — Vacuum permittivity has 10^{-12}
+  ok  — Vacuum permittivity has C^{2}
+  ok  — Vacuum permittivity has N
+  ok  — Vacuum permittivity has m^{2}
+  ok  — name: Vacuum permeability
+  ok  — Vacuum permeability has 4\pi
+  ok  — Vacuum permeability has 10^{-7}
+  ok  — Vacuum permeability has T
+  ok  — Vacuum permeability has m/A
+  ok  — name: Universal gravitational constant
+  ok  — Universal gravitational constant has 6.67
+  ok  — Universal gravitational constant has 10^{-11}
+  ok  — Universal gravitational constant has m^{3}
+  ok  — Universal gravitational constant has kg
+  ok  — Universal gravitational constant has s^{2}
+  ok  — name: Acceleration due to gravity
+  ok  — Acceleration due to gravity has 9.80
+  ok  — Acceleration due to gravity has m/s^{2}
+  ok  — name: 1 atmosphere pressure
+  ok  — 1 atmosphere pressure has 1.0
+  ok  — 1 atmosphere pressure has 10^{5}
+  ok  — 1 atmosphere pressure has N/m^{2}
+  ok  — 1 atmosphere pressure has Pa
+  ok  — name: 1 angstrom
+  ok  — 1 angstrom has 10^{-10}
+  ok  — 1 angstrom has 0.1
+  ok  — 1 angstrom has nm
+prefixes and inertia
+  ok  — prefixes heading
+  ok  — inertia heading
+  ok  — prefix femto 10^{-15} f
+  ok  — prefix pico 10^{-12} p
+  ok  — prefix nano 10^{-9} n
+  ok  — prefix micro 10^{-6} \mu
+  ok  — prefix milli 10^{-3} m
+  ok  — prefix centi 10^{-2} c
+  ok  — prefix kilo 10^{3} k
+  ok  — prefix mega 10^{6} M
+  ok  — prefix giga 10^{9} G
+  ok  — prefix tera 10^{12} T
+  ok  — prefix peta 10^{15} P
+  ok  — inertia Rod
+  ok  — inertia Disc
+  ok  — inertia Sphere
+scope
+  ok  — panel title
+  ok  — does not add proton
+  ok  — does not add neutron
+  ok  — does not add Bohr
+  ok  — does not add CODATA
+  ok  — does not add 9.109
+  ok  — does not add 1.602176
+  ok  — does not add 6.626
+  ok  — does not add formula card
+  ok  — does not add mistake
+  ok  — 15 constant rows (Planck has two follow-on lines)
+  ok  — 11 SI prefixes
+  ok  — 3 moments of inertia
+  ok  — index.html loads data-exam-table.js with a cache token
+  ok  — index.html cache-busts view-exam.js
+  ok  — index.html cache-busts style.css
+  ok  — exam room has the table button
+  ok  — T opens or closes the table
+  ok  — T does nothing while the exam is paused
+  ok  — Paused card markup from main is still present
+
+101 passed, 0 failed
