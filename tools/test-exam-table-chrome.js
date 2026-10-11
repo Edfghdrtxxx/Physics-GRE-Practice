@@ -7,7 +7,8 @@
    questions with the room's flag button, submits the sitting, and checks
    the flag list in PGRE.buildStatusSummary().exams. On the results page it
    checks that the Flagged tile switches the review list to the flagged
-   questions and back.
+   questions and back, and that the question navigator beside the list
+   jumps to a question and follows that filter.
    Isolated profile + ephemeral ports. Requests to the OrbitOS status bridge
    (127.0.0.1:4789) are blocked before the page loads. Run:
      node tools/test-exam-table-chrome.js
@@ -459,6 +460,12 @@ async function main() {
     }
     await flagQuestion(5);
     await flagQuestion(2);
+    // answer question 2 right; the draw mixes fixture and bank questions, so read its key
+    await evaluate(`(function () {
+      var exam = PGRE.examEngine.active();
+      var key = PGRE.questionById(exam.order[exam.cursor]).answer;
+      document.querySelector('#exam-q .choice[data-idx="' + key + '"]').click();
+    })()`);
     await flagQuestion(3);
     await evaluate('document.getElementById("exam-flag").click()');
     var sitting = await evaluate(`(function () {
@@ -517,6 +524,13 @@ async function main() {
       'the Flagged tile is a button showing 2, not pressed, labelled "Show only these"');
     check(review.total === sitting.order.length && review.shown === everyCard && !review.bar,
       'the review list starts with all ' + sitting.order.length + ' questions and no filter line');
+    // offsetTop is the laid-out position (tile in the row, plus label in its tile);
+    // the entrance animation moves the tiles on screen but not these numbers
+    var labelTops = await evaluate(`Array.prototype.map.call(
+      document.querySelectorAll('.exam-result-stats .stat-label'),
+      function (el) { return el.closest('.stat-tile').offsetTop + el.offsetTop; })`);
+    check(labelTops.length === 4 && labelTops.every(function (t) { return t === labelTops[0]; }),
+      'the four tile labels sit on one line (offsets ' + labelTops.join(', ') + ' px)');
     var startTop = review.headTop;
 
     await evaluate('document.getElementById("exam-flagged-tile").click()');
@@ -550,6 +564,102 @@ async function main() {
     check(review.shown === everyCard && review.pressed === 'false' && !review.bar &&
       review.focus === 'exam-review-title',
       '"Show all" shows every question again and keeps focus on the review heading');
+
+    /* Results page: the question navigator beside the cards. Question 2 was
+       answered right and flagged; question 5 was flagged and left blank. */
+    async function navState() {
+      return evaluate(`(function () {
+        function seen(el) { return !!el && el.getClientRects().length > 0; }
+        function numbers(list, test) {
+          return list.map(function (el, i) { return test(el) ? i + 1 : 0; }).filter(Boolean).join(',');
+        }
+        var nav = document.getElementById('exam-review-nav');
+        var cells = Array.prototype.slice.call(nav.querySelectorAll('.pal-cell'));
+        var cards = Array.prototype.slice.call(document.querySelectorAll('#exam-root .exam-review-q'));
+        var toggle = document.getElementById('exam-nav-flagged');
+        var exam = PGRE.examEngine.byId(${JSON.stringify(sitting.id)});
+        function top(i) { return seen(cards[i]) ? Math.round(cards[i].getBoundingClientRect().top) : null; }
+        return {
+          seen: seen(nav),
+          cells: cells.length,
+          scored: numbers(exam.order, function (qid) {
+            var q = PGRE.questionById(qid);
+            return !!q && exam.answers[qid] === q.answer;
+          }),
+          right: numbers(cells, function (c) { return c.classList.contains('is-correct'); }),
+          flagged: numbers(cells, function (c) { return c.classList.contains('is-flagged'); }),
+          current: numbers(cells, function (c) { return c.getAttribute('aria-current') === 'true'; }),
+          disabled: cells.filter(function (c) { return c.disabled; }).length,
+          agree: cells.every(function (c, i) {
+            var right = cards[i].classList.contains('is-right');
+            return c.classList.contains('is-correct') === right && c.classList.contains('is-wrong') !== right;
+          }),
+          labels: cells[1].getAttribute('aria-label') + ' | ' + cells[4].getAttribute('aria-label'),
+          pressed: toggle ? toggle.getAttribute('aria-pressed') : '',
+          tile: document.getElementById('exam-flagged-tile').getAttribute('aria-pressed'),
+          shown: numbers(cards, seen),
+          top4: top(3),
+          top5: top(4),
+          navTop: Math.round(nav.getBoundingClientRect().top),
+          viewport: window.innerHeight,
+          pageWidth: document.documentElement.scrollWidth,
+          windowWidth: document.documentElement.clientWidth
+        };
+      })()`);
+    }
+    function near(value, target) { return value != null && Math.abs(value - target) <= 2; }
+    var total = sitting.order.length;
+    var nav = await navState();
+    check(nav.seen && nav.cells === total && nav.pressed === 'false' && nav.disabled === 0,
+      'the question navigator shows ' + total + ' enabled cells and an unpressed "Flagged only" toggle');
+    check(nav.right === nav.scored && nav.right.split(',').indexOf('2') !== -1 && nav.flagged === '2,5' && nav.agree,
+      'its cells mark the right answers (' + nav.right + ', question 2 among them) and questions 2 and 5 flagged, ' +
+      'and agree with every review card');
+    check(nav.labels === 'Question 2, right, flagged | Question 5, wrong, flagged',
+      'cell labels state the result and the flag (' + nav.labels + ')');
+
+    await evaluate('document.querySelector(\'#exam-review-nav [data-review-goto="3"]\').click()');
+    nav = await navState();
+    check(near(nav.top4, 64) && nav.current === '4',
+      'a click on cell 4 puts question 4 under the top bar and rings that cell (top ' + nav.top4 + ' px)');
+    check(near(nav.navTop, 72), 'the navigator stays in view while the page scrolls (top ' + nav.navTop + ' px)');
+
+    await evaluate('document.getElementById("exam-nav-flagged").click()');
+    nav = await navState();
+    await sleep(300);
+    await shot('22-nav-flagged-only.png');
+    check(nav.shown === '2,5' && nav.pressed === 'true' && nav.tile === 'true' && nav.disabled === total - 2,
+      'the navigator toggle shows the flagged questions only, presses the Flagged tile, and disables ' +
+      (total - 2) + ' cells');
+    check(nav.top5 != null && nav.top5 >= 0 && nav.top5 < nav.viewport && nav.current === '5',
+      'from question 4 the page moves to question 5, the next flagged question (top ' + nav.top5 + ' px)');
+
+    await evaluate('document.getElementById("exam-nav-flagged").click()');
+    nav = await navState();
+    await sleep(300);
+    await shot('23-nav-all.png');
+    check(nav.shown === everyCard && nav.pressed === 'false' && nav.tile === 'false' && nav.disabled === 0,
+      'the navigator toggle shows every question again and releases the Flagged tile');
+    check(near(nav.top5, 64) && nav.current === '5',
+      'question 5 stays under the top bar when the other questions return (top ' + nav.top5 + ' px)');
+
+    await evaluate('window.scrollTo(0, 0)');
+    await sleep(200);
+    nav = await navState();
+    check(nav.current === '', 'no cell is ringed above the review list');
+
+    await send('Emulation.setDeviceMetricsOverride', {
+      width: 700, height: 900, deviceScaleFactor: 1, mobile: false
+    });
+    await sleep(300);
+    nav = await navState();
+    check(!nav.seen && nav.pageWidth <= nav.windowWidth,
+      'a 700 px window hides the navigator and has no horizontal page scroll (' + nav.pageWidth + ' / ' +
+      nav.windowWidth + ')');
+    await send('Emulation.setDeviceMetricsOverride', {
+      width: 1280, height: 900, deviceScaleFactor: 1, mobile: false
+    });
+    await sleep(200);
 
     await evaluate('location.hash = "#/"');
     await until('!document.getElementById("exam-root") && !document.body.classList.contains("exam-fullscreen")', 'dashboard');
