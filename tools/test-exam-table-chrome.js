@@ -298,9 +298,11 @@ async function main() {
     /* The weighted 70-draw mixes these fixtures with the gitignored bank.
        Put the tall fixture first before the scroll steps so a still-
        typesetting bank stem cannot move .exam-main scrollTop via overflow-
-       anchor during the table-open wait. The check below stays a strict
-       equality on scrollTop; a product that drops the position still fails. */
-    var pinned = await evaluate(`(function () {
+       anchor during the table-open wait. Click a different palette cell
+       first: a click on the already-current cell may leave the bank
+       question on screen. The scrollTop comparison stays a strict
+       equality; a product that drops the position still fails. */
+    await evaluate(`(function () {
       var exam = PGRE.examEngine.active();
       var want = 'toi-q0';
       var i = exam.order.indexOf(want);
@@ -310,14 +312,24 @@ async function main() {
         exam.order[0] = exam.order[i];
         exam.order[i] = tmp;
       }
-      exam.cursor = 0;
       PGRE.store.save();
-      var cell = document.querySelector('#exam-palette [data-goto="0"]');
-      if (cell) cell.click();
-      return exam.order[0];
+      var other = document.querySelector('#exam-palette [data-goto="1"]');
+      if (other) other.click();
     })()`);
-    check(pinned === 'toi-q0', 'scroll check uses the tall fixture as question 1 (' + pinned + ')');
-    await sleep(200);
+    await until('PGRE.examEngine.active().cursor === 1', 'palette moved off question 1');
+    await evaluate('document.querySelector(\'#exam-palette [data-goto="0"]\').click()');
+    await until('PGRE.examEngine.active().cursor === 0', 'palette back on question 1');
+    var pinned = await evaluate(`(function () {
+      var exam = PGRE.examEngine.active();
+      var qtext = document.querySelector('#exam-q .q-text');
+      return {
+        qid: exam.order[0],
+        shown: qtext ? qtext.textContent : ''
+      };
+    })()`);
+    check(pinned.qid === 'toi-q0' && (pinned.shown || '').indexOf(STEM) !== -1,
+      'scroll check shows the tall fixture as question 1 (qid ' + pinned.qid +
+      ', shown ' + JSON.stringify((pinned.shown || '').slice(0, 60)) + ')');
 
     await evaluate(`(function () {
       var choice = document.querySelector('.choice[data-idx="2"]');
@@ -333,6 +345,7 @@ async function main() {
       var exam = PGRE.examEngine.active();
       var main = document.querySelector('.exam-main');
       var heading = document.getElementById('exam-q-heading');
+      var qtext = document.querySelector('#exam-q .q-text');
       return {
         cursor: exam.cursor,
         qid: exam.order[exam.cursor],
@@ -340,11 +353,15 @@ async function main() {
         duration: exam.durationSec,
         scroll: main ? main.scrollTop : 0,
         heading: heading ? heading.textContent : '',
+        shown: qtext ? qtext.textContent : '',
         paused: exam.paused
       };
     })()`);
     check(before.answer === 2, 'chose Charlie (index 2) on question 1');
     check(before.cursor === 0 && before.paused === false, 'sitting is on question 1 with the clock running');
+    check(before.qid === 'toi-q0' && (before.shown || '').indexOf(STEM) !== -1,
+      'question 1 on screen is the tall fixture during the scroll steps (qid ' +
+      before.qid + ', shown ' + JSON.stringify((before.shown || '').slice(0, 60)) + ')');
 
     await evaluate('document.getElementById("exam-table-btn").click()');
     await until('!!document.getElementById("exam-table-dialog")', 'table drawer in the DOM');
