@@ -807,6 +807,7 @@ function loadShipped(reduced, opts) {
     runFile('js/bank.js');
     runFile('js/flashmodes.js');
     runFile('js/view-formulas.js');
+    runFile('js/data-exam-table.js');
     runFile('js/view-exam.js');
     runFile('js/view-practice.js');
   }

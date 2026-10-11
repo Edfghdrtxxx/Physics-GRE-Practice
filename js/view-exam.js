@@ -59,17 +59,29 @@ PGRE.views.exam = (function () {
     if (ex) PGRE.store.save(); // last unsaved seconds survive a reload
   });
 
-  /* Keyboard: A–E / 1–5 to (de)select, ←/→ to navigate, F to flag, P to pause.
-     Registered once; only acts inside the room. Modal keys (Esc / Enter) share
-     the existing hide/resume/confirm handlers. */
+  /* Keyboard: A–E / 1–5 to (de)select, ←/→ to navigate, F to flag, P to pause,
+     T to open/close the Table of Information. Registered once; only acts
+     inside the room. Modal keys (Esc / Enter) share the existing
+     hide/resume/confirm handlers. T does not collide with those keys. */
   document.addEventListener('keydown', function (e) {
     if (!document.body.classList.contains('exam-fullscreen')) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return; // ⌘C / ⌘F etc. must never answer or flag
+    var tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     var host = document.getElementById('exam-modal-host');
     var modalOpen = !!(host && host.firstChild);
     var exam = PGRE.examEngine && PGRE.examEngine.active();
     if (!exam) return;
     var k = e.key;
+    if (tableIsOpen()) {
+      if (k === 'Escape' || k === 't' || k === 'T') {
+        e.preventDefault();
+        hideTable();
+      } else {
+        e.preventDefault();
+      }
+      return;
+    }
     if (modalOpen) {
       if (k === 'Escape') {
         e.preventDefault();
@@ -84,6 +96,11 @@ PGRE.views.exam = (function () {
       return;
     }
     if (exam.paused) return;
+    if (k === 't' || k === 'T') {
+      e.preventDefault();
+      showTable();
+      return;
+    }
     if (/^[a-eA-E]$/.test(k) || /^[1-5]$/.test(k)) {
       var idx = /^[1-5]$/.test(k) ? parseInt(k, 10) - 1 : k.toUpperCase().charCodeAt(0) - 65;
       var q = PGRE.questionById(exam.order[exam.cursor]);
@@ -351,6 +368,9 @@ PGRE.views.exam = (function () {
           '<div class="exam-bar-right">' +
             PGRE.ui.meter(0, 'meter-thin exam-progress-meter') +
             '<span class="exam-progress" id="exam-progress"></span>' +
+            '<button class="btn btn-ghost btn-sm" id="exam-table-btn" type="button" ' +
+              'aria-expanded="false" aria-controls="exam-table-dialog" ' +
+              'title="Table of Information (T)">Table of Information</button>' +
             '<button class="btn btn-ghost btn-sm" id="exam-pause">Pause</button>' +
             '<button class="btn btn-primary btn-sm" id="exam-submit">Submit</button>' +
           '</div>' +
@@ -375,8 +395,10 @@ PGRE.views.exam = (function () {
           '<button class="btn btn-primary" id="exam-next">Next</button>' +
         '</div>' +
       '</div>' +
+      '<div id="exam-table-host"></div>' +
       '<div id="exam-modal-host"></div>';
 
+    document.getElementById('exam-table-btn').addEventListener('click', function () { toggleTable(); });
     document.getElementById('exam-pause').addEventListener('click', function () { togglePause(exam); });
     document.getElementById('exam-submit').addEventListener('click', function () { confirmSubmit(exam); });
     document.getElementById('exam-prev').addEventListener('click', function () {
@@ -620,6 +642,73 @@ PGRE.views.exam = (function () {
     if (resume.focus) resume.focus();
   }
   function hideModal() { var h = document.getElementById('exam-modal-host'); if (h) h.innerHTML = ''; }
+
+  /* Table of Information — a left drawer over the sitting (same
+     transform + --dur/--ease-out as the sidebar drawer). The clock
+     keeps running. Opening and closing must not remount the question.
+     Kept off exam-modal-host so the pause overlay stays a separate edit. */
+  var tableClosing = false;
+  function tableIsOpen() {
+    var host = document.getElementById('exam-table-host');
+    var overlay = document.getElementById('exam-table-overlay');
+    return !!(host && host.firstChild && overlay && overlay.classList.contains('is-open'));
+  }
+  function setTableButtonState(open) {
+    var btn = document.getElementById('exam-table-btn');
+    if (!btn) return;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  function showTable() {
+    var host = document.getElementById('exam-table-host');
+    if (!host || host.firstChild || tableClosing) return;
+    var html = PGRE.examTableHTML ? PGRE.examTableHTML() : '';
+    if (!html) return;
+    host.innerHTML = html;
+    if (PGRE.typesetMath) PGRE.typesetMath(host);
+    setTableButtonState(true);
+    var overlay = document.getElementById('exam-table-overlay');
+    if (overlay) overlay.addEventListener('click', function (ev) {
+      if (ev.target === overlay) hideTable();
+    });
+    var close = document.getElementById('exam-table-close');
+    if (close) {
+      close.addEventListener('click', function () { hideTable(); });
+      if (close.focus) close.focus();
+    }
+    if (overlay) {
+      overlay.offsetWidth; /* force layout so the closed translateX paints */
+      overlay.classList.add('is-open');
+    }
+  }
+  function hideTable() {
+    var host = document.getElementById('exam-table-host');
+    var overlay = document.getElementById('exam-table-overlay');
+    var card = document.getElementById('exam-table-dialog');
+    if (!host || !host.firstChild || tableClosing) return;
+    tableClosing = true;
+    setTableButtonState(false);
+    if (overlay) overlay.classList.remove('is-open');
+    var finished = false;
+    function finish() {
+      if (finished) return;
+      finished = true;
+      tableClosing = false;
+      if (card) card.removeEventListener('transitionend', onEnd);
+      if (host) host.innerHTML = '';
+      var btn = document.getElementById('exam-table-btn');
+      if (btn && btn.focus) btn.focus();
+    }
+    function onEnd(ev) {
+      if (ev && ev.target !== card) return;
+      finish();
+    }
+    if (card) card.addEventListener('transitionend', onEnd);
+    setTimeout(finish, 500);
+  }
+  function toggleTable() {
+    if (tableIsOpen()) hideTable();
+    else showTable();
+  }
 
   /* ——— Submit (custom in-page modal — never window.confirm) ——— */
   function confirmSubmit(exam) {

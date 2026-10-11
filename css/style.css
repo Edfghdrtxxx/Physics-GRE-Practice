@@ -2075,6 +2075,112 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .exam-overlay-card { max-width: 460px; width: 100%; margin: 0; box-shadow: none; }
 .exam-overlay-card h2 { margin-bottom: 8px; }
 
+/* Table of Information — mock-exam room only. A left drawer over the
+   sitting, same transform + --dur/--ease-out as the narrow sidebar
+   drawer. Below pause/submit (z-index 60). The clock keeps ticking. */
+.exam-table-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: var(--scrim);
+  overflow: hidden;
+}
+.exam-table-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(640px, 92vw);
+  max-width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 16px 20px 20px;
+  border-radius: 0;
+  border-top: none;
+  border-bottom: none;
+  border-left: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: none;
+  transform: translateX(-100%);
+  transition: transform var(--dur) var(--ease-out);
+  pointer-events: none;
+}
+.exam-table-overlay.is-open .exam-table-card {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+.exam-table-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+}
+.exam-table-head h2 { margin: 0; font-size: 18px; }
+.exam-table-head .btn { margin-top: 0; flex: none; }
+.exam-table-body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 4px;
+}
+.exam-table-const {
+  display: grid;
+  grid-template-columns: minmax(8.5em, 0.9fr) minmax(0, 1.4fr);
+  column-gap: 16px;
+  row-gap: 3px;
+  align-items: baseline;
+}
+.exam-table-row { display: contents; }
+.exam-table-name {
+  color: var(--ink-2);
+  font-size: 14px;
+  text-align: right;
+  line-height: 1.4;
+}
+.exam-table-eq {
+  min-width: 0;
+  overflow-x: auto;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.exam-table-lower {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px 32px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.exam-table-sub {
+  font-size: 13px;
+  margin: 0 0 10px;
+  color: var(--ink);
+}
+.exam-table-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.exam-table-grid td {
+  padding: 2px 10px 2px 0;
+  vertical-align: baseline;
+  color: var(--ink);
+}
+.exam-table-grid td:last-child { padding-right: 0; }
+.exam-table-inertia td:first-child { color: var(--ink-2); width: 40%; }
+
+@media (max-width: 700px) {
+  .exam-table-card { width: min(640px, 100vw); padding: 14px 16px 16px; }
+  .exam-table-const { grid-template-columns: 1fr; }
+  .exam-table-name { text-align: left; }
+  .exam-table-lower { grid-template-columns: 1fr; gap: 18px; }
+}
+
 /* ——— Results / review ——— */
 .exam-result-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .exam-result-head .btn { margin: 0; }
