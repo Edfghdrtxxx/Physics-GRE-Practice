@@ -269,7 +269,12 @@ PGRE.views.dashboard = (function () {
     var sims = s.exams.filter(function (x) { return x.submittedAt && typeof x.scaledEst === 'number'; });
     if (sims.length) {
       sims.sort(function (a, b) { return a.submittedAt < b.submittedAt ? -1 : 1; });
-      latest = sims[sims.length - 1].scaledEst;
+      var last = sims[sims.length - 1];
+      latest = last.scaledEst;
+      if (PGRE.examEngine && typeof PGRE.examEngine.scaleDisplay === 'function') {
+        var shown = PGRE.examEngine.scaleDisplay(last);
+        if (shown && typeof shown.scaled === 'number') latest = shown.scaled;
+      }
       scaled = (scaled + latest) / 2;
       blended = true;
     }

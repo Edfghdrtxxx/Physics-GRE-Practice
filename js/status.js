@@ -175,9 +175,14 @@ window.PGRE = window.PGRE || {};
         return exam && exam.submittedAt && localDay(exam.submittedAt) === date;
       })
       .map(function (exam) {
-        return compact(exam, [
+        var row = compact(exam, [
           'id', 'submittedAt', 'format', 'source', 'raw', 'total', 'scaledEst'
         ]);
+        if (PGRE.examEngine && typeof PGRE.examEngine.scaleDisplay === 'function') {
+          var shown = PGRE.examEngine.scaleDisplay(exam);
+          if (shown && shown.scaled != null) row.scaledEst = shown.scaled;
+        }
+        return row;
       });
 
     var reviewed = (Array.isArray(state.cardReviews) ? state.cardReviews : [])
