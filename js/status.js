@@ -151,6 +151,20 @@ window.PGRE = window.PGRE || {};
     return out;
   }
 
+  /* Question ids flagged in one sitting, each once, in the exam's own
+     question order (exam.flags is stored in click order). Ids only: a
+     sitting may be an intact exam (spoiler rule, AGENTS.md → Content Rules). */
+  function examFlags(exam) {
+    var flagged = Array.isArray(exam.flags) ? exam.flags : [];
+    var out = [];
+    (Array.isArray(exam.order) ? exam.order : []).forEach(function (qid) {
+      if (typeof qid === 'string' && flagged.indexOf(qid) !== -1 && out.indexOf(qid) === -1) {
+        out.push(qid);
+      }
+    });
+    return out;
+  }
+
   PGRE.buildStatusSummary = function () {
     var store = PGRE.store || {};
     var state = store.state || {};
@@ -182,6 +196,7 @@ window.PGRE = window.PGRE || {};
           var shown = PGRE.examEngine.scaleDisplay(exam);
           if (shown && shown.scaled != null) row.scaledEst = shown.scaled;
         }
+        row.flags = examFlags(exam);
         return row;
       });
 

@@ -3,8 +3,11 @@
    Starts a sitting on fixture questions, opens the table by button and by
    key, checks every official entry, checks the clock advanced while open,
    closes, checks the question and chosen answer are unchanged, and checks
-   the control is absent outside the room.
-   Isolated profile + ephemeral ports. Run:
+   the control is absent outside the room. Before leaving the room it flags
+   questions with the room's flag button, submits the sitting, and checks
+   the flag list in PGRE.buildStatusSummary().exams.
+   Isolated profile + ephemeral ports. Requests to the OrbitOS status bridge
+   (127.0.0.1:4789) are blocked before the page loads. Run:
      node tools/test-exam-table-chrome.js
    PGRE_ARTIFACT_DIR keeps screenshots. PGRE_TEST_PORT / PGRE_CDP_PORT pin ports. */
 'use strict';
@@ -19,6 +22,8 @@ var { spawn } = require('child_process');
 var PORT = parseInt(process.env.PGRE_TEST_PORT || '0', 10);
 var CDP_PORT = parseInt(process.env.PGRE_CDP_PORT || '0', 10);
 var ROOT = path.resolve(__dirname, '..');
+var BRIDGE_PORT = 4789; // js/status.js ENDPOINT
+function isBridgeUrl(u) { return /^https?:\/\/(127\.0\.0\.1|localhost):4789\//.test(String(u)); }
 var KEEP_ARTIFACTS = !!process.env.PGRE_ARTIFACT_DIR;
 var ARTIFACT_DIR = process.env.PGRE_ARTIFACT_DIR ||
   fs.mkdtempSync(path.join(os.tmpdir(), 'pgre-exam-table-shots-'));
@@ -144,9 +149,10 @@ async function main() {
     '--user-data-dir=' + userDataDir,
     '--no-first-run',
     '--window-size=1280,900',
-    'http://127.0.0.1:' + httpPort + '/'
+    'about:blank'
   ], { stdio: 'ignore' });
 
+  var bridge = { sent: 0, answered: 0 };
   var ws = null;
   try {
     var wsUrl = null;
@@ -165,6 +171,8 @@ async function main() {
     var pending = new Map();
     ws.onmessage = function (ev) {
       var msg = JSON.parse(ev.data);
+      if (msg.method === 'Network.requestWillBeSent' && isBridgeUrl(msg.params.request.url)) bridge.sent++;
+      if (msg.method === 'Network.responseReceived' && isBridgeUrl(msg.params.response.url)) bridge.answered++;
       if (msg.id && pending.has(msg.id)) {
         var p = pending.get(msg.id); pending.delete(msg.id);
         if (msg.error) p.reject(msg.error); else p.resolve(msg.result);
@@ -216,6 +224,13 @@ async function main() {
     await send('Emulation.setDeviceMetricsOverride', {
       width: 1280, height: 900, deviceScaleFactor: 1, mobile: false
     });
+    /* js/status.js posts the status summary to the OrbitOS status bridge on
+       127.0.0.1:4789. Block that port before the app loads, so this
+       fixture sitting never replaces the snapshot agents read. */
+    await send('Network.enable', {});
+    await send('Network.setBlockedURLs', { urls: ['*://127.0.0.1:' + BRIDGE_PORT + '/*', '*://localhost:' + BRIDGE_PORT + '/*'] });
+    await send('Page.navigate', { url: 'http://127.0.0.1:' + httpPort + '/' });
+    await sleep(250);
 
     await until("typeof PGRE !== 'undefined' && typeof PGRE._resetBankCache === 'function'", 'PGRE boot');
 
@@ -432,12 +447,43 @@ async function main() {
     })()`);
     check(stillSame, 'question and answer still unchanged after key toggles');
 
-    await evaluate(`(function () {
+    /* Flags reach the agent status summary (js/status.js). Flag question 5,
+       then question 2, so the stored click order is the reverse of the exam
+       order; flag and unflag question 3; submit through the room's dialog. */
+    async function flagQuestion(n) {
+      await evaluate('document.querySelector(\'#exam-palette [data-goto="' + (n - 1) + '"]\').click()');
+      await until('PGRE.examEngine.active().cursor === ' + (n - 1), 'question ' + n);
+      await evaluate('document.getElementById("exam-flag").click()');
+    }
+    await flagQuestion(5);
+    await flagQuestion(2);
+    await flagQuestion(3);
+    await evaluate('document.getElementById("exam-flag").click()');
+    var sitting = await evaluate(`(function () {
       var exam = PGRE.examEngine.active();
-      if (exam && PGRE.examEngine.discard) PGRE.examEngine.discard(exam);
-      location.hash = '#/';
+      return { id: exam.id, order: exam.order.slice(), stored: exam.flags.slice() };
     })()`);
-    await until('!document.body.classList.contains("exam-fullscreen")', 'dashboard');
+    check(sitting.stored.join(',') === [sitting.order[4], sitting.order[1]].join(','),
+      'the room stores the flags in click order: question 5, then question 2');
+
+    await evaluate('document.getElementById("exam-submit").click()');
+    await until('!!document.getElementById("exam-confirm")', 'submit dialog');
+    await evaluate('document.getElementById("exam-confirm").click()');
+    await until('location.hash === ' + JSON.stringify('#/exam/review/' + sitting.id), 'results page');
+
+    var examRows = await evaluate('PGRE.buildStatusSummary().exams');
+    var examRow = examRows[0] || {};
+    check(examRows.length === 1 && examRow.id === sitting.id,
+      'the status summary lists the submitted sitting');
+    check(JSON.stringify(examRow.flags) === JSON.stringify([sitting.order[1], sitting.order[4]]),
+      'its flags are the flagged question ids in exam order (question 2, then question 5), without the unflagged question 3');
+    check(Object.keys(examRow).join(',') === 'id,submittedAt,format,source,raw,total,scaledEst,flags',
+      'the exam row carries ids and scores only: no answers map, question text, or choices');
+    check(bridge.answered === 0, 'the status bridge on port ' + BRIDGE_PORT + ' received nothing (' + bridge.sent +
+      ' request(s) blocked, ' + bridge.answered + ' answered)');
+
+    await evaluate('location.hash = "#/"');
+    await until('!document.getElementById("exam-root") && !document.body.classList.contains("exam-fullscreen")', 'dashboard');
     check(!(await evaluate('!!document.getElementById("exam-table-btn")')),
       'Table of Information control is absent on the dashboard');
 
