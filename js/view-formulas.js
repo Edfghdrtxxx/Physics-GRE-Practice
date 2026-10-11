@@ -34,6 +34,10 @@ PGRE.views.formulas = (function () {
   var sessionHeld = false;     // partial deck: do not shorten a saved session
   var lastDeckStatus = null;   // formulaDeckStatus from the load that filled `deck`
   var ROUND_SIZE = 10;   // F11: grade presses per round (every press counts)
+  // Study-card recall clock: 2:00 down, then +m:ss overtime. RAM only.
+  var RECALL_LIMIT_SEC = 120;
+  var RECALL_TICK_MS = 250;
+  var recallTimer = null; // { startedAt, frozen, id }
   // Classic Anki SM-2: four grades. (A legacy 'mastered' value may still
   // appear in cardReviews / lastGrade from older sessions; history chips
   // keep rendering it. Key 5 no longer grades.)
@@ -537,11 +541,12 @@ PGRE.views.formulas = (function () {
          Study session has taken the body over, and its own tab is the obvious
          "back to the deck" affordance. Nothing is lost: the round was persisted
          on every grade, so the home screen meets you with Resume. */
-      if (m === 'study' && study) { settleStudy(); study = null; renderMode(); }
+      if (m === 'study' && study) { settleStudy(); stopRecallTimer(); study = null; renderMode(); }
       return;
     }
     teardownGame();
     settleStudy();
+    stopRecallTimer();
     study = null;
     mode = m;
     renderShell();
@@ -926,6 +931,7 @@ PGRE.views.formulas = (function () {
 
   /* ——— Study mode home — progressive daily batch, rendered into body ——— */
   function renderHome() {
+    stopRecallTimer();
     study = null;
     if (studyFromFill) {
       studyFromFill = false;
@@ -2170,6 +2176,55 @@ PGRE.views.formulas = (function () {
     renderCard();
   }
 
+  function padRecall(n) {
+    n = Math.abs(n) | 0;
+    return (n < 10 ? '0' : '') + n;
+  }
+
+  function formatRecallTimer(elapsedSec) {
+    elapsedSec = Math.max(0, elapsedSec | 0);
+    if (elapsedSec <= RECALL_LIMIT_SEC) {
+      var rem = RECALL_LIMIT_SEC - elapsedSec;
+      return Math.floor(rem / 60) + ':' + padRecall(rem % 60);
+    }
+    var over = elapsedSec - RECALL_LIMIT_SEC;
+    return '+' + Math.floor(over / 60) + ':' + padRecall(over % 60);
+  }
+
+  function stopRecallTimer() {
+    if (recallTimer && recallTimer.id) {
+      clearInterval(recallTimer.id);
+      recallTimer.id = null;
+    }
+    recallTimer = null;
+  }
+
+  function paintRecallTimer() {
+    var el = document.getElementById('recall-timer');
+    if (!el || !recallTimer || recallTimer.frozen) return;
+    var elapsed = Math.floor((Date.now() - recallTimer.startedAt) / 1000);
+    if (elapsed < 0) elapsed = 0;
+    el.textContent = formatRecallTimer(elapsed);
+    if (elapsed > RECALL_LIMIT_SEC) el.classList.add('is-over');
+    else el.classList.remove('is-over');
+  }
+
+  function startRecallTimer() {
+    stopRecallTimer();
+    recallTimer = { startedAt: Date.now(), frozen: false, id: null };
+    paintRecallTimer();
+    recallTimer.id = setInterval(paintRecallTimer, RECALL_TICK_MS);
+  }
+
+  function freezeRecallTimer() {
+    if (!recallTimer) return;
+    if (recallTimer.id) {
+      clearInterval(recallTimer.id);
+      recallTimer.id = null;
+    }
+    recallTimer.frozen = true;
+  }
+
   function newStudyId() {
     studySeq++;
     return 'fs-' + Date.now().toString(36) + '-' + studySeq;
@@ -2378,6 +2433,7 @@ PGRE.views.formulas = (function () {
     var html = '<div class="card practice-card">' +
       '<div class="practice-meta">' +
         '<span>Card ' + (study.done + 1) + ' · ' + study.queue.length + ' left</span>' +
+        '<span class="recall-timer" id="recall-timer" role="timer" aria-live="off">2:00</span>' +
         (study.history.length ? '<button class="btn btn-ghost btn-sm session-back" id="session-back">' +
           'Back <span class="key-hint">←</span></button>' : '') +
         undoBtn +
@@ -2432,6 +2488,7 @@ PGRE.views.formulas = (function () {
     if (shuf) shuf.addEventListener('click', function (e) { e.stopPropagation(); shuffleRemaining(); });
     wireVizNav(body());
     wireSimilar(body());
+    startRecallTimer();
   }
 
   /* F8 pre-flip scaffold: swap the card front for the generic prompt list; the
@@ -2456,6 +2513,7 @@ PGRE.views.formulas = (function () {
   }
 
   function renderPeek() {
+    stopRecallTimer();
     setMasthead('');
     closeVisualizerIfOpen();
     var n = study.history.length, idx = study.peek.idx;
@@ -2514,6 +2572,7 @@ PGRE.views.formulas = (function () {
   }
 
   function flip() {
+    freezeRecallTimer();
     var c = study.queue[0];
     study.flipped = true;
     var backEl = document.getElementById('fcard-back');
@@ -2858,6 +2917,7 @@ PGRE.views.formulas = (function () {
   /* F8 post-Again interstitial: the formula + the same 5 prompts, then Continue.
      A book list has no formula to rebuild: show the list and ask for each point. */
   function renderScaffold(c) {
+    stopRecallTimer();
     setMasthead('');
     study.overlay = 'scaffold';
     var list = c && c.kind === 'list';
@@ -2878,6 +2938,7 @@ PGRE.views.formulas = (function () {
 
   /* F11 round checkpoint: pause after ROUND_SIZE presses with cards still queued. */
   function renderCheckpoint() {
+    stopRecallTimer();
     setMasthead('');
     study.overlay = 'checkpoint';
     // study.done is cumulative across a resume (doneBase carries the earlier
@@ -2935,6 +2996,7 @@ PGRE.views.formulas = (function () {
   }
 
   function renderStudySummary() {
+    stopRecallTimer();
     setMasthead('');
     if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: session over — back to base
     settleStudy();
@@ -4358,6 +4420,7 @@ PGRE.views.formulas = (function () {
     if (!/^#\/formulas/.test(location.hash)) {
       teardownGame();
       settleStudy();
+      stopRecallTimer();
       study = null;
       var sheet = document.getElementById('formulas-print');
       if (sheet && sheet.parentNode) sheet.parentNode.removeChild(sheet);
@@ -4420,6 +4483,7 @@ PGRE.views.formulas = (function () {
     render: function () { return '<div id="formulas-root"></div>'; },
     mount: function () {
       settleStudy();
+      stopRecallTimer();
       study = null;
       teardownGame();
       mode = 'study';
