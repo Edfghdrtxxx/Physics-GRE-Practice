@@ -1,0 +1,9 @@
+PASS: file:// page loaded; the search engine is not loaded and the panel is closed
+PASS: "/" focuses the box in the sidebar and opens the panel
+PASS: typing "wave" loads the engine and shows groups: Pages, Questions, Formula cards
+PASS: ArrowDown then Enter opens #/topic/em, closes the panel, empties the box
+PASS: Cmd+K, "energy", last row: the Search page opens at #/search/energy with 22 hits (22 results · 0.2 ms)
+PASS: sidebar folded: the top-bar button shows and "/" opens the panel with the box in its head
+PASS: Escape closes it; unfolded, the box is back in the sidebar
+PASS: localStorage["pgre-state-v1"] holds the same top-level keys as at load (the box adds none)
+ALL OK

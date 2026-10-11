@@ -1,0 +1,5 @@
+fixture: {"src":"cpg-exam","mistakeOnIt":true,"mockExamUnfinished":false}
+PASS: dashboard: two rows, question text only | groups: Sample-exam questions1, Mistakes1
+PASS: mistake drill on screen (#/mistakes/drill, question before Confirm: true): no row | note: No matches for “frictionless incline”.Tr
+PASS: drill page left (#/): the two rows are back | groups: Sample-exam questions1, Mistakes1
+ALL OK

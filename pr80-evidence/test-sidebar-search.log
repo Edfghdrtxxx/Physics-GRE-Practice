@@ -1,0 +1,131 @@
+PASS: js/sidebar-search.js touches no storage and no saved state
+PASS: js/sidebar-search.js matches through PGRE.search.match (pages, index, sealed titles) and reads no haystack or score itself
+PASS: index.html loads the box with a cache token and still does not script-tag the engine
+
+empty-focused
+PASS: the box sits in the sidebar, above the navigation
+PASS: page load neither fetches the search engine nor builds an index
+PASS: "/" focuses the box and opens its panel under it
+PASS: the empty state names what is searched and how to start, with no rows and no key legend
+PASS: the first focus loads the engine once, through the search view's inject site
+PASS: one character runs no query
+
+results
+PASS: "energy" finds at least three groups, the Studio's pages first: Pages, Questions, Formula cards
+PASS: each group shows at most four rows under a heading that counts every hit
+PASS: every result row marks the matched word
+PASS: the first row starts highlighted and is announced through aria-activedescendant
+PASS: the last row opens the Search page with the same query
+PASS: the key legend shows with the rows
+PASS: the panel opens with its short rise
+PASS: the panel stays inside the window and adds no horizontal scroll
+PASS: no row shows raw LaTeX
+PASS: each Pages row leads to a route and names where it lives
+PASS: six input events in one task run no match; the settled burst runs one (pages, index, sealed titles): 0, 3
+PASS: results for "energy" stay on screen with the first row highlighted
+
+keyboard-selected-row
+PASS: ArrowDown highlights the second row while the caret stays in the box
+PASS: ArrowUp steps back
+PASS: ArrowUp from the first row wraps to the Search-page row
+PASS: ArrowDown from the last row wraps to the first
+PASS: the pointer and the arrow keys share one highlighted row
+PASS: arrowing to the last result scrolls it fully into the list
+PASS: the highlighted row carries its own background
+
+open-and-hand-over
+PASS: Enter opens the highlighted result (#/topic/qm), closes the panel, empties the box and hands the keyboard to the page
+PASS: the Search page opened from its sidebar link is unchanged: empty box, stats card, link active
+PASS: in an input "/" types a slash and neither shortcut moves focus
+PASS: in a textarea "/" types a slash and neither shortcut moves focus
+PASS: in an editable block neither shortcut moves focus
+PASS: Meta+k focuses the box, back in its empty state
+PASS: the last row lands on #/search/energy with the query already searched
+PASS: the box marks a match exactly as the Search page does (same background, weight and colour)
+PASS: the query moved to the Search page: the panel is closed and the box is empty
+
+no-results
+PASS: a query nothing matches says so, with no rows, no Search-page row and no key legend
+
+escape-and-the-rest
+PASS: Escape clears the query and closes the panel
+PASS: Escape returns focus to where it was before the shortcut
+PASS: a query only a page matches offers that page and no Search-page row (that page lists no pages)
+PASS: a press outside closes the panel and keeps the query
+PASS: the shortcut comes back to the kept query, selected for typing over, its first row highlighted
+PASS: the clear button empties the box and leaves it focused
+PASS: a click on a row opens it and closes the panel
+PASS: a query of two words reaches the Search page whole
+PASS: the box wrote nothing to localStorage or sessionStorage through all of the above
+PASS: there is one box and one panel
+
+folded-sidebar
+PASS: with the sidebar folded a search button stands in the top bar
+PASS: the shortcut opens the panel under that button with the box in its head, focused
+PASS: the panel hangs from the button and stays inside the window
+PASS: typing there gives the same grouped results: Pages 4, Questions 2, Formula cards 8
+PASS: the arrow keys work there too
+
+folded-actions
+PASS: Enter opens the result; the box goes back, empty, to its place in the sidebar
+PASS: a press on the button opens the panel and focuses the box
+PASS: a second press closes it and keeps focus on the button
+PASS: Escape clears and closes there as well, back to the button
+PASS: unfolded, the button is gone and the box is in the sidebar
+
+dark-theme
+PASS: on the dark theme the highlighted row stands off the panel (contrast 1.15 or more)
+
+narrow-window
+PASS: in a narrow window the drawer is closed and the search button is in the top bar
+PASS: the button opens the same panel, inside the window, with no horizontal scroll
+
+narrow-drawer
+PASS: Escape closes it
+PASS: with the drawer open the button gives way to the box
+PASS: the panel hangs under the box and lies over the drawer and its scrim
+
+narrow-escape
+PASS: the first Escape clears and closes the search; the drawer stays
+PASS: the next Escape closes the drawer
+
+phone-width
+PASS: at 390 px the panel fits the window: 12 to 378 of 390
+PASS: on a touch screen the key legend and the shortcut chip are left out
+
+where-the-shortcut-stays-out
+PASS: on Recall's Search tab "/" still focuses that tab's own box
+PASS: and Meta+k reaches the sidebar box from there
+PASS: on a question whose clock is running neither shortcut fires
+PASS: the box itself still opens there when it is clicked into
+PASS: once the question is answered the shortcut works again
+PASS: and finds the two questions added after the box was first opened: each open refreshes the index
+PASS: while a dialog is open neither shortcut fires
+
+sealed-exam-questions
+PASS: on the dashboard, with no mock exam unfinished
+PASS: a released ETS exam question is not in the box, and the note on it is not found through the question's words
+PASS: that note is found by its own words and shows only them
+PASS: a book sample-exam question and the mistake made on it appear under the Search page's own headings
+PASS: each of the two rows shows words of the question's stem and nothing else
+PASS: no choice, no solution and no wrong pick is on screen
+PASS: a word of the solution, of a choice or of the wrong pick finds nothing in the box
+PASS: the Search page, which is opened on purpose, finds and shows it as before
+PASS: on a practice set the box shows no sealed question
+PASS: once the practice page is left the two title-only rows are back
+
+off-the-mac
+PASS: off the Mac the box names Ctrl K as its shortcut
+PASS: and Ctrl+K focuses it
+PASS: while the Mac's chord does nothing there
+
+mock-exam-room
+PASS: in the mock-exam room "/", Cmd+K and Ctrl+K do nothing, and the top bar's search button is not on screen
+PASS: and the exam is as it was: first question, clock running, no answer, no flag, no dialog
+PASS: with that exam left unfinished the box shows no sealed question
+PASS: and shows its title again once the exam is discarded
+
+reduced-motion
+PASS: with reduced motion asked for, the panel opens with no animation and the box changes with no transition
+
+ALL OK

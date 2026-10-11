@@ -1,0 +1,9 @@
+origin: file://
+print rules applied as screen rules: {"panelOpen":true,"displayOnScreen":"flex","printRulesApplied":0,"displayWithPrintRules":"flex"}
+large bank: {"questionsInPool":3000,"indexEntries":3086,"buildMs":[23,23,23,17,15],"matches":["energy: 618 hits in 1.8 ms","harmonic oscillator: 153 hits in 0.5 ms","wave: 308 hits in 0.4 ms","capacitor battery: 301 hits in 0.6 ms","zzqxv: 0 hits in 0.1 ms"]}
+box with the large bank: {"groups":["Pages3","Questions600","Mistakes1","Formula cards14","Book sections2","Notes1"],"rows":16} rows on screen 688 ms after typing began (includes the time the tool takes to type six keys and the 150 ms wait after the last key)
+
+origin: http://127.0.0.1:47831
+print rules applied as screen rules: {"panelOpen":true,"displayOnScreen":"flex","printRulesApplied":41,"displayWithPrintRules":"none"}
+large bank: {"questionsInPool":3000,"indexEntries":3081,"buildMs":[22,17,14,16,15],"matches":["energy: 614 hits in 1.4 ms","harmonic oscillator: 153 hits in 0.5 ms","wave: 308 hits in 0.3 ms","capacitor battery: 300 hits in 0.6 ms","zzqxv: 0 hits in 0.1 ms"]}
+box with the large bank: {"groups":["Pages3","Questions600","Formula cards14"],"rows":12} rows on screen 685 ms after typing began (includes the time the tool takes to type six keys and the 150 ms wait after the last key)

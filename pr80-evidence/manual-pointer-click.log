@@ -1,0 +1,14 @@
+Real pointer clicks (chrome-devtools-axi click @uid) on the file:// origin, isolated session and profile, commit b7997e2.
+A reply that begins "page:" is the tool's report of a click it made; a stale reference is retried with a new snapshot.
+1. Cmd+K, typed "mock" on #/notes
+   before the click: {"hash":"#/notes","panelOpen":true,"box":"mock","focus":"INPUT#sbs-input","folded":false}
+   click on the result row 'Mock exam' (@g76:36_43): attempt 1, tool reply begins "page:"
+   after the click:  {"hash":"#/exam","panelOpen":false,"box":"","focus":"MAIN#main","folded":false}
+2. the sidebar toggle
+   click on the sidebar toggle (@g78:35_86): attempt 1, tool reply begins "page:"
+   after the click:  {"hash":"#/exam","panelOpen":false,"box":"","focus":"BUTTON#sidebar-toggle","folded":true}
+3. the search button in the top bar, sidebar folded
+   click on the top-bar search button (@g80:39_0): attempt 1, tool reply begins "page:"
+   after the click:  {"hash":"#/exam","panelOpen":true,"box":"","focus":"INPUT#sbs-input","folded":true}
+   click on the same button, second click (@g82:39_0): attempt 1, tool reply begins "page:"
+   after the click:  {"hash":"#/exam","panelOpen":false,"box":"","focus":"BUTTON#sbs-open","folded":true}

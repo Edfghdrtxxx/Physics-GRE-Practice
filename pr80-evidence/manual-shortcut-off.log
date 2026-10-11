@@ -1,0 +1,6 @@
+PASS: on the focus page before zen mode, "/" opens the box
+PASS: focus timer, zen mode | state reached: true | after "/" and Cmd+K: panel open false, focus ""
+PASS: Recall, Match with its stopwatch | state reached: true | after "/" and Cmd+K: panel open false, focus ""
+PASS: visualizer window | state reached: true | after "/" and Cmd+K: panel open false, focus ""
+PASS: mistake-drill question before Confirm | state reached: true | after "/" and Cmd+K: panel open false, focus ""
+ALL OK

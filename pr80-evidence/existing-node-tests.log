@@ -1,0 +1,29 @@
+commit b7997e2 (this branch with the default branch c2a167f merged in) on 2026-10-11T03:10Z
+test-agent-receipt: exit 0 | 25 passed, 0 failed
+test-bank: exit 0 | 98 passed, 0 failed
+test-dashboard-qotd: exit 0 | 11 passed, 0 failed
+test-exam-engine: exit 0 | 147 passed, 0 failed
+test-file-structure: exit 1 | Node.js v24.14.0
+test-focus-sound: exit 0 | ALL OK
+test-formula-checkin: exit 0 | ALL GREEN
+test-formula-consumers: exit 0 | 13 passed, 0 failed
+test-formula-export: exit 0 | 65 passed, 0 failed
+test-formula-picker: exit 0 | 34 passed, 0 failed
+test-intensity: exit 0 | 100 passed, 0 failed
+test-mem-history: exit 0 | ALL PASS
+test-mistakes-srs: exit 0 | 96 passed, 0 failed
+test-pack-launch: exit 0 | 45 passed, 0 failed
+test-packs: exit 1 | FAIL: missing content/bank/cpg-questions.js (needed to test shipped packs against the real pool)
+test-plan: exit 0 | All 37 assertions passed.
+test-public-formulas: exit 0 | 1103 passed, 0 failed
+test-recall-lists: exit 0 | 14 passed, 0 failed
+test-session-park: exit 0 | 100 passed, 0 failed
+test-srs-intervals: exit 0 | 222 passed, 0 failed
+test-status: exit 0 | 55 passed, 0 failed
+test-store-persist: exit 0 | 63 passed, 0 failed
+test-ux-interaction: exit 0 |   ok  — formulaTextHTML converts power/star/prime suffixes, wanted $J^2$ in: spin operators $J^2$ and $S^2$, $
+test-visualizer-aesthetics: exit 0 |   ok  — cpgf-1.35 derivationSteps math segment parses cleanly: \mathbf{r}(t) 
+
+test-file-structure in the worktree: AssertionError [ERR_ASSERTION]: Unexpected top-level entry found: .claude
+test-file-structure on a clean export of commit b7997e2 (git archive, no .claude folder): All canonical structure and placement checks passed successfully. | exit 0
+test-packs on an export of the default branch c2a167f: FAIL: missing content/bank/cpg-questions.js (needed to test shipped packs against the real pool) | exit 1

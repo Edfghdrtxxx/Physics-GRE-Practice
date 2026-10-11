@@ -1,0 +1,417 @@
+commit b7997e2 (this branch with the default branch c2a167f merged in) on 2026-10-11T03:10Z
+
+## node tools/test-keep-failing-confirm-chrome.js
+PASS: clicking Keep failing opens a confirmation
+PASS: opening the reminder changes no assessment or mistake data
+PASS: the reminder and native hover tip explain repeated difficulty and retakes
+PASS: Cancel closes the reminder without flagging or saving
+PASS: Cancel returns keyboard focus to Keep failing
+PASS: R opens the same confirmation without flagging
+PASS: Escape cancels without flagging
+PASS: Too slow is recorded while the reminder stays open
+PASS: Escape after Too slow dismisses the reminder without further writes
+PASS: Escape keeps the Too slow assessment and does not flag Keep failing
+PASS: clearing Too slow restores the original answer record
+PASS: Escape after Tab leaves the reminder cancels it without flagging
+PASS: Tab then Escape does not mark Keep failing
+PASS: repeated R and Next shortcuts cannot bypass the focused reminder
+PASS: Enter activates Confirm rather than advancing the question
+PASS: Confirm flags the current problem and keeps its recorded answer on screen
+PASS: removing a confirmed flag stays immediate
+PASS: returning to a flagged answer restores the chip and leaves attempts and mistakes unchanged
+PASS: leaving a flagged answer does not rewrite the archived mistake
+PASS: resuming flagged feedback leaves the attempt and the archived mistake unchanged
+PASS: resume paints Keep failing and does not reopen the archived entry
+PASS: mistake-drill R also requests confirmation before changing data
+PASS: mistake-drill Cancel preserves its existing retake data
+PASS: mistake-drill Confirm stamps Keep failing on the fresh assessment
+PASS: restoring a mistake-drill result never opens the reminder
+PASS: removing a mistake-book flag stays immediate
+PASS: mistake-book marking opens the reminder before changing data
+PASS: mistake-book Keep failing uses the same hover tip
+PASS: mistake-book Cancel leaves the problem unflagged
+PASS: mistake-book Cancel returns focus to the selected problem
+PASS: selecting another problem reuses one reminder next to the captured problem
+PASS: mistake-book Confirm flags only the selected problem
+PASS: mistake-book removal does not request confirmation
+PASS: an archived problem stays archived and unflagged while confirmation is pending
+PASS: Cancel preserves the archived entry and its retake schedule
+PASS: Confirm reopens only the selected archived problem for retakes
+status: stopped
+## exit 0
+
+## node tools/test-review-regrade-chrome.js
+
+01-practice-review-opens-on-saved-grading
+PASS: answer page: Forgot something on a 3 d answer stores tomorrow
+PASS: resumed practice session finished with four recorded attempts
+PASS: practice review shows the grading chips in place of the read-only line
+PASS: the chip saved before the reload is the one selected
+PASS: the review window opens on 3 d before and 1 d now, and the banner agrees
+PASS: the chips carry the same K G T F R hints as the answer page
+PASS: opening the review page writes nothing
+
+02-practice-review-unpicked-restores-saved-date
+PASS: unpicking Forgot something shows 3 d alone at once, in the strip and the banner
+PASS: the stored review date is back on the saved date, on disk too
+PASS: the tap moves nothing on the page (panel height and solution position unchanged)
+PASS: no attempt, XP, miss, solve, or ladder step was added
+
+03-practice-review-guessed-by-keyboard
+PASS: G selects Guessed and the window reads 3 d then 2 d
+PASS: the date, the lucky-guess flag and the attempt row all follow the regrade
+PASS: no layout movement on the key press
+PASS: T adds Too slow and the wait is halved once, not twice
+PASS: keyboard regrades add no attempt or XP
+
+04-practice-review-keep-failing-asks-first
+PASS: unpicking Guessed removes the lucky flag and restores 3 d
+PASS: R opens the Keep failing confirmation and writes nothing yet
+
+05-practice-review-keep-failing-confirmed
+PASS: Escape closes the confirmation and stays on the review page
+PASS: confirmed Keep failing flags the problem and the window follows the shared rule (3 d then 1 d)
+PASS: K adds Knew it and the window still follows the shared rule (1 d)
+
+06-practice-review-unscheduled-answer-guessed
+PASS: a correct answer with no schedule reads not scheduled
+PASS: Guessed files it and the window reads not scheduled then 1 d
+
+07-practice-review-incorrect-answer
+PASS: unpicking removes the lucky-only entry again
+PASS: an incorrect answer shows the chips and its 1 d window
+PASS: Too slow is saved on it and a 1 d wait is never cut further
+
+08-practice-review-archived-entry
+PASS: an archived entry opens on its own 7 d window
+PASS: Forgot something moves it to tomorrow and leaves it archived on the same ladder step
+
+09-practice-results-then-reopened
+PASS: chip keys on the results page change nothing
+PASS: reopening a regraded question paints what was saved
+PASS: after every practice regrade: still four attempts and the same XP, in memory and on disk
+
+10-mistake-drill-result-after-resume
+PASS: mistake drill answer page: Guessed halves the fresh wait
+PASS: the resumed drill reopens on the answered question
+PASS: the saved result is back on screen with Guessed selected and nothing new recorded
+PASS: T regrades the revealed result on the same attempt
+
+11-mistake-drill-review-regraded
+PASS: the resumed drill moves on to the other question
+PASS: mistake-drill review shows the chips with the saved Guessed and the moved window
+PASS: opening the mistake-drill review writes nothing
+PASS: G unpicks it and the window returns to the saved 7 d (it was 4 d)
+PASS: no layout movement in the drill review
+PASS: F selects Forgot something: 7 d then 1 d, stored as tomorrow
+PASS: the drill regrade adds no attempt, XP, solve, or ladder step
+
+12-mistake-book-after-regrade
+PASS: the other drilled question opens ungraded on its own window
+PASS: Knew it is saved and keeps its date
+PASS: chip keys do nothing once the review page is gone
+PASS: the book keeps the regraded date and both gradings
+
+ALL OK
+## exit 0
+
+## node tools/test-intensity-chrome.js
+HTTP http://127.0.0.1:56341  CDP 56342
+
+history 1 (mixed)
+  ok  — the Intensity card sits right after the Daily activity target card
+  ok  — newQuestions shows "11 no target today" (got "11 no target today")
+  ok  — newQuestions band is amber with the label "No pack today" (got amber / No pack today)
+  ok  — newQuestions lands in the amber band this history was built for
+  ok  — newQuestions carries a hint when amber
+  ok  — newQuestions has a meter and starts closed
+  ok  — paceSec shows "128 s target 103 s or under" (got "128 s target 103 s or under")
+  ok  — paceSec band is amber with the label "Close" (got amber / Close)
+  ok  — paceSec lands in the amber band this history was built for
+  ok  — paceSec carries a hint when amber
+  ok  — paceSec has a meter and starts closed
+  ok  — firstAttemptAccuracy shows "73% target 75% or more" (got "73% target 75% or more")
+  ok  — firstAttemptAccuracy band is amber with the label "Close" (got amber / Close)
+  ok  — firstAttemptAccuracy lands in the amber band this history was built for
+  ok  — firstAttemptAccuracy carries a hint when amber
+  ok  — firstAttemptAccuracy has a meter and starts closed
+  ok  — repeatMinutes shows "45 min limit 20 min" (got "45 min limit 20 min")
+  ok  — repeatMinutes band is red with the label "Off target" (got red / Off target)
+  ok  — repeatMinutes lands in the red band this history was built for
+  ok  — repeatMinutes is the headline, so it prints no second hint
+  ok  — repeatMinutes has a meter and starts closed
+  ok  — coverage shows "6.0 a day needed: 24.8" (got "6.0 a day needed: 24.8")
+  ok  — coverage band is red with the label "Off target" (got red / Off target)
+  ok  — coverage lands in the red band this history was built for
+  ok  — coverage carries a hint when red
+  ok  — coverage has a meter and starts closed
+  ok  — headline: "45 min of retakes today, 25 over the limit." (got "45 min of retakes today, 25 over the limit.", about repeatMinutes)
+  ok  — the headline carries the band shape of the reading it is about (red)
+  ok  — the headline does not ask for another pack (no button)
+  ok  — tally: "2 close 2 off target 1 without a target" (got "2 close 2 off target 1 without a target")
+  ok  — no chart bar is a tab stop
+  ok  — new-question strip, oldest first: [0,0,5,0,6,8,11] (got [0,0,5,0,6,8,11])
+  ok  — median-pace strip, oldest first: [null,null,100,null,100,100,128] (got [null,null,100,null,100,100,128])
+  ok  — status payload newQuestions = 11 (amber)
+  ok  — status payload paceSec = 128 (amber)
+  ok  — status payload firstAttemptAccuracy = 73 (amber)
+  ok  — status payload repeatMinutes = 45 (red)
+  ok  — status payload coverage = 6 (red)
+  ok  — status payload coverage inputs: remaining 323, working days 13, required 24.8, actual 6
+  ok  — the last 7 days (2026-10-05 to 2026-10-11) hold Thursday 2026-10-08 and one Sunday, so actual divides by 5 working days (got 5)
+  ok  — PGRE.intensity.NO_PACK_WEEKDAYS is [0, 4]: Sunday and Thursday
+  ok  — Thursday changes actual: 30 new / 5 working days = 6 (Sundays only: / 6 = 5)
+  ok  — Thursdays change required: 323 / 13 working days = 24.8 (Sundays only: / 15 = 21.5)
+
+opening a reading (history 1)
+  ok  — the coverage explanation is closed and takes no room at first
+  ok  — a click on the Coverage row opens how it is computed
+  ok  — it shows both divisions: 323 / 13 and 30 / 5
+  ok  — it says there is no timed pack on Sundays or Thursdays
+  ok  — it lists the three bands and their limits
+  ok  — it links to the Study plan
+  ok  — in each reading the one band limit marked as current is the band on its chip; a reading without a band marks none
+  ok  — each day's sentence for screen readers gives the pace band as a word, for example "Wednesday, Oct 7: 5 new questions, median pace 100 seconds (on target)."
+  ok  — a second reading opens without closing the first
+  ok  — New questions explains what counts and prints its limits: 15 or more, 8 to 14, under 8
+  screenshot <tmp>
+  ok  — a second click closes each one again
+  ok  — Enter on a focused reading opens it: pace limits 103, 104 to 130, over 130
+  ok  — Space closes it
+  ok  — the card has 10 tab stops: the five readings, the links and the topic table (it had 23, 14 of them chart bars)
+  ok  — the 9-topic table opens on request and the choice is saved as settings.intensityTopicsOpen
+  ok  — above the table one line names the topic to work on: Classical Mechanics, 50% on 10 (got "Where to adjust Classical Mechanics Off target 50% on 10 new questions in 14 days, 20% of the exam. Practice 4 untried questions →")
+  ok  — with a link into that topic (#/practice/cm/new)
+  ok  — the table is still open after a reload
+  ok  — the new preference sits beside the existing settings, which are kept
+  ok  — status payload accuracy counts 22 of 30
+  ok  — status payload topic rows are in the same order as the table
+  ok  — Where to adjust order: cm, em, th, qm, at, sp, ow, sr, lb
+  ok  — cm: 10 new, 50%, red (got 10, 50%, Off target)
+  ok  — em: 8 new, 63%, amber (got 8, 63%, Close)
+  ok  — th: 5 new, 80%, green (got 5, 80%, On target)
+  ok  — qm: 6 new, 100%, green (got 6, 100%, On target)
+  ok  — at: 4 new, too few to judge (got 4, —, too few to judge)
+  ok  — sp: 3 new, too few to judge (got 3, —, too few to judge)
+  ok  — ow: 2 new, too few to judge (got 2, —, too few to judge)
+  ok  — sr: 1 new, too few to judge (got 1, —, too few to judge)
+  ok  — lb: 1 new, too few to judge (got 1, —, too few to judge)
+  ok  — topic rows show the ETS weight
+  screenshot <tmp>
+  ok  — at 375 px the page has no horizontal scroll (overflow 0 px)
+  ok  — at 375 px the Intensity card fits the viewport
+  ok  — at 375 px every row, strip cell, opened panel and table cell stays inside the card
+  ok  — with a reading and the table open the page still has no horizontal scroll (overflow 0 px)
+  ok  — on a touch screen every control in the card is at least 44 px tall
+  screenshot <tmp>
+  ok  — closing the table saves that too
+  ok  — at the full window width the readings are one line each (card 936 px)
+  ok  — at 900 px with the 264 px sidebar open the card is 556 px wide: the readings stack, no name runs into its meter and the page does not scroll sideways (clashes 0, overflow 0 px)
+
+practice summary after a timed pack (history 1)
+  ok  — PGRE.launchPack("09") opens the pack
+  screenshot <tmp>
+  ok  — answered 2 question(s) of pack 09
+  ok  — summary line 1 reads "Median seconds per question" for this pack
+  ok  — summary pace line: 120 / 103, amber (got 120 / 103, amber)
+  ok  — summary new-question line: 13 / 15, amber (got 13 / 15, amber)
+  ok  — the agent receipt and packReceipts["09"] carry medianSec 120
+  ok  — the pack receipt keeps its existing fields
+  ok  — status payload after the pack: 13 new today, pace 120 s
+  ok  — the summary link points at the Intensity card
+  ok  — the link lands on the card, just under the top bar (card top 52 px, bar ends 47 px, page scrolled 1077 px; it used to land on the top of the page)
+  ok  — keyboard focus moves to the card heading, and the one-shot note is cleared
+  ok  — the dashboard agrees with the summary and the payload after the pack
+  ok  — each reading shows what the pack changed: new questions +2, pace −8 s (got "+2", "−8 s")
+  ok  — a reading the pack did not move shows no change
+  screenshot <tmp>
+  ok  — the next visit opens at the top of the page with no change markers
+  ok  — after a sibling tab saves 2 new questions the card reads 15 with "+2", without a reload (got "15 of 15", "+2")
+  ok  — the opened reading stays open and keeps the keyboard focus through that repaint
+  ok  — focus on the topic disclosure survives a repaint too (now on SUMMARY)
+  ok  — and so does focus on a link inside an opened reading (now on A #/plan)
+  ok  — after midnight the card shows the new day (MONDAY, OCT 12) with 0 new questions and no pace, without a reload
+  ok  — no page errors
+  ok  — the status bridge on port 4789 received nothing (1 request(s) blocked, 0 answered)
+
+history 2 (all green)
+  ok  — newQuestions shows "16 of 15" (got "16 of 15")
+  ok  — newQuestions band is green with the label "On target" (got green / On target)
+  ok  — newQuestions lands in the green band this history was built for
+  ok  — newQuestions has no hint when green
+  ok  — newQuestions has a meter and starts closed
+  ok  — paceSec shows "90 s target 103 s or under" (got "90 s target 103 s or under")
+  ok  — paceSec band is green with the label "On target" (got green / On target)
+  ok  — paceSec lands in the green band this history was built for
+  ok  — paceSec has no hint when green
+  ok  — paceSec has a meter and starts closed
+  ok  — firstAttemptAccuracy shows "84% target 75% or more" (got "84% target 75% or more")
+  ok  — firstAttemptAccuracy band is green with the label "On target" (got green / On target)
+  ok  — firstAttemptAccuracy lands in the green band this history was built for
+  ok  — firstAttemptAccuracy has no hint when green
+  ok  — firstAttemptAccuracy has a meter and starts closed
+  ok  — repeatMinutes shows "18 min limit 20 min" (got "18 min limit 20 min")
+  ok  — repeatMinutes band is green with the label "On target" (got green / On target)
+  ok  — repeatMinutes lands in the green band this history was built for
+  ok  — repeatMinutes has no hint when green
+  ok  — repeatMinutes has a meter and starts closed
+  ok  — coverage shows "7.4 a day needed: 2.2" (got "7.4 a day needed: 2.2")
+  ok  — coverage band is green with the label "On target" (got green / On target)
+  ok  — coverage lands in the green band this history was built for
+  ok  — coverage has no hint when green
+  ok  — coverage has a meter and starts closed
+  ok  — headline: "On target on all five readings." (got "On target on all five readings.", about null)
+  ok  — the headline carries the band shape of the reading it is about (green)
+  ok  — the one button launches a pack that still has untried questions: #/practice/pack/09, 14 untried
+  FAIL — the headline block names that pack and its 14 untried questions
+  ok  — the button is a quiet one when everything is on target
+  ok  — no row repeats the headline button
+  ok  — tally: "5 on target" (got "5 on target")
+  ok  — no chart bar is a tab stop
+  ok  — new-question strip, oldest first: [3,3,3,4,4,4,16] (got [3,3,3,4,4,4,16])
+  ok  — median-pace strip, oldest first: [95,95,95,95,95,95,90] (got [95,95,95,95,95,95,90])
+  ok  — status payload newQuestions = 16 (green)
+  ok  — status payload paceSec = 90 (green)
+  ok  — status payload firstAttemptAccuracy = 84 (green)
+  ok  — status payload repeatMinutes = 18 (green)
+  ok  — status payload coverage = 7.4 (green)
+  ok  — status payload coverage inputs: remaining 29, working days 13, required 2.2, actual 7.4
+  ok  — the last 7 days (2026-10-05 to 2026-10-11) hold Thursday 2026-10-08 and one Sunday, so actual divides by 5 working days (got 5)
+  ok  — a new question answered on Thursday 2026-10-08 still counts: 37 new / 5 working days = 7.4
+  ok  — status payload accuracy counts 31 of 37
+  ok  — status payload topic rows are in the same order as the table
+  ok  — no page errors
+  ok  — the status bridge on port 4789 received nothing (2 request(s) blocked, 0 answered)
+
+history 3 (slow and short)
+  ok  — newQuestions shows "5 no target today" (got "5 no target today")
+  ok  — newQuestions band is red with the label "No pack today" (got red / No pack today)
+  ok  — newQuestions lands in the red band this history was built for
+  ok  — newQuestions carries a hint when red
+  ok  — newQuestions has a meter and starts closed
+  ok  — paceSec shows "160 s target 103 s or under" (got "160 s target 103 s or under")
+  ok  — paceSec band is red with the label "Off target" (got red / Off target)
+  ok  — paceSec lands in the red band this history was built for
+  ok  — paceSec carries a hint when red
+  ok  — paceSec has a meter and starts closed
+  ok  — firstAttemptAccuracy shows "50% target 75% or more" (got "50% target 75% or more")
+  ok  — firstAttemptAccuracy band is red with the label "Off target" (got red / Off target)
+  ok  — firstAttemptAccuracy lands in the red band this history was built for
+  ok  — firstAttemptAccuracy is the headline, so it prints no second hint
+  ok  — firstAttemptAccuracy has a meter and starts closed
+  ok  — repeatMinutes shows "30 min limit 20 min" (got "30 min limit 20 min")
+  ok  — repeatMinutes band is amber with the label "Close" (got amber / Close)
+  ok  — repeatMinutes lands in the amber band this history was built for
+  ok  — repeatMinutes carries a hint when amber
+  ok  — repeatMinutes has a meter and starts closed
+  ok  — coverage shows "4.8 a day needed: 6.9" (got "4.8 a day needed: 6.9")
+  ok  — coverage band is amber with the label "Close" (got amber / Close)
+  ok  — coverage lands in the amber band this history was built for
+  ok  — coverage carries a hint when amber
+  ok  — coverage has a meter and starts closed
+  ok  — headline: "First-try accuracy is 50% over the last 7 days." (got "First-try accuracy is 50% over the last 7 days.", about firstAttemptAccuracy)
+  ok  — the headline carries the band shape of the reading it is about (red)
+  ok  — the headline does not ask for another pack (#/history)
+  ok  — tally: "2 close 2 off target 1 without a target" (got "2 close 2 off target 1 without a target")
+  ok  — no chart bar is a tab stop
+  ok  — new-question strip, oldest first: [3,3,3,3,3,4,5] (got [3,3,3,3,3,4,5])
+  ok  — median-pace strip, oldest first: [120,120,120,120,120,120,160] (got [120,120,120,120,120,120,160])
+  ok  — status payload newQuestions = 5 (red)
+  ok  — status payload paceSec = 160 (red)
+  ok  — status payload firstAttemptAccuracy = 50 (red)
+  ok  — status payload repeatMinutes = 30 (amber)
+  ok  — status payload coverage = 4.8 (amber)
+  ok  — status payload coverage inputs: remaining 90, working days 13, required 6.9, actual 4.8
+  ok  — the last 7 days (2026-10-05 to 2026-10-11) hold Thursday 2026-10-08 and one Sunday, so actual divides by 5 working days (got 5)
+  ok  — status payload accuracy counts 12 of 24
+  ok  — status payload topic rows are in the same order as the table
+  ok  — no page errors
+  ok  — the status bridge on port 4789 received nothing (3 request(s) blocked, 0 answered)
+
+new user (no answers)
+  ok  — the card says "Nothing measured yet."
+  ok  — its one button starts the first timed pack (#/practice/pack/18)
+  ok  — no reading is judged: no band chip, no meter, no value and no hint (it used to open with two red chips)
+  ok  — each row shows its target instead: 15 a day, 103 s or under, 75% or more, 20 min, and 28.2 a working day for all 366 pack questions (got "366 pack questions by Oct 28: 28.2 each working day")
+  ok  — the 7-day strip, the topic table and the tally wait for the first answers
+  ok  — a reading still opens to explain itself
+  ok  — and marks none of its three band limits as the current one
+  screenshot <tmp>
+  ok  — the status payload is unchanged by this: it still reports 0 new questions as red
+  ok  — no page errors
+
+no-pack Sunday (page clock +7 days)
+  ok  — the page clock reads Sunday, and the history has no new question on it
+  ok  — New questions reads "0, no target today" with the chip "No pack today", not "Off target" (got "0 no target today" / No pack today)
+  ok  — headline: "No timed pack today." with a quiet link to the mock exam (it used to say "Answer 15 more new questions ... Start the next pack.")
+  ok  — the other readings are judged as on any day; tally "3 on target 1 no data 1 without a target" (got "3 on target 1 no data 1 without a target")
+  ok  — the 7-day strip marks Thursday and Sunday as "no pack", apart from a pack day with nothing answered (got "pack:— pack:95 s pack:95 s rest:no pack pack:95 s pack:95 s rest:no pack")
+  ok  — the New questions row marks no band limit as current, and no link on the card starts a timed pack (0 pack links)
+  ok  — PGRE.intensity.compute() and the status payload still report 0 of 15, red: only the card wording differs
+  screenshot <tmp>
+  ok  — no page errors
+  ok  — the status bridge on port 4789 received nothing (5 request(s) blocked, 0 answered)
+
+212 passed, 1 failed
+## exit 1
+
+## node tools/test-practice-scroll-stem-chrome.js
+HTTP http://127.0.0.1:56479  CDP 56480
+unanswered scrollTop=0 stem=84px in view
+finished {"clientHeight":84,"scrollHeight":84,"boxHeight":84.140625,"overlap":84.140625,"scrollTop":65,"maxScroll":353,"hasSolution":true}
+finished stem scrolls into view, overlap=84
+## exit 0
+
+## node tools/test-oscillator-chrome.js
+HTTP server listening on http://127.0.0.1:56515
+Connected to Chrome CDP: ws://127.0.0.1:56516/devtools/page/2DE49DBB5AE745633D50A0ADF1315B7D
+Total KaTeX elements rendered on page: 27
+Capturing Light Mode Dynamic Simulation...
+Saved screenshot: <tmp>
+Testing Beats Preset dynamically...
+Saved screenshot: <tmp>
+Testing Dark Mode dynamically...
+Saved screenshot: <tmp>
+Dynamic Chrome CDP testing completed successfully!
+## exit 0
+
+## node tools/test-pack-launch-chrome.js
+HTTP http://127.0.0.1:56571  CDP 56572
+pack 03 expected n=8 shown=null
+Error during pack-launch chrome test: Error: pack 03 expected Question 1 of 8, got "Custom quiz\nC\nC\nu\nu\ns\ns\nt\nt\no\no\nm\nm\n \nq\nq\nu\nu\ni\ni\nz\nz\n\nNo custom set is ready. Choose topics, difficulty and status filters in the builder, then start your set.\n\nOpen the quiz builder\nMixed practice instead"
+    at runPack (<worktree>/tools/test-pack-launch-chrome.js:198:15)
+    at async main (<worktree>/tools/test-pack-launch-chrome.js:214:14)
+## exit 1
+
+## node tools/test-srs-anki-chrome.js
+FAIL Error: real Physics GRE formula deck missing or too small: {"count":81,"first":["cpgf-1.30b","cpgf-2.56a","cpgf-2.15a"]}
+    at main (<worktree>/tools/test-srs-anki-chrome.js:175:11)
+## exit 1
+
+# The three tests that exit 1 above, run on an export of the default branch c2a167f (git archive, without this change)
+
+## default branch c2a167f: node tools/test-intensity-chrome.js
+HTTP http://127.0.0.1:56679  CDP 56680
+
+history 1 (mixed)
+
+opening a reading (history 1)
+practice summary after a timed pack (history 1)
+history 2 (all green)
+  FAIL — the headline block names that pack and its 14 untried questions
+history 3 (slow and short)
+new user (no answers)
+
+no-pack Sunday (page clock +7 days)
+212 passed, 1 failed
+## exit 1
+
+## default branch c2a167f: node tools/test-pack-launch-chrome.js
+HTTP http://127.0.0.1:56812  CDP 56813
+pack 03 expected n=8 shown=null
+Error during pack-launch chrome test: Error: pack 03 expected Question 1 of 8, got "Custom quiz\nC\nC\nu\nu\ns\ns\nt\nt\no\no\nm\nm\n \nq\nq\nu\nu\ni\ni\nz\nz\n\nNo custom set is ready. Choose topics, difficulty and status filters in the builder, then start yo
+## exit 1
+
+## default branch c2a167f: node tools/test-srs-anki-chrome.js
+FAIL Error: real Physics GRE formula deck missing or too small: {"count":81,"first":["cpgf-1.30b","cpgf-2.56a","cpgf-2.15a"]}
+## exit 1
