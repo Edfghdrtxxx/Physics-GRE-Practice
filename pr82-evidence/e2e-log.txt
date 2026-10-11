@@ -1,0 +1,444 @@
+HTTP http://127.0.0.1:57171  CDP 57172
+shots /Users/Reid Hu/firstmate/data/pgre-mock-constants/e2e
+  ok  — fixture bank is large enough for a 70-question mock (90)
+  ok  — Table of Information control is absent on the exam setup page
+  ok  — Table of Information button is in the exam bar
+  ok  — table panel starts closed
+  ok  — chose Charlie (index 2) on question 1
+  ok  — sitting is on question 1 with the clock running
+  shot /Users/Reid Hu/firstmate/data/pgre-mock-constants/e2e/04-table-mid-slide.png
+
+--- panel text ---
+Table of Information
+Close
+Rest mass of the electron
+𝑚
+𝑒
+=
+9.11
+×
+10
+−
+31
+k
+g
+m
+e
+	​
+
+=9.11×10
+−31
+kg
+Magnitude of the electron charge
+𝑒
+=
+1.60
+×
+10
+−
+19
+C
+e=1.60×10
+−19
+C
+Avogadro's number
+𝑁
+𝐴
+=
+6.02
+×
+10
+23
+N
+A
+	​
+
+=6.02×10
+23
+Universal gas constant
+𝑅
+=
+8.31
+J
+/
+(
+m
+o
+l
+⋅
+K
+)
+R=8.31J/(mol⋅K)
+Boltzmann's constant
+𝑘
+=
+1.38
+×
+10
+−
+23
+J
+/
+K
+k=1.38×10
+−23
+J/K
+Speed of light
+𝑐
+=
+3.00
+×
+10
+8
+m
+/
+s
+c=3.00×10
+8
+m/s
+Planck's constant
+ℎ
+=
+6.63
+×
+10
+−
+34
+J
+⋅
+s
+=
+4.14
+×
+10
+−
+15
+e
+V
+⋅
+s
+h=6.63×10
+−34
+J⋅s=4.14×10
+−15
+eV⋅s
+ℏ
+=
+ℎ
+/
+2
+𝜋
+ℏ=h/2π
+ℎ
+𝑐
+=
+1240
+e
+V
+⋅
+n
+m
+hc=1240eV⋅nm
+Vacuum permittivity
+𝜖
+0
+=
+8.85
+×
+10
+−
+12
+C
+2
+/
+(
+N
+⋅
+m
+2
+)
+ϵ
+0
+	​
+
+=8.85×10
+−12
+C
+2
+/(N⋅m
+2
+)
+Vacuum permeability
+𝜇
+0
+=
+4
+𝜋
+×
+10
+−
+7
+T
+⋅
+m
+/
+A
+μ
+0
+	​
+
+=4π×10
+−7
+T⋅m/A
+Universal gravitational constant
+𝐺
+=
+6.67
+×
+10
+−
+11
+m
+3
+/
+(
+k
+g
+⋅
+s
+2
+)
+G=6.67×10
+−11
+m
+3
+/(kg⋅s
+2
+)
+Acceleration due to gravity
+𝑔
+=
+9.80
+m
+/
+s
+2
+g=9.80m/s
+2
+1 atmosphere pressure
+1
+a
+t
+m
+=
+1.0
+×
+10
+5
+N
+/
+m
+2
+=
+1.0
+×
+10
+5
+P
+a
+1atm=1.0×10
+5
+N/m
+2
+=1.0×10
+5
+Pa
+1 angstrom
+1
+A
+˚
+=
+1
+×
+10
+−
+10
+m
+=
+0.1
+n
+m
+1
+A
+˚
+=1×10
+−10
+m=0.1nm
+Prefixes for Powers of 10
+10
+−
+15
+10
+−15
+	femto	f
+
+10
+−
+12
+10
+−12
+	pico	p
+
+10
+−
+9
+10
+−9
+	nano	n
+
+10
+−
+6
+10
+−6
+	micro	
+𝜇
+μ
+
+10
+−
+3
+10
+−3
+	milli	m
+
+10
+−
+2
+10
+−2
+	centi	c
+
+10
+3
+10
+3
+	kilo	k
+
+10
+6
+10
+6
+	mega	M
+
+10
+9
+10
+9
+	giga	G
+
+10
+12
+10
+12
+	tera	T
+
+10
+15
+10
+15
+	peta	P
+Rotational inertia about center of mass
+Rod	
+1
+12
+𝑀
+ℓ
+2
+12
+1
+	​
+
+Mℓ
+2
+
+Disc	
+1
+2
+𝑀
+𝑅
+2
+2
+1
+	​
+
+MR
+2
+
+Sphere	
+2
+5
+𝑀
+𝑅
+2
+5
+2
+	​
+
+MR
+2
+--- end panel text ---
+
+  ok  — panel rendered text
+  ok  — exam is not paused while the table is open
+  ok  — panel has no notes, search, or question text
+  ok  — Rest mass of the electron present with value and unit
+  ok  — Magnitude of the electron charge present with value and unit
+  ok  — Avogadro's number present with value and unit
+  ok  — Universal gas constant present with value and unit
+  ok  — Boltzmann's constant present with value and unit
+  ok  — Speed of light present with value and unit
+  ok  — Planck's constant present with value and unit
+  ok  — reduced Planck present with value and unit
+  ok  — hc present with value and unit
+  ok  — Vacuum permittivity present with value and unit
+  ok  — Vacuum permeability present with value and unit
+  ok  — Universal gravitational constant present with value and unit
+  ok  — Acceleration due to gravity present with value and unit
+  ok  — 1 atmosphere pressure present with value and unit
+  ok  — 1 angstrom present with value and unit
+  ok  — prefix femto
+  ok  — prefix pico
+  ok  — prefix nano
+  ok  — prefix micro
+  ok  — prefix milli
+  ok  — prefix centi
+  ok  — prefix kilo
+  ok  — prefix mega
+  ok  — prefix giga
+  ok  — prefix tera
+  ok  — prefix peta
+  ok  — inertia Rod
+  ok  — inertia Disc
+  ok  — inertia Sphere
+  ok  — prefixes heading in panel
+  ok  — inertia heading in panel
+  shot /Users/Reid Hu/firstmate/data/pgre-mock-constants/e2e/01-table-light.png
+  ok  — clock advanced while the table was open (0.00s -> 2.00s)
+  shot /Users/Reid Hu/firstmate/data/pgre-mock-constants/e2e/02-table-dark.png
+  ok  — 700 px window has no horizontal page scroll (700 / 700)
+  shot /Users/Reid Hu/firstmate/data/pgre-mock-constants/e2e/03-table-700.png
+  ok  — same question after close
+  ok  — chosen answer unchanged after close
+  ok  — question heading unchanged after close
+  ok  — question was scrolled before opening the table (240)
+  ok  — scroll position unchanged after close (240 -> 240)
+  ok  — panel is closed
+  ok  — T opens the table
+  ok  — T closes the table
+  ok  — Escape closes the table
+  ok  — question and answer still unchanged after key toggles
+  ok  — Table of Information control is absent on the dashboard
+  ok  — Table of Information control is absent on exam setup after leaving the room
+
+54 passed, 0 failed
