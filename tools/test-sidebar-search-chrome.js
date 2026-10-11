@@ -276,8 +276,9 @@ var STAGES = [
       PGRE.search.match = window.__sbsMatchOrig;
       return window.__sbsMatches;
     });
-    h.assert(during === 0 && after === 2,
-      'six input events in one task run no match; the settled burst runs one (pages + index): ' + during + ', ' + after);
+    h.assert(during === 0 && after === 3,
+      'six input events in one task run no match; the settled burst runs one (pages, index, sealed titles): ' +
+      during + ', ' + after);
     h.assert(h.selected(await h.ui()) === 0, 'results for "energy" stay on screen with the first row highlighted');
   } },
 
@@ -652,9 +653,12 @@ var STAGES = [
     h.assert(!u.open && u.focus !== 'sbs-input', 'while a dialog is open neither shortcut fires');
   } },
 
+  /* A sealed exam question (src 'cpg-exam' or 'ets-exam') gets less in the box
+     than on the Search page: its title only, found by its title only, and
+     nothing while a practice set or a mock exam is unfinished. */
   { name: 'sealed-exam-questions', size: DESKTOP, run: async function (page, h) {
     await h.load();
-    await page.eval(function () {
+    var stem = await page.eval(function () {
       function sealed(id, word) {
         return { id: id, title: 'Sidebar search test exam', questions: [{
           id: id + '-q1', topic: 'cm', difficulty: 1,
@@ -667,36 +671,83 @@ var STAGES = [
       PGRE.BOOK_EXAMS = (PGRE.BOOK_EXAMS || []).concat([sealed('sbs-book-exam', 'zyxwbook')]);
       PGRE.ETS_EXAMS = (PGRE.ETS_EXAMS || []).concat([sealed('sbs-ets-exam', 'zyxwets')]);
       PGRE._resetBankCache();
+      // the book question missed once (a mistake-book entry that names the wrong pick),
+      // and a note on the ETS question (an entry whose body is that question's stem)
+      var q = PGRE.questionById('sbs-book-exam-q1');
+      PGRE.gamify.recordAnswer(q, false, 30000, { mode: 'practice', picked: 1 });
+      PGRE.notes.set('sbs-ets-exam-q1', 'zyxwnote reminder');
+      return q.q.replace(/<[^>]*>/g, '');
     });
+    var shown = async function () {
+      return JSON.parse(await page.eval(function () {
+        return JSON.stringify(Array.prototype.map.call(
+          document.querySelectorAll('#sbs-panel .sbs-scroll .sbs-row'), function (r) {
+            var snip = r.querySelector('.sbs-snip');
+            return { title: r.querySelector('.sbs-title').textContent, snip: snip ? snip.textContent : '',
+              all: r.textContent };
+          }));
+      }));
+    };
+    var fromStem = function (text) {
+      return stem.indexOf(text.replace(/^(…|\.\.\.)\s*|\s*(…|\.\.\.)$/g, '')) !== -1;
+    };
+    var again = async function () { await page.press('Escape'); await h.blur(); await page.press('/'); };
+    h.assert(await page.eval('location.hash === "" && !PGRE.examEngine.active()'),
+      'on the dashboard, with no mock exam unfinished');
+
     await page.press('/');
     await h.indexBuilt();
     var u = await h.search('zyxwets', false);
-    h.assert(!u.rows.length, 'a released ETS exam question is not in the box at all');
+    h.assert(!u.rows.length,
+      'a released ETS exam question is not in the box, and the note on it is not found through the question\'s words');
+    await again();
+    u = await h.search('zyxwnote');
+    var rows = await shown();
+    h.assert(u.groups.length === 1 && u.groups[0].label === 'Notes' && rows.length === 1 &&
+      rows[0].all.indexOf('sealed stem') === -1,
+      'that note is found by its own words and shows only them');
+
+    await again();
+    u = await h.search('zyxwbook');
+    rows = await shown();
+    h.assert(u.groups.map(function (g) { return g.label + ' ' + g.count; }).join(', ') ===
+      'Sample-exam questions 1, Mistakes 1' && rows.length === 2 && u.last.text.indexOf('2 results') !== -1,
+      'a book sample-exam question and the mistake made on it appear under the Search page\'s own headings');
+    h.assert(rows.every(function (r) {
+      return fromStem(r.title) && (!r.snip || fromStem(r.snip)) && r.all.replace(/^CM/, '') === r.title + r.snip;
+    }), 'each of the two rows shows words of the question\'s stem and nothing else');
+    h.assert(rows.every(function (r) { return !/sealedchoice|sealedsolutiontext|wrong picks/.test(r.all); }),
+      'no choice, no solution and no wrong pick is on screen');
+
+    await again();
+    u = await h.search('sealedsolutiontext', false);
+    var none = !u.rows.length;
+    await again();
+    u = await h.search('sealedchoicetwo', false);
+    h.assert(none && !u.rows.length, 'a word of the solution, of a choice or of the wrong pick finds nothing in the box');
     await page.press('Escape');
+    await page.eval('() => { location.hash = "#/search/sealedsolutiontext"; }');
+    await h.until('!!document.querySelector(".srch-hit")', 'the Search page hit');
+    h.assert(await page.eval('document.querySelector(".srch-hit-snip").textContent.indexOf("sealedsolutiontext") !== -1'),
+      'the Search page, which is opened on purpose, finds and shows it as before');
+
+    await page.eval(function () {
+      sessionStorage.setItem('pgre-quiz-config', JSON.stringify({
+        ids: [PGRE.QUESTIONS[0].id, PGRE.QUESTIONS[1].id], label: 'Sidebar search test', purpose: 'similar'
+      }));
+      location.hash = '#/practice/custom';
+    });
+    await h.until('!!document.querySelector("#practice-root #confirm-btn")', 'a live practice question');
+    await page.eval('() => { document.getElementById("sbs-input").focus(); }');
+    u = await h.search('zyxwbook', false);
+    h.assert(!u.rows.length, 'on a practice set the box shows no sealed question');
+    await page.press('Escape');
+    await page.eval('() => { location.hash = "#/"; }');
+    await h.until('!document.getElementById("practice-root")', 'the dashboard');
+    await h.blur();
     await page.press('/');
     u = await h.search('zyxwbook');
-    var row = JSON.parse(await page.eval(function () {
-      var r = document.querySelector('#sbs-panel .sbs-scroll .sbs-row');
-      var snip = r.querySelector('.sbs-snip');
-      return JSON.stringify({ title: r.querySelector('.sbs-title').textContent, snip: snip ? snip.textContent : '',
-        all: r.textContent, href: r.getAttribute('href') });
-    }));
-    h.assert(u.groups.length === 1 && u.groups[0].label === 'Sample-exam questions' && u.rows.length === 2 &&
-      row.href === '#/topic/cm',
-      'a book sample-exam question appears under the Search page\'s own Sample-exam heading');
-    await page.press('ArrowUp');
-    await page.press('Enter');
-    await h.until('location.hash === "#/search/zyxwbook" && !!document.querySelector(".srch-hit")', 'the Search page hit');
-    var hit = JSON.parse(await page.eval(function () {
-      var x = document.querySelector('.srch-hit');
-      return JSON.stringify({ title: x.querySelector('.srch-hit-title').textContent,
-        snip: x.querySelector('.srch-hit-snip').textContent });
-    }));
-    h.assert((row.title === hit.title || row.title === hit.snip) && (!row.snip || row.snip === hit.snip) &&
-      row.all.replace(/^CM/, '') === row.title + row.snip,
-      'its row shows only text the Search page shows for the same query, and nothing else');
-    h.assert(row.all.indexOf('sealedsolutiontext') === -1 && row.all.indexOf('sealedchoice') === -1,
-      'its row shows neither the choices nor the solution');
+    h.assert(u.groups.length === 2, 'once the practice page is left the two title-only rows are back');
   } },
 
   /* The box reads navigator.platform once, at load: the test server hands
@@ -755,6 +806,29 @@ var STAGES = [
       'in the mock-exam room "/", Cmd+K and Ctrl+K do nothing, and the top bar\'s search button is not on screen');
     h.assert(before === '[0,false,{},[],false]' && await exam() === before,
       'and the exam is as it was: first question, clock running, no answer, no flag, no dialog');
+
+    // the room left with the exam unfinished: sealed questions stay out of the box
+    await page.eval(function () {
+      PGRE.BOOK_EXAMS = (PGRE.BOOK_EXAMS || []).concat([{ id: 'sbs-room-exam', title: 'Sidebar search test exam',
+        questions: [{ id: 'sbs-room-exam-q1', topic: 'cm', difficulty: 1,
+          q: '<p>A sealed stem that mentions zyxwroom.</p>', choices: ['one', 'two'], answer: 0, sol: '<p>three</p>' }] }]);
+      PGRE._resetBankCache();
+      location.hash = '#/';
+    });
+    await h.until('!document.body.classList.contains("exam-fullscreen")', 'the dashboard');
+    await h.blur();
+    await page.press('/');
+    await h.indexBuilt();
+    u = await h.search('zyxwroom', false);
+    h.assert(await page.eval('!!PGRE.examEngine.active()') && !u.rows.length,
+      'with that exam left unfinished the box shows no sealed question');
+    await page.press('Escape');
+    await page.eval('() => { PGRE.examEngine.discard(PGRE.examEngine.active()); }');
+    await h.blur();
+    await page.press('/');
+    u = await h.search('zyxwroom');
+    h.assert(u.groups.length === 1 && u.groups[0].label === 'Sample-exam questions',
+      'and shows its title again once the exam is discarded');
   } },
 
   { name: 'reduced-motion', size: DESKTOP, chrome: '--force-prefers-reduced-motion', run: async function (page, h) {
@@ -786,8 +860,8 @@ function staticChecks() {
   }
   check(!/localStorage|sessionStorage|indexedDB|PGRE\.store|pgre-state/.test(code),
     'js/sidebar-search.js touches no storage and no saved state');
-  check((code.match(/PGRE\.search\.match\(/g) || []).length === 2 && !/\.hay\b|\.score\b/.test(code),
-    'js/sidebar-search.js matches through PGRE.search.match (pages, index) and reads no haystack or score itself');
+  check((code.match(/PGRE\.search\.match\(/g) || []).length === 3 && !/\.hay\b|\.score\b/.test(code),
+    'js/sidebar-search.js matches through PGRE.search.match (pages, index, sealed titles) and reads no haystack or score itself');
   var index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   check(/<script src="js\/sidebar-search\.js\?v=\d{8}[a-z]" defer><\/script>/.test(index) &&
     !/<script[^>]+js\/search\.js/.test(index),

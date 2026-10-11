@@ -8,8 +8,13 @@
    one inject site on first use, so page load pays nothing. The Pages group is
    a second small index (the destinations PGRE.buildNav paints) run through the
    same PGRE.search.match. A row shows the engine's title and snippet and
-   nothing else, so a sample-exam question is never shown further than #/search
-   shows it.
+   nothing else.
+
+   Sealed exam questions (AGENTS.md, spoiler protection) get less than that.
+   #/search is a page the user opens on purpose; this box is on every page. So
+   an entry that shows a real-exam question is matched and shown by its title
+   alone, and is not shown at all while a practice set or a mistake drill is on
+   screen or a mock exam is unfinished (see isSealed and sessionRunning).
 
    One field, two homes. While the sidebar is on screen the field sits in it
    and the panel hangs under it. With the sidebar folded (or, below 860px, the
@@ -33,7 +38,8 @@ PGRE.sidebarSearch = (function () {
     '<path d="M6 6l12 12M18 6L6 18"/></svg>';
 
   var pages = [];        // index entries for the sidebar destinations
-  var idx = null;        // PGRE.search's index, once built
+  var idx = null;        // PGRE.search's index, once built, less its sealed entries
+  var sealed = [];       // those sealed entries, cut down to their titles
   var warming = false;   // an index build is in flight
   var failed = false;    // the engine script did not load
   var el = null;         // the nodes built by build()
@@ -188,13 +194,42 @@ PGRE.sidebarSearch = (function () {
       return PGRE.search.buildIndex();
     }).then(function (built) {
       warming = false;
-      if (built) idx = built;
+      if (built) take(built);
       if (isOpen) run();
     }, function () {
       warming = false;
       failed = true;
       if (isOpen) run();
     });
+  }
+
+  /* ——— Sealed exam questions ———
+     An entry is sealed when it shows a question from a real exam (src
+     'cpg-exam' or 'ets-exam'): the question itself, or a mistake or a note
+     that belongs to one. Its body holds the choices, the solution, the wrong
+     picks or the stem, so the box keeps a copy with the title only: a query
+     cannot find it through its answer, and no snippet can show one. */
+  function isSealed(e) {
+    if (e.kind === 'exam') return true;
+    if (e.kind !== 'mistake' && e.kind !== 'note') return false;
+    var q = PGRE.questionById(e.id);
+    return !!q && (q.src === 'cpg-exam' || q.src === 'ets-exam');
+  }
+
+  function take(built) {
+    idx = built.filter(function (e) { return !isSealed(e); });
+    sealed = built.filter(isSealed).map(function (e) {
+      return { kind: e.kind, id: e.id, title: e.title, body: '', topic: e.topic, href: e.href,
+               text: e.title, hay: e.title.toLowerCase() };
+    });
+  }
+
+  /* A practice set or a mistake drill is on screen, or a mock exam is not yet
+     submitted (in its room, or left unfinished). A set the user has left is
+     paused (its question clock restarts on return), so it does not count. */
+  function sessionRunning() {
+    if (/^#\/(practice|mistakes\/drill|exam\/run)/.test(location.hash)) return true;
+    return !!(PGRE.examEngine && PGRE.examEngine.active());
   }
 
   /* ——— Rendering ——— */
@@ -246,15 +281,16 @@ PGRE.sidebarSearch = (function () {
 
   function renderResults(q) {
     var pageHits = PGRE.search.match(pages, q).hits;
-    var found = PGRE.search.match(idx, q);
-    if (!pageHits.length && !found.total) {
+    var hits = PGRE.search.match(idx, q).hits;
+    if (!sessionRunning()) hits = hits.concat(PGRE.search.match(sealed, q).hits);
+    if (!pageHits.length && !hits.length) {
       note('No matches for “' + esc(q) + '”.',
         'Try fewer or different words — every word must appear for a result to match.');
       el.status.textContent = 'No matches';
       return;
     }
     var byKind = { page: pageHits };
-    found.hits.forEach(function (h) {
+    hits.forEach(function (h) {
       (byKind[h.entry.kind] = byKind[h.entry.kind] || []).push(h);
     });
     var html = '', n = 0;
@@ -269,19 +305,19 @@ PGRE.sidebarSearch = (function () {
     });
     el.scroll.innerHTML = html;
     // the Search page does not list pages: with page hits only it would open on "No matches"
-    el.all.hidden = !found.total;
-    el.all.innerHTML = !found.total ? '' :
+    el.all.hidden = !hits.length;
+    el.all.innerHTML = !hits.length ? '' :
       '<a class="sbs-row sbs-row-all" role="option" id="sbs-opt-' + n +
         '" tabindex="-1" aria-selected="false" href="#/search/' + encodeURIComponent(q) + '">' +
       '<span class="sbs-lead">' + icon('search') + '</span>' +
       '<span class="sbs-text"><span class="sbs-title">Open “' + esc(q) +
         '” on the Search page</span></span>' +
-      '<span class="sbs-meta">' + PGRE.ui.fmt(found.total) + ' result' +
-        (found.total === 1 ? '' : 's') + '</span>' +
+      '<span class="sbs-meta">' + PGRE.ui.fmt(hits.length) + ' result' +
+        (hits.length === 1 ? '' : 's') + '</span>' +
       '</a>';
     el.note.hidden = true;
     el.results.hidden = false;
-    var total = pageHits.length + found.total;
+    var total = pageHits.length + hits.length;
     el.status.textContent = PGRE.ui.fmt(total) + ' result' + (total === 1 ? '' : 's');
     rows = Array.prototype.slice.call(el.results.querySelectorAll('.sbs-row'));
     // a refreshed index repaints the same query: the highlighted row keeps its place
