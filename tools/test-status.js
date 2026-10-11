@@ -170,6 +170,8 @@ assert(!('xp' in summary.sessions[0]), 'sessions omit fields outside the compact
 assert(summary.exams.length === 1 && summary.exams[0].id === 'exam-today',
   'exams include submitted-today records only');
 assert(!('answers' in summary.exams[0]), 'exams omit full answer payloads');
+assert(Array.isArray(summary.exams[0].flags) && summary.exams[0].flags.length === 0,
+  'an exam stored without a flag list reports flags as []');
 assert(summary.formulaCards.reviewed === 2,
   'formula counts include today reviews');
 assert(summary.formulaCards.total === 5 &&
