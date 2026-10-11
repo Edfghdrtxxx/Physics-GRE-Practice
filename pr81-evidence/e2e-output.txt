@@ -1,0 +1,46 @@
+node tools/test-exam-pause-chrome.js
+PGRE_PAUSE_SHOTS=/Users/Reid Hu/firstmate/data/pgre-pause-info/evidence
+CHROME_DEVTOOLS_AXI_SESSION=pgre-pause-info
+isolated profile + http://127.0.0.1 (ephemeral port)
+
+pause-light
+PASS: heading is still Paused
+PASS: the original pause sentence is still on the card
+PASS: Resume exam is still the button
+PASS: progress reads 2 of 5 answered
+PASS: the meter fill is 40% for 2 of 5
+PASS: time used matches the stopped clock
+PASS: time remaining matches the stopped clock
+PASS: the card shows question 3 of 5
+PASS: not yet answered is 3
+PASS: flagged for review is 1
+PASS: pace uses time used divided by answered questions
+PASS: leftover pace uses remaining clock divided by unanswered questions
+PASS: Paused card does not say "accuracy"
+PASS: Paused card does not say "score"
+PASS: Paused card does not say "correct"
+PASS: Paused card does not say "incorrect"
+PASS: Paused card does not say "wrong"
+PASS: Paused card does not say "scaled"
+PASS: Paused card does not say "raw score"
+PASS: Paused card does not show question text, choices, or right/wrong marks
+PASS: pause overlay backdrop is opaque
+PASS: the clock stays stopped while the Paused card is shown
+PASS: the card is still up after the wait
+screenshot pause-card-light.png
+
+pause-dark
+PASS: dark theme keeps the same Paused card
+screenshot pause-card-dark.png
+
+pause-700
+PASS: 700 px window still shows the Paused card
+PASS: no horizontal scroll at a 700 px window
+screenshot pause-card-700.png
+
+resume
+PASS: still paused before Resume
+PASS: Resume exam closes the card and returns to question 3
+PASS: the clock runs again after resume
+
+ALL OK
