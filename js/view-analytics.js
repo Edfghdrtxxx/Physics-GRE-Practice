@@ -332,11 +332,16 @@ PGRE.views.analytics = (function () {
       var wid = weakestTopic(x.perTopic || {});
       var wt = wid ? PGRE.topicById(wid) : null;
       var raw = (x.raw != null ? x.raw : '—') + (x.total ? ' / ' + x.total : '');
+      var scaled = x.scaledEst;
+      if (PGRE.examEngine && typeof PGRE.examEngine.scaleDisplay === 'function') {
+        var shown = PGRE.examEngine.scaleDisplay(x);
+        if (shown && shown.scaled != null) scaled = shown.scaled;
+      }
       html += '<tr>' +
         '<td>' + date + '</td>' +
         '<td>' + fmtFormat(x.format) + '</td>' +
         '<td class="an-num">' + raw + '</td>' +
-        '<td class="an-num">' + (x.scaledEst != null ? x.scaledEst : '—') + '</td>' +
+        '<td class="an-num">' + (scaled != null ? scaled : '—') + '</td>' +
         '<td>' + (wt ? ui.monogram(wt) + ' <span class="an-td-topic">' + ui.esc(wt.name) + '</span>' : '—') + '</td>' +
         '<td><a href="#/exam/review/' + ui.esc(x.id) + '">Review →</a></td>' +
       '</tr>';

@@ -103,11 +103,50 @@ function fakeExam(id, format, n, prefix, src) {
   return { id: id, title: id.toUpperCase(), format: format, questions: qs };
 }
 
+function publishedScale(rows) {
+  var out = [];
+  rows.forEach(function (row) {
+    var raw = row[0], scaled = row[1];
+    if (typeof raw === 'number') out.push({ raw: raw, scaled: scaled });
+    else for (var r = raw[0]; r <= raw[1]; r++) out.push({ raw: r, scaled: scaled });
+  });
+  return out;
+}
+
+function fillByCounts(exam, nCorrect, nWrong) {
+  exam.order.forEach(function (id, i) {
+    var ans = PGRE.questionById(id).answer;
+    if (i < nCorrect) exam.answers[id] = ans;
+    else if (i < nCorrect + nWrong) exam.answers[id] = (ans + 1) % 5;
+  });
+}
+
 PGRE.BOOK_EXAMS = [fakeExam('x1', '70x120', 70, 'be-', null)];
 PGRE.ETS_EXAMS = [
   Object.assign(fakeExam('gr8677', '100x170', 100, 'g77-', null),
     { scale: [{ raw: 0, scaled: 200 }, { raw: 50, scaled: 640 }, { raw: 100, scaled: 990 }] }),
-  fakeExam('gr9277', '100x170', 100, 'g27-', null)
+  fakeExam('gr9277', '100x170', 100, 'g27-', null),
+  /* Published rows typed from the practice-book conversion tables. Full
+     tables are not needed; lookup is exact. Citations:
+     GR0877 p.91; GR0177 p.73; GR9677 p.75; GR1777 p.88; ets2024/GR1775 p.26. */
+  Object.assign(fakeExam('gr9677', '100x170', 100, 'g96-', null), {
+    scale: publishedScale([[[0, 0], 440], [[36, 37], 740], [56, 900]])
+  }),
+  Object.assign(fakeExam('gr0177', '100x170', 100, 'g01-', null), {
+    scale: publishedScale([[0, 390], [[36, 37], 650], [73, 900]])
+  }),
+  Object.assign(fakeExam('gr0877', '100x170', 100, 'g08-', null), {
+    scale: publishedScale([
+      [[0, 1], 380], [[36, 37], 630], [65, 840], [72, 900],
+      [[73, 74], 910], [78, 950], [[82, 100], 990]
+    ])
+  }),
+  Object.assign(fakeExam('gr1777', '100x170', 100, 'g17-', null), {
+    scale: publishedScale([[0, 250], [59, 740], [67, 820], [70, 850], [[84, 100], 990]])
+  }),
+  Object.assign(fakeExam('ets2024', '70x120', 70, 'e24-', null), {
+    scale: publishedScale([[0, 280], [54, 880], [[62, 70], 990]])
+  })
 ];
 /* Tag the fabricated exam questions with their src the way the real banks do. */
 PGRE.BOOK_EXAMS[0].questions.forEach(function (x) { x.src = 'cpg-exam'; });
@@ -248,6 +287,98 @@ assert(engine.scaledEstimate(0, 70) === 380, 'fraction 0.00 anchors at 380');
 assert(engine.scaledEstimate(35, 70) === 760, 'fraction 0.50 interpolates to 760');
 assert(engine.scaledEstimate(100, 70) === 990, 'raw above total clamps to 990');
 assert(engine.scaledEstimate(5, 0) === null, 'zero-total exam yields no estimate');
+
+console.log('\nformula raw (GR0877 / GR0177 / GR9677) vs number-correct (GR1777 / ets2024)');
+/* GR0877 p.89: C − I/4, round to nearest whole; 36.5 → 37. Blanks omitted.
+   Table p.91: raw 65 → 840, 73 → 910. Number-correct 72 → 900, 78 → 950. */
+resetState();
+var g0877a = engine.create({ source: 'gr0877' });
+fillByCounts(g0877a, 72, 28);
+engine.submit(g0877a);
+assert(g0877a.raw === 72, 'GR0877 72 correct / 28 wrong still stores number correct as exam.raw');
+assert(g0877a.scaledEst === 840 && g0877a.scaledOfficial === true,
+  'GR0877 72 correct / 28 wrong scales as official raw 65 → 840, got ' + g0877a.scaledEst);
+
+resetState();
+var g0877b = engine.create({ source: 'gr0877' });
+fillByCounts(g0877b, 78, 22);
+engine.submit(g0877b);
+assert(g0877b.scaledEst === 910 && g0877b.scaledOfficial === true,
+  'GR0877 78 correct / 22 wrong rounds 72.5 up to 73 → 910, got ' + g0877b.scaledEst);
+
+resetState();
+var g0877blank = engine.create({ source: 'gr0877' });
+fillByCounts(g0877blank, 44, 30); // 26 blanks; book example on p.89
+engine.submit(g0877blank);
+assert(g0877blank.raw === 44, 'blanks are not counted as correct');
+assert(g0877blank.scaledEst === 630 && g0877blank.scaledOfficial === true,
+  'GR0877 44 correct / 30 wrong / 26 blank: 36.5 rounds to 37 → 630, blanks not incorrect, got ' +
+    g0877blank.scaledEst);
+
+resetState();
+var g0877neg = engine.create({ source: 'gr0877' });
+fillByCounts(g0877neg, 0, 100);
+engine.submit(g0877neg);
+assert(g0877neg.scaledEst === 380 && g0877neg.scaledOfficial === true,
+  'GR0877 0 correct / 100 wrong: C−I/4 is −25, table starts at 0 → 380, got ' + g0877neg.scaledEst);
+
+resetState();
+var g0177ex = engine.create({ source: 'gr0177' });
+fillByCounts(g0177ex, 44, 30);
+engine.submit(g0177ex);
+assert(g0177ex.scaledEst === 650 && g0177ex.scaledOfficial === true,
+  'GR0177 book example 44/30 → raw 37 → 650 (p.71, p.73), got ' + g0177ex.scaledEst);
+
+resetState();
+var g9677ex = engine.create({ source: 'gr9677' });
+fillByCounts(g9677ex, 44, 30);
+engine.submit(g9677ex);
+assert(g9677ex.scaledEst === 740 && g9677ex.scaledOfficial === true,
+  'GR9677 book example 44/30 → raw 37 → 740 (p.73, p.75), got ' + g9677ex.scaledEst);
+
+resetState();
+var g1777ex = engine.create({ source: 'gr1777' });
+fillByCounts(g1777ex, 67, 33);
+engine.submit(g1777ex);
+assert(g1777ex.scaledEst === 820 && g1777ex.scaledOfficial === true,
+  'GR1777 67 correct / 33 wrong stays number-correct 67 → 820 (p.88), got ' + g1777ex.scaledEst);
+
+resetState();
+var ets2024ex = engine.create({ source: 'ets2024' });
+fillByCounts(ets2024ex, 54, 16);
+engine.submit(ets2024ex);
+assert(ets2024ex.scaledEst === 880 && ets2024ex.scaledOfficial === true,
+  'ets2024 54 correct stays number-correct 54 → 880 (GR1775 p.26), got ' + ets2024ex.scaledEst);
+
+assert(engine.scaledEstimate(35, 70) === 760, 'weighted 70-question estimate is unchanged after the form-rule split');
+
+/* Stored record: scaledEst was written under the old number-correct lookup.
+   Display recomputes; it does not write the record. */
+assert(typeof engine.scaleDisplay === 'function', 'scaleDisplay is exported for results/history');
+if (typeof engine.scaleDisplay === 'function') {
+  resetState();
+  var storedOld = engine.create({ source: 'gr0877' });
+  fillByCounts(storedOld, 72, 28);
+  storedOld.raw = 72;
+  storedOld.total = 100;
+  storedOld.scaledEst = 900;
+  storedOld.scaledOfficial = true;
+  storedOld.submittedAt = '2026-10-11T12:00:00.000Z';
+  var shown = engine.scaleDisplay(storedOld);
+  assert(shown && shown.scaled === 840 && shown.official === true && shown.rule === 'formula' && shown.stale !== true,
+    'stored GR0877 72/28 with old scaledEst 900 displays corrected 840, got ' +
+      (shown && shown.scaled) + ' rule=' + (shown && shown.rule));
+  assert(storedOld.scaledEst === 900, 'scaleDisplay does not rewrite the stored scaledEst');
+
+  var storedBare = {
+    source: 'gr0877', raw: 72, total: 100, scaledEst: 900, scaledOfficial: true,
+    submittedAt: '2026-10-11T12:00:00.000Z'
+  };
+  var bare = engine.scaleDisplay(storedBare);
+  assert(bare && bare.scaled === 900 && bare.stale === true,
+    'stored GR0877 without answers keeps the old scaled score and marks it stale, got ' +
+      (bare && JSON.stringify(bare)));
+}
 
 console.log('\nactive / history / lifecycle');
 resetState();

@@ -314,11 +314,12 @@ PGRE.views.exam = (function () {
       html += '<div class="exam-hist-rows">';
       hist.forEach(function (x) {
         var pct = x.total ? Math.round(100 * x.raw / x.total) : 0;
+        var scale = eng.scaleDisplay ? eng.scaleDisplay(x) : { scaled: x.scaledEst, official: !!x.scaledOfficial };
         html += '<a class="exam-hist-row" href="#/exam/review/' + PGRE.ui.esc(x.id) + '">' +
           '<span class="exam-hist-when">' + fmtDate(x.submittedAt) + '</span>' +
           '<span class="chip">' + eng.FORMAT_META[x.format].label + '</span>' +
           '<span class="exam-hist-score">' + x.raw + ' / ' + x.total + ' · ' + pct + '%</span>' +
-          '<span class="exam-hist-scaled">' + (x.scaledOfficial ? '' : '~') + x.scaledEst + ' scaled</span>' +
+          '<span class="exam-hist-scaled">' + (scale.official ? '' : '~') + scale.scaled + ' scaled</span>' +
         '</a>';
       });
       html += '</div>';
@@ -661,6 +662,20 @@ PGRE.views.exam = (function () {
   }
 
   /* ——————————————————————————— Results / review ——————————————————————————— */
+  function scaleNote(scale) {
+    if (scale.stale) {
+      return 'This sitting stored a scaled score under the old number-correct lookup; the answers needed for the official rule are not on this record.';
+    }
+    if (scale.official && scale.rule === 'formula') {
+      return 'Scaled with the official table using correct minus a quarter of incorrect.';
+    }
+    if (scale.official) {
+      return 'Scaled with the official table using number correct.';
+    }
+    return 'Scaled scores run 200–990; this estimate is interpolated from a hand-averaged lookalike ' +
+      'of released ETS practice-test tables and is a rough ballpark only.';
+  }
+
   function renderResults(id) {
     leaveRoom();
     var eng = PGRE.examEngine, ui = PGRE.ui;
@@ -671,6 +686,13 @@ PGRE.views.exam = (function () {
                   pct >= 65 ? 'Strong sitting. Mine the misses below for the last points.' :
                   pct >= 45 ? 'Solid base — the per-topic table shows where to aim next.' :
                   'A tough one. Every miss below is now in your mistake book for review.';
+    var scale = eng.scaleDisplay ? eng.scaleDisplay(exam) : {
+      scaled: exam.scaledEst, official: !!exam.scaledOfficial,
+      rule: exam.scaledOfficial ? 'correct' : 'estimate', stale: false
+    };
+    var scaledSub = scale.stale ? 'stored under the old rule' :
+      scale.rule === 'formula' ? 'correct minus a quarter of incorrect' :
+      'number correct';
 
     var html = '<div class="card exam-result-hero">' +
       '<div class="exam-result-head">' +
@@ -683,20 +705,17 @@ PGRE.views.exam = (function () {
       '<p class="muted">' + verdict + '</p>' +
       '<div class="stat-row exam-result-stats">' +
         ui.statTile('Raw score', exam.raw + ' / ' + exam.total) +
-        (exam.scaledOfficial
-          ? ui.statTile('Scaled score', String(exam.scaledEst), 'official ETS table')
-          : ui.statTile('Scaled estimate', '~' + exam.scaledEst, 'ballpark, not ETS-equated')) +
+        (scale.official
+          ? ui.statTile('Scaled score', String(scale.scaled), scaledSub)
+          : ui.statTile('Scaled estimate', '~' + scale.scaled, 'ballpark, not ETS-equated')) +
         ui.statTile('Time used', fmtDur(exam.durationSec), 'of ' + fmtDur(exam.limitSec)) +
-        ui.statTile('Flagged', String(exam.flags.length)) +
+        ui.statTile('Flagged', String((exam.flags || []).length)) +
       '</div>' +
       (exam.missing ? '<p class="muted exam-missing-note">' + exam.missing + ' question' +
         (exam.missing === 1 ? '' : 's') + ' could not be matched to the current bank and ' +
         (exam.missing === 1 ? 'was' : 'were') + ' scored as incorrect — the bank changed ' +
         'since this sitting.</p>' : '') +
-      '<p class="muted exam-scale-note">' + (exam.scaledOfficial
-        ? 'Scaled with the raw→scaled conversion table ETS published for this released exam.'
-        : 'Scaled scores run 200–990; this estimate is interpolated from a hand-averaged lookalike ' +
-          'of released ETS practice-test tables and is a rough ballpark only.') + '</p>' +
+      '<p class="muted exam-scale-note">' + scaleNote(scale) + '</p>' +
     '</div>';
 
     // Per-topic breakdown
@@ -730,7 +749,7 @@ PGRE.views.exam = (function () {
           '</button></div>'
         : '') +
       '</div>';
-    exam.order.forEach(function (qid, i) {
+    (exam.order || []).forEach(function (qid, i) {
       html += reviewCard(exam, qid, i);
     });
 
