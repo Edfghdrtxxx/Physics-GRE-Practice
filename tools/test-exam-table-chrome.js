@@ -563,7 +563,36 @@ async function main() {
       'question 2 (focus on choice ' + tabOn + ', answer ' + afterPick.second + ' then ' + room.second + ')');
     await evaluate('document.querySelector(\'#exam-palette [data-goto="' + room.last + '"]\').click()');
     await until('PGRE.examEngine.active().cursor === ' + room.last, 'last question');
+    /* clickAt records the choice's box, then sends the pointer later. A
+       bank stem with an <img> can still move that box in the gap (the
+       gitignored figure files are absent in this worktree, so the image
+       finishes as a broken-icon layout). Wait until every image in the
+       question has completed and the choice has sat still for two
+       samples, then click; if that click still missed, click once more
+       from a fresh box. Enter is sent only after the answer is stored,
+       so this check still fails when Enter clears it or leaves the
+       question. */
+    var prevChoiceY = null;
+    var lastChoiceReady = false;
+    for (var settle = 0; settle < 40 && !lastChoiceReady; settle++) {
+      var box = await evaluate(`(function () {
+        var imgs = document.querySelectorAll('#exam-q img');
+        var pending = 0;
+        for (var i = 0; i < imgs.length; i++) if (!imgs[i].complete) pending++;
+        var c = document.querySelector('#exam-q .choice[data-idx="0"]');
+        var r = c ? c.getBoundingClientRect() : null;
+        return { pending: pending, y: r ? r.top : null, h: r ? r.height : 0 };
+      })()`);
+      lastChoiceReady = box.pending === 0 && box.h > 0 && prevChoiceY != null &&
+        Math.abs(prevChoiceY - box.y) < 0.5;
+      prevChoiceY = box.y;
+      if (!lastChoiceReady) await sleep(50);
+    }
+    if (!lastChoiceReady) throw new Error('timeout waiting for last question choice 0 to settle');
     await clickAt('document.querySelector(\'#exam-q .choice[data-idx="0"]\')', true);
+    if ((await roomState()).final == null) {
+      await clickAt('document.querySelector(\'#exam-q .choice[data-idx="0"]\')', true);
+    }
     await pressEnter();
     room = await roomState();
     check(room.cursor === room.last && room.final === 0,
