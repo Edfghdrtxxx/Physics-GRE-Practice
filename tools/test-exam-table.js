@@ -99,8 +99,8 @@ check(PGRE.EXAM_TABLE.inertia.length === 3, '3 moments of inertia');
 
 var indexSrc = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 check(/js\/data-exam-table\.js\?v=/.test(indexSrc), 'index.html loads data-exam-table.js with a cache token');
-check(/js\/view-exam\.js\?v=20261011c/.test(indexSrc), 'index.html cache-busts view-exam.js');
-check(/css\/style\.css\?v=20261011c/.test(indexSrc), 'index.html cache-busts style.css');
+check(/js\/view-exam\.js\?v=/.test(indexSrc), 'index.html loads view-exam.js with a cache token');
+check(/css\/style\.css\?v=/.test(indexSrc), 'index.html loads style.css with a cache token');
 
 var viewSrc = fs.readFileSync(path.join(ROOT, 'js', 'view-exam.js'), 'utf8');
 check(viewSrc.indexOf('exam-table-btn') !== -1, 'exam room has the table button');

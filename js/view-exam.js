@@ -835,6 +835,54 @@ PGRE.views.exam = (function () {
       'of released ETS practice-test tables and is a rough ballpark only.';
   }
 
+  /* Results page, Flagged tile. With at least one flagged question it is a
+     toggle: on, the review list shows the flagged questions only. View state
+     only; a fresh render starts with every question shown. */
+  function flaggedShown(exam) {
+    var flags = exam.flags || [];
+    return (exam.order || []).filter(function (qid) { return flags.indexOf(qid) !== -1; }).length;
+  }
+
+  function flaggedTile(exam) {
+    var n = (exam.flags || []).length;
+    if (!flaggedShown(exam)) return PGRE.ui.statTile('Flagged', String(n));
+    return '<button type="button" class="stat-tile stat-tile-btn" id="exam-flagged-tile"' +
+        ' aria-pressed="false" aria-controls="exam-review-head">' +
+      '<span class="stat-label">Flagged</span>' +
+      '<span class="stat-value">' + n + '</span>' +
+      '<span class="stat-sub">Show only these</span>' +
+    '</button>';
+  }
+
+  function setFlaggedOnly(exam, on) {
+    var tile = document.getElementById('exam-flagged-tile');
+    if (!tile) return;
+    var n = flaggedShown(exam);
+    root().classList.toggle('exam-flagged-only', on);
+    tile.setAttribute('aria-pressed', on ? 'true' : 'false');
+    tile.querySelector('.stat-sub').textContent = on ? 'Show all ' + (exam.order || []).length : 'Show only these';
+    document.getElementById('exam-review-filter').hidden = !on;
+    document.getElementById('exam-review-filter-text').textContent = on
+      ? 'Showing ' + n + ' flagged question' + (n === 1 ? '' : 's') : '';
+  }
+
+  function bindFlaggedFilter(exam) {
+    var tile = document.getElementById('exam-flagged-tile');
+    if (!tile) return;
+    var title = document.getElementById('exam-review-title');
+    tile.addEventListener('click', function () {
+      var on = tile.getAttribute('aria-pressed') !== 'true';
+      setFlaggedOnly(exam, on);
+      if (!on) return;
+      document.getElementById('exam-review-head').scrollIntoView({ block: 'start' });
+      title.focus({ preventScroll: true });
+    });
+    document.getElementById('exam-review-all').addEventListener('click', function () {
+      setFlaggedOnly(exam, false);
+      title.focus({ preventScroll: true });
+    });
+  }
+
   function renderResults(id) {
     leaveRoom();
     var eng = PGRE.examEngine, ui = PGRE.ui;
@@ -868,7 +916,7 @@ PGRE.views.exam = (function () {
           ? ui.statTile('Scaled score', String(scale.scaled), scaledSub)
           : ui.statTile('Scaled estimate', '~' + scale.scaled, 'ballpark, not ETS-equated')) +
         ui.statTile('Time used', fmtDur(exam.durationSec), 'of ' + fmtDur(exam.limitSec)) +
-        ui.statTile('Flagged', String((exam.flags || []).length)) +
+        flaggedTile(exam) +
       '</div>' +
       (exam.missing ? '<p class="muted exam-missing-note">' + exam.missing + ' question' +
         (exam.missing === 1 ? '' : 's') + ' could not be matched to the current bank and ' +
@@ -896,7 +944,8 @@ PGRE.views.exam = (function () {
     // Question-by-question review
     var flaggedRight = eng.flaggedCorrectIds ? eng.flaggedCorrectIds(exam) : [];
     var pendingGuess = flaggedRight.filter(function (qid) { return !eng.isMarkedGuess(exam, qid); });
-    html += '<div class="card"><h2>Question-by-question review</h2>' +
+    html += '<div class="card" id="exam-review-head">' +
+      '<h2 id="exam-review-title" tabindex="-1">Question-by-question review</h2>' +
       '<p class="muted">Your pick beside the correct answer, with the full solution. ' +
       'Questions you flagged are marked. On a question you got right, Guessed files it in the mistake book.</p>' +
       (flaggedRight.length
@@ -907,6 +956,11 @@ PGRE.views.exam = (function () {
               : 'Flagged correct answers are marked as guessed') +
           '</button></div>'
         : '') +
+      '<div class="btn-row" id="exam-review-filter" hidden>' +
+        '<span class="muted" id="exam-review-filter-text" role="status"></span>' +
+        '<button type="button" class="btn btn-ghost btn-sm" id="exam-review-all">Show all ' +
+          (exam.order || []).length + '</button>' +
+      '</div>' +
       '</div>';
     (exam.order || []).forEach(function (qid, i) {
       html += reviewCard(exam, qid, i);
@@ -917,10 +971,12 @@ PGRE.views.exam = (function () {
       '<a class="btn btn-ghost" href="#/analytics">Open analytics →</a>' +
     '</div></div>';
 
+    root().classList.remove('exam-flagged-only');
     root().innerHTML = html;
     PGRE.typesetMath(root());
     bindReviewNotes();
     bindGuesses(exam);
+    bindFlaggedFilter(exam);
     if (window.PGRE && PGRE.motion) {
       var pctEl = root().querySelector('.summary-pct');
       if (pctEl && PGRE.motion.countUp) PGRE.motion.countUp(pctEl, pct, { duration: 900, format: function (n) { return Math.round(n) + '%'; } });
@@ -1119,12 +1175,13 @@ PGRE.views.exam = (function () {
     var flagged = exam.flags.indexOf(qid) !== -1;
     var picked = exam.answers[qid] != null ? exam.answers[qid] : null;
     if (!q) {
-      return '<div class="card exam-review-q"><div class="miss-head">' +
+      return '<div class="card exam-review-q' + (flagged ? ' is-flagged' : '') + '"><div class="miss-head">' +
         '<span class="muted">Question ' + (i + 1) + ' — no longer in the bank</span></div></div>';
     }
     var t = PGRE.topicById(q.topic);
     var correct = picked === q.answer;
-    var html = '<div class="card exam-review-q' + (correct ? ' is-right' : '') + '">' +
+    var html = '<div class="card exam-review-q' + (correct ? ' is-right' : '') +
+        (flagged ? ' is-flagged' : '') + '">' +
       '<div class="miss-head">' +
         '<span class="hist-mark ' + (correct ? 'is-good' : 'is-bad') + '">' + (correct ? 'Right' : 'Wrong') + '</span>' +
         (t ? ui.monogram(t) : '') +

@@ -2241,6 +2241,25 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .exam-topic-score { font-size: 13px; color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .exam-topic-foot { margin-top: 12px; }
 
+/* The Flagged tile is a toggle when the sitting has flagged questions; on, it
+   wears the room's flag colours (#exam-flag.is-flagged) and the review list
+   shows the flagged questions only. scroll-margin keeps the review heading
+   clear of the sticky top bar when the tile scrolls to it. */
+.stat-tile-btn {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.stat-tile-btn > span { display: block; }
+.stat-tile-btn .stat-sub { color: var(--accent-deep); }
+.stat-tile-btn:hover { background: var(--ivory); border-color: var(--ink-3); }
+.stat-tile-btn[aria-pressed="true"] { background: var(--accent-tint); border-color: var(--accent); }
+#exam-review-head { scroll-margin-top: 64px; }
+#exam-review-title:focus { outline: none; }
+.exam-flagged-only .exam-review-q:not(.is-flagged) { display: none; }
+
 .exam-review-q { border-left: 1px solid var(--bad); }
 .exam-review-q.is-right { border-left-color: var(--good); }
 .exam-review-q .q-text { font-size: 15.5px; margin: 12px 0; }
