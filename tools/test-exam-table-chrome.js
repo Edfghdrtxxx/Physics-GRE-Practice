@@ -409,6 +409,23 @@ async function main() {
     await until('!document.getElementById("exam-table-dialog")', 'closed by Escape');
     check(!(await evaluate('!!document.getElementById("exam-table-dialog")')), 'Escape closes the table');
 
+    await evaluate('document.getElementById("exam-pause").click()');
+    await until('!!document.querySelector(".exam-overlay.is-pause")', 'Paused card shown');
+    await press('t', 'KeyT', 84);
+    await sleep(400);
+    var pausedT = await evaluate(`(function () {
+      var exam = PGRE.examEngine.active();
+      return {
+        paused: !!(exam && exam.paused),
+        pauseCard: !!document.querySelector('.exam-overlay.is-pause'),
+        table: !!document.getElementById('exam-table-dialog')
+      };
+    })()`);
+    check(pausedT.paused && pausedT.pauseCard && !pausedT.table,
+      'T does nothing while the Paused card is shown');
+    await evaluate('document.getElementById("exam-resume-btn").click()');
+    await until('!document.querySelector(".exam-overlay.is-pause")', 'resumed after T-while-paused');
+
     var stillSame = await evaluate(`(function () {
       var exam = PGRE.examEngine.active();
       return exam.cursor === 0 && exam.answers[exam.order[0]] === 2;

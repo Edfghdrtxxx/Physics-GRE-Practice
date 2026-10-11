@@ -99,13 +99,16 @@ check(PGRE.EXAM_TABLE.inertia.length === 3, '3 moments of inertia');
 
 var indexSrc = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 check(/js\/data-exam-table\.js\?v=/.test(indexSrc), 'index.html loads data-exam-table.js with a cache token');
-check(/js\/view-exam\.js\?v=20261011b/.test(indexSrc), 'index.html cache-busts view-exam.js');
-check(/css\/style\.css\?v=20261011b/.test(indexSrc), 'index.html cache-busts style.css');
+check(/js\/view-exam\.js\?v=20261011c/.test(indexSrc), 'index.html cache-busts view-exam.js');
+check(/css\/style\.css\?v=20261011c/.test(indexSrc), 'index.html cache-busts style.css');
 
 var viewSrc = fs.readFileSync(path.join(ROOT, 'js', 'view-exam.js'), 'utf8');
 check(viewSrc.indexOf('exam-table-btn') !== -1, 'exam room has the table button');
 check(viewSrc.indexOf('k === \'t\' || k === \'T\'') !== -1, 'T opens or closes the table');
-check(/showPauseOverlay[\s\S]*exam-overlay is-pause/.test(viewSrc), 'pause overlay markup is unchanged');
+check(viewSrc.indexOf('exam.paused && (k === \'t\' || k === \'T\')') !== -1,
+  'T does nothing while the exam is paused');
+check(viewSrc.indexOf('pauseCardHTML') !== -1 && viewSrc.indexOf('exam-overlay is-pause') !== -1,
+  'Paused card markup from main is still present');
 
 if (failed) {
   console.log('\n' + passed + ' passed, ' + failed + ' failed');

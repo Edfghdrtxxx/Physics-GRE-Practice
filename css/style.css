@@ -2071,8 +2071,14 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 }
 /* Pause promises "the questions are hidden" — its backdrop must be opaque
    (the submit modal keeps the translucent scrim). */
-.exam-overlay.is-pause { background: var(--bg); }
-.exam-overlay-card { max-width: 460px; width: 100%; margin: 0; box-shadow: none; }
+.exam-overlay.is-pause { background: var(--bg); overflow: auto; }
+.exam-overlay-card {
+  max-width: 460px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  box-shadow: none;
+}
 .exam-overlay-card h2 { margin-bottom: 8px; }
 
 /* Table of Information — mock-exam room only. A left drawer over the
@@ -2180,6 +2186,37 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
   .exam-table-name { text-align: left; }
   .exam-table-lower { grid-template-columns: 1fr; gap: 18px; }
 }
+
+/* Pause card extras: one thin meter and a quiet two-column fact grid.
+   Coral stays on the meter fill (and the existing Resume button). */
+.exam-pause-progress { margin-top: 20px; }
+.exam-pause-progress .meter { width: 100%; margin-top: 0; }
+.exam-pause-count {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.exam-pause-facts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px 28px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.exam-pause-fact { min-width: 0; }
+.exam-pause-k { font-size: 12px; color: var(--ink-2); }
+.exam-pause-v {
+  margin-top: 2px;
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.exam-pause-pace { margin-top: 14px; font-size: 13px; }
+.exam-overlay-card.is-pause-card .btn-row { margin-top: 18px; }
 
 /* ——— Results / review ——— */
 .exam-result-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
