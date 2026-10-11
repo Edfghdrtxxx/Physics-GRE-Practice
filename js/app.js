@@ -1234,6 +1234,8 @@ PGRE.buildNav = function () {
   if (PGRE.motion && typeof PGRE.motion.letterSwapNav === 'function') {
     PGRE.motion.letterSwapNav(el);
   }
+  // the search box above the tree finds these same destinations (js/sidebar-search.js)
+  if (PGRE.sidebarSearch) PGRE.sidebarSearch.mount(items, groupLabels);
 };
 
 

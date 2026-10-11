@@ -145,7 +145,16 @@ PGRE.views.search = (function () {
     });
   }
 
+  /* #/search/<query> — the sidebar box (js/sidebar-search.js) hands its query
+     over in the hash, so its last row opens this page already searched. */
+  function seedQuery(params) {
+    if (!params || !params.sub) return '';
+    try { return decodeURIComponent(params.sub); } catch (e) { return ''; }
+  }
+
   return {
+    ensureEngine: ensureEngine,   // the sidebar box loads the engine through this one inject site
+
     render: function () {
       return '<div class="srch-wrap">' +
         '<div class="card srch-box page-head">' +
@@ -161,13 +170,14 @@ PGRE.views.search = (function () {
       '</div>';
     },
 
-    mount: function () {
+    mount: function (params) {
       idx = null;
       // drop the engine's cached index so this visit picks up anything new —
       // book imports, remappings, fresh notes and mistakes
       if (window.PGRE && PGRE.search) PGRE.search.invalidate();
       var input = document.getElementById('srch-input');
       var timer = null;
+      input.value = seedQuery(params);   // run() below searches it once the index is built
 
       renderEmpty();   // recents + a "building…" note while the index warms up
 
