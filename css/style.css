@@ -853,6 +853,16 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
   margin-bottom: 8px;
 }
 .practice-meta .btn { margin: 0; }
+.practice-meta .recall-timer {
+  display: inline-block;
+  min-width: 5.5ch;
+  text-align: end;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.practice-meta .recall-timer.is-over { color: var(--bad); }
 .q-text { font-size: 17px; line-height: 1.6; margin: 20px 0; }
 /* Book figures and wide KaTeX must never widen the page past a phone
    viewport: images shrink to their card, overlong math scrolls in place. */
