@@ -1,3 +1,1 @@
-PGRE_ARTIFACT_DIR=… node tools/test-exam-table-chrome.js
 55 passed, 0 failed
-  ok  — 1 angstrom present with value and unit
