@@ -606,15 +606,79 @@ PGRE.views.exam = (function () {
       showPauseOverlay(exam);
     }
   }
-  function showPauseOverlay(exam) {
-    var host = document.getElementById('exam-modal-host');
-    if (!host) return;
-    host.innerHTML = '<div class="exam-overlay is-pause"><div class="exam-overlay-card card">' +
+
+  /* Counts and clock values already on the sitting. No score, no
+     correctness, no pause counter (the record only stores paused). */
+  function pauseSnapshot(exam) {
+    var total = (exam && exam.order) ? exam.order.length : 0;
+    var answered = exam ? answeredCount(exam) : 0;
+    var unanswered = Math.max(0, total - answered);
+    var used = Math.max(0, exam && exam.durationSec ? exam.durationSec : 0);
+    var remain = Math.max(0, ((exam && exam.limitSec) || 0) - used);
+    return {
+      total: total,
+      answered: answered,
+      unanswered: unanswered,
+      flagged: (exam && exam.flags) ? exam.flags.length : 0,
+      used: used,
+      remain: remain,
+      onQuestion: exam ? exam.cursor + 1 : 0,
+      avgSec: answered ? used / answered : null,
+      remainEachSec: unanswered ? remain / unanswered : null
+    };
+  }
+
+  function pauseFact(label, value, id) {
+    return '<div class="exam-pause-fact">' +
+      '<div class="exam-pause-k">' + label + '</div>' +
+      '<div class="exam-pause-v" id="' + id + '">' + value + '</div>' +
+    '</div>';
+  }
+
+  function pausePaceLine(snap) {
+    var parts = [];
+    if (snap.avgSec != null) {
+      parts.push('Average ' + fmtClock(snap.avgSec) + ' per answered question.');
+    }
+    if (snap.remainEachSec != null) {
+      parts.push('Remaining clock allows ' + fmtClock(snap.remainEachSec) +
+        ' per leftover question.');
+    }
+    if (!parts.length) return '';
+    return '<p class="muted exam-pause-pace" id="exam-pause-pace">' + parts.join(' ') + '</p>';
+  }
+
+  function pauseCardHTML(exam) {
+    var snap = pauseSnapshot(exam);
+    var pct = snap.total ? (100 * snap.answered / snap.total) : 0;
+    var meter = (PGRE.ui && typeof PGRE.ui.meter === 'function')
+      ? PGRE.ui.meter(pct, 'meter-thin exam-pause-meter')
+      : '';
+    return '<div class="exam-overlay is-pause"><div class="exam-overlay-card card is-pause-card">' +
       '<h2>Paused</h2>' +
       '<p class="muted">The clock is stopped and the questions are hidden. A real GRE can’t be ' +
       'paused — use this sparingly so your practice reflects true test conditions.</p>' +
+      '<div class="exam-pause-progress" id="exam-pause-progress">' +
+        meter +
+        '<span class="exam-pause-count" id="exam-pause-count">' +
+          snap.answered + ' of ' + snap.total + ' answered</span>' +
+      '</div>' +
+      '<div class="exam-pause-facts">' +
+        pauseFact('Time used', fmtClock(snap.used), 'exam-pause-used') +
+        pauseFact('Time remaining', fmtClock(snap.remain), 'exam-pause-remain') +
+        pauseFact('On question', snap.onQuestion + ' of ' + snap.total, 'exam-pause-cursor') +
+        pauseFact('Not yet answered', String(snap.unanswered), 'exam-pause-blank') +
+        pauseFact('Flagged for review', String(snap.flagged), 'exam-pause-flagged') +
+      '</div>' +
+      pausePaceLine(snap) +
       '<div class="btn-row"><button class="btn btn-primary" id="exam-resume-btn">Resume exam</button></div>' +
     '</div></div>';
+  }
+
+  function showPauseOverlay(exam) {
+    var host = document.getElementById('exam-modal-host');
+    if (!host) return;
+    host.innerHTML = pauseCardHTML(exam);
     var resume = document.getElementById('exam-resume-btn');
     resume.addEventListener('click', function () { togglePause(exam); });
     if (resume.focus) resume.focus();
@@ -995,6 +1059,8 @@ PGRE.views.exam = (function () {
 
   /* ——— View entry points ——— */
   return {
+    pauseSnapshot: pauseSnapshot,
+    pauseCardHTML: pauseCardHTML,
     render: function () {
       return '<div id="exam-root"><div class="card"><p class="muted">Loading the exam simulator…</p></div></div>';
     },
