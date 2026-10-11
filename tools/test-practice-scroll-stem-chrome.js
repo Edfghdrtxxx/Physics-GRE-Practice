@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /* Headless Chrome: after a practice answer, the stem must scroll back into
    .practice-scroll. The unanswered question stays at the scroll it loaded with.
-   Isolated profile + ephemeral ports. Run: node tools/test-practice-scroll-stem-chrome.js
+   Isolated profile + ephemeral ports. Requests to the OrbitOS status bridge
+   (127.0.0.1:4789) are blocked before the page loads.
+   Run: node tools/test-practice-scroll-stem-chrome.js
    Override PGRE_TEST_PORT / PGRE_CDP_PORT. */
 'use strict';
 
@@ -15,6 +17,8 @@ var { spawn } = require('child_process');
 var PORT = parseInt(process.env.PGRE_TEST_PORT || '0', 10);
 var CDP_PORT = parseInt(process.env.PGRE_CDP_PORT || '0', 10);
 var ROOT = path.resolve(__dirname, '..');
+var BRIDGE_PORT = 4789; // js/status.js ENDPOINT
+function isBridgeUrl(u) { return /^https?:\/\/(127\.0\.0\.1|localhost):4789\//.test(String(u)); }
 var MIME = {
   '.html': 'text/html',
   '.js': 'application/javascript',
@@ -116,9 +120,10 @@ async function main() {
     '--user-data-dir=' + userDataDir,
     '--no-first-run',
     '--window-size=1280,900',
-    'http://127.0.0.1:' + httpPort + '/'
+    'about:blank'
   ], { stdio: 'ignore' });
 
+  var bridge = { sent: 0, answered: 0 };
   var ws = null;
   try {
     var wsUrl = null;
@@ -137,6 +142,8 @@ async function main() {
     var pending = new Map();
     ws.onmessage = function (ev) {
       var msg = JSON.parse(ev.data);
+      if (msg.method === 'Network.requestWillBeSent' && isBridgeUrl(msg.params.request.url)) bridge.sent++;
+      if (msg.method === 'Network.responseReceived' && isBridgeUrl(msg.params.response.url)) bridge.answered++;
       if (msg.id && pending.has(msg.id)) {
         var p = pending.get(msg.id); pending.delete(msg.id);
         if (msg.error) p.reject(msg.error); else p.resolve(msg.result);
@@ -163,6 +170,13 @@ async function main() {
     await send('Emulation.setDeviceMetricsOverride', {
       width: 1280, height: 900, deviceScaleFactor: 1, mobile: false
     });
+    /* js/status.js posts the status summary to the OrbitOS status bridge on
+       127.0.0.1:4789. Block that port before the app loads, so this probe
+       answer never replaces the snapshot agents read. */
+    await send('Network.enable', {});
+    await send('Network.setBlockedURLs', { urls: ['*://127.0.0.1:' + BRIDGE_PORT + '/*', '*://localhost:' + BRIDGE_PORT + '/*'] });
+    await send('Page.navigate', { url: 'http://127.0.0.1:' + httpPort + '/' });
+    await sleep(250);
 
     for (var w = 0; w < 50; w++) {
       var ready = await evaluate("typeof PGRE !== 'undefined' && typeof PGRE.questionById === 'function' && typeof PGRE._resetBankCache === 'function'");
@@ -264,6 +278,10 @@ async function main() {
     assert(answered.overlap >= Math.min(answered.boxHeight, 80) - 1,
       'scrolling up did not bring the stem into view: ' + JSON.stringify(answered));
     console.log('finished stem scrolls into view, overlap=' + Math.round(answered.overlap));
+    assert(bridge.answered === 0,
+      'the status bridge on port ' + BRIDGE_PORT + ' answered ' + bridge.answered + ' request(s)');
+    console.log('the status bridge on port ' + BRIDGE_PORT + ' received nothing (' + bridge.sent +
+      ' request(s) blocked, ' + bridge.answered + ' answered)');
   } finally {
     if (ws) try { ws.close(); } catch (e) {}
     await stopChrome(chrome);

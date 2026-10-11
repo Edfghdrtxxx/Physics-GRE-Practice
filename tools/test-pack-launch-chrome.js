@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /* Headless Chrome: PGRE.launchPack → #/practice/custom shows Question 1 of n.
-   Isolated profile + ephemeral ports. Run: node tools/test-pack-launch-chrome.js
+   Isolated profile + ephemeral ports. Requests to the OrbitOS status bridge
+   (127.0.0.1:4789) are blocked before the page loads.
+   Run: node tools/test-pack-launch-chrome.js
    Override PGRE_TEST_PORT / PGRE_CDP_PORT / PGRE_ARTIFACT_DIR. */
 'use strict';
 
@@ -14,6 +16,8 @@ var { spawn } = require('child_process');
 var PORT = parseInt(process.env.PGRE_TEST_PORT || '0', 10);
 var CDP_PORT = parseInt(process.env.PGRE_CDP_PORT || '0', 10);
 var ROOT = path.resolve(__dirname, '..');
+var BRIDGE_PORT = 4789; // js/status.js ENDPOINT
+function isBridgeUrl(u) { return /^https?:\/\/(127\.0\.0\.1|localhost):4789\//.test(String(u)); }
 var ARTIFACT_DIR = process.env.PGRE_ARTIFACT_DIR ||
   fs.mkdtempSync(path.join(os.tmpdir(), 'pgre-pack-launch-'));
 var MIME = {
@@ -114,10 +118,11 @@ async function main() {
     '--user-data-dir=' + userDataDir,
     '--no-first-run',
     '--window-size=1280,900',
-    'http://127.0.0.1:' + httpPort + '/'
+    'about:blank'
   ], { stdio: 'ignore' });
 
   var pageErrors = [];
+  var bridge = { sent: 0, answered: 0 };
   var ws = null;
   try {
     var wsUrl = null;
@@ -140,6 +145,8 @@ async function main() {
         var d = msg.params && msg.params.exceptionDetails;
         pageErrors.push((d && d.text) || JSON.stringify(d));
       }
+      if (msg.method === 'Network.requestWillBeSent' && isBridgeUrl(msg.params.request.url)) bridge.sent++;
+      if (msg.method === 'Network.responseReceived' && isBridgeUrl(msg.params.response.url)) bridge.answered++;
       if (msg.id && pending.has(msg.id)) {
         var p = pending.get(msg.id); pending.delete(msg.id);
         if (msg.error) p.reject(msg.error); else p.resolve(msg.result);
@@ -163,6 +170,13 @@ async function main() {
     }
 
     await send('Runtime.enable', {});
+    /* js/status.js posts the status summary to the OrbitOS status bridge on
+       127.0.0.1:4789. Block that port before the app loads, so this empty
+       test profile never replaces the snapshot agents read. */
+    await send('Network.enable', {});
+    await send('Network.setBlockedURLs', { urls: ['*://127.0.0.1:' + BRIDGE_PORT + '/*', '*://localhost:' + BRIDGE_PORT + '/*'] });
+    await send('Page.navigate', { url: 'http://127.0.0.1:' + httpPort + '/' });
+    await sleep(250);
 
     for (var w = 0; w < 50; w++) {
       var ready = await evaluate("typeof PGRE !== 'undefined' && typeof PGRE.launchPack === 'function' && !!(PGRE.PACKS && PGRE.PACKS['03'])");
@@ -217,6 +231,11 @@ async function main() {
     var b2 = await runPack('07', 'pack-07-run2.png');
     if (a1 !== a2) throw new Error('pack 03 n mismatch across launches');
     if (b1 !== b2) throw new Error('pack 07 n mismatch across launches');
+    if (bridge.answered !== 0) {
+      throw new Error('the status bridge on port ' + BRIDGE_PORT + ' answered ' + bridge.answered + ' request(s)');
+    }
+    console.log('the status bridge on port ' + BRIDGE_PORT + ' received nothing (' + bridge.sent +
+      ' request(s) blocked, ' + bridge.answered + ' answered)');
     console.log('chrome pack launch ok: 03 n=' + a1 + '  07 n=' + b1);
   } finally {
     if (ws) try { ws.close(); } catch (e) {}
