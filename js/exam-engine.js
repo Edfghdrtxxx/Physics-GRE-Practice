@@ -179,6 +179,67 @@ PGRE.examEngine = (function () {
     return null;
   }
 
+  /* GR0877 p.89, GR0177 p.71, GR9677 p.73: the published table is indexed
+     by C − I/4, rounded to the nearest whole number (half rounds up: 36.5 → 37).
+     Unanswered questions are omitted. Tables start at raw 0 (negative C − I/4
+     uses that floor). GR1777 p.5 and ets2024 / GR1775 p.4–5 index by number
+     correct. */
+  var FORMULA_RAW_SOURCES = { gr9677: 1, gr0177: 1, gr0877: 1 };
+
+  function usesFormulaRaw(source) {
+    return !!(source && FORMULA_RAW_SOURCES[source]);
+  }
+
+  function formulaRaw(correct, incorrect) {
+    var c = Number(correct);
+    var w = Number(incorrect);
+    if (!isFinite(c) || !isFinite(w) || c < 0 || w < 0) return null;
+    var r = Math.round(c - w / 4);
+    return r < 0 ? 0 : r;
+  }
+
+  function incorrectFromRecord(exam) {
+    if (!exam || exam.raw == null || !exam.answers || !exam.order) return null;
+    var answered = 0;
+    exam.order.forEach(function (qid) {
+      if (exam.answers[qid] != null) answered += 1;
+    });
+    var incorrect = answered - exam.raw;
+    if (!isFinite(incorrect) || incorrect < 0) return null;
+    return incorrect;
+  }
+
+  function tableRaw(source, correct, incorrect) {
+    if (usesFormulaRaw(source)) return formulaRaw(correct, incorrect);
+    return correct;
+  }
+
+  /* Read-only scaled score for results/history. Recomputes formula-raw
+     sittings from stored number-correct plus answers; never writes. */
+  function scaleDisplay(exam) {
+    if (!exam) return { scaled: null, official: false, rule: 'estimate', stale: false, tableRaw: null };
+    var source = exam.source;
+    var stored = exam.scaledEst;
+    if (usesFormulaRaw(source)) {
+      var incorrect = incorrectFromRecord(exam);
+      if (incorrect == null || exam.raw == null) {
+        return { scaled: stored, official: !!exam.scaledOfficial, rule: 'old', stale: true, tableRaw: exam.raw };
+      }
+      var fRaw = formulaRaw(exam.raw, incorrect);
+      var looked = fRaw == null ? null : officialScaled(fRaw, source);
+      if (looked != null) {
+        return { scaled: looked, official: true, rule: 'formula', stale: false, tableRaw: fRaw };
+      }
+      return { scaled: stored, official: !!exam.scaledOfficial, rule: 'old', stale: true, tableRaw: fRaw };
+    }
+    var nRaw = exam.raw;
+    var official = nRaw == null ? null : officialScaled(nRaw, source);
+    if (official != null) {
+      return { scaled: official, official: true, rule: 'correct', stale: false, tableRaw: nRaw };
+    }
+    return { scaled: stored, official: false, rule: 'estimate', stale: false, tableRaw: nRaw };
+  }
+
   /* Is there enough content to start this format/source right now? */
   function canStart(format, source) {
     if (source || format === '100x170') {
@@ -302,7 +363,7 @@ PGRE.examEngine = (function () {
     }
     var snap = JSON.parse(JSON.stringify(PGRE.store.state));
     var diskBefore = diskBlob();
-    var perTopic = {}, raw = 0, missing = 0, answered = 0;
+    var perTopic = {}, raw = 0, missing = 0, answered = 0, incorrect = 0;
     exam.order.forEach(function (qid) {
       var q = PGRE.questionById(qid);
       if (!q) { missing += 1; return; }
@@ -310,6 +371,7 @@ PGRE.examEngine = (function () {
       if (picked != null) answered += 1;
       var correct = picked === q.answer;
       if (correct) raw += 1;
+      else if (picked != null) incorrect += 1;
       var pt = perTopic[q.topic] || { right: 0, total: 0 };
       pt.total += 1; if (correct) pt.right += 1;
       perTopic[q.topic] = pt;
@@ -324,7 +386,8 @@ PGRE.examEngine = (function () {
     exam.perTopic = perTopic;
     exam.scaledEst = scaledEstimate(raw, exam.total);
     // Replayed released exams score on their own published ETS table instead
-    var official = officialScaled(raw, exam.source);
+    var lookup = tableRaw(exam.source, raw, incorrect);
+    var official = lookup == null ? null : officialScaled(lookup, exam.source);
     if (official != null) { exam.scaledEst = official; exam.scaledOfficial = true; }
     exam.paused = false;
     exam.submittedAt = new Date().toISOString();
@@ -474,6 +537,9 @@ PGRE.examEngine = (function () {
     WEIGHTS: WEIGHTS,
     SCALE_ANCHORS: SCALE_ANCHORS,
     scaledEstimate: scaledEstimate,
+    formulaRaw: formulaRaw,
+    usesFormulaRaw: usesFormulaRaw,
+    scaleDisplay: scaleDisplay,
     examById: examById,
     canStart: canStart,
     poolSize: function () { return drawPool().length; },
