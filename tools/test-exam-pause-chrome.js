@@ -4,7 +4,9 @@
    every number against the sitting, reject spoiler copy, confirm the clock
    stays stopped, then resume and confirm it runs again. Synthetic questions
    in an isolated Chrome profile on a throwaway port; never the saved
-   profile. Run: node tools/test-exam-pause-chrome.js
+   profile. Requests to the OrbitOS status bridge (127.0.0.1:4789) are
+   refused by the page's Content-Security-Policy.
+   Run: node tools/test-exam-pause-chrome.js
    PGRE_PAUSE_SHOTS=<dir> also saves light, dark, and 700 px screenshots. */
 'use strict';
 
@@ -18,6 +20,16 @@ var MIME = {
   '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
   '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.svg': 'image/svg+xml'
 };
+/* js/status.js posts the status summary to the OrbitOS status bridge on
+   127.0.0.1:4789. chrome-devtools-axi cannot block a URL, so the test server
+   sends a Content-Security-Policy that lets the page connect to this server
+   only. Chrome then refuses the bridge request, so this fixture sitting never
+   replaces the snapshot agents read, and reports the refusal to
+   CSP_REPORT_PATH. */
+var BRIDGE_PORT = 4789; // js/status.js ENDPOINT
+var CSP_REPORT_PATH = '/__csp-report';
+var PAGE_CSP = "connect-src 'self'; report-uri " + CSP_REPORT_PATH;
+function isBridgeUrl(u) { return /^https?:\/\/(127\.0\.0\.1|localhost):4789(\/|$)/.test(String(u)); }
 
 async function helpers(page) {
   var URL = process.env.PGRE_PAUSE_TEST_URL;
@@ -277,13 +289,26 @@ async function main() {
   var profile = fs.mkdtempSync(path.join(os.tmpdir(), 'pgre-pause-info-chrome-'));
   var shots = process.env.PGRE_PAUSE_SHOTS ? path.resolve(process.env.PGRE_PAUSE_SHOTS) : '';
   if (shots) fs.mkdirSync(shots, { recursive: true });
+  var bridge = { refused: 0 };
   var server = http.createServer(function (request, response) {
     var pathname = decodeURIComponent(request.url.split('?')[0]);
+    if (request.method === 'POST' && pathname === CSP_REPORT_PATH) {
+      var report = '';
+      request.on('data', function (chunk) { report += chunk; });
+      request.on('end', function () {
+        try { if (isBridgeUrl(JSON.parse(report)['csp-report']['blocked-uri'])) bridge.refused++; } catch (e) {}
+        response.writeHead(204); response.end();
+      });
+      return;
+    }
     var file = path.resolve(ROOT, '.' + (pathname === '/' ? '/index.html' : pathname));
     if (!file.startsWith(ROOT + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
       response.writeHead(404); response.end(); return;
     }
-    response.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+    response.writeHead(200, {
+      'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
+      'Content-Security-Policy': PAGE_CSP
+    });
     fs.createReadStream(file).pipe(response);
   });
   var env = Object.assign({}, process.env, {
@@ -311,6 +336,11 @@ async function main() {
         console.log('screenshot ' + STAGES[i].shot + '.png');
       }
     }
+    if (!bridge.refused) {
+      throw new Error('Chrome reported no refused request to the status bridge on port ' + BRIDGE_PORT);
+    }
+    console.log('\nPASS: the status bridge on port ' + BRIDGE_PORT + ' received nothing (Chrome refused the request on ' +
+      bridge.refused + ' page load(s))');
     console.log('\nALL OK');
   } finally {
     await run(['stop'], env).catch(function (error) { console.error(error.message); });

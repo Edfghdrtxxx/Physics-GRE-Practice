@@ -7,6 +7,16 @@ var path = require('path');
 var spawn = require('child_process').spawn;
 var ROOT = path.resolve(__dirname, '..');
 var MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css' };
+/* js/status.js posts the status summary to the OrbitOS status bridge on
+   127.0.0.1:4789. chrome-devtools-axi cannot block a URL, so the test server
+   sends a Content-Security-Policy that lets the page connect to this server
+   only. Chrome then refuses the bridge request, so these fixture mistakes
+   never replace the snapshot agents read, and reports the refusal to
+   CSP_REPORT_PATH. */
+var BRIDGE_PORT = 4789; // js/status.js ENDPOINT
+var CSP_REPORT_PATH = '/__csp-report';
+var PAGE_CSP = "connect-src 'self'; report-uri " + CSP_REPORT_PATH;
+function isBridgeUrl(u) { return /^https?:\/\/(127\.0\.0\.1|localhost):4789(\/|$)/.test(String(u)); }
 
 async function browserTest() {
   async function wait(selector) {
@@ -344,13 +354,26 @@ function run(args, env, input) {
 
 async function main() {
   var profile = fs.mkdtempSync(path.join(ROOT, '.pgre-confirm-chrome-'));
+  var bridge = { refused: 0 };
   var server = http.createServer(function (request, response) {
     var pathname = decodeURIComponent(request.url.split('?')[0]);
+    if (request.method === 'POST' && pathname === CSP_REPORT_PATH) {
+      var report = '';
+      request.on('data', function (chunk) { report += chunk; });
+      request.on('end', function () {
+        try { if (isBridgeUrl(JSON.parse(report)['csp-report']['blocked-uri'])) bridge.refused++; } catch (e) {}
+        response.writeHead(204); response.end();
+      });
+      return;
+    }
     var file = path.resolve(ROOT, '.' + (pathname === '/' ? '/index.html' : pathname));
     if (!file.startsWith(ROOT + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
       response.writeHead(404); response.end(); return;
     }
-    response.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+    response.writeHead(200, {
+      'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
+      'Content-Security-Policy': PAGE_CSP
+    });
     fs.createReadStream(file).pipe(response);
   });
   var env = Object.assign({}, process.env, {
@@ -364,6 +387,11 @@ async function main() {
     env.PGRE_CONFIRM_TEST_URL = 'http://127.0.0.1:' + server.address().port + '/';
     await run(['run'], env, 'try { await (' + browserTest.toString() +
       ')(); } catch (error) { console.log("BROWSER_TEST_FAILED: " + error.stack); }');
+    if (!bridge.refused) {
+      throw new Error('Chrome reported no refused request to the status bridge on port ' + BRIDGE_PORT);
+    }
+    console.log('PASS: the status bridge on port ' + BRIDGE_PORT + ' received nothing (Chrome refused the request on ' +
+      bridge.refused + ' page load(s))');
   } finally {
     await run(['stop'], env).catch(function (error) { console.error(error.message); });
     await new Promise(function (resolve) { server.close(resolve); });

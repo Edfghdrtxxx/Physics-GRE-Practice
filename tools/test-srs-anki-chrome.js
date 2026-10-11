@@ -2,7 +2,9 @@
 /* Headless Chrome check: Anki SM-2 grade buttons + exam-cap toggle.
    Run: node tools/test-srs-anki-chrome.js
    Isolated profile + ephemeral ports (override with PGRE_TEST_PORT /
-   PGRE_CDP_PORT) so it never touches the user's browser or pinned services. */
+   PGRE_CDP_PORT) so it never touches the user's browser or pinned services.
+   Requests to the OrbitOS status bridge (127.0.0.1:4789) are blocked in
+   both tabs before the page loads. */
 'use strict';
 
 var http = require('http');
@@ -15,6 +17,9 @@ var { spawn } = require('child_process');
 var PORT = parseInt(process.env.PGRE_TEST_PORT || '0', 10);
 var CDP_PORT = parseInt(process.env.PGRE_CDP_PORT || '0', 10);
 var ROOT = path.resolve(__dirname, '..');
+var BRIDGE_PORT = 4789; // js/status.js ENDPOINT
+var BRIDGE_BLOCK = ['*://127.0.0.1:' + BRIDGE_PORT + '/*', '*://localhost:' + BRIDGE_PORT + '/*'];
+function isBridgeUrl(u) { return /^https?:\/\/(127\.0\.0\.1|localhost):4789\//.test(String(u)); }
 var MIME = {
   '.html': 'text/html',
   '.js': 'application/javascript',
@@ -100,6 +105,7 @@ async function main() {
   var chrome = null;
   var ws = null;
   var secondTargetId = null;
+  var bridge = { sent: 0, answered: 0 };
   try {
   chrome = spawn(findChrome(), [
     '--headless=new',
@@ -107,7 +113,7 @@ async function main() {
     '--user-data-dir=' + userDataDir,
     '--no-first-run',
     '--window-size=1280,900',
-    'http://127.0.0.1:' + httpPort + '/'
+    'about:blank'
   ], { stdio: 'ignore' });
 
   var wsUrl = null;
@@ -126,6 +132,8 @@ async function main() {
   var pending = new Map();
   ws.onmessage = function (ev) {
     var msg = JSON.parse(ev.data);
+    if (msg.method === 'Network.requestWillBeSent' && isBridgeUrl(msg.params.request.url)) bridge.sent++;
+    if (msg.method === 'Network.responseReceived' && isBridgeUrl(msg.params.response.url)) bridge.answered++;
     if (msg.id && pending.has(msg.id)) {
       var p = pending.get(msg.id); pending.delete(msg.id);
       if (msg.error) p.reject(msg.error); else p.resolve(msg.result);
@@ -157,6 +165,14 @@ async function main() {
     if (res.exceptionDetails) throw new Error(JSON.stringify(res.exceptionDetails));
     return res.result.value;
   }
+
+  /* js/status.js posts the status summary to the OrbitOS status bridge on
+     127.0.0.1:4789. Block that port before the app loads, so these fixture
+     cards never replace the snapshot agents read. */
+  await send('Network.enable', {});
+  await send('Network.setBlockedURLs', { urls: BRIDGE_BLOCK });
+  await send('Page.navigate', { url: 'http://127.0.0.1:' + httpPort + '/' });
+  await sleep(250);
 
   for (var w = 0; w < 40; w++) {
     var ready = await evaluate("typeof PGRE !== 'undefined' && !!(PGRE.srs && PGRE.store && PGRE.contentDB)");
@@ -710,10 +726,16 @@ async function main() {
   /* Cross-tab persistence: a stale empty shell cannot erase a newly filled
      current-day batch, and a stale same-day heap cannot resurrect a card the
      user explicitly removed. */
-  var target = await send('Target.createTarget', { url: 'http://127.0.0.1:' + httpPort + '/' });
+  var target = await send('Target.createTarget', { url: 'about:blank' });
   secondTargetId = target.targetId;
   var attached = await send('Target.attachToTarget', { targetId: secondTargetId, flatten: true });
   var secondSessionId = attached.sessionId;
+  /* Blocked URLs are set per tab: block the bridge in this tab too before
+     it loads the app. */
+  await send('Network.enable', {}, secondSessionId);
+  await send('Network.setBlockedURLs', { urls: BRIDGE_BLOCK }, secondSessionId);
+  await send('Page.navigate', { url: 'http://127.0.0.1:' + httpPort + '/' }, secondSessionId);
+  await sleep(250);
   for (var peerReady = 0; peerReady < 40; peerReady++) {
     if (await evaluateInSession(secondSessionId, "typeof PGRE !== 'undefined' && !!(PGRE.srs && PGRE.store && PGRE.store.state && PGRE.contentDB)")) break;
     await sleep(100);
@@ -896,6 +918,12 @@ async function main() {
       fpDayOne.next.easy !== 1 || fpDayOne.mastered !== 1) {
     throw new Error('final-pass day-one boundary mismatch: ' + JSON.stringify(fpDayOne));
   }
+
+  if (bridge.answered !== 0) {
+    throw new Error('the status bridge on port ' + BRIDGE_PORT + ' answered ' + bridge.answered + ' request(s)');
+  }
+  console.log('the status bridge on port ' + BRIDGE_PORT + ' received nothing (' + bridge.sent +
+    ' request(s) blocked, ' + bridge.answered + ' answered)');
 
   await evaluate("PGRE.contentDB.del('formula-deck')");
   console.log('PASS — Anki grades + end-to-end Today due pickup, backlog cap, mixed due+new auto-pick, repeat-click safety, persistence, deliberate-batch preservation, rollover, date stamping, overflow copy, cross-tab conflict safety, and automatic final-pass inclusion');
