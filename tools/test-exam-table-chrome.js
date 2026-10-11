@@ -568,10 +568,9 @@ async function main() {
        gitignored figure files are absent in this worktree, so the image
        finishes as a broken-icon layout). Wait until every image in the
        question has completed and the choice has sat still for two
-       samples, then click; if that click still missed, click once more
-       from a fresh box. Enter is sent only after the answer is stored,
-       so this check still fails when Enter clears it or leaves the
-       question. */
+       samples, then one click. The stored-answer check fails if that
+       click missed. Enter then still fails the next check if it clears
+       the pick or leaves the question. */
     var prevChoiceY = null;
     var lastChoiceReady = false;
     for (var settle = 0; settle < 40 && !lastChoiceReady; settle++) {
@@ -590,9 +589,9 @@ async function main() {
     }
     if (!lastChoiceReady) throw new Error('timeout waiting for last question choice 0 to settle');
     await clickAt('document.querySelector(\'#exam-q .choice[data-idx="0"]\')', true);
-    if ((await roomState()).final == null) {
-      await clickAt('document.querySelector(\'#exam-q .choice[data-idx="0"]\')', true);
-    }
+    room = await roomState();
+    check(room.cursor === room.last && room.final === 0,
+      'click on the settled choice stored the answer');
     await pressEnter();
     room = await roomState();
     check(room.cursor === room.last && room.final === 0,
