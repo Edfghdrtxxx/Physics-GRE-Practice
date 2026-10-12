@@ -44,6 +44,7 @@ async function helpers(page) {
     return { id: id, title: title, format: format, questions: questions };
   }
   var BOOK = fixtureExam('x1', 'Book sample exam', '100x170', 'be-sat-', 'cpg-exam', 3);
+  var BOOK2 = fixtureExam('x2', 'Book sample exam 2', '100x170', 'be-unsat-', 'cpg-exam', 3);
   var GR1777 = fixtureExam('gr1777', 'GR1777 fixture', '100x170', 'g17-sat-', 'ets-exam', 3);
   var ETS2024 = fixtureExam('ets2024', 'ets2024 fixture', '70x120', 'e24-sat-', 'ets-exam', 3);
   function sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
@@ -71,9 +72,10 @@ async function helpers(page) {
     await h.wait('!!document.getElementById("main") && !!window.PGRE && !!PGRE.examEngine && !!PGRE.allQuestions',
       'PGRE exam engine');
     await page.eval('() => { var book = ' + JSON.stringify(BOOK) + ';' +
+      'var book2 = ' + JSON.stringify(BOOK2) + ';' +
       'var gr = ' + JSON.stringify(GR1777) + ';' +
       'var e24 = ' + JSON.stringify(ETS2024) + ';' +
-      'PGRE.BOOK_EXAMS = [book];' +
+      'PGRE.BOOK_EXAMS = [book, book2];' +
       'PGRE.ETS_EXAMS = [gr, e24];' +
       'if (PGRE._resetBankCache) PGRE._resetBankCache(); }');
   };
@@ -99,6 +101,7 @@ async function helpers(page) {
         hasG17: ids.indexOf('g17-sat-1') !== -1,
         hasE24: ids.indexOf('e24-sat-1') !== -1,
         hasBook: ids.indexOf('be-sat-1') !== -1,
+        hasBook2: ids.indexOf('be-unsat-1') !== -1,
         poolSize: PGRE.examEngine.poolSize(),
         satSources: Object.keys(sat).sort(),
         exams: exams,
@@ -126,6 +129,36 @@ async function helpers(page) {
       'submitted review page');
   };
 
+  h.search = async function (query) {
+    var hash = await page.eval('() => location.hash');
+    if (String(hash).indexOf('#/search') !== 0) {
+      await page.eval('() => { location.hash = "#/search"; }');
+      await h.wait('!!document.getElementById("srch-input")', 'search input');
+      await h.wait('!!(window.PGRE && PGRE.search)', 'search engine');
+      await page.eval('() => { window.__srchIdx = false; PGRE.search.buildIndex().then(function () { window.__srchIdx = true; }); }');
+      await h.wait('!!window.__srchIdx', 'search index');
+      await h.sleep(400);
+    }
+    await page.eval('() => { var i = document.getElementById("srch-input"); i.value = ' +
+      JSON.stringify(query) +
+      '; i.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); }');
+    await h.sleep(250);
+    await h.wait('!!document.querySelector(".srch-empty, .srch-hit")', 'search results for ' + query);
+    return JSON.parse(await page.eval(function () {
+      var empty = document.querySelector('.srch-empty');
+      var hits = document.querySelectorAll('.srch-hit');
+      var status = document.getElementById('srch-status');
+      return JSON.stringify({
+        empty: !!(empty && /No matches/.test(empty.textContent || '')),
+        emptyText: empty ? empty.textContent : '',
+        hitCount: hits.length,
+        status: status ? status.textContent : '',
+        results: document.getElementById('srch-results')
+          ? document.getElementById('srch-results').textContent : ''
+      });
+    }));
+  };
+
   return h;
 }
 
@@ -133,7 +166,7 @@ var STAGES = [
   { name: 'unsat pool', size: '1280x800x2', shot: 'setup-unsat', run: async function (page, h) {
     await h.openExam();
     var pool = await h.pool();
-    h.assert(!pool.hasG17 && !pool.hasE24 && !pool.hasBook,
+    h.assert(!pool.hasG17 && !pool.hasE24 && !pool.hasBook && !pool.hasBook2,
       'unsat intact exams are absent from the default pool');
     h.assert(pool.satSources.length === 0, 'no sat exam sources before a sitting');
     h.assert(pool.setupText.indexOf('unsat released-ETS question') !== -1,
@@ -185,7 +218,7 @@ var STAGES = [
     var pool = await h.pool();
     h.assert(pool.hasG17, 'submitted GR1777 questions enter the default pool');
     h.assert(!pool.hasE24, 'ets2024 stays protected when it was not the recorded source');
-    h.assert(!pool.hasBook, 'unsat book sample exam stays protected');
+    h.assert(!pool.hasBook && !pool.hasBook2, 'unsat book sample exams stay protected');
     h.assert(pool.satSources.join(',') === 'gr1777',
       'sat sources are the recorded exam source only');
     h.assert(pool.replayGr && pool.replayE24, 'verbatim replay buttons remain for sat and unsat forms');
@@ -240,6 +273,64 @@ var STAGES = [
     await h.wait('!!document.getElementById("exam-resume-drop")', 'resume after replay start');
     await h.click('#exam-resume-drop');
     await h.wait('!!document.querySelector(\'[data-replay="ets2024"]\')', 'discarded replay');
+  } },
+
+  { name: 'search omits unsat book exam', size: '1280x800x2', shot: 'search-unsat-book', run: async function (page, h) {
+    var unsat = await h.search('satgrad unique stem x1');
+    h.assert(unsat.empty && unsat.hitCount === 0,
+      'unsat book sample-exam stem has no search result');
+  } },
+
+  { name: 'search finds sat ETS exam', size: '1280x800x2', shot: '', run: async function (page, h) {
+    var satEts = await h.search('satgrad unique stem gr1777');
+    h.assert(!satEts.empty && satEts.hitCount > 0,
+      'sat ETS stem is searchable as a normal question');
+  } },
+
+  { name: 'sit book exam then search and builder', size: '1280x800x2', shot: 'custom-quiz-count', run: async function (page, h) {
+    await page.eval('() => { location.hash = "#/exam"; }');
+    await h.wait('!!document.querySelector(\'[data-replay="x1"]\')', 'book exam replay button');
+    await h.startReplay('x1');
+    await h.submitSitting();
+    var satBook = await h.search('satgrad unique stem x1');
+    h.assert(!satBook.empty && satBook.hitCount > 0,
+      'sat book sample-exam stem is searchable');
+    var stillUnsat = await h.search('satgrad unique stem x2');
+    h.assert(stillUnsat.empty && stillUnsat.hitCount === 0,
+      'the other unsat book exam still has no search result');
+    await page.eval('() => { location.hash = "#/build"; }');
+    await h.wait('!!document.getElementById("build-preview") && !!document.querySelector("[data-source=exam]")',
+      'custom quiz builder');
+    var counts = JSON.parse(await page.eval(function () {
+      function n() {
+        var el = document.querySelector('.build-count-num');
+        return el ? el.textContent : '';
+      }
+      var off = n();
+      var btn = document.querySelector('[data-source="exam"]');
+      btn.click();
+      var on = n();
+      var hint = btn ? btn.textContent : '';
+      var ids = (PGRE.allQuestions() || []).map(function (q) { return q.id; });
+      var onPool = JSON.parse(JSON.stringify(
+        (PGRE.views.build.resample({ includeExam: true }, 1000) || [])
+      ));
+      return JSON.stringify({
+        off: off, on: on, hint: hint,
+        hasG17: ids.indexOf('g17-sat-1') !== -1,
+        hasBook: ids.indexOf('be-sat-1') !== -1,
+        hasBook2: ids.indexOf('be-unsat-1') !== -1,
+        resampleHasUnsat: onPool.indexOf('be-unsat-1') !== -1
+      });
+    }));
+    h.assert(counts.off === counts.on,
+      'builder toggle on and off report the same match count');
+    h.assert(counts.hasG17 && counts.hasBook && !counts.hasBook2,
+      'default pool has the sat forms and not the remaining unsat book exam');
+    h.assert(!counts.resampleHasUnsat,
+      'toggle on does not add the unsat book exam');
+    h.assert(counts.hint.indexOf('unsat stay reserved') !== -1,
+      'toggle copy says unsat exams stay reserved');
   } }
 ];
 
