@@ -204,15 +204,17 @@ PGRE.sidebarSearch = (function () {
   }
 
   /* ——— Sealed exam questions ———
-     An entry is sealed when it shows a question from a real exam (src
-     'cpg-exam' or 'ets-exam'): the question itself, or a mistake or a note
-     that belongs to one. Its body holds the choices, the solution, the wrong
-     picks or the stem, so the box keeps a copy with the title only: a query
-     cannot find it through its answer, and no snippet can show one. */
+     Unsat intact exams are omitted from the shared search index. A leftover
+     exam-kind row, or a mistake or note that belongs to an unsat real exam,
+     still seals to title only so a query cannot find it through its answer.
+     Sat exam questions are ordinary pool items. */
   function isSealed(e) {
     if (e.kind === 'exam') return true;
     if (e.kind !== 'mistake' && e.kind !== 'note') return false;
     var q = PGRE.questionById(e.id);
+    if (typeof PGRE.isProtectedExamQuestion === 'function') {
+      return PGRE.isProtectedExamQuestion(q);
+    }
     return !!q && (q.src === 'cpg-exam' || q.src === 'ets-exam');
   }
 

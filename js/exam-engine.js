@@ -87,13 +87,10 @@ PGRE.examEngine = (function () {
     return map;
   }
 
-  /* Weighted mocks use only the daily pool. Intact book and ETS exams stay
-     reserved for their verbatim replay modes so a generated mock cannot spoil
-     a later scheduled sitting. */
+  /* Weighted mocks use the default practice pool, which already includes
+     questions from submitted intact exams and excludes unsat ones. */
   function drawPool() {
-    return PGRE.allQuestions({ includeExam: true }).filter(function (q) {
-      return q.src !== 'ets-exam' && q.src !== 'cpg-exam';
-    });
+    return PGRE.allQuestions();
   }
 
   function buildWeighted(seed) {

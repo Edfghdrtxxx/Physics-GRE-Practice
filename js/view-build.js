@@ -1,6 +1,7 @@
 /* Custom quiz builder (proposal #3) — build a practice set by topic(s),
    difficulty and status (unseen / previously missed / slowest / bookmarked),
-   with an optional "include sample-exam questions" source toggle and a live
+   with an optional "include sample-exam questions" source toggle (sat exams
+   are already in the default pool; the toggle does not add unsat forms) and a live
    match-count preview. Start writes sessionStorage['pgre-quiz-config'] =
    { ids, label, criteria } and routes to #/practice/custom, where view-practice
    consumes it (criteria lets the summary's replay resample a fresh draw).
@@ -82,10 +83,15 @@ PGRE.views.build = (function () {
 
   function matching(view) {
     view = view || sel;
-    // the include-exam toggle means the BOOK's sample exams only; intact
-    // released ETS exams never enter practice (AGENTS.md spoiler rule)
-    var pool = PGRE.allQuestions(view.includeExam ? { includeExam: true } : {})
-      .filter(function (q) { return q.src !== 'ets-exam'; });
+    // Off: default pool, which already includes questions from submitted
+    // intact exams. On: flatten every intact exam, then drop unsat forms
+    // (book and ETS) so the toggle cannot add a protected question.
+    var pool = PGRE.allQuestions(view.includeExam ? { includeExam: true } : {});
+    if (view.includeExam) {
+      pool = pool.filter(function (q) {
+        return !PGRE.isProtectedExamQuestion(q);
+      });
+    }
     var topicKeys = Object.keys(view.topics);
     var diffKeys = Object.keys(view.diffs);
     var statusKeys = Object.keys(view.statuses);
@@ -218,7 +224,7 @@ PGRE.views.build = (function () {
     html += '<div class="card build-section"><h2>Sources</h2>' +
       '<div class="build-chips">' +
         chip('data-source', 'exam',
-          'Include sample-exam questions <span class="build-chip-hint">off keeps your mock sims fresh</span>', false) +
+          'Include sample-exam questions <span class="build-chip-hint">submitted exams are already in the pool; unsat stay reserved</span>', false) +
       '</div></div>';
 
     html += '<div class="card build-start-card">' +

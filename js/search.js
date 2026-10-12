@@ -1,7 +1,7 @@
 /* Search engine — one box across the whole studio (feature #9, #/search).
    Builds a lazy, in-memory index over every corner of the app: questions
-   (incl. sample-exam ones), the mistake book, formula cards, imported book
-   sections and personal notes. The index is built on first use and cached
+   (incl. sat sample-exam ones; unsat intact exams stay out), the mistake
+   book, formula cards, imported book sections and personal notes. The index is built on first use and cached
    until invalidate() — nothing is persisted, so the banks and IndexedDB are
    re-read fresh on every rebuild. All searchable text is run through plain()
    first, which strips HTML tags and reduces LaTeX to its bare letters, so
@@ -54,13 +54,13 @@ PGRE.search = (function () {
 
   function buildQuestions(out) {
     PGRE.allQuestions({ includeExam: true }).forEach(function (q) {
-      // intact released ETS exams stay out of the index — they must stay
-      // fresh for verbatim replay (AGENTS.md spoiler rule); the book's
-      // sample exams remain searchable under the 'exam' group as before
-      if (q.src === 'ets-exam') return;
+      // Unsat intact exams (book sample and released ETS) stay out of the
+      // index so they stay fresh for verbatim replay. Sat exam questions
+      // index as normal practice.
+      if (typeof PGRE.isProtectedExamQuestion === 'function' &&
+          PGRE.isProtectedExamQuestion(q)) return;
       var choices = (q.choices || []).map(plain).join(' · ');
-      var kind = q.src === 'cpg-exam' ? 'exam' : 'question';
-      out.push(entry(kind, q.id, plain(q.q),
+      out.push(entry('question', q.id, plain(q.q),
         choices + ' ' + plain(q.sol), q.topic, '#/topic/' + q.topic));
     });
   }

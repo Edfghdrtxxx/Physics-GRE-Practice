@@ -170,8 +170,8 @@ PGRE.views.exam = (function () {
     if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: setup is the base exam screen
     var eng = PGRE.examEngine, ui = PGRE.ui;
     var act = eng.active();
-    // the number the weighted draw actually samples from: intact ETS exams are
-    // excluded (spoiler rule), so this is smaller than the whole bank
+    // the number the weighted draw actually samples from: unsat intact exams
+    // stay out (spoiler rule); submitted exams join the default pool
     var pool = eng.poolSize();
     var need70 = eng.FORMAT_META['70x120'].questions;
     var bookExams = PGRE.BOOK_EXAMS || [];
@@ -185,6 +185,15 @@ PGRE.views.exam = (function () {
       else if (q.src === 'ets-exam') nEtsExam++;
       else if (q.src === 'cpg-exam') nCpgExam++;
     });
+    var nSatCpg = 0, nSatEts = 0;
+    (PGRE.allQuestions() || []).forEach(function (q) {
+      if (!q) return;
+      if (q.src === 'cpg-exam') nSatCpg++;
+      else if (q.src === 'ets-exam') nSatEts++;
+    });
+    var satN = nSatCpg + nSatEts;
+    var nUnsatCpg = Math.max(0, nCpgExam - nSatCpg);
+    var nUnsatEts = Math.max(0, nEtsExam - nSatEts);
     var dailyN = nPreview + nBook + nDrill;
     // same pointer the dashboard's Today card shows — the next unused real exam
     var next = PGRE.nextMockPointer ? PGRE.nextMockPointer() : null;
@@ -267,10 +276,11 @@ PGRE.views.exam = (function () {
       'weights (CM 20 · EM 18 · QM 13 · TS 10 · AP 10 · ST 9 · OW 8 · SR 6 · LM 6), preferring ' +
       'questions you have not seen. The drawable pool is ' + pool + ' question' +
       (pool === 1 ? '' : 's') + ': ' + dailyN + ' in the daily pool (' +
-      nPreview + ' preview + ' + nBook + ' book + ' + nDrill + ' drill). ' +
-      nCpgExam + ' book sample-exam question' + (nCpgExam === 1 ? '' : 's') +
-      ' and ' + nEtsExam + ' released-ETS question' + (nEtsExam === 1 ? '' : 's') +
-      ' stay protected for verbatim replay.</p>';
+      nPreview + ' preview + ' + nBook + ' book + ' + nDrill + ' drill)' +
+      (satN ? (' plus ' + satN + ' from exams already sat') : '') + '. ' +
+      nUnsatCpg + ' unsat book sample-exam question' + (nUnsatCpg === 1 ? '' : 's') +
+      ' and ' + nUnsatEts + ' unsat released-ETS question' + (nUnsatEts === 1 ? '' : 's') +
+      ' stay reserved for verbatim replay until those exams are submitted.</p>';
     if (pool >= need70) {
       html += '<div class="btn-row"><button class="btn ' +
         (nextExam && isScheduledLater(next && next.scheduledFor) ? 'btn-primary' : 'btn-ghost') +

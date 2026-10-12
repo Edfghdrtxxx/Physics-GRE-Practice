@@ -395,6 +395,72 @@ engine.discard(e3);
 assert(store.state.exams.indexOf(e3) === -1, 'discard removes the sitting from state');
 assert(engine.byId(e2.id) === e2, 'byId finds a submitted exam by id');
 
+console.log('\nsat 100-question form graduates only that recorded source');
+resetState();
+if (typeof PGRE._resetBankCache === 'function') PGRE._resetBankCache();
+var poolBefore = engine.poolSize();
+var open100 = engine.create({ source: 'gr1777' });
+assert(open100 && open100.format === '100x170' && open100.source === 'gr1777',
+  'create({source:"gr1777"}) is a 100-question sitting');
+assert(engine.poolSize() === poolBefore,
+  'an in-progress 100-question sitting does not grow the practice pool');
+assert(PGRE.allQuestions().every(function (q) { return q.src !== 'ets-exam' && q.src !== 'cpg-exam'; }),
+  'in-progress GR1777 questions stay out of the default pool');
+engine.discard(open100);
+assert(engine.poolSize() === poolBefore, 'discarding an unsubmitted sitting does not graduate it');
+
+var sit100 = engine.create({ source: 'gr1777' });
+sit100.order.forEach(function (id, i) {
+  if (i < 59) sit100.answers[id] = PGRE.questionById(id).answer;
+});
+engine.submit(sit100);
+assert(!!sit100.submittedAt, 'the 100-question sitting is recorded as submitted');
+assert(sit100.source === 'gr1777', 'the stored source is the recorded form id, not ets2024');
+var after100 = PGRE.allQuestions();
+assert(after100.some(function (q) { return q.id === 'g17-0' && q.src === 'ets-exam'; }),
+  'submitted GR1777 questions enter the default practice pool');
+assert(after100.filter(function (q) { return String(q.id).indexOf('g17-') === 0; }).length === 100,
+  'all 100 questions from the sat form graduate');
+assert(!after100.some(function (q) { return String(q.id).indexOf('e24-') === 0; }),
+  'ets2024 stays protected when it was not the recorded source');
+assert(!after100.some(function (q) { return String(q.id).indexOf('g08-') === 0; }),
+  'other unsat released forms stay protected');
+assert(!after100.some(function (q) { return q.src === 'cpg-exam'; }),
+  'unsat book sample exams stay protected');
+assert(engine.poolSize() === poolBefore + 100,
+  'the weighted-draw pool grows by the sat 100-question form only');
+var weightedAfter = engine.create({});
+assert(weightedAfter.source === 'weighted', 'verbatim replay is not required to keep drawing weighted mocks');
+assert(weightedAfter.order.every(function (id) {
+  var drawn = PGRE.questionById(id);
+  if (!drawn) return false;
+  if (drawn.src === 'cpg-exam') return false;
+  if (drawn.src === 'ets-exam') return String(id).indexOf('g17-') === 0;
+  return true;
+}), 'weighted draw may use the sat form and still excludes unsat intact exams');
+var replaySat = engine.create({ source: 'gr1777' });
+assert(replaySat && replaySat.order.length === 100 && replaySat.source === 'gr1777',
+  'verbatim replay of the sat 100-question form still works');
+engine.discard(replaySat);
+
+console.log('\nsat source match is case-insensitive (D5)');
+resetState();
+if (typeof PGRE._resetBankCache === 'function') PGRE._resetBankCache();
+store.state.exams.push({
+  id: 'ex-case', source: 'GR1777', submittedAt: '2026-10-12T00:00:00.000Z',
+  format: '100x170'
+});
+if (typeof PGRE._resetBankCache === 'function') PGRE._resetBankCache();
+var casePool = PGRE.allQuestions();
+assert(casePool.filter(function (q) { return String(q.id).indexOf('g17-') === 0; }).length === 100,
+  'source GR1777 graduates catalog id gr1777');
+assert(!casePool.some(function (q) { return String(q.id).indexOf('e24-') === 0; }),
+  'ets2024 stays protected after a case-mismatched GR1777 sitting');
+assert(PGRE.isProtectedExamQuestion(PGRE.questionById('g17-0')) === false,
+  'case-mismatched sat source unprotects that form');
+assert(PGRE.isProtectedExamQuestion(PGRE.questionById('e24-0')) === true,
+  'unsat ets2024 stays protected');
+
 console.log('\nguess marks on exam results');
 vm.runInContext(srsSrc, sandbox);
 resetState();

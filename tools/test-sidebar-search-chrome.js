@@ -664,9 +664,12 @@ var STAGES = [
     h.assert(!u.open && u.focus !== 'sbs-input', 'while a dialog is open neither shortcut fires');
   } },
 
-  /* A sealed exam question (src 'cpg-exam' or 'ets-exam') gets less in the box
-     than on the Search page: its title only, found by its title only, and
-     nothing while a practice set or a mock exam is unfinished. */
+  /* Unsat intact exams (src 'cpg-exam' or 'ets-exam') are omitted from the
+     shared index the same way: no sample-exam group, no solution hit, no
+     title-only exam row. A leftover mistake or note on an unsat id still
+     seals to title only. Sat exam questions index as ordinary questions.
+     Sealed leftovers stay out while a practice set or a mock exam is
+     unfinished. */
   { name: 'sealed-exam-questions', size: DESKTOP, run: async function (page, h) {
     await h.load();
     var stem = await page.eval(function () {
@@ -722,11 +725,11 @@ var STAGES = [
     u = await h.search('zyxwbook');
     rows = await shown();
     h.assert(u.groups.map(function (g) { return g.label + ' ' + g.count; }).join(', ') ===
-      'Sample-exam questions 1, Mistakes 1' && rows.length === 2 && u.last.text.indexOf('2 results') !== -1,
-      'a book sample-exam question and the mistake made on it appear under the Search page\'s own headings');
+      'Mistakes 1' && rows.length === 1 && u.last.text.indexOf('1 result') !== -1,
+      'an unsat book sample-exam question is omitted from the index; only a leftover mistake on that id remains');
     h.assert(rows.every(function (r) {
       return fromStem(r.title) && (!r.snip || fromStem(r.snip)) && r.all.replace(/^CM/, '') === r.title + r.snip;
-    }), 'each of the two rows shows words of the question\'s stem and nothing else');
+    }), 'that leftover row shows words of the question\'s stem and nothing else');
     h.assert(rows.every(function (r) { return !/sealedchoice|sealedsolutiontext|wrong picks/.test(r.all); }),
       'no choice, no solution and no wrong pick is on screen');
 
@@ -738,9 +741,9 @@ var STAGES = [
     h.assert(none && !u.rows.length, 'a word of the solution, of a choice or of the wrong pick finds nothing in the box');
     await page.press('Escape');
     await page.eval('() => { location.hash = "#/search/sealedsolutiontext"; }');
-    await h.until('!!document.querySelector(".srch-hit")', 'the Search page hit');
-    h.assert(await page.eval('document.querySelector(".srch-hit-snip").textContent.indexOf("sealedsolutiontext") !== -1'),
-      'the Search page, which is opened on purpose, finds and shows it as before');
+    await h.until('!!document.querySelector(".srch-empty, .srch-hit")', 'the Search page answer');
+    h.assert(await page.eval('!!document.querySelector(".srch-empty") && !document.querySelector(".srch-hit")'),
+      'the Search page also omits the unsat book exam, so a word of its solution finds nothing');
 
     await page.eval(function () {
       sessionStorage.setItem('pgre-quiz-config', JSON.stringify({
@@ -758,7 +761,8 @@ var STAGES = [
     await h.blur();
     await page.press('/');
     u = await h.search('zyxwbook');
-    h.assert(u.groups.length === 2, 'once the practice page is left the two title-only rows are back');
+    h.assert(u.groups.length === 1 && u.groups[0].label === 'Mistakes',
+      'once the practice page is left the leftover mistake is back, still without a sample-exam row');
   } },
 
   /* The box reads navigator.platform once, at load: the test server hands
@@ -837,9 +841,10 @@ var STAGES = [
     await page.eval('() => { PGRE.examEngine.discard(PGRE.examEngine.active()); }');
     await h.blur();
     await page.press('/');
-    u = await h.search('zyxwroom');
-    h.assert(u.groups.length === 1 && u.groups[0].label === 'Sample-exam questions',
-      'and shows its title again once the exam is discarded');
+    await h.indexBuilt();
+    u = await h.search('zyxwroom', false);
+    h.assert(!u.rows.length && !(await page.eval('!!PGRE.examEngine.active()')),
+      'once that sitting is discarded the unsat book exam stays omitted from the box');
   } },
 
   { name: 'reduced-motion', size: DESKTOP, chrome: '--force-prefers-reduced-motion', run: async function (page, h) {
