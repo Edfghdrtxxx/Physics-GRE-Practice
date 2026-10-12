@@ -808,7 +808,10 @@ PGRE.views.dashboard = (function () {
 
   /* Next unused intact ETS form. Never GR8677/GR9277 as a fresh test.
      Keep the scheduled date with the pointer so the lobby can protect a
-     future diagnostic from an accidental early click. */
+     future diagnostic from an accidental early click. When that first
+     unsat form's plan date is already before today, jump to the next
+     unsat plan mock on or after today; if none remain, keep the first
+     unsat form so a past diagnostic stays the lobby's "next mock". */
   function mockScheduleDate(id) {
     var plan = PGRE.PLAN || [];
     for (var pi = 0; pi < plan.length; pi++) {
@@ -825,32 +828,84 @@ PGRE.views.dashboard = (function () {
     return null;
   }
 
+  function mockTodayIso() {
+    if (PGRE.store && typeof PGRE.store.today === 'function') return PGRE.store.today();
+    var d = new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+
   function nextMockPointer() {
     var sat = {};
     (PGRE.store.state.exams || []).forEach(function (x) {
+      /* Recorded sitting source only — never infer from format or length. */
       if (x && x.source) sat[String(x.source).toLowerCase()] = true;
     });
     var skip = { gr8677: 1, gr9277: 1 };
+    function catalogEntry(id) {
+      var list = PGRE.ETS_EXAMS || [];
+      var want = String(id).toLowerCase();
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] && String(list[i].id).toLowerCase() === want) return list[i];
+      }
+      return null;
+    }
     function catalogTitle(id, fallback) {
+      var ex = catalogEntry(id);
+      return (ex && ex.title) || fallback;
+    }
+    function catalogId(id) {
+      var ex = catalogEntry(id);
+      return (ex && ex.id) || id;
+    }
+    function firstUnsat() {
+      if (!sat.ets2024) {
+        return { id: 'ets2024', title: catalogTitle('ets2024', 'ETS 2024'),
+          scheduledFor: mockScheduleDate('ets2024') };
+      }
       var list = PGRE.ETS_EXAMS || [];
       for (var i = 0; i < list.length; i++) {
-        if (list[i] && list[i].id === id) return list[i].title || fallback;
+        var ex = list[i];
+        if (!ex || !ex.id) continue;
+        var id = String(ex.id).toLowerCase();
+        if (skip[id] || sat[id]) continue;
+        return { id: ex.id, title: ex.title || ex.id, scheduledFor: mockScheduleDate(ex.id) };
       }
-      return fallback;
+      return null;
     }
-    if (!sat.ets2024) {
-      return { id: 'ets2024', title: catalogTitle('ets2024', 'ETS 2024'),
-        scheduledFor: mockScheduleDate('ets2024') };
+    function upcomingPlanMock(today) {
+      var plan = PGRE.PLAN || [];
+      var best = null;
+      for (var pi = 0; pi < plan.length; pi++) {
+        var weeks = plan[pi] && plan[pi].weeks || [];
+        for (var wi = 0; wi < weeks.length; wi++) {
+          var mocks = weeks[wi] && weeks[wi].mocks || [];
+          for (var mi = 0; mi < mocks.length; mi++) {
+            var m = mocks[mi];
+            if (!m || !m.id || !m.date) continue;
+            var id = String(m.id).toLowerCase();
+            if (skip[id] || sat[id]) continue;
+            if (m.date < today) continue;
+            if (!best || m.date < best.date) best = m;
+          }
+        }
+      }
+      if (!best) return null;
+      return {
+        id: catalogId(best.id),
+        title: catalogTitle(best.id, best.id),
+        scheduledFor: best.date
+      };
     }
-    var list = PGRE.ETS_EXAMS || [];
-    for (var i = 0; i < list.length; i++) {
-      var ex = list[i];
-      if (!ex || !ex.id) continue;
-      var id = String(ex.id).toLowerCase();
-      if (skip[id] || sat[id]) continue;
-      return { id: ex.id, title: ex.title || ex.id, scheduledFor: mockScheduleDate(ex.id) };
+    var first = firstUnsat();
+    if (!first) return null;
+    var today = mockTodayIso();
+    if (first.scheduledFor && first.scheduledFor < today) {
+      var upcoming = upcomingPlanMock(today);
+      if (upcoming) return upcoming;
     }
-    return null;
+    return first;
   }
   PGRE.nextMockPointer = nextMockPointer;
 
