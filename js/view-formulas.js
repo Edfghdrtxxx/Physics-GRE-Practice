@@ -2486,6 +2486,21 @@ PGRE.views.formulas = (function () {
     return -1;
   }
 
+  /* Stored SM-2 interval on this card, in days. "new" when the scheduler
+     has never written one. Reads st.interval as gradeCard left it — not
+     a days-until-due guess. */
+  function boxIntervalText(id) {
+    var st = PGRE.srs.cardState(id);
+    if (!st || typeof st.interval !== 'number' || !isFinite(st.interval)) return 'new';
+    if (!(st.reviews > 0) && !(st.interval > 0)) return 'new';
+    return st.interval === 1 ? '1 day' : st.interval + ' days';
+  }
+
+  function boxHoverText(id, g) {
+    var grade = (g && GRADE_LABEL[g]) ? GRADE_LABEL[g] : 'not graded yet';
+    return grade + ', ' + boxIntervalText(id);
+  }
+
   /* Numbered jump grid — same .pal-cell / .exam-palette-grid as practice. */
   function paletteHTML() {
     if (!study || !study.roster || !study.roster.length) return '';
@@ -2499,13 +2514,13 @@ PGRE.views.formulas = (function () {
       var cls = 'pal-cell';
       if (g && GRADE_LABEL[g]) cls += ' is-graded is-' + g;
       if (c.id === currentId) cls += ' is-current';
-      var label = 'Card ' + (n + 1);
-      if (g && GRADE_LABEL[g]) label += ', ' + GRADE_LABEL[g];
-      else label += ', not yet graded';
+      var facts = boxHoverText(c.id, g);
+      var label = 'Card ' + (n + 1) + ', ' + facts;
       if (c.id === currentId) label += ', current';
       cells += '<button type="button" class="' + cls + '" data-goto="' + n +
         '" data-id="' + PGRE.ui.esc(c.id) +
-        '" title="Go to this card" aria-label="' + label + '">' + (n + 1) + '</button>';
+        '" data-box-tip="' + PGRE.ui.esc(facts) +
+        '" aria-label="' + PGRE.ui.esc(label) + '">' + (n + 1) + '</button>';
     });
     return '<div class="drill-palette practice-palette formula-palette">' +
       '<div class="exam-palette-title">Cards in this set</div>' +
