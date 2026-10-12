@@ -177,6 +177,106 @@ PGRE._resetBankCache();
 assert(PGRE.allQuestions().every(function (x) { return EXAM_SRCS.indexOf(x.src) === -1; }),
   'clearing submitted sittings restores the unsat-only default pool');
 
+console.log('\nshared qid: protection follows the default pool (D4)');
+(function () {
+  var window2 = { PGRE: {} };
+  var sandbox2 = {
+    window: window2,
+    PGRE: window2.PGRE,
+    console: console,
+    Array: Array,
+    Object: Object
+  };
+  vm.createContext(sandbox2);
+  vm.runInContext(bankSrc, sandbox2);
+  var P = sandbox2.PGRE;
+  P.QUESTIONS = [q('p1', 'cm')];
+  P.BOOK_QUESTIONS = [];
+  P.ETS_DRILLS = [];
+  P.BOOK_EXAMS = [];
+  P.ETS_EXAMS = [
+    { id: 'gr1777', title: 'GR1777', format: '100x170',
+      questions: [q('shared-1', 'cm'), q('g17-only', 'em')] },
+    { id: 'ets2024', title: 'ets2024', format: '70x120',
+      questions: [q('shared-1', 'cm'), q('e24-only', 'th')] }
+  ];
+  P.store = {
+    state: {
+      exams: [{ id: 'ex-sat', source: 'ets2024', submittedAt: '2026-10-12T00:00:00.000Z' }]
+    }
+  };
+  P._resetBankCache();
+  var pool = P.allQuestions();
+  assert(pool.some(function (x) { return x.id === 'shared-1'; }),
+    'shared qid from a sat form enters the default pool');
+  assert(pool.some(function (x) { return x.id === 'e24-only'; }),
+    'sat-only qid from ets2024 enters the default pool');
+  assert(!pool.some(function (x) { return x.id === 'g17-only'; }),
+    'unsat first-catalog owner stays out of the default pool');
+  var shared = P.questionById('shared-1');
+  assert(P.isSatExamQuestion(shared) === true,
+    'shared qid is sat when any catalog owner is sat');
+  assert(P.isProtectedExamQuestion(shared) === false,
+    'a question the default pool already admitted is not protected');
+  assert(P.isProtectedExamQuestion(P.questionById('g17-only')) === true,
+    'qid that lives only on the unsat first owner stays protected');
+  assert(P.isProtectedExamQuestion(P.questionById('e24-only')) === false,
+    'qid that lives only on the sat form is not protected');
+})();
+
+console.log('\nsat source match is case-insensitive (D5)');
+(function () {
+  var window2 = { PGRE: {} };
+  var sandbox2 = {
+    window: window2,
+    PGRE: window2.PGRE,
+    console: console,
+    Array: Array,
+    Object: Object
+  };
+  vm.createContext(sandbox2);
+  vm.runInContext(bankSrc, sandbox2);
+  var P = sandbox2.PGRE;
+  P.QUESTIONS = [q('p1', 'cm')];
+  P.BOOK_QUESTIONS = [];
+  P.ETS_DRILLS = [];
+  P.BOOK_EXAMS = [
+    { id: 'sample-1', title: 'Book sample', format: '70x120', questions: [q('e1', 'at')] }
+  ];
+  P.ETS_EXAMS = [
+    { id: 'gr1777', title: 'GR1777', format: '100x170', questions: [q('g17-1', 'cm')] },
+    { id: 'ets2024', title: 'ets2024', format: '70x120', questions: [q('e24-1', 'em')] }
+  ];
+  P.store = {
+    state: {
+      exams: [
+        { id: 'ex-case', source: 'GR1777', submittedAt: '2026-10-12T00:00:00.000Z' },
+        { id: 'ex-w', source: 'Weighted', submittedAt: '2026-10-12T00:00:00.000Z' }
+      ]
+    }
+  };
+  P._resetBankCache();
+  var pool = P.allQuestions();
+  assert(pool.some(function (x) { return x.id === 'g17-1' && x.src === 'ets-exam'; }),
+    'source GR1777 graduates catalog id gr1777');
+  assert(!pool.some(function (x) { return x.id === 'e24-1'; }),
+    'ets2024 stays out when only GR1777 is recorded');
+  assert(!pool.some(function (x) { return x.id === 'e1'; }),
+    'a Weighted sitting does not graduate a book exam');
+  assert(P.isProtectedExamQuestion(P.questionById('g17-1')) === false,
+    'case-mismatched sat source still unprotects that form');
+  assert(P.isProtectedExamQuestion(P.questionById('e24-1')) === true,
+    'unsat ets2024 stays protected after a GR1777 sitting');
+  P.store.state.exams = [
+    { id: 'ex-book', source: 'X1', submittedAt: '2026-10-12T00:00:00.000Z' }
+  ];
+  P._resetBankCache();
+  assert(P.allQuestions().some(function (x) { return x.id === 'e1' && x.src === 'cpg-exam'; }),
+    'source X1 graduates the first book sample exam via the x1 alias');
+  assert(!P.allQuestions().some(function (x) { return x.id === 'g17-1'; }),
+    'uppercase book alias does not graduate an ETS form');
+})();
+
 console.log('\nguarded reads when bank files are absent');
 (function () {
   var window2 = { PGRE: {} };

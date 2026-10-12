@@ -443,6 +443,24 @@ assert(replaySat && replaySat.order.length === 100 && replaySat.source === 'gr17
   'verbatim replay of the sat 100-question form still works');
 engine.discard(replaySat);
 
+console.log('\nsat source match is case-insensitive (D5)');
+resetState();
+if (typeof PGRE._resetBankCache === 'function') PGRE._resetBankCache();
+store.state.exams.push({
+  id: 'ex-case', source: 'GR1777', submittedAt: '2026-10-12T00:00:00.000Z',
+  format: '100x170'
+});
+if (typeof PGRE._resetBankCache === 'function') PGRE._resetBankCache();
+var casePool = PGRE.allQuestions();
+assert(casePool.filter(function (q) { return String(q.id).indexOf('g17-') === 0; }).length === 100,
+  'source GR1777 graduates catalog id gr1777');
+assert(!casePool.some(function (q) { return String(q.id).indexOf('e24-') === 0; }),
+  'ets2024 stays protected after a case-mismatched GR1777 sitting');
+assert(PGRE.isProtectedExamQuestion(PGRE.questionById('g17-0')) === false,
+  'case-mismatched sat source unprotects that form');
+assert(PGRE.isProtectedExamQuestion(PGRE.questionById('e24-0')) === true,
+  'unsat ets2024 stays protected');
+
 console.log('\nguess marks on exam results');
 vm.runInContext(srsSrc, sandbox);
 resetState();

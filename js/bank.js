@@ -37,26 +37,32 @@ PGRE.isIntactExamSrc = function (src) {
   return src === 'ets-exam' || src === 'cpg-exam';
 };
 
-/* Submitted intact-exam ids from state.exams[].source. Weighted mocks and
-   in-progress or discarded sittings do not count. */
+/* Submitted intact-exam ids from state.exams[].source. Keys are lowercased
+   so a recorded source matches the catalog id the way nextMockPointer does.
+   Weighted mocks and in-progress or discarded sittings do not count. */
 PGRE.satExamSources = function () {
   var sat = {};
   var exams = (PGRE.store && PGRE.store.state && PGRE.store.state.exams) || [];
   for (var i = 0; i < exams.length; i++) {
     var x = exams[i];
-    if (!x || !x.submittedAt || !x.source || x.source === 'weighted') continue;
-    sat[x.source] = true;
+    if (!x || !x.submittedAt || !x.source) continue;
+    var src = String(x.source).toLowerCase();
+    if (src === 'weighted') continue;
+    sat[src] = true;
   }
   return sat;
 };
 
 function examIsSat(ex, sat, bookIndex) {
   if (!ex || !sat) return false;
-  if (ex.id && sat[ex.id]) return true;
+  if (ex.id && sat[String(ex.id).toLowerCase()]) return true;
   if (bookIndex != null && sat['x' + (bookIndex + 1)]) return true;
   return false;
 }
 
+/* Every catalog exam that contains a qid. Protection is "not in the default
+   pool": a later sat owner still graduates a shared id even when an earlier
+   unsat form listed it first. */
 function qidToExamMeta() {
   if (_qidToExam) return _qidToExam;
   _qidToExam = {};
@@ -65,9 +71,9 @@ function qidToExamMeta() {
     var id = ex.id || (bookIndex != null ? 'x' + (bookIndex + 1) : null);
     if (!id) return;
     (ex.questions || []).forEach(function (qq) {
-      if (qq && qq.id && !_qidToExam[qq.id]) {
-        _qidToExam[qq.id] = { id: id, bookIndex: bookIndex };
-      }
+      if (!qq || !qq.id) return;
+      var owners = _qidToExam[qq.id] || (_qidToExam[qq.id] = []);
+      owners.push({ id: id, bookIndex: bookIndex });
     });
   }
   (PGRE.BOOK_EXAMS || []).forEach(function (ex, i) { indexExam(ex, i); });
@@ -81,11 +87,12 @@ function satPoolKey() {
 
 PGRE.isSatExamQuestion = function (q) {
   if (!q || !q.id) return false;
-  var meta = qidToExamMeta()[q.id];
-  if (!meta) return false;
+  var owners = qidToExamMeta()[q.id];
+  if (!owners || !owners.length) return false;
   var sat = PGRE.satExamSources();
-  if (sat[meta.id]) return true;
-  if (meta.bookIndex != null && sat['x' + (meta.bookIndex + 1)]) return true;
+  for (var i = 0; i < owners.length; i++) {
+    if (examIsSat({ id: owners[i].id }, sat, owners[i].bookIndex)) return true;
+  }
   return false;
 };
 
