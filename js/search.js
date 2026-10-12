@@ -54,12 +54,15 @@ PGRE.search = (function () {
 
   function buildQuestions(out) {
     PGRE.allQuestions({ includeExam: true }).forEach(function (q) {
-      // intact released ETS exams stay out of the index — they must stay
-      // fresh for verbatim replay (AGENTS.md spoiler rule); the book's
-      // sample exams remain searchable under the 'exam' group as before
-      if (q.src === 'ets-exam') return;
+      // unsat released ETS exams stay out of the index so they stay fresh
+      // for verbatim replay; sat ETS questions index as normal practice.
+      // Unsat book sample exams stay under the 'exam' group as before;
+      // sat book-exam questions index as normal practice.
+      var protectedExam = typeof PGRE.isProtectedExamQuestion === 'function' &&
+        PGRE.isProtectedExamQuestion(q);
+      if (q.src === 'ets-exam' && protectedExam) return;
       var choices = (q.choices || []).map(plain).join(' · ');
-      var kind = q.src === 'cpg-exam' ? 'exam' : 'question';
+      var kind = (q.src === 'cpg-exam' && protectedExam) ? 'exam' : 'question';
       out.push(entry(kind, q.id, plain(q.q),
         choices + ' ' + plain(q.sol), q.topic, '#/topic/' + q.topic));
     });

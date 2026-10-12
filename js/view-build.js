@@ -82,10 +82,14 @@ PGRE.views.build = (function () {
 
   function matching(view) {
     view = view || sel;
-    // the include-exam toggle means the BOOK's sample exams only; intact
-    // released ETS exams never enter practice (AGENTS.md spoiler rule)
-    var pool = PGRE.allQuestions(view.includeExam ? { includeExam: true } : {})
-      .filter(function (q) { return q.src !== 'ets-exam'; });
+    // Off: default pool, which already includes questions from submitted
+    // intact exams. On: also unsat book sample exams; unsat ETS stay out.
+    var pool = PGRE.allQuestions(view.includeExam ? { includeExam: true } : {});
+    if (view.includeExam) {
+      pool = pool.filter(function (q) {
+        return q.src !== 'ets-exam' || !PGRE.isProtectedExamQuestion(q);
+      });
+    }
     var topicKeys = Object.keys(view.topics);
     var diffKeys = Object.keys(view.diffs);
     var statusKeys = Object.keys(view.statuses);

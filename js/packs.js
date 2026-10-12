@@ -99,7 +99,7 @@ PGRE.selectLearnQuestions = function (opts) {
   (opts.excludeIds || []).forEach(function (id) { excluded[String(id)] = true; });
   var attempted = PGRE.store && PGRE.store.state && PGRE.store.state.questions || {};
   var rows = PGRE.allQuestions().filter(function (q) {
-    return q && q.id && q.src !== 'ets-exam' && q.src !== 'cpg-exam' && !excluded[q.id];
+    return q && q.id && !PGRE.isProtectedExamQuestion(q) && !excluded[q.id];
   }).map(function (q) {
     var topic = String(q.topic || q.topic_id || '');
     var sub = String(q.subtopic || '').toLowerCase();
@@ -148,7 +148,7 @@ PGRE.launchCustomQuiz = function (opts, storage, loc) {
   if (typeof PGRE.allQuestions === 'function') {
     eligible = {};
     PGRE.allQuestions().forEach(function (q) {
-      if (!q || !q.id || q.src === 'ets-exam' || q.src === 'cpg-exam') return;
+      if (!q || !q.id || PGRE.isProtectedExamQuestion(q)) return;
       eligible[q.id] = true;
     });
   }
@@ -159,7 +159,7 @@ PGRE.launchCustomQuiz = function (opts, storage, loc) {
     if (eligible && !eligible[ids[i]]) return null;
     if (!eligible && typeof PGRE.questionById === 'function') {
       var q = PGRE.questionById(ids[i]);
-      if (!q || q.src === 'ets-exam' || q.src === 'cpg-exam') return null;
+      if (!q || PGRE.isProtectedExamQuestion(q)) return null;
     }
   }
   var store = storage;
@@ -197,8 +197,8 @@ PGRE.launchCustomQuiz = function (opts, storage, loc) {
 /* Most-similar-problem lookup for a formula card: the single practice-pool
    question that best matches the card's topic and wording. The matcher lives
    in js/bank.js (PGRE.similarQuestionForCard) beside the pool it scores —
-   same-topic token overlap with a qualifying threshold, intact exams always
-   excluded, so a similar problem can never spoil a mock. */
+   same-topic token overlap with a qualifying threshold, unsat intact exams
+   excluded, so a similar problem can never spoil a mock not yet sat. */
 PGRE.similarProblemFor = function (card) {
   if (typeof PGRE.similarQuestionForCard !== 'function') return null;
   return PGRE.similarQuestionForCard(card);

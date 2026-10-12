@@ -131,6 +131,52 @@ assert(PGRE.questionsForTopic('all').length === def.length, 'questionsForTopic("
 assert(PGRE.questionsForTopic('all') === def, 'questionsForTopic("all") is the cached default pool');
 assert(PGRE.questionsForTopic('cm') === cm, 'questionsForTopic memoizes per topic id');
 
+console.log('\nsat intact exams graduate into the default pool');
+PGRE.store = {
+  state: {
+    exams: [
+      { id: 'ex-open', source: 'gr8677', submittedAt: null, order: ['g2'] },
+      { id: 'ex-weighted', source: 'weighted', submittedAt: '2026-10-11T00:00:00.000Z' },
+      { id: 'ex-sat-book', source: 'x1', submittedAt: '2026-10-11T16:09:00.000Z' }
+    ]
+  }
+};
+PGRE._resetBankCache();
+var satPool = PGRE.allQuestions();
+assert(satPool.some(function (x) { return x.id === 'e1' && x.src === 'cpg-exam'; }),
+  'submitted book sample-exam questions enter the default pool');
+assert(satPool.some(function (x) { return x.id === 'e2' && x.src === 'cpg-exam'; }),
+  'the whole sat book exam graduates, not only answered items');
+assert(!satPool.some(function (x) { return x.id === 'g2' || x.id === 'g3'; }),
+  'an in-progress sitting does not graduate its form');
+assert(!satPool.some(function (x) { return x.src === 'ets-exam'; }),
+  'unsat released ETS exams stay out of the default pool');
+assert(PGRE.isProtectedExamQuestion(PGRE.questionById('g2')) === true,
+  'unsat ETS questions stay protected');
+assert(PGRE.isProtectedExamQuestion(PGRE.questionById('e1')) === false,
+  'sat book-exam questions are no longer protected');
+assert(PGRE.questionsForTopic('at').some(function (x) { return x.id === 'e1'; }),
+  'topic slices include sat exam questions');
+assert(PGRE.questionsForTopic('ow').length === 0,
+  'a topic that exists only on an unsat exam stays empty');
+
+PGRE.store.state.exams.push({
+  id: 'ex-sat-ets', source: 'gr8677', submittedAt: '2026-10-12T00:00:00.000Z'
+});
+PGRE._resetBankCache();
+var satBoth = PGRE.allQuestions();
+assert(satBoth.some(function (x) { return x.id === 'g2' && x.src === 'ets-exam'; }),
+  'a submitted released exam graduates by recorded source');
+assert(PGRE.questionsForTopic('ow').some(function (x) { return x.id === 'g2'; }),
+  'topic that only existed on the sat exam now has those questions');
+assert(PGRE.allQuestions({ includeExam: true }).length === 12,
+  'includeExam still flattens every intact exam');
+
+PGRE.store = { state: { exams: [] } };
+PGRE._resetBankCache();
+assert(PGRE.allQuestions().every(function (x) { return EXAM_SRCS.indexOf(x.src) === -1; }),
+  'clearing submitted sittings restores the unsat-only default pool');
+
 console.log('\nguarded reads when bank files are absent');
 (function () {
   var window2 = { PGRE: {} };

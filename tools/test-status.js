@@ -301,6 +301,22 @@ sandbox.PGRE.pushStatus().then(function (ok) {
     JSON.parse(fetchCall.options.body).mistakeBook.active === 3,
     'push body carries per-question results and the mistake-book summary');
 
+  console.log('\nsat exam texts');
+  practicePool.push({
+    id: 'x-sat', topic: 'qm', subtopic: 'Spin', src: 'ets-exam', q: 'SAT-EXAM-PROMPT',
+    choices: ['SAT-CHOICE'], answer: 0
+  });
+  state.attempts.push({
+    ts: localIso(0, 15), qid: 'x-sat', topic: 'qm', picked: 0, answer: 0, correct: true,
+    ms: 2000, sid: 'exam-today', mode: 'exam', confidence: null
+  });
+  var satSummary = sandbox.PGRE.buildStatusSummary();
+  assert(satSummary.questions['x-sat'] && satSummary.questions['x-sat'].prompt === 'SAT-EXAM-PROMPT' &&
+    satSummary.questions['x-sat'].choices[0] === 'SAT-CHOICE',
+    'sat exam questions in the default pool publish prompt and choices');
+  assert(!satSummary.questions.x1 && !satSummary.questions.x2,
+    'unsat exam questions stay qid-only even when attempted today');
+
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
   if (failed) process.exitCode = 1;
 });

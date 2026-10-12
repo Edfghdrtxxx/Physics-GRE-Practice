@@ -70,8 +70,9 @@ window.PGRE = window.PGRE || {};
      (row.confidence), too-slow / forgot-something (row.tags), keep-failing
      (the question's current mistake-book flag, which is not stored per
      attempt). Prompt and choices go into `texts` once per qid, and only for
-     the default practice pool: intact exam questions stay qid-only (spoiler
-     rule, AGENTS.md → Content Rules). */
+     the default practice pool: unsat intact exam questions stay qid-only
+     (spoiler rule, AGENTS.md → Content Rules); sat exam questions are in
+     that pool and carry prompt and choices. */
   function attemptResults(state, date, texts) {
     var mistakes = state.mistakes || {};
     var pool = {};
@@ -91,8 +92,7 @@ window.PGRE = window.PGRE || {};
           else if (tag === 'forgot') tags.push('forgot-something');
         });
         if (mistakes[row.qid] && mistakes[row.qid].stuck) tags.push('keep-failing');
-        var isExam = q.src === 'ets-exam' || q.src === 'cpg-exam';
-        if (pool[row.qid] && !isExam && !texts[row.qid]) {
+        if (pool[row.qid] && !texts[row.qid]) {
           texts[row.qid] = {
             prompt: typeof q.q === 'string' ? q.q : '',
             choices: Array.isArray(q.choices) ? q.choices.slice() : []

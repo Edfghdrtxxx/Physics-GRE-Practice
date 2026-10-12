@@ -111,11 +111,12 @@ PGRE.views.notes = (function () {
     if (!el) return;
     var entries = PGRE.notes.list({ filter: state.filter, topic: state.topic, text: state.text });
     // Batch-drill set: everything in the current filter that may enter a
-    // practice drill. Exam questions (sample + released ETS) may be bookmarked
-    // but never drill (spoiler rule); orphans have no bank question to drill.
+    // practice drill. Unsat exam questions may be bookmarked but do not
+    // drill (spoiler rule); sat exam questions drill with the pool.
+    // Orphans have no bank question to drill.
     var ids = [];
     entries.forEach(function (e) {
-      if (e.q && e.q.src !== 'cpg-exam' && e.q.src !== 'ets-exam') ids.push(e.qid);
+      if (e.q && !PGRE.isProtectedExamQuestion(e.q)) ids.push(e.qid);
     });
     updateDrillButton(ids);
     if (!entries.length) {
@@ -166,9 +167,9 @@ PGRE.views.notes = (function () {
         '</details>';
 
       chips = '<div class="nb-chips">';
-      // exam questions (sample + released ETS) stay out of practice drills
-      // (spoiler rule) — no drill chip, the mistake-book link still applies
-      if (e.q.src !== 'cpg-exam' && e.q.src !== 'ets-exam') {
+      // unsat exam questions stay out of practice drills (spoiler rule) —
+      // no drill chip; sat exam questions drill like the rest of the pool
+      if (!PGRE.isProtectedExamQuestion(e.q)) {
         chips += '<a class="chip nb-chip" href="#/practice/custom" data-drill="' + ui.esc(e.qid) + '">Drill this question →</a>';
       }
       if (PGRE.store.state.mistakes[e.qid]) {
