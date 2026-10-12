@@ -1531,6 +1531,43 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 .formula-palette .pal-cell.is-easy {
   background: var(--accent-tint); border-color: var(--accent); color: var(--accent-deep);
 }
+/* Hover / keyboard-focus label: session grade and stored SRS interval.
+   Native title is mouse-only and delayed, so the facts live on ::after. */
+.formula-palette .exam-palette-grid {
+  overflow: visible;
+  padding-bottom: 30px;
+}
+.formula-palette .pal-cell { overflow: visible; }
+.formula-palette .pal-cell[data-box-tip]::after {
+  content: attr(data-box-tip);
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--ctl-r);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+.formula-palette .pal-cell[data-box-tip]:hover::after,
+.formula-palette .pal-cell[data-box-tip]:focus::after,
+.formula-palette .pal-cell[data-box-tip]:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+.formula-palette .pal-cell:hover,
+.formula-palette .pal-cell:focus,
+.formula-palette .pal-cell:focus-visible { z-index: 3; }
 .pal-swatch.sw-again { background: var(--bad-tint); border-color: var(--bad); }
 .pal-swatch.sw-hard { background: var(--amber-tint); border-color: var(--amber); }
 .pal-swatch.sw-good { background: var(--good-tint); border-color: var(--good); }
