@@ -1,0 +1,88 @@
+PASS: persistStudy writes formulaStudy
+PASS: persistStudy still writes _opAt
+PASS: persistStudy still writes _opId
+PASS: persistStudy still writes again
+PASS: persistStudy still writes completed
+PASS: persistStudy still writes date
+PASS: persistStudy still writes dayBound
+PASS: persistStudy still writes done
+PASS: persistStudy still writes history
+PASS: persistStudy still writes id
+PASS: persistStudy still writes pressCount
+PASS: persistStudy still writes queueIds
+PASS: persistStudy still writes steps
+PASS: persistStudy does not store roster or cursor fields
+PASS: Study renders a pal-cell jump grid
+PASS: each box carries a hover/focus label
+PASS: box interval is the stored SRS interval, not a due-date guess
+PASS: ungraded boxes say not graded yet
+PASS: hover and keyboard focus show the box label
+PASS: regrade undoes the named review then writes the new grade
+PASS: clicking a box calls jumpTo
+PASS: wide layout uses a container query on #flash-body
+PASS: narrow viewport stacks the grid below the card
+PASS: the card column keeps a 760px floor beside the grid
+PASS: index.html cache-busts view-formulas.js and style.css
+PASS: Match/Type/Quiz/Cloze do not render the Study jump grid
+
+grid has one box per session card; click jumps
+PASS: live Study shows three pal-cells
+PASS: formulaStudy keys stay _opAt, _opId, again, completed, date, dayBound, done, history, id, pressCount, queueIds, steps
+PASS: one box is marked current
+PASS: a second box is available to jump to
+PASS: clicking a box shows a different card
+PASS: the jumped-to box is is-current
+PASS: at 1280px the grid sits to the right of the card
+PASS: the card column stays at least 760px beside the grid (got 760)
+PASS: box 1 tip is "not graded yet, new" before any grade
+PASS: box 1 CSS label matches the tip before any grade
+PASS: box 1 aria-label names the ungraded state and new interval
+PASS: box 2 shows the stored 10-day interval while ungraded this session
+PASS: box 2 CSS label is the stored interval, not a due-date guess
+PASS: box 2 aria-label names the ungraded state and 10 days
+PASS: box 3 tip is "not graded yet, new" before any grade
+PASS: box 3 CSS label matches the tip before any grade
+PASS: box 3 aria-label names the ungraded state and new interval
+PASS: keyboard focus shows the box label
+
+after Easy the box shows Easy and 4 days
+PASS: a current card id is on the grid
+PASS: Easy writes one cardReviews row
+PASS: session done climbs by one
+PASS: one press is counted
+PASS: formula grades write no practice attempts
+PASS: the graded box shows Easy
+PASS: Easy on a new card stores interval 4
+PASS: after Easy the box label is "Easy, 4 days"
+PASS: after Easy the aria-label names Easy and 4 days
+PASS: keyboard focus shows the Easy label
+
+regrade changes the grade without a second review
+PASS: an Easy box is on the grid
+PASS: navigating to the graded card opens the regrade view
+PASS: Easy stays pressed
+PASS: label uses the stored interval after due is moved, not a due-date guess
+PASS: regrade keeps a single cardReviews row
+PASS: regrade does not climb done
+PASS: regrade does not count a second press
+PASS: regrade writes no practice attempts
+PASS: regrade does not award a second XP settle yet
+PASS: SRS lastGrade is now good
+PASS: the box shows Good
+PASS: regrade to Good on a new card stores interval 1
+PASS: after regrade the box label is "Good, 1 day"
+PASS: after regrade the aria-label names Good and 1 day
+PASS: Good is the pressed grade button
+PASS: keyboard focus still shows the label after a regrade
+PASS: history keeps one row for the card
+PASS: regrade does not grow formulaStudy keys
+PASS: the original Easy still counted as study work
+
+narrow width stacks the grid below the card
+PASS: the grid still has three boxes at 700px
+PASS: at 700px the grid sits below the card
+PASS: at 700px the grid is not beside the card
+
+PASS: the status bridge on port 4789 received nothing (Chrome refused the request on 2 page load(s))
+
+ALL OK
