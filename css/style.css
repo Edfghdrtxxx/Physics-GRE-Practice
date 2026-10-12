@@ -1509,6 +1509,75 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 .stat-row-4 { grid-template-columns: repeat(4, 1fr); }
 /* Study cards sit under the Options band; drop Practice's 760px cap so both share #view width. */
 #flash-body .practice-card { max-width: none; }
+#flash-body {
+  container-type: inline-size;
+  container-name: flash;
+}
+
+/* Study jump grid: same pal-cell geometry as practice. Wide enough
+   (#flash-body ≥ 920px) sits beside the card; narrower stacks below.
+   The card column keeps a 760px floor so the grid never pinches it. */
+.formula-study-live .study-scroll { min-width: 0; }
+.formula-study-live .study-main { min-width: 0; }
+.formula-palette .pal-cell.is-again {
+  background: var(--bad-tint); border-color: var(--bad); color: var(--bad);
+}
+.formula-palette .pal-cell.is-hard {
+  background: var(--amber-tint); border-color: var(--amber); color: var(--amber);
+}
+.formula-palette .pal-cell.is-good {
+  background: var(--good-tint); border-color: var(--good); color: var(--good);
+}
+.formula-palette .pal-cell.is-easy {
+  background: var(--accent-tint); border-color: var(--accent); color: var(--accent-deep);
+}
+.pal-swatch.sw-again { background: var(--bad-tint); border-color: var(--bad); }
+.pal-swatch.sw-hard { background: var(--amber-tint); border-color: var(--amber); }
+.pal-swatch.sw-good { background: var(--good-tint); border-color: var(--good); }
+.pal-swatch.sw-easy { background: var(--accent-tint); border-color: var(--accent); }
+@container flash (min-width: 920px) {
+  .formula-study-live .study-scroll {
+    display: grid;
+    grid-template-columns: minmax(760px, 1fr) 148px;
+    column-gap: 12px;
+    align-items: start;
+  }
+  .formula-study-live .study-main { min-width: 760px; }
+  .formula-study-live .formula-palette {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    position: sticky;
+    top: 16px;
+    margin: 0;
+    padding: 4px 0 0 12px;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+  .formula-study-live .formula-palette .exam-palette-grid {
+    grid-template-columns: repeat(4, minmax(28px, 1fr));
+    max-width: none;
+  }
+  .formula-study-live .formula-palette .drill-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+@media (max-width: 900px) {
+  .formula-study-live .study-scroll {
+    display: flex;
+    flex-direction: column;
+  }
+  .formula-study-live .study-main { min-width: 0; }
+  .formula-study-live .formula-palette {
+    position: static;
+    margin-top: 22px;
+    padding-top: 16px;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}
 
 .fcard {
   border: 1px solid var(--line);

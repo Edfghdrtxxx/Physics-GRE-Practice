@@ -22,7 +22,8 @@ PGRE.views.formulas = (function () {
   var mode = 'study';
   // Study session: { queue, total, done, again, xp, flipped, history, peek,
   //   overlay: null|'peek'|'scaffold'|'checkpoint', steps: {id->learningStep},
-  //   undo: [snapshots], pressCount, pendingOverlays: [], settled }
+  //   undo: [snapshots], pressCount, pendingOverlays: [], settled,
+  //   roster: unique session cards in start order, currentId, reviewing }
   var study = null;
   var lastCompletedStudy = null;
   var activeGame = null; // Match/Type/Quiz controller { onKey, stop } or null
@@ -2170,7 +2171,10 @@ PGRE.views.formulas = (function () {
               dayBound: dayBound !== false,
               sessionDate: PGRE.srs.today(),
               knownIds: known,
-              pendingOverlays: [], settled: false };
+              pendingOverlays: [], settled: false,
+              roster: [], seenRoster: Object.create(null),
+              currentId: queue[0] && queue[0].id, reviewing: false };
+    rememberRoster(queue);
     persistStudy();          // ITEM 2: snapshot the fresh order so a resume matches
     PGRE.store.save();
     renderCard();
@@ -2394,8 +2398,200 @@ PGRE.views.formulas = (function () {
               sessionDate: saved.date || PGRE.srs.today(),
               knownIds: known,
               _opAt: Number(saved._opAt) || 0,
-              pendingOverlays: [], settled: false };
+              pendingOverlays: [], settled: false,
+              roster: [], seenRoster: Object.create(null),
+              currentId: cards[0] && cards[0].id, reviewing: false };
+    rememberRoster(history.map(function (h) { return h && h.c; }).concat(cards));
     renderCard();
+  }
+
+  function rememberRoster(cards) {
+    if (!study) return;
+    if (!study.roster) study.roster = [];
+    if (!study.seenRoster) study.seenRoster = Object.create(null);
+    (cards || []).forEach(function (c) {
+      if (!c || !c.id || study.seenRoster[c.id]) return;
+      study.seenRoster[c.id] = 1;
+      study.roster.push(c);
+    });
+  }
+
+  function dropFromRoster(id) {
+    if (!study || !id) return;
+    if (study.seenRoster) delete study.seenRoster[id];
+    if (study.roster) {
+      study.roster = study.roster.filter(function (c) { return c && c.id !== id; });
+    }
+  }
+
+  function lastHistoryEntry(id) {
+    if (!study || !id || !study.history) return null;
+    for (var i = study.history.length - 1; i >= 0; i--) {
+      var h = study.history[i];
+      if (h && h.c && h.c.id === id) return h;
+    }
+    return null;
+  }
+
+  function committedReviewRow(id) {
+    if (!id) return null;
+    var log = (PGRE.store.state && PGRE.store.state.cardReviews) || [];
+    for (var i = log.length - 1; i >= 0; i--) {
+      if (log[i] && log[i].id === id) return log[i];
+    }
+    return null;
+  }
+
+  function canRegrade(id) {
+    var entry = lastHistoryEntry(id);
+    if (!entry) return false;
+    var row = committedReviewRow(id);
+    if (!row || !row.op) return false;
+    var card = PGRE.store.state.cards && PGRE.store.state.cards[id];
+    if (card && card.lastReviewOpId && card.lastReviewOpId !== row.op) return false;
+    return true;
+  }
+
+  function shownCard() {
+    if (!study) return null;
+    var id = study.currentId, i;
+    if (id) {
+      for (i = 0; i < study.queue.length; i++) {
+        if (study.queue[i] && study.queue[i].id === id) return study.queue[i];
+      }
+      if (study.reviewing && study.roster) {
+        for (i = 0; i < study.roster.length; i++) {
+          if (study.roster[i] && study.roster[i].id === id) return study.roster[i];
+        }
+      }
+    }
+    return study.queue[0] || null;
+  }
+
+  function takeQueueCard(id) {
+    if (!study || !id) return null;
+    for (var i = 0; i < study.queue.length; i++) {
+      if (study.queue[i] && study.queue[i].id === id) {
+        return study.queue.splice(i, 1)[0];
+      }
+    }
+    return null;
+  }
+
+  function rosterIndexOf(id) {
+    if (!study || !study.roster || !id) return -1;
+    for (var i = 0; i < study.roster.length; i++) {
+      if (study.roster[i] && study.roster[i].id === id) return i;
+    }
+    return -1;
+  }
+
+  /* Numbered jump grid — same .pal-cell / .exam-palette-grid as practice. */
+  function paletteHTML() {
+    if (!study || !study.roster || !study.roster.length) return '';
+    var current = shownCard();
+    var currentId = (current && current.id) || study.currentId;
+    var cells = '';
+    study.roster.forEach(function (c, n) {
+      if (!c) return;
+      var entry = lastHistoryEntry(c.id);
+      var g = entry && entry.grade;
+      var cls = 'pal-cell';
+      if (g && GRADE_LABEL[g]) cls += ' is-graded is-' + g;
+      if (c.id === currentId) cls += ' is-current';
+      var label = 'Card ' + (n + 1);
+      if (g && GRADE_LABEL[g]) label += ', ' + GRADE_LABEL[g];
+      else label += ', not yet graded';
+      if (c.id === currentId) label += ', current';
+      cells += '<button type="button" class="' + cls + '" data-goto="' + n +
+        '" data-id="' + PGRE.ui.esc(c.id) +
+        '" title="Go to this card" aria-label="' + label + '">' + (n + 1) + '</button>';
+    });
+    return '<div class="drill-palette practice-palette formula-palette">' +
+      '<div class="exam-palette-title">Cards in this set</div>' +
+      '<div class="exam-palette-grid">' + cells + '</div>' +
+      '<div class="exam-legend drill-legend">' +
+        '<span class="exam-legend-item"><span class="pal-swatch"></span>Not yet graded</span>' +
+        '<span class="exam-legend-item"><span class="pal-swatch sw-again"></span>Again</span>' +
+        '<span class="exam-legend-item"><span class="pal-swatch sw-hard"></span>Hard</span>' +
+        '<span class="exam-legend-item"><span class="pal-swatch sw-good"></span>Good</span>' +
+        '<span class="exam-legend-item"><span class="pal-swatch sw-easy"></span>Easy</span>' +
+      '</div></div>';
+  }
+
+  function bindPalette() {
+    var root = body();
+    if (!root || root._pgreGotoBound) return;
+    root._pgreGotoBound = true;
+    root.addEventListener('click', function (e) {
+      var t = e.target && e.target.closest ? e.target.closest('[data-goto]') : null;
+      if (!t || t.disabled || !root.contains(t)) return;
+      var n = parseInt(t.getAttribute('data-goto'), 10);
+      if (n !== n) return;
+      jumpTo(n);
+    });
+  }
+
+  function jumpTo(n) {
+    if (!study || study.overlay) return;
+    var roster = study.roster || [];
+    if (n < 0 || n >= roster.length) return;
+    var c = roster[n];
+    if (!c) return;
+    if (canRegrade(c.id)) {
+      renderGradedCard(c);
+      return;
+    }
+    study.reviewing = false;
+    var inQueue = false, i;
+    for (i = 0; i < study.queue.length; i++) {
+      if (study.queue[i] && study.queue[i].id === c.id) { inQueue = true; break; }
+    }
+    study.currentId = inQueue ? c.id : (study.queue[0] && study.queue[0].id);
+    renderCard();
+  }
+
+  function jumpNeighbor(dir) {
+    if (!study || !study.roster) return;
+    var cur = shownCard();
+    var i = rosterIndexOf(cur && cur.id);
+    if (i < 0) return;
+    jumpTo(i + dir);
+  }
+
+  function forgetUndoOp(opId) {
+    if (!study || !opId || !study.undo) return;
+    study.undo = study.undo.filter(function (e) { return !e || e.opId !== opId; });
+  }
+
+  /* Replace the last committed review for this card. Session counters,
+     XP, streaks and the remaining queue's live grade path stay put; the
+     SRS row is undone and rewritten the way practice review chips stamp
+     an existing attempt. */
+  function regrade(g) {
+    if (!study || study.overlay) return;
+    var c = shownCard();
+    if (!c || !canRegrade(c.id)) return;
+    var entry = lastHistoryEntry(c.id);
+    if (!entry || entry.grade === g) return;
+    var row = committedReviewRow(c.id);
+    var opId = row && row.op;
+    if (!opId || typeof PGRE.srs.undoReview !== 'function') return;
+    var undone = PGRE.srs.undoReview(String(opId));
+    if (undone == null) return;
+    forgetUndoOp(String(opId));
+    var committed = commitReview(c.id, g);
+    if (committed === null) {
+      persistStudy();
+      PGRE.store.save();
+      renderGradedCard(c);
+      return;
+    }
+    entry.grade = g;
+    takeQueueCard(c.id);
+    persistStudy();
+    PGRE.store.save();
+    renderGradedCard(c);
   }
 
   function renderCard() {
@@ -2404,7 +2600,13 @@ PGRE.views.formulas = (function () {
     if (window.PGRE && window.PGRE.teardownInlineVisualizer) {
       window.PGRE.teardownInlineVisualizer();
     }
-    var c = study.queue[0];
+    study.reviewing = false;
+    if (!study.currentId || !shownCard()) {
+      study.currentId = study.queue[0] && study.queue[0].id;
+    }
+    var c = shownCard();
+    if (!c) { renderStudySummary(); return; }
+    study.currentId = c.id;
     var t = PGRE.topicById(c.topic);
     var nm = cardName(c);
     var step = study.steps[c.id] || 0;   // F7 learning step (0 or 1)
@@ -2430,9 +2632,14 @@ PGRE.views.formulas = (function () {
         '<div class="fcard-front" id="fcard-front">' + formulaHTML(c.front || 'Recall the formula.') + '</div>';
       backFace = backHTML(c) + noteHTML + mnem + vizNavButtonHTML(c.id, 'btn-sm', 'study-viz');
     }
-    var html = '<div class="card practice-card">' +
+    var ri = rosterIndexOf(c.id);
+    var rosterN = (study.roster && study.roster.length) || (study.done + study.queue.length);
+    var html = '<div class="card practice-card formula-study-live">' +
+      '<div class="study-scroll">' +
+      '<div class="study-main">' +
       '<div class="practice-meta">' +
-        '<span>Card ' + (study.done + 1) + ' · ' + study.queue.length + ' left</span>' +
+        '<span>Card ' + (ri >= 0 ? ri + 1 : study.done + 1) + ' of ' + rosterN +
+          ' · ' + study.queue.length + ' left</span>' +
         '<span class="recall-timer" id="recall-timer" role="timer" aria-live="off">2:00</span>' +
         (study.history.length ? '<button class="btn btn-ghost btn-sm session-back" id="session-back">' +
           'Back <span class="key-hint">←</span></button>' : '') +
@@ -2458,7 +2665,9 @@ PGRE.views.formulas = (function () {
         similarButton(c, 'btn-sm') +
       '</div>' +
       '<div class="card-review-hist-wrap" hidden>' + reviewHistoryHTML(c.id) + '</div>' +
-      '</div>';
+      '</div>' +
+      paletteHTML() +
+      '</div></div>';
     body().innerHTML = html;
     PGRE.typesetMath(body());
     if (window.PGRE && PGRE.motion && PGRE.motion.animateMeter) {
@@ -2488,7 +2697,103 @@ PGRE.views.formulas = (function () {
     if (shuf) shuf.addEventListener('click', function (e) { e.stopPropagation(); shuffleRemaining(); });
     wireVizNav(body());
     wireSimilar(body());
+    bindPalette();
     startRecallTimer();
+  }
+
+  function renderGradedCard(c) {
+    if (!study || !c) return;
+    stopRecallTimer();
+    setMasthead('');
+    closeVisualizerIfOpen();
+    if (window.PGRE && window.PGRE.teardownInlineVisualizer) {
+      window.PGRE.teardownInlineVisualizer();
+    }
+    study.reviewing = true;
+    study.flipped = true;
+    study.peek = null;
+    study.overlay = null;
+    study.currentId = c.id;
+    var t = PGRE.topicById(c.topic);
+    var nm = cardName(c);
+    var entry = lastHistoryEntry(c.id);
+    var chosen = entry ? entry.grade : '';
+    var undoBtn = study.undo.length ?
+      '<button class="btn btn-ghost btn-sm study-undo" id="study-undo">Undo ' +
+        '<span class="key-hint">⌘Z</span></button>' : '';
+    var noteHTML = c.note ? '<div class="fcard-note">' + formulaHTML(c.note) + '</div>' : '';
+    var mnem = mnemonicHTML(c.id);
+    var reverse = !!PGRE.store.state.settings.formulaReverse;
+    var frontFace, backFace;
+    if (reverse) {
+      frontFace = '<div class="fcard-rev-q">What is this? When does it apply?</div>' +
+        '<div class="fcard-front" id="fcard-front">' + backHTML(c) + '</div>';
+      backFace = (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
+        '<div class="fcard-rev-prompt">' + formulaHTML(c.front) + '</div>' + noteHTML + mnem +
+        vizNavButtonHTML(c.id, 'btn-sm', 'study-viz');
+    } else {
+      frontFace = (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
+        '<div class="fcard-front" id="fcard-front">' + formulaHTML(c.front || 'Recall the formula.') + '</div>';
+      backFace = backHTML(c) + noteHTML + mnem + vizNavButtonHTML(c.id, 'btn-sm', 'study-viz');
+    }
+    var row = committedReviewRow(c.id);
+    var previewSt = null;
+    if (row && row.prev) {
+      try { previewSt = JSON.parse(JSON.stringify(row.prev)); } catch (ePrev) { previewSt = row.prev; }
+    }
+    var ivls = PGRE.srs.nextIntervals(previewSt);
+    var gradeHtml = '';
+    GRADES.forEach(function (g) {
+      var pressed = g.key === chosen;
+      gradeHtml += '<button class="btn grade-btn grade-' + g.key +
+        (pressed ? ' chosen' : '') + '" data-grade="' + g.key +
+        '" aria-pressed="' + (pressed ? 'true' : 'false') + '">' +
+        '<span class="grade-top">' + g.label + ' <span class="key-hint">' + g.hint + '</span></span>' +
+        '<span class="grade-ivl">' + PGRE.srs.ivlLabel(ivls[g.key]) + '</span></button>';
+    });
+    gradeHtml += similarButton(c, 'btn-sm');
+    var ri = rosterIndexOf(c.id);
+    var rosterN = (study.roster && study.roster.length) || 0;
+    var html = '<div class="card practice-card formula-study-live">' +
+      '<div class="study-scroll">' +
+      '<div class="study-main">' +
+      '<div class="practice-meta">' +
+        '<span>Card ' + (ri >= 0 ? ri + 1 : 1) + ' of ' + rosterN + '</span>' +
+        (study.history.length ? '<button class="btn btn-ghost btn-sm session-back" id="session-back">' +
+          'Back <span class="key-hint">←</span></button>' : '') +
+        undoBtn +
+        (t ? '<span class="chip">' + t.name + '</span>' : '') +
+        (chosen ? '<span class="grade-chip grade-' + chosen + ' peek-grade">Graded ' +
+          (GRADE_LABEL[chosen] || chosen) + '</span>' : '') +
+        '<button class="btn btn-ghost btn-sm session-export-btn" id="session-export-btn" title="Export learning status for agent">Export status</button>' +
+      '</div>' +
+      PGRE.ui.meter(100 * study.done / Math.max(1, study.done + study.queue.length), 'meter-thin') +
+      '<div class="fcard" id="fcard">' +
+        frontFace +
+        '<div class="fcard-back" id="fcard-back">' + backFace + '</div>' +
+      '</div>' +
+      '<div class="btn-row" id="fcard-actions">' + gradeHtml + '</div>' +
+      '<div class="card-review-hist-wrap">' + reviewHistoryHTML(c.id) + '</div>' +
+      '</div>' +
+      paletteHTML() +
+      '</div></div>';
+    body().innerHTML = html;
+    PGRE.typesetMath(body());
+    var bk = document.getElementById('session-back');
+    if (bk) bk.addEventListener('click', function (e) { e.stopPropagation(); openPeek(); });
+    var ub = document.getElementById('study-undo');
+    if (ub) ub.addEventListener('click', function (e) { e.stopPropagation(); undoGrade(); });
+    var eb = document.getElementById('session-export-btn');
+    if (eb) eb.addEventListener('click', function (e) { e.stopPropagation(); openFormulaExportModal(); });
+    var box = document.getElementById('fcard-actions');
+    if (box) {
+      box.querySelectorAll('[data-grade]').forEach(function (b) {
+        b.addEventListener('click', function () { regrade(b.getAttribute('data-grade')); });
+      });
+    }
+    wireVizNav(body());
+    wireSimilar(body());
+    bindPalette();
   }
 
   /* F8 pre-flip scaffold: swap the card front for the generic prompt list; the
@@ -2573,7 +2878,8 @@ PGRE.views.formulas = (function () {
 
   function flip() {
     freezeRecallTimer();
-    var c = study.queue[0];
+    var c = shownCard();
+    if (!c) return;
     study.flipped = true;
     var backEl = document.getElementById('fcard-back');
     if (backEl) {
@@ -2654,6 +2960,7 @@ PGRE.views.formulas = (function () {
       });
     }
     study.queue = next;
+    rememberRoster(next);
   }
 
   /* Midnight while a session is open: run the same allocator home would,
@@ -2701,19 +3008,29 @@ PGRE.views.formulas = (function () {
      directly (no steps) — see js/flashmodes.js. */
   function grade(g) {
     if (!study || study.overlay) return;        // no grading while an overlay is up
+    if (study.reviewing) { regrade(g); return; }
     // The press belongs to the card on screen. Reconcile may drop it when
     // the list changed; that same click must not grade the card that slides up.
-    var shownId = study.queue[0] && study.queue[0].id;
+    var shown = shownCard();
+    var shownId = shown && shown.id;
     var rolled = study.sessionDate && study.sessionDate !== PGRE.srs.today();
     onLiveClock(rolled && study.dayBound !== false);
     if (!study.queue.length) { renderStudySummary(); return; }
-    var c = study.queue[0], id = c.id;
+    var c = null, qi;
+    if (shownId) {
+      for (qi = 0; qi < study.queue.length; qi++) {
+        if (study.queue[qi] && study.queue[qi].id === shownId) { c = study.queue[qi]; break; }
+      }
+    }
+    if (!c) c = study.queue[0];
+    var id = c.id;
     if (id !== shownId || !cardEligible(id)) {
-      if (id === shownId) {
-        study.queue.shift();
+      if (shownId && id === shownId) {
+        takeQueueCard(id);
         persistStudy();
         PGRE.store.save();
       }
+      study.currentId = study.queue[0] && study.queue[0].id;
       if (study.queue.length) renderCard();
       else renderStudySummary();
       return;
@@ -2746,7 +3063,7 @@ PGRE.views.formulas = (function () {
     if (stateless) {
       if (g === 'easy') {                        // Anki: Easy graduates immediately
         delete study.steps[id];
-        study.queue.shift();
+        takeQueueCard(id);
         study.done++;
       } else if (g === 'again') {               // no commit, no lapse
         // Formula cards go back to step 0. A book list's next Hard/Good is
@@ -2754,20 +3071,21 @@ PGRE.views.formulas = (function () {
         study.steps[id] = (c.kind === 'list') ? 1 : 0;
         study.again++;
         recycled = true;
-        reinsertCard();
+        reinsertCard(c);
       } else if (step === 0) {                  // Hard/Good step 0 → learning step 1
         study.steps[id] = 1;
-        reinsertCard();
+        reinsertCard(c);
       } else {                                  // Hard/Good step 1 → graduate
         delete study.steps[id];
-        study.queue.shift();
+        takeQueueCard(id);
         study.done++;
       }
     } else {                                    // review card: commit directly
-      study.queue.shift();
+      takeQueueCard(id);
       study.done++;
       if (g === 'again') { study.queue.push(c); study.again++; recycled = true; }
     }
+    study.currentId = study.queue[0] && study.queue[0].id;
     // A second copy of a card that just graduated is no longer remaining.
     // A learning requeue is still remaining, so it stays.
     reconcileLiveQueue(false);
@@ -2796,30 +3114,36 @@ PGRE.views.formulas = (function () {
      schedules, mistakes and notes are untouched. The saved session queue
      keeps the new order so a resume matches the screen. */
   function shuffleRemaining() {
-    if (!study || study.overlay || !study.queue || study.queue.length < 2) return;
+    if (!study || study.overlay || study.reviewing || !study.queue || study.queue.length < 2) return;
     var keep = !!study.flipped;
-    var cur = study.queue[0];
+    var cur = shownCard() || study.queue[0];
+    var others = [];
+    study.queue.forEach(function (card) {
+      if (card && cur && card.id === cur.id) return;
+      others.push(card);
+    });
     var next;
     if (keep) {
-      var tail = study.queue.slice(1);
-      if (tail.length < 2) return;
-      var beforeTail = tail.map(function (c) { return c.id; }).join('\n');
-      var shuffledTail = tail;
+      if (others.length < 2) return;
+      var beforeTail = others.map(function (card) { return card.id; }).join('\n');
+      var shuffledTail = others;
       var guard = 0;
       do {
-        shuffledTail = shuffle(tail);
+        shuffledTail = shuffle(others);
         guard++;
-      } while (guard < 8 && shuffledTail.map(function (c) { return c.id; }).join('\n') === beforeTail);
-      if (shuffledTail.map(function (c) { return c.id; }).join('\n') === beforeTail) return;
+      } while (guard < 8 && shuffledTail.map(function (card) { return card.id; }).join('\n') === beforeTail);
+      if (shuffledTail.map(function (card) { return card.id; }).join('\n') === beforeTail) return;
       next = [cur].concat(shuffledTail);
     } else {
-      var others = shuffle(study.queue.slice(1));
-      var rest = shuffle(others.slice(1).concat([cur]));
-      next = [others[0]].concat(rest);
+      if (others.length < 1) return;
+      var shuffled = shuffle(others);
+      var rest = shuffle(shuffled.slice(1).concat([cur]));
+      next = [shuffled[0]].concat(rest);
     }
     if (next.map(function (c) { return c.id; }).join('\n') ===
         study.queue.map(function (c) { return c.id; }).join('\n')) return;
     study.queue = next;
+    study.currentId = (keep ? cur : next[0]).id;
     persistStudy();
     PGRE.store.save();
     if (!keep) renderCard();
@@ -2828,10 +3152,14 @@ PGRE.views.formulas = (function () {
   /* F7: pull the current card off the front and reinsert it a few cards back so a
      learning card returns within the session without immediately repeating. */
   function skipCard() {
-    if (!study || study.overlay) return;
-    study.queue.shift();
+    if (!study || study.overlay || study.reviewing) return;
+    var c = shownCard();
+    if (!c) return;
+    takeQueueCard(c.id);
+    dropFromRoster(c.id);
     study.total--;
     study.undo = [];
+    study.currentId = study.queue[0] && study.queue[0].id;
     persistStudy();
     PGRE.store.save();
     if (study.queue.length) renderCard();
@@ -2839,19 +3167,25 @@ PGRE.views.formulas = (function () {
   }
 
   function putAwayCard() {
-    if (!study || study.overlay) return;
-    var c = study.queue.shift();
+    if (!study || study.overlay || study.reviewing) return;
+    var c = shownCard();
+    if (!c) return;
+    takeQueueCard(c.id);
+    dropFromRoster(c.id);
     PGRE.srs.suspendCard(c.id);
     study.total--;
     study.undo = [];
+    study.currentId = study.queue[0] && study.queue[0].id;
     persistStudy();
     PGRE.store.save();
     if (study.queue.length) renderCard();
     else renderStudySummary();
   }
 
-  function reinsertCard() {
-    var c = study.queue.shift();
+  function reinsertCard(c) {
+    if (!c) c = shownCard();
+    if (!c) return;
+    takeQueueCard(c.id);
     var p = Math.min(study.queue.length, 3 + Math.floor(Math.random() * 3));
     study.queue.splice(p, 0, c);
   }
@@ -2895,6 +3229,8 @@ PGRE.views.formulas = (function () {
     study.pressCount = e.pressCount;
     study.overlay = null;
     study.pendingOverlays = [];
+    study.reviewing = false;
+    study.currentId = study.queue[0] && study.queue[0].id;
     persistStudy();
     PGRE.store.save();
     renderCard();
@@ -4382,6 +4718,9 @@ PGRE.views.formulas = (function () {
         e.preventDefault(); undoGrade();
       } else if (e.metaKey || e.ctrlKey || e.altKey) {
         return;
+      } else if (study.reviewing && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        jumpNeighbor(e.key === 'ArrowRight' ? 1 : -1);
       } else if ((e.key === ' ' || e.key === 'Enter') && !study.flipped) {
         e.preventDefault(); flip();
       } else if (study.flipped && e.key >= '1' && e.key <= '4') {
