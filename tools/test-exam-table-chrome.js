@@ -913,13 +913,22 @@ async function main() {
       var exam = PGRE.examEngine.byId(${JSON.stringify(sitting.id)});
       var LETTERS = 'ABCDE';
       var cards = Array.prototype.slice.call(document.querySelectorAll('#exam-root .exam-review-q'));
-      var bad = [], open = 0, flaggedOk = true;
+      var bad = [], open = 0, flaggedOk = true, letterLeak = [];
+      function attrsLeak(el) {
+        if (!el || !el.attributes) return false;
+        return Array.prototype.some.call(el.attributes, function (a) {
+          var n = a.name, v = a.value || '';
+          return (n === 'aria-label' || n === 'title' || n.indexOf('data-') === 0) &&
+            /\\b[A-E]\\b/.test(v);
+        });
+      }
       cards.forEach(function (card, i) {
         var qid = exam.order[i];
         var q = PGRE.questionById(qid);
         var picked = exam.answers[qid];
         var pickedNull = picked == null;
-        var correct = picked === q.answer;
+        var hasKey = q && typeof q.answer === 'number';
+        var correct = hasKey && picked === q.answer;
         var flagged = exam.flags.indexOf(qid) !== -1;
         var rows = Array.prototype.slice.call(card.querySelectorAll('details.exam-review-pick'));
         rows.forEach(function (row) { if (row.open) open++; });
@@ -927,17 +936,21 @@ async function main() {
           return (row.querySelector('summary') || {}).textContent.trim();
         });
         var expected;
-        if (pickedNull) expected = ['Left blank', 'Correct: ' + LETTERS.charAt(q.answer)];
-        else if (!correct) expected = ['You picked ' + LETTERS.charAt(picked), 'Correct: ' + LETTERS.charAt(q.answer)];
-        else expected = ['You picked ' + LETTERS.charAt(q.answer)];
+        if (pickedNull) expected = ['Left blank', 'Correct answer'];
+        else if (!correct) expected = ['You picked', 'Correct answer'];
+        else expected = ['You picked'];
         var kinds = rows.map(function (row) {
           return row.classList.contains('is-bad') ? 'bad' : (row.classList.contains('is-good') ? 'good' : '?');
         });
         var expectedKinds = correct ? ['good'] : ['bad', 'good'];
         var bodiesOk = rows.every(function (row, ri) {
           var bodyEl = row.querySelector('.exam-review-pick-body');
+          var text = bodyEl ? bodyEl.textContent.replace(/\\s+/g, ' ').trim() : '';
           if (labels[ri] === 'Left blank') return !bodyEl;
-          return !!bodyEl && bodyEl.textContent.replace(/\s+/g, '').length > 0;
+          if (!hasKey && labels[ri] === 'Correct answer') return !bodyEl;
+          var want = (labels[ri] === 'You picked' && !pickedNull) ? LETTERS.charAt(picked)
+            : LETTERS.charAt(q.answer);
+          return !!bodyEl && text.indexOf(want + ' —') === 0 && text.length > (want + ' —').length;
         });
         var allChoices = card.querySelector('details.exam-review-choices');
         var afterPicks = rows.length ? rows[rows.length - 1].nextElementSibling : null;
@@ -946,19 +959,94 @@ async function main() {
         }
         var chip = card.querySelector('.exam-flagchip');
         if (!!chip !== flagged) flaggedOk = false;
+        var foldedOk = rows.every(function (row) {
+          var summary = row.querySelector('summary');
+          var label = (summary || {}).textContent.trim();
+          return !/\\b[A-E]\\b/.test(label) && !attrsLeak(row) && !attrsLeak(summary);
+        });
+        if (!foldedOk) letterLeak.push(i + 1);
         var ok = !!q && rows.length === expected.length &&
           labels.join('|') === expected.join('|') &&
           kinds.join('|') === expectedKinds.join('|') &&
-          bodiesOk && afterPicks === allChoices &&
+          bodiesOk && afterPicks === allChoices && foldedOk &&
           rows.every(function (row) { return row.tagName === 'DETAILS' && !row.open; });
         if (!ok) bad.push(i + 1);
       });
-      return { cards: cards.length, open: open, bad: bad.join(','), flaggedOk: flaggedOk };
+      return { cards: cards.length, open: open, bad: bad.join(','), flaggedOk: flaggedOk,
+        letterLeak: letterLeak.join(',') };
     })()`);
     check(pickBands.cards === total && pickBands.bad === '' && pickBands.open === 0 && pickBands.flaggedOk,
-      'every review card folds the pick and correct rows as closed details bands under the stem, with the same ' +
-      'labels as before (wrong / blank / correct) and the Flagged chip still on the card head' +
+      'every review card folds the pick and correct rows as closed details bands under the stem, with ' +
+      'letter-free headers (You picked / Correct answer / Left blank) and the Flagged chip still on the card head' +
       (pickBands.bad ? ' (wrong on questions ' + pickBands.bad + ')' : ''));
+    check(pickBands.letterLeak === '',
+      'folded pick and key headers carry no choice letter in summary, aria-label, title, or data-*' +
+      (pickBands.letterLeak ? ' (leaked on questions ' + pickBands.letterLeak + ')' : ''));
+
+    var nokey = await evaluate(`(function () {
+      var q = {
+        id: 'bands-nokey', topic: 'cm', difficulty: 1,
+        q: 'A question whose bank row has no recorded key.',
+        choices: ['$C_P$', '$C_V$', '$\\\\gamma$', '$R$', '$T$'],
+        sol: 'No key was stored.'
+      };
+      PGRE.QUESTIONS.push(q);
+      if (typeof PGRE._resetBankCache === 'function') PGRE._resetBankCache();
+      var exam = {
+        id: 'ex-bands-nokey',
+        startedAt: new Date().toISOString(),
+        submittedAt: new Date().toISOString(),
+        format: '70x120', source: null, title: 'No-key fixture', seed: 1,
+        order: [q.id], answers: { 'bands-nokey': 0 }, flags: [],
+        cursor: 0, paused: false, durationSec: 1, limitSec: 7200,
+        raw: 0, total: 1, scaledEst: 390, perTopic: { cm: { right: 0, total: 1 } }
+      };
+      PGRE.store.state.exams.push(exam);
+      PGRE.store.save();
+      location.hash = '#/exam/review/ex-bands-nokey';
+      if (typeof PGRE.route === 'function') PGRE.route();
+      var card = document.querySelector('#exam-root .exam-review-q');
+      var rows = card ? Array.prototype.slice.call(card.querySelectorAll('details.exam-review-pick')) : [];
+      var labels = rows.map(function (row) {
+        return (row.querySelector('summary') || {}).textContent.trim();
+      });
+      var bodies = rows.map(function (row) {
+        var el = row.querySelector('.exam-review-pick-body');
+        return el ? el.textContent.replace(/\\s+/g, ' ').trim() : '';
+      });
+      function attrsLeak(el) {
+        if (!el || !el.attributes) return false;
+        return Array.prototype.some.call(el.attributes, function (a) {
+          var n = a.name, v = a.value || '';
+          return (n === 'aria-label' || n === 'title' || n.indexOf('data-') === 0) &&
+            /\\b[A-E]\\b/.test(v);
+        });
+      }
+      var foldedOk = rows.every(function (row) {
+        var summary = row.querySelector('summary');
+        return !row.open && !/\\b[A-E]\\b/.test((summary || {}).textContent.trim()) &&
+          !attrsLeak(row) && !attrsLeak(summary);
+      });
+      return {
+        labels: labels.join('|'),
+        kinds: rows.map(function (row) {
+          return row.classList.contains('is-bad') ? 'bad' : (row.classList.contains('is-good') ? 'good' : '?');
+        }).join('|'),
+        bodies: bodies,
+        foldedOk: foldedOk,
+        undefinedText: (card && card.innerHTML.indexOf('undefined') !== -1)
+      };
+    })()`);
+    check(nokey.labels === 'You picked|Correct answer' && nokey.kinds === 'bad|good' &&
+      nokey.bodies[0].indexOf('A —') === 0 && nokey.bodies[1] === '' &&
+      nokey.foldedOk && !nokey.undefinedText,
+      'a pick with no recorded key is two closed letter-free bands: "You picked" with the letter in the body, ' +
+      '"Correct answer" with no body');
+    await evaluate('location.hash = ' + JSON.stringify('#/exam/review/' + sitting.id) +
+      '; if (typeof PGRE.route === "function") PGRE.route();');
+    await until('document.querySelectorAll("#exam-root .exam-review-q").length === ' + total,
+      'original review sitting restored');
+
     // a dark-theme picture for a human check; transitions are off so the capture shows the final colours
     await evaluate(`(function () {
       var off = document.createElement('style');

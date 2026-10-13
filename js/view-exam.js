@@ -1380,14 +1380,22 @@ PGRE.views.exam = (function () {
   /* Picked and correct answers as closed details.miss bands, same chevron,
      border, and native open/keyboard behaviour as All choices. Folded by
      default; native details does not remember open state. Verdict tint stays
-     on the band. The summary is the label with the choice letter; the full
-     choice HTML (LaTeX included) is the expanded body. Left blank has no
-     choice body. Used only by the mock-exam results review page. */
+     on the band. The folded summary is the label only (no choice letter);
+     the expanded body is the letter, an em dash, and the choice HTML
+     (LaTeX included). Left blank has no choice body. Used only by the
+     mock-exam results review page. */
   function pickBand(kind, label, bodyHtml) {
     return '<details class="miss exam-review-pick is-' + kind + '">' +
       '<summary><strong>' + label + '</strong></summary>' +
       (bodyHtml ? '<div class="exam-review-pick-body">' + bodyHtml + '</div>' : '') +
       '</details>';
+  }
+
+  function pickChoiceBody(idx, q) {
+    var letter = LETTERS[idx];
+    var text = q && q.choices ? q.choices[idx] : null;
+    if (!letter || text == null || text === '') return '';
+    return letter + ' — ' + text;
   }
 
   function reviewPickBandsHTML(q, picked) {
@@ -1396,11 +1404,11 @@ PGRE.views.exam = (function () {
     if (picked == null) {
       html += pickBand('bad', 'Left blank', '');
     } else if (!correct) {
-      html += pickBand('bad', 'You picked ' + LETTERS[picked], q.choices[picked]);
+      html += pickBand('bad', 'You picked', pickChoiceBody(picked, q));
     }
     html += pickBand('good',
-      (correct ? 'You picked ' : 'Correct: ') + LETTERS[q.answer],
-      q.choices[q.answer]);
+      correct ? 'You picked' : 'Correct answer',
+      pickChoiceBody(q.answer, q));
     return html;
   }
 
