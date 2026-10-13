@@ -11,7 +11,7 @@
 window.PGRE = window.PGRE || {};
 
 PGRE.studyTime = (function () {
-  var GAP_MAX = 60;      // seconds — a longer silence credits at most this
+  var GAP_MAX = 120;     // seconds — a longer silence credits at most this
   var SAVE_MS = 30000;   // persist at most once per 30 s
   var lastBeat = 0;      // ms timestamp of the previous heartbeat (0 = chain broken)
   var lastSave = 0;
