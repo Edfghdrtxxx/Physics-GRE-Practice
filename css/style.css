@@ -1642,6 +1642,90 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
   padding-top: 18px;
   border-top: 1px dashed var(--line);
 }
+.card-diagram-host {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 3 / 2;
+  margin: 4px 0 10px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  text-align: left;
+  cursor: grab;
+  background: var(--ivory);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.card-diagram-host.is-dragging { cursor: grabbing; }
+.card-diagram-host canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+.card-diagram-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.card-diagram-host .cd-lab {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--ink);
+  background: var(--surface);
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.card-diagram-host .cd-lab-sm { font-size: 12px; }
+.card-diagram-host .cd-lab-muted {
+  color: var(--ink-2);
+  font-size: 11px;
+  white-space: normal;
+  max-width: 13em;
+  text-align: center;
+  line-height: 1.25;
+}
+.card-diagram-host .cd-lab-corner {
+  left: 10px !important;
+  top: 10px !important;
+  transform: none;
+  text-align: left;
+  max-width: 16em;
+}
+.card-diagram-host .cd-lab-plane {
+  left: 10px !important;
+  top: 72px !important;
+  transform: none;
+}
+.card-diagram-hint {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+.card-diagram-host.is-narrow .cd-lab { font-size: 10px; padding: 0 2px; }
+.card-diagram-host.is-narrow .cd-lab-sm { font-size: 10px; }
+.card-diagram-host.is-narrow .cd-lab-muted {
+  font-size: 9px;
+  max-width: 10em;
+}
+.card-diagram-host.is-narrow .cd-lab-corner {
+  top: auto !important;
+  bottom: 8px !important;
+  left: 8px !important;
+}
+.card-diagram-host.is-narrow .cd-lab-plane { top: 8px !important; }
+.card-diagram-host.is-narrow .card-diagram-hint { display: none; }
 /* Scoped to supp-moment-of-inertia card back only — do not style every .fcard-back table/list. */
 .moi-inertia-table {
   margin: 14px auto 0;

@@ -218,7 +218,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20261001g';
+      s.src = 'js/flashmodes.js?v=20261013a';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -437,8 +437,16 @@ PGRE.views.formulas = (function () {
      tagged on at RENDER time. Tag first, then formulaHTML — the prose mangler
      treats $$…$$ as a protected part, so the tag rides through untouched. Cards
      without an eq (hand-seeded PGRE.FORMULAS, imported decks) render bare. */
-  function backHTML(c) {
+  function taggedBackHTML(c) {
     return formulaHTML(PGRE.formulaBackTagged ? PGRE.formulaBackTagged(c.back, c.eq) : c.back);
+  }
+
+  function backHTML(c) {
+    var html = taggedBackHTML(c);
+    if (c && c.id && PGRE.replaceRecallListWithDiagram) {
+      html = PGRE.replaceRecallListWithDiagram(html, c.id);
+    }
+    return html;
   }
 
   function topicCardsHTML(cards) {
@@ -2751,7 +2759,7 @@ PGRE.views.formulas = (function () {
     var frontFace, backFace;
     if (reverse) {
       frontFace = '<div class="fcard-rev-q">What is this? When does it apply?</div>' +
-        '<div class="fcard-front" id="fcard-front">' + backHTML(c) + '</div>';
+        '<div class="fcard-front" id="fcard-front">' + taggedBackHTML(c) + '</div>';
       backFace = (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
         '<div class="fcard-rev-prompt">' + formulaHTML(c.front) + '</div>' + noteHTML + mnem +
         vizNavButtonHTML(c.id, 'btn-sm', 'study-viz');
@@ -2916,7 +2924,7 @@ PGRE.views.formulas = (function () {
     // re-typeset the already-rendered back).
     if (PGRE.store.state.settings.formulaReverse) {
       var front = document.getElementById('fcard-front');
-      if (front) { front.innerHTML = backHTML(c); PGRE.typesetMath(front); }
+      if (front) { front.innerHTML = taggedBackHTML(c); PGRE.typesetMath(front); }
     }
     var rb = document.getElementById('rebuild-btn');
     if (rb && rb.parentNode) rb.parentNode.removeChild(rb);
