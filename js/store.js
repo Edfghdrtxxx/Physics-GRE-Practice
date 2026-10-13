@@ -157,7 +157,8 @@ PGRE.store = {
       cards: {},
       // F10 — capped append-only formula review log (srs.gradeCard), newest last:
       //   { d: 'YYYY-MM-DD', id, g: grade, ivl: pre-review interval,
-      //     m: was-mature (ivl>=21), n: had-prior-state } — feeds Memory stats
+      //     m: was-mature (ivl >= matureDays() at write), n: had-prior-state }
+      //     — feeds Memory stats; old rows keep the flag they stored
       cardReviews: [],
       // F2 — per-card mnemonic notes: cardId -> { text, updatedAt }
       cardNotes: {},

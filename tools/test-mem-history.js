@@ -156,7 +156,9 @@ assert(same.count === 2 && same.chips[0].day === 1 && same.chips[1].day === 1,
 
 // ——— gradeCard-shaped log produces non-empty strip ———
 console.log('\ngradeCard-shaped sequence');
-// Mirror what gradeCard pushes: { d, id, g, ivl, m, n }
+// Mirror stored gradeCard rows: { d, id, g, ivl, m, n }. m is the flag
+// written at review time (live threshold then); this fixture uses the
+// classic 21-day cut because it is testing strip shape, not the helper.
 var shaped = [];
 function pushGrade(d, g, ivl, had) {
   shaped.push({

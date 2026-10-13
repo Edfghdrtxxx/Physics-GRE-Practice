@@ -2900,7 +2900,8 @@ function consumerCases() {
     console.log('\nformulas: recall band segments hint and navigate');
     var band = autoPickEnv();
     var BP = band.P, t0 = BP.srs.today();
-    // recallMix: selected = reviews > 0; solid = interval >= 21.
+    // recallMix: selected = reviews > 0; solid = interval >= matureDays()
+    // (21 when examDate is unset, as in autoPickEnv).
     band.env.cardStates['cpgf-2.3'] = { due: BP.srs.addDays(30), interval: 30, reps: 5, reviews: 5, lapses: 0, lastReviewedDay: t0 };
     band.env.cardStates['cpgf-1.2'] = { due: t0, interval: 2, reps: 2, reviews: 2, lapses: 0, lastReviewedDay: t0 };
     // A saved state with reviews 0 (the normalizeRecallState repair shape):
@@ -2916,6 +2917,9 @@ function consumerCases() {
       var restSeg = doc.querySelector('.fr-seg-rest');
       assert(!!solidSeg && !!youngSeg && !!restSeg,
         'recall band renders its three segments');
+      var solidTip = solidSeg.getAttribute('data-tip') || '';
+      assert(solidTip.indexOf('≥ ' + BP.srs.matureDays() + ' d') !== -1,
+        'solid tooltip names the live threshold, got: ' + solidTip);
       assert(solidSeg.getAttribute('tabindex') === '0' && restSeg.getAttribute('tabindex') === '0',
         'labelled and unlabelled segments are focusable');
       assert(solidSeg.getAttribute('role') === 'button' &&
@@ -2935,6 +2939,8 @@ function consumerCases() {
       var matureOpt = doc.querySelector('#fs-status-sel option[value="mature"]');
       assert(!!matureOpt && matureOpt.getAttribute('selected') !== null,
         'double-click on Solid enough filters status:mature');
+      assert((matureOpt.textContent || '').indexOf('≥ ' + BP.srs.matureDays() + ' d') !== -1,
+        'search mature chip names the live threshold, got: ' + matureOpt.textContent);
       assert(doc.getElementById('fs-status').textContent.indexOf('1') !== -1,
         'the mature filter lists the one solid card, status line: ' +
           (doc.getElementById('fs-status') || {}).textContent);

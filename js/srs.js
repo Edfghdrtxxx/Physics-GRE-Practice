@@ -338,6 +338,25 @@ PGRE.srs = {
     if (!isFinite(days) || days <= 1) return null;
     return Math.max(1, days - 1);
   },
+  /* Whole-day interval at which a card counts as solid / mature in the
+     Recall UI. While the exam cap is on, that is min(21, examCap()) — the
+     farthest interval the scheduler can still write. When the exam date is
+     a valid future day but examCap() is null only because the exam is due
+     within a day (tomorrow), the threshold is 1 so a just-passed card is
+     solid. Cap off, invalid date, exam day, or a past date: the classic 21.
+     Never 0. */
+  matureDays: function () {
+    var cap = this.examCap();
+    if (cap != null) {
+      var n = Math.min(21, cap);
+      return n < 1 ? 1 : n;
+    }
+    var settings = (PGRE.store.state && PGRE.store.state.settings) || {};
+    if (settings.formulaExamCap === false) return 21;
+    var days = this.daysUntil(settings.examDate);
+    if (isFinite(days) && days === 1) return 1;
+    return 21;
+  },
   /* F3 — final pass: the last week before the exam. The resolved Today and
      Formula Recall views call fillFormulaDayFinalPass(), which appends every
      unsuspended learned card to the persisted batch. New cards remain manual.
@@ -546,7 +565,8 @@ PGRE.srs = {
     var s = PGRE.store.state;
     // Review-log capture (bundle 2) — read BEFORE the default-object creation:
     // hadState (n) separates a real review from a card's first-ever grade;
-    // prevIvl / m record whether the card was mature (>= 21 d) going in.
+    // prevIvl / m record whether the card was mature (interval >= matureDays())
+    // going in. The stored flag keeps the threshold that was in force that day.
     var hadState = !!(s.cards && Object.prototype.hasOwnProperty.call(s.cards, id));
     var prev = null;
     if (hadState) {
@@ -588,7 +608,7 @@ PGRE.srs = {
     // it had no state). soft: 1 means this grade consumed a soft pin.
     var log = s.cardReviews || (s.cardReviews = []);
     var row = { d: this.today(), id: id, g: grade, ivl: prevIvl,
-                m: prevIvl >= 21 ? 1 : 0, n: hadState ? 1 : 0, op: op, prev: prev };
+                m: prevIvl >= this.matureDays() ? 1 : 0, n: hadState ? 1 : 0, op: op, prev: prev };
     if (consumedSoft) row.soft = 1;
     log.push(row);
     if (log.length > 8000) log.shift();

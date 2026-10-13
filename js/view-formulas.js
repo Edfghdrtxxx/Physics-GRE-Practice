@@ -234,7 +234,7 @@ PGRE.views.formulas = (function () {
     if (searchLoad) return searchLoad;
     searchLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/formula-search.js?v=20261001h';
+      s.src = 'js/formula-search.js?v=20261013a';
       s.onload = function () { resolve(); };
       s.onerror = function () { searchLoad = null; searchFailed = true; resolve(); };
       document.head.appendChild(s);
@@ -680,14 +680,22 @@ PGRE.views.formulas = (function () {
   }
 
 
-  /* Deck-level title-band mix. Solid = interval ≥ 21; selected = reviews > 0.
-     Remainder of the selected segment is selected − solid. Not today’s picks. */
+  /* Live solid-enough threshold (whole days). Falls back to 21 if the helper
+     is missing so an older srs.js still paints the band. */
+  function matureDays() {
+    return (PGRE.srs && typeof PGRE.srs.matureDays === 'function') ? PGRE.srs.matureDays() : 21;
+  }
+
+  /* Deck-level title-band mix. Solid = interval ≥ matureDays(); selected =
+     reviews > 0. Remainder of the selected segment is selected − solid.
+     Not today’s picks. */
   function recallMix(list) {
-    var solid = 0, selected = 0, i, st, n;
+    var solid = 0, selected = 0, i, st, n, thresh;
     n = (list && list.length) || 0;
+    thresh = matureDays();
     for (i = 0; i < n; i++) {
       st = PGRE.srs.cardState(list[i].id);
-      if (st && (st.interval || 0) >= 21) solid++;
+      if (st && (st.interval || 0) >= thresh) solid++;
       if (st && st.reviews > 0) selected++;
     }
     return { total: n, solid: solid, selected: selected };
@@ -706,7 +714,7 @@ PGRE.views.formulas = (function () {
     var pSolid = pct(solid);
     var pYoung = pct(young);
     var aria = selected + ' of ' + total + ' introduced, ' + solid + ' solid enough';
-    var solidTip = 'Solid enough\\n' + solid + ' of ' + total + ' · interval ≥ 21 d\\nDouble-click to browse these cards';
+    var solidTip = 'Solid enough\\n' + solid + ' of ' + total + ' · interval ≥ ' + matureDays() + ' d\\nDouble-click to browse these cards';
     var youngTip = 'Learning\\n' + young + ' of ' + total + ' · introduced, not yet mature\\nDouble-click to browse these cards';
     var unseenTip = 'Not yet introduced\\n' + unseen + ' of ' + total + ' · never studied\\nDouble-click to browse these cards';
     function segAria(name, n) {
@@ -1145,10 +1153,11 @@ PGRE.views.formulas = (function () {
   function memStatsHTML() {
     var srs = PGRE.srs, ui = PGRE.ui;
     var mature = 0, young = 0, learning = 0;
+    var thresh = matureDays();
     deck.forEach(function (c) {
       var st = srs.cardState(c.id);
-      if (st && (st.interval || 0) >= 21) mature++;
-      else if (st && st.reps > 0 && (st.interval || 0) < 21) young++;
+      if (st && (st.interval || 0) >= thresh) mature++;
+      else if (st && st.reps > 0 && (st.interval || 0) < thresh) young++;
       else learning++;                       // no state, or state with reps === 0
     });
 
@@ -1159,8 +1168,8 @@ PGRE.views.formulas = (function () {
     }
 
     var h = '<div class="mem-mix stat-row stat-row-3">' +
-      ui.statTile('Mature', ui.fmt(mature) + ' <span class="stat-unit">≥ 21 d</span>') +
-      ui.statTile('Young', ui.fmt(young) + ' <span class="stat-unit">&lt; 21 d</span>') +
+      ui.statTile('Mature', ui.fmt(mature) + ' <span class="stat-unit">≥ ' + thresh + ' d</span>') +
+      ui.statTile('Young', ui.fmt(young) + ' <span class="stat-unit">&lt; ' + thresh + ' d</span>') +
       ui.statTile('Learning / new', ui.fmt(learning)) +
     '</div>';
 
@@ -3599,7 +3608,7 @@ PGRE.views.formulas = (function () {
         item.lapses = st.lapses || 0;
         item.reviews = st.reviews || 0;
         item.ease = st.ease != null ? Math.round(st.ease * 100) / 100 : 2.5;
-        item.status = (st.interval >= 21) ? 'mature' : ((st.interval > 0) ? 'learning' : 'new');
+        item.status = (st.interval >= matureDays()) ? 'mature' : ((st.interval > 0) ? 'learning' : 'new');
         item.lastReviewedAt = st.lastReviewedAt || '';
         if (!item.lastGrade && st.lastGrade) item.lastGrade = st.lastGrade;
       } else {
@@ -3646,7 +3655,7 @@ PGRE.views.formulas = (function () {
       if (st && st.reviews > 0) {
         learnedCount++;
         if (top) top.learned++;
-        if (st.interval >= 21) {
+        if (st.interval >= matureDays()) {
           matureCount++;
           if (top) top.mature++;
         } else {
@@ -3735,7 +3744,7 @@ PGRE.views.formulas = (function () {
           lapses: st.lapses || 0,
           reviews: st.reviews || 0,
           ease: st.ease != null ? Math.round(st.ease * 100) / 100 : 2.5,
-          status: (st.interval >= 21) ? 'mature' : ((st.interval > 0) ? 'learning' : 'new'),
+          status: (st.interval >= matureDays()) ? 'mature' : ((st.interval > 0) ? 'learning' : 'new'),
           lastGrade: st.lastGrade || '',
           lastReviewedDay: st.lastReviewedDay || ''
         });
@@ -3914,7 +3923,7 @@ PGRE.views.formulas = (function () {
           '</div>' +
           '<div class="export-stat-tile">' +
             '<div class="stat-num">' + mature + '</div>' +
-            '<div class="stat-label">Mature (≥21d)</div>' +
+            '<div class="stat-label">Mature (≥ ' + matureDays() + ' d)</div>' +
           '</div>' +
         '</div>' +
         listHtml +
@@ -4213,8 +4222,10 @@ PGRE.views.formulas = (function () {
     });
     var statusOpts = '';
     PGRE.formulaSearch.STATUSES.forEach(function (s) {
+      var label = (typeof PGRE.formulaSearch.statusLabel === 'function')
+        ? PGRE.formulaSearch.statusLabel(s) : s.label;
       statusOpts += '<option value="' + ui.esc(s.key) + '"' +
-        (searchQ.status === s.key ? ' selected' : '') + '>' + ui.esc(s.label) + '</option>';
+        (searchQ.status === s.key ? ' selected' : '') + '>' + ui.esc(label) + '</option>';
     });
     var sortOpts = '';
     [['relevance', 'Best match'], ['order', 'Book order'], ['due', 'Due soonest']]
