@@ -57,7 +57,11 @@ PGRE.flashmodes = (function () {
      must never reach c.back, which is what acceptSet / the match dedupe key /
      quizOptions / clozeParts all read. */
   function backHTML(c) {
-    return formulaHTML(PGRE.formulaBackTagged ? PGRE.formulaBackTagged(c.back, c.eq) : c.back);
+    var html = formulaHTML(PGRE.formulaBackTagged ? PGRE.formulaBackTagged(c.back, c.eq) : c.back);
+    if (c && c.id && PGRE.replaceRecallListWithDiagram) {
+      html = PGRE.replaceRecallListWithDiagram(html, c.id);
+    }
+    return html;
   }
 
   /* "Similar problem" control — the button markup and matching live in
