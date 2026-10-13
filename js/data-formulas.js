@@ -696,7 +696,7 @@ PGRE.FORMULAS = [
     name: "Determinant, trace, and eigenvalues (supplemental list)",
     front: "For square matrices of one size, state the product rule for determinants, the trace identity, the characteristic equation, and the trace and determinant in terms of the eigenvalues. (5)",
     back: "<ul class=\"recall-list\"><li>$\\det(AB) = \\det A\\,\\det B$.</li><li>$\\operatorname{Tr}(AB) = \\operatorname{Tr}(BA)$ when both products are square. This is not an arbitrary reorder of three factors.</li><li>$\\det(A-\\lambda I) = 0$.</li><li>$\\operatorname{Tr} A = \\sum_i \\lambda_i$, with multiplicity counted.</li><li>$\\det A = \\prod_i \\lambda_i$, with multiplicity counted.</li></ul>",
-    note: "Supplemental — not a numbered CPG equation. The statement that a Hermitian operator has real eigenvalues stays on the quantum cards. The word trace on cpgf-1.43 is not a matrix trace."
+    note: "Supplemental — not a numbered CPG equation. The normal-mode secular equation is a determinant condition, not a trace identity."
   },
   {
     id: "supp-binomial-counting",
