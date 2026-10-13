@@ -142,5 +142,24 @@ assert(flash.indexOf('replaceRecallListWithDiagram') !== -1,
 assert(!/js\/visualizers\/.*radiation/.test(fs.readFileSync(path.join(root, 'js', 'card-diagrams.js'), 'utf8')),
   'the diagram module does not register a visualizer');
 
+console.log('\nzoom clamp and wiring');
+assert(typeof PGRE.clampCardDiagramZoom === 'function', 'clampCardDiagramZoom is exported');
+assert(PGRE.clampCardDiagramZoom(0.2) === 0.6, 'zoom floor is 0.6');
+assert(PGRE.clampCardDiagramZoom(4) === 3, 'zoom ceiling is 3');
+assert(PGRE.clampCardDiagramZoom(1) === 1, 'zoom 1 is unchanged');
+assert(PGRE.clampCardDiagramZoom(1.25) === 1.25, 'zoom 1.25 is unchanged');
+var diagramsSrc = fs.readFileSync(path.join(root, 'js', 'card-diagrams.js'), 'utf8');
+assert(/passive:\s*false/.test(diagramsSrc),
+  'the wheel listener is registered with passive: false');
+assert(diagramsSrc.indexOf('attributeFilter') !== -1 &&
+  diagramsSrc.indexOf('data-theme') !== -1,
+  'the diagram redraws when html data-theme changes');
+assert(diagramsSrc.indexOf('data-cd-zoom') !== -1,
+  'zoom in/out/reset buttons are in the diagram markup');
+var css = fs.readFileSync(path.join(root, 'css', 'style.css'), 'utf8');
+assert(css.indexOf('.card-diagram-zoom') !== -1 &&
+  css.indexOf('touch-action: none') !== -1,
+  'zoom controls are styled and the host keeps touch-action: none');
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

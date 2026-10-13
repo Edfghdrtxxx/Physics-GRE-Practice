@@ -47,6 +47,11 @@ function staticChecks() {
     'rotation is pointer-driven (touch-action lives in CSS)');
   check(css.indexOf('touch-action: none') !== -1,
     'CSS disables touch scrolling on the diagram host');
+  check(diagrams.indexOf('data-cd-zoom') !== -1 &&
+    /passive:\s*false/.test(diagrams),
+    'zoom buttons and a non-passive wheel listener are present');
+  check(css.indexOf('.card-diagram-zoom') !== -1,
+    'style.css styles the zoom control cluster');
 }
 
 async function helpers(page) {
@@ -195,6 +200,8 @@ async function helpers(page) {
         label: host ? host.getAttribute('aria-label') : '',
         yaw: host ? host.getAttribute('data-yaw') : '',
         pitch: host ? host.getAttribute('data-pitch') : '',
+        zoom: host ? host.getAttribute('data-zoom') : '',
+        ink: host ? host.getAttribute('data-ink') : '',
         hasCanvas: !!canvas,
         canvasW: canvas ? canvas.width : 0,
         canvasH: canvas ? canvas.height : 0,
@@ -233,6 +240,45 @@ async function helpers(page) {
       fire('pointerup', x + 90, y + 40);
     });
     await sleep(150);
+  };
+
+  h.clickZoom = async function (op) {
+    await page.eval('() => { var b = document.querySelector("[data-cd-zoom=\\"' + op +
+      '\\"]"); if (!b) throw new Error("missing zoom " + ' + JSON.stringify(op) +
+      '); b.click(); }');
+    await sleep(80);
+  };
+
+  h.labelOverlap = async function () {
+    return JSON.parse(await page.eval(function () {
+      var host = document.querySelector('[data-card-diagram]');
+      var labs = host ? host.querySelectorAll('.cd-lab') : [];
+      var boxes = [];
+      var i, j, a, b, x, y, area, max = 0, pair = '';
+      for (i = 0; i < labs.length; i++) {
+        var el = labs[i];
+        if (!el.getClientRects().length) continue;
+        if (getComputedStyle(el).visibility === 'hidden') continue;
+        boxes.push({
+          id: el.getAttribute('data-lab') || String(i),
+          r: el.getBoundingClientRect()
+        });
+      }
+      for (i = 0; i < boxes.length; i++) {
+        for (j = i + 1; j < boxes.length; j++) {
+          a = boxes[i].r;
+          b = boxes[j].r;
+          x = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+          y = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+          area = x * y;
+          if (area > max) {
+            max = area;
+            pair = boxes[i].id + '+' + boxes[j].id;
+          }
+        }
+      }
+      return JSON.stringify({ max: max, pair: pair, n: boxes.length });
+    }));
   };
 
   return h;
@@ -292,6 +338,89 @@ var STAGES = [
       h.assert(!after.hasList, 'bullets stay absent after rotate');
     } },
 
+  { name: 'zoom in about the diagram centre', shot: '07-zoomed-in', size: '1280x800',
+    run: async function (page, h) {
+      await h.showCard('supp-drift-current');
+      await h.sleep(100);
+      await h.showCard('supp-radiation-field');
+      await h.flip();
+      await h.clickZoom('reset');
+      var before = await h.snapBack();
+      await h.clickZoom('in');
+      await h.clickZoom('in');
+      var after = await h.snapBack();
+      h.assert(Number(after.zoom) > Number(before.zoom),
+        'zoom in raises data-zoom (' + before.zoom + ' -> ' + after.zoom + ')');
+      h.assert(after.pixels !== before.pixels, 'zoom in changes the drawn scene');
+      h.assert(after.yaw === before.yaw, 'zoom in keeps rotation');
+    } },
+
+  { name: 'zoom out about the diagram centre', shot: '08-zoomed-out',
+    run: async function (page, h) {
+      await h.clickZoom('reset');
+      var before = await h.snapBack();
+      await h.clickZoom('out');
+      await h.clickZoom('out');
+      var after = await h.snapBack();
+      h.assert(Number(after.zoom) < Number(before.zoom),
+        'zoom out lowers data-zoom (' + before.zoom + ' -> ' + after.zoom + ')');
+      h.assert(Number(after.zoom) >= 0.6, 'zoom out stays at or above 0.6');
+      h.assert(after.pixels !== before.pixels, 'zoom out changes the drawn scene');
+    } },
+
+  { name: 'reset restores default zoom and rotation',
+    run: async function (page, h) {
+      await h.dragDiagram();
+      await h.clickZoom('in');
+      await h.clickZoom('reset');
+      var snap = await h.snapBack();
+      h.assert(Math.abs(Number(snap.yaw) - 1.08) < 1e-6, 'reset restores yaw 1.08');
+      h.assert(Math.abs(Number(snap.pitch) - 0.42) < 1e-6, 'reset restores pitch 0.42');
+      h.assert(Math.abs(Number(snap.zoom) - 1) < 1e-6, 'reset restores zoom 1');
+    } },
+
+  { name: 'wheel over the diagram does not scroll the page',
+    run: async function (page, h) {
+      var out = JSON.parse(await page.eval(function () {
+        var host = document.querySelector('[data-card-diagram]');
+        if (!host) throw new Error('no host');
+        var y0 = window.scrollY || document.documentElement.scrollTop || 0;
+        var z0 = host.getAttribute('data-zoom');
+        var ev = new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          deltaY: -120,
+          deltaMode: 0
+        });
+        var prevented = !host.dispatchEvent(ev);
+        return JSON.stringify({
+          prevented: prevented,
+          y0: y0,
+          y1: window.scrollY || document.documentElement.scrollTop || 0,
+          z0: z0,
+          z1: host.getAttribute('data-zoom')
+        });
+      }));
+      h.assert(out.prevented, 'wheel preventDefault ran on the diagram');
+      h.assert(out.y1 === out.y0, 'wheel over the diagram left page scroll unchanged');
+      h.assert(Number(out.z1) > Number(out.z0),
+        'wheel zoomed in (zoom ' + out.z0 + ' -> ' + out.z1 + ')');
+    } },
+
+  { name: 'zoom is clamped to 0.6-3',
+    run: async function (page, h) {
+      await h.clickZoom('reset');
+      var i;
+      for (i = 0; i < 16; i++) await h.clickZoom('in');
+      var hi = await h.snapBack();
+      h.assert(Math.abs(Number(hi.zoom) - 3) < 1e-6, 'zoom in clamps at 3 (got ' + hi.zoom + ')');
+      await h.clickZoom('reset');
+      for (i = 0; i < 16; i++) await h.clickZoom('out');
+      var lo = await h.snapBack();
+      h.assert(Math.abs(Number(lo.zoom) - 0.6) < 1e-6, 'zoom out clamps at 0.6 (got ' + lo.zoom + ')');
+      await h.clickZoom('reset');
+    } },
+
   { name: 'diagram at a narrow phone width', shot: '04-back-phone', size: '390x844',
     run: async function (page, h) {
       await h.showCard('supp-drift-current');
@@ -306,14 +435,34 @@ var STAGES = [
       var snap = await h.snapBack();
       h.assert(snap.hasHost && snap.hasCanvas, 'the diagram is present at phone width');
       h.assert(!snap.hasList, 'bullets stay absent at phone width');
+      var ov = await h.labelOverlap();
+      h.assert(ov.n >= 6, 'vector labels are present at phone width');
+      h.assert(ov.max === 0,
+        'no two labels overlap at phone width (got ' + ov.max + ' px^2 on ' + ov.pair + ')');
     } },
 
   { name: 'diagram in dark theme', shot: '06-back-dark', size: '1280x800',
     run: async function (page, h) {
       await page.eval(function () {
+        if (PGRE.setTheme) PGRE.setTheme('light');
+        else if (PGRE.applyTheme) PGRE.applyTheme('light');
+      });
+      await h.showCard('supp-radiation-field');
+      await h.flip();
+      await h.sleep(200);
+      var before = await h.snapBack();
+      await page.eval(function () {
         if (PGRE.setTheme) PGRE.setTheme('dark');
         else if (PGRE.applyTheme) PGRE.applyTheme('dark');
       });
+      await h.sleep(250);
+      var after = await h.snapBack();
+      var theme = await page.eval(function () {
+        return document.documentElement.getAttribute('data-theme') || '';
+      });
+      h.assert(theme === 'dark', 'html data-theme is dark');
+      h.assert(after.pixels !== before.pixels, 'a live theme toggle redraws the canvas');
+      h.assert(after.ink !== before.ink, 'a live theme toggle picks up new CSS colours');
       await h.showCard('supp-drift-current');
       await h.sleep(150);
       await h.showCard('supp-radiation-field');
@@ -323,10 +472,6 @@ var STAGES = [
         if (host && host.scrollIntoView) host.scrollIntoView({ block: 'center' });
       });
       await h.sleep(250);
-      var theme = await page.eval(function () {
-        return document.documentElement.getAttribute('data-theme') || '';
-      });
-      h.assert(theme === 'dark', 'html data-theme is dark');
       var snap = await h.snapBack();
       h.assert(snap.hasHost && snap.hasCanvas, 'the diagram is present in dark theme');
       h.assert(!snap.hasList, 'bullets stay absent in dark theme');

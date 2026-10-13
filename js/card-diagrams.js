@@ -1,6 +1,6 @@
 /* Inline 3D diagrams drawn on a recall-card back in place of that card's
    .recall-list. Registry is keyed by card id. Not a visualizer: no Lab
-   entry, no js/visualizers/ file, drag-to-rotate only. */
+   entry, no js/visualizers/ file. Drag rotates; wheel / pinch / buttons zoom. */
 window.PGRE = window.PGRE || {};
 PGRE.cardDiagrams = PGRE.cardDiagrams || {};
 
@@ -89,6 +89,18 @@ function radiationFieldVectors() {
 }
 PGRE.radiationFieldDiagramVectors = radiationFieldVectors;
 
+var CD_YAW0 = 1.08;
+var CD_PITCH0 = 0.42;
+var CD_ZOOM_MIN = 0.6;
+var CD_ZOOM_MAX = 3;
+var CD_ZOOM_0 = 1;
+PGRE.clampCardDiagramZoom = function (z) {
+  z = Number(z);
+  if (!isFinite(z) || z < CD_ZOOM_MIN) return CD_ZOOM_MIN;
+  if (z > CD_ZOOM_MAX) return CD_ZOOM_MAX;
+  return z;
+};
+
 function cssVar(el, name, fallback) {
   var raw = '';
   try { raw = getComputedStyle(el).getPropertyValue(name); } catch (e) { raw = ''; }
@@ -109,12 +121,20 @@ function renderTex(el, tex, display) {
 
 PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
   var vec = radiationFieldVectors();
-  var yaw = 1.08;
-  var pitch = 0.42;
+  var yaw = CD_YAW0;
+  var pitch = CD_PITCH0;
+  var zoom = CD_ZOOM_0;
   var dragging = false;
   var lastX = 0;
   var lastY = 0;
   var pointerId = null;
+  var pointers = {};
+  var pinching = false;
+  var pinchStartDist = 0;
+  var pinchStartZoom = CD_ZOOM_0;
+  var lastNarrow = null;
+  var eradLong = '\\mathbf{E}_{\\mathrm{rad}}\\ (q>0:\\ \\text{opp. }\\mathbf{a}_\\perp)';
+  var eradShort = '\\mathbf{E}_{\\mathrm{rad}}';
 
   host.setAttribute('role', 'img');
   host.setAttribute('aria-label',
@@ -124,7 +144,8 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     'the line of sight and the acceleration, and is perpendicular to the line of ' +
     'sight. Its magnitude is proportional to sine of theta and the power per solid ' +
     'angle is proportional to sine squared theta: both are zero on the acceleration ' +
-    'axis and largest at ninety degrees. Drag to rotate.');
+    'axis and largest at ninety degrees. Drag to rotate. Scroll, pinch, or use the ' +
+    'zoom buttons to zoom. Reset returns zoom and rotation to the default view.');
   host.innerHTML =
     '<canvas></canvas>' +
     '<div class="card-diagram-labels" aria-hidden="true">' +
@@ -138,7 +159,12 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
       '<span class="cd-lab cd-lab-sm cd-lab-plane" data-lab="plane"></span>' +
       '<span class="cd-lab cd-lab-muted cd-lab-corner" data-lab="ang"></span>' +
     '</div>' +
-    '<p class="card-diagram-hint">Drag to rotate</p>';
+    '<p class="card-diagram-hint">Drag to rotate. Scroll or pinch to zoom.</p>' +
+    '<div class="card-diagram-zoom" role="group" aria-label="Zoom">' +
+      '<button type="button" class="cd-zoom-btn" data-cd-zoom="in" aria-label="Zoom in">+</button>' +
+      '<button type="button" class="cd-zoom-btn" data-cd-zoom="out" aria-label="Zoom out">\u2212</button>' +
+      '<button type="button" class="cd-zoom-btn cd-zoom-reset" data-cd-zoom="reset" aria-label="Reset view">Reset</button>' +
+    '</div>';
 
   var canvas = host.querySelector('canvas');
   var labels = {};
@@ -182,7 +208,7 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     var cp = Math.cos(pitch), sp = Math.sin(pitch);
     var y2 = y1 * cp - z1 * sp;
     var z2 = y1 * sp + z1 * cp;
-    var scale = Math.min(W, H) / (W < 420 ? 6.0 : 7.3);
+    var scale = Math.min(W, H) / (W < 420 ? 6.0 : 7.3) * zoom;
     var persp = 7.4 / (7.4 + y2);
     return {
       x: W / 2 + x1 * scale * persp,
@@ -344,11 +370,18 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    if (W < 420) host.classList.add('is-narrow');
+    var narrow = W < 420;
+    if (narrow) host.classList.add('is-narrow');
     else host.classList.remove('is-narrow');
+    if (narrow !== lastNarrow) {
+      lastNarrow = narrow;
+      renderTex(labels.erad, narrow ? eradShort : eradLong);
+    }
     var c = token();
     host.setAttribute('data-yaw', String(yaw));
     host.setAttribute('data-pitch', String(pitch));
+    host.setAttribute('data-zoom', zoom.toFixed(3));
+    host.setAttribute('data-ink', c.ink);
 
     var i;
     for (i = 0; i < doughnut.length; i++) {
@@ -403,25 +436,70 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     place(labels.q, vec.origin, -22, 18);
     place(labels.a, vscale(vec.a, 0.62), -24, -10);
     place(labels.aperp, vec.aPerp, -32, -6);
-    place(labels.apar, vec.aPar, 22, 12);
+    place(labels.apar, vscale(vec.aPar, narrow ? 0.32 : 1), narrow ? 14 : 22, narrow ? 22 : 12);
     place(labels.rhat, rHatTip, 18, -12);
-    place(labels.erad, vadd(vec.field, vec.eRad), 36, 6);
+    if (narrow) {
+      place(labels.erad, vadd(vec.field, vec.eRad), 22, 28);
+    } else {
+      place(labels.erad, vadd(vec.field, vec.eRad), 36, 6);
+    }
     var thLab = [0.78 * Math.sin(vec.theta * 0.5), 0, 0.78 * Math.cos(vec.theta * 0.5)];
-    place(labels.theta, thLab, 10, -6);
+    place(labels.theta, thLab, narrow ? 8 : 10, narrow ? 14 : -6);
+  }
+
+  function pointerCount() {
+    var n = 0, id;
+    for (id in pointers) {
+      if (Object.prototype.hasOwnProperty.call(pointers, id)) n++;
+    }
+    return n;
+  }
+  function pinchDist() {
+    var ids = Object.keys(pointers);
+    if (ids.length < 2) return 0;
+    var a = pointers[ids[0]], b = pointers[ids[1]];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+  function isZoomControl(el) {
+    return !!(el && el.closest && el.closest('.card-diagram-zoom'));
   }
 
   function onDown(ev) {
     if (ev.button != null && ev.button !== 0) return;
+    if (isZoomControl(ev.target)) return;
+    pointers[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
+    if (pointerCount() >= 2) {
+      dragging = false;
+      pinching = true;
+      pinchStartDist = pinchDist();
+      pinchStartZoom = zoom;
+      host.classList.remove('is-dragging');
+      if (ev.cancelable) ev.preventDefault();
+      ev.stopPropagation();
+      return;
+    }
     dragging = true;
     lastX = ev.clientX;
     lastY = ev.clientY;
     pointerId = ev.pointerId;
-    try { canvas.setPointerCapture(ev.pointerId); } catch (eCap) { /* older */ }
+    try { host.setPointerCapture(ev.pointerId); } catch (eCap) { /* older */ }
     host.classList.add('is-dragging');
     if (ev.cancelable) ev.preventDefault();
     ev.stopPropagation();
   }
   function onMove(ev) {
+    if (pointers[ev.pointerId]) {
+      pointers[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
+    }
+    if (pinching && pointerCount() >= 2) {
+      var d = pinchDist();
+      if (pinchStartDist > 1 && d > 1) {
+        zoom = PGRE.clampCardDiagramZoom(pinchStartZoom * (d / pinchStartDist));
+        draw();
+      }
+      if (ev.cancelable) ev.preventDefault();
+      return;
+    }
     if (!dragging) return;
     if (pointerId != null && ev.pointerId !== pointerId) return;
     var dx = ev.clientX - lastX;
@@ -436,28 +514,72 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     if (ev.cancelable) ev.preventDefault();
   }
   function onUp(ev) {
-    if (pointerId != null && ev.pointerId !== pointerId) return;
+    delete pointers[ev.pointerId];
+    if (pointerCount() < 2) pinching = false;
+    if (pointerId != null && ev.pointerId !== pointerId && pointerCount() > 0) return;
     dragging = false;
     pointerId = null;
     host.classList.remove('is-dragging');
   }
 
-  canvas.addEventListener('pointerdown', onDown);
-  canvas.addEventListener('pointermove', onMove);
-  canvas.addEventListener('pointerup', onUp);
-  canvas.addEventListener('pointercancel', onUp);
-  canvas.addEventListener('lostpointercapture', onUp);
+  function onWheel(ev) {
+    if (ev.cancelable) ev.preventDefault();
+    ev.stopPropagation();
+    var dy = ev.deltaY;
+    if (ev.deltaMode === 1) dy *= 16;
+    if (ev.deltaMode === 2) dy *= 120;
+    var k = ev.ctrlKey ? 0.012 : 0.0022;
+    zoom = PGRE.clampCardDiagramZoom(zoom * Math.exp(-dy * k));
+    draw();
+  }
+
+  function applyZoomOp(op) {
+    if (op === 'in') zoom = PGRE.clampCardDiagramZoom(zoom * 1.25);
+    else if (op === 'out') zoom = PGRE.clampCardDiagramZoom(zoom / 1.25);
+    else if (op === 'reset') {
+      zoom = CD_ZOOM_0;
+      yaw = CD_YAW0;
+      pitch = CD_PITCH0;
+    }
+    draw();
+  }
+
+  host.addEventListener('pointerdown', onDown);
+  host.addEventListener('pointermove', onMove);
+  host.addEventListener('pointerup', onUp);
+  host.addEventListener('pointercancel', onUp);
+  host.addEventListener('lostpointercapture', onUp);
+  host.addEventListener('wheel', onWheel, { passive: false });
+  host.querySelectorAll('[data-cd-zoom]').forEach(function (btn) {
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      applyZoomOp(btn.getAttribute('data-cd-zoom'));
+    });
+    btn.addEventListener('pointerdown', function (ev) { ev.stopPropagation(); });
+  });
 
   var ro = null;
   if (typeof ResizeObserver === 'function') {
     ro = new ResizeObserver(function () {
       if (!host.isConnected) {
         if (ro) ro.disconnect();
+        if (themeObs) themeObs.disconnect();
         return;
       }
       draw();
     });
     ro.observe(host);
+  }
+  var themeObs = null;
+  if (typeof MutationObserver === 'function' && document.documentElement) {
+    themeObs = new MutationObserver(function () {
+      if (host.isConnected) draw();
+    });
+    themeObs.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    });
   }
   draw();
 };
