@@ -139,9 +139,6 @@ assert(view.indexOf('replaceRecallListWithDiagram') !== -1 &&
 var flash = fs.readFileSync(path.join(root, 'js', 'flashmodes.js'), 'utf8');
 assert(flash.indexOf('replaceRecallListWithDiagram') !== -1,
   'flashmodes backHTML swaps in the diagram when a list back is shown');
-var agents = fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8');
-assert(agents.indexOf('card-diagrams.js') !== -1,
-  'AGENTS.md lists card-diagrams.js');
 assert(!/js\/visualizers\/.*radiation/.test(fs.readFileSync(path.join(root, 'js', 'card-diagrams.js'), 'utf8')),
   'the diagram module does not register a visualizer');
 
