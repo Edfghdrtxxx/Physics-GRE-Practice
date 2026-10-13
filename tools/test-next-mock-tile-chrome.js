@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 /* Real-page check of the dashboard Mock exam tile: with a fixed local
    "today", the tile names the next unsat plan mock on or after that day.
-   Isolated Chrome profile on a throwaway 127.0.0.1 port; never the saved
-   studio. The status bridge on 127.0.0.1:4789 is refused by CSP.
+   Catalog is the real five-id ETS order (ets2024, gr1777, gr0877, gr0177,
+   gr9677) — never a three-form stub that hides undated forms between
+   plan mocks. Isolated Chrome profile on a throwaway 127.0.0.1 port;
+   never the saved studio. The status bridge on 127.0.0.1:4789 is refused
+   by CSP.
    Run: node tools/test-next-mock-tile-chrome.js
    PGRE_MOCK_TILE_SHOTS=<dir> also saves one screenshot per day pin. */
 'use strict';
@@ -31,6 +34,11 @@ function staticChecks() {
   var index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   check(/js\/view-dashboard\.js\?v=\d{8}[a-z]/.test(index),
     'index.html cache-busts view-dashboard.js');
+  var dash = fs.readFileSync(path.join(ROOT, 'js/view-dashboard.js'), 'utf8');
+  check(/!x\.submittedAt/.test(dash) && /x\.source === 'weighted'/.test(dash),
+    'nextMockPointer counts a form sat only when submittedAt is set');
+  check(/!first\.scheduledFor \|\| first\.scheduledFor < today/.test(dash),
+    'undated or overdue first-unsat jumps to the next upcoming plan mock');
 }
 
 async function helpers(page) {
@@ -68,21 +76,32 @@ async function helpers(page) {
           }]
         };
       }
-      var need = [
+      var want = [
         stub('ets2024', 'ETS Official Practice Test (2024)', '70x120'),
         stub('gr1777', 'GR1777 Released Exam (2017)', '100x170'),
+        stub('gr0877', 'GR0877 Released Exam (2008)', '100x170'),
+        stub('gr0177', 'GR0177 Released Exam (2001)', '100x170'),
         stub('gr9677', 'GR9677 Released Exam (1996)', '100x170')
       ];
-      var have = {};
+      var byId = {};
       (PGRE.ETS_EXAMS || []).forEach(function (ex) {
-        if (ex && ex.id) have[String(ex.id).toLowerCase()] = true;
+        if (ex && ex.id) byId[String(ex.id).toLowerCase()] = ex;
       });
-      var missing = need.filter(function (ex) { return !have[ex.id]; });
-      if (missing.length) {
-        PGRE.ETS_EXAMS = (PGRE.ETS_EXAMS || []).concat(missing);
-        if (PGRE._resetBankCache) PGRE._resetBankCache();
-      }
+      PGRE.ETS_EXAMS = want.map(function (w) { return byId[w.id] || w; });
+      if (PGRE._resetBankCache) PGRE._resetBankCache();
     });
+  };
+
+  h.assertCatalogOrder = async function () {
+    var ids = JSON.parse(await page.eval(function () {
+      return JSON.stringify((PGRE.ETS_EXAMS || []).map(function (ex) {
+        return ex && String(ex.id).toLowerCase();
+      }));
+    }));
+    h.assert(ids.length === 5 && ids[0] === 'ets2024' && ids[1] === 'gr1777' &&
+      ids[2] === 'gr0877' && ids[3] === 'gr0177' && ids[4] === 'gr9677',
+      'catalog order is ets2024, gr1777, gr0877, gr0177, gr9677, got ' +
+      JSON.stringify(ids));
   };
 
   h.pinToday = async function (iso) {
@@ -105,15 +124,20 @@ async function helpers(page) {
       '}');
   };
 
+  h.setExams = async function (rows) {
+    await page.eval('() => { PGRE.store.state.exams = ' + JSON.stringify(rows) + '; }');
+  };
+
   h.setSat = async function (ids) {
-    await page.eval('() => { PGRE.store.state.exams = ' +
-      JSON.stringify(ids) + '.map(function (id) {' +
-      '  var seventy = id === "ets2024";' +
-      '  return { id: "ex-mv35d-" + id, source: id,' +
-      '    format: seventy ? "70x120" : "100x170",' +
-      '    raw: 59, total: seventy ? 70 : 100,' +
-      '    submittedAt: "2026-10-11T16:09:00.000Z" };' +
-      '}); }');
+    await h.setExams(ids.map(function (id) {
+      var seventy = id === 'ets2024';
+      return {
+        id: 'ex-mv35d-' + id, source: id,
+        format: seventy ? '70x120' : '100x170',
+        raw: 59, total: seventy ? 70 : 100,
+        submittedAt: '2026-10-11T16:09:00.000Z'
+      };
+    }));
   };
 
   h.showDashboard = async function () {
@@ -170,7 +194,10 @@ async function helpers(page) {
         nextText: nextBtn ? nextBtn.textContent.trim() : '',
         nextDisabled: nextBtn ? !!nextBtn.disabled : null,
         ets2024: info('ets2024'),
-        gr1777: info('gr1777')
+        gr1777: info('gr1777'),
+        gr0877: info('gr0877'),
+        gr0177: info('gr0177'),
+        gr9677: info('gr9677')
       });
     }));
   };
@@ -183,6 +210,7 @@ var STAGES = [
     run: async function (page, h) {
       await h.open();
       await h.ensureCatalog();
+      await h.assertCatalogOrder();
       await h.setSat([]);
       await h.pinToday('2026-10-10');
       await h.showDashboard();
@@ -260,43 +288,71 @@ var STAGES = [
         'sat gr1777 is not the next-mock card, got ' + JSON.stringify(L.gr1777));
     } },
 
+  { name: 'ets2024 and gr1777 submitted (real five-id catalog)',
+    shot: 'tile-sat-ets2024-gr1777',
+    run: async function (page, h) {
+      await h.ensureCatalog();
+      await h.assertCatalogOrder();
+      await h.setSat(['ets2024', 'gr1777']);
+      await h.pinToday('2026-10-19');
+      await h.showDashboard();
+      var t = await h.tile();
+      h.assert(t.today === '2026-10-19', 'store.today is 2026-10-19, got ' + t.today);
+      h.assert(t.pointer && t.pointer.id !== 'gr0877' && t.pointer.id !== 'gr0177',
+        'undated catalog forms between the plan mocks are not next, got ' +
+        JSON.stringify(t.pointer));
+      h.assert(t.pointer && t.pointer.id === 'gr9677' && t.pointer.scheduledFor === '2026-10-25',
+        'after ets2024 and gr1777 submitted, next is gr9677 on 2026-10-25, got ' +
+        JSON.stringify(t.pointer));
+      h.assert(t.status === 'Scheduled Oct 25', 'tile status Scheduled Oct 25, got ' + t.status);
+      h.assert(t.title === 'GR9677 Released Exam (1996)', 'tile title GR9677, got ' + t.title);
+      await h.showExam();
+      var L = await h.lobby();
+      h.assert(L.nextId === 'gr9677' && L.nextDisabled === true &&
+        L.heading === 'Next scheduled mock',
+        'lobby locks gr9677 until Oct 25, got ' + JSON.stringify({
+          heading: L.heading, nextId: L.nextId, nextDisabled: L.nextDisabled, nextText: L.nextText
+        }));
+      h.assert(L.gr0877 && L.gr0877.inNext === false && L.gr0877.disabled === false,
+        'undated gr0877 stays selectable in Other, got ' + JSON.stringify(L.gr0877));
+      await h.showDashboard();
+    } },
+
+  { name: 'unsubmitted in-progress ets2024 sitting stays unsat',
+    shot: 'tile-inprogress-ets2024',
+    run: async function (page, h) {
+      await h.ensureCatalog();
+      await h.setExams([{
+        id: 'ex-inprog-ets2024', source: 'ets2024', format: '70x120',
+        startedAt: '2026-10-10T16:00:00.000Z', submittedAt: null,
+        order: ['ets2024-q1'], answers: {}, flags: [], cursor: 0,
+        durationSec: 0, limitSec: 7200, paused: false
+      }]);
+      await h.pinToday('2026-10-10');
+      await h.showDashboard();
+      var t = await h.tile();
+      h.assert(t.today === '2026-10-10', 'store.today is 2026-10-10, got ' + t.today);
+      h.assert(t.pointer && t.pointer.id === 'ets2024' && t.pointer.scheduledFor === '2026-10-11',
+        'in-progress ets2024 is not sat; pointer stays ets2024, got ' +
+        JSON.stringify(t.pointer));
+      h.assert(t.status === 'Scheduled Oct 11', 'tile status Scheduled Oct 11, got ' + t.status);
+      h.assert(t.title === 'ETS Official Practice Test (2024)', 'tile title ETS 2024, got ' + t.title);
+    } },
+
   { name: 'no upcoming plan mock (2026-10-26)', shot: 'tile-2026-10-26',
     run: async function (page, h) {
+      await h.ensureCatalog();
       await h.setSat([]);
       await h.pinToday('2026-10-26');
       await h.showDashboard();
       var t = await h.tile();
       h.assert(t.today === '2026-10-26', 'store.today is 2026-10-26, got ' + t.today);
-      h.assert(t.pointer && t.pointer.id === 'ets2024' && t.status === 'Scheduled Oct 11' &&
+      h.assert(t.pointer && t.pointer.id === 'ets2024',
+        'with no upcoming plan mock the pointer keeps the first unsat form, got ' +
+        JSON.stringify(t.pointer));
+      h.assert(t.status === 'Next intact form' &&
         t.title === 'ETS Official Practice Test (2024)',
-        'with no upcoming plan mock the tile keeps the first unsat form, got ' + JSON.stringify(t));
-    } },
-
-  { name: 'a form with no plan date says Next intact form',
-    run: async function (page, h) {
-      await page.eval(function () {
-        PGRE.store.state.exams = [{ source: 'ets2024' }];
-        var extra = {
-          id: 'gr0877', title: 'GR0877 Released Exam (2008)', format: '100x170',
-          questions: [{
-            id: 'gr0877-q1', topic: 'cm', q: '<p>q</p>',
-            choices: ['a', 'b', 'c', 'd', 'e'], answer: 0
-          }]
-        };
-        var list = (PGRE.ETS_EXAMS || []).filter(function (ex) {
-          return !ex || String(ex.id).toLowerCase() !== 'gr0877';
-        });
-        PGRE.ETS_EXAMS = [extra].concat(list);
-        if (PGRE._resetBankCache) PGRE._resetBankCache();
-      });
-      await h.pinToday('2026-10-12');
-      await h.showDashboard();
-      var t = await h.tile();
-      h.assert(t.pointer && t.pointer.id === 'gr0877' && !t.pointer.scheduledFor,
-        'first unsat form with no plan date stays the pointer, got ' + JSON.stringify(t.pointer));
-      h.assert(t.status === 'Next intact form',
-        'tile wording is Next intact form, got ' + t.status);
-      h.assert(t.title === 'GR0877 Released Exam (2008)', 'tile title is the extra form, got ' + t.title);
+        'a past plan date is Next intact form, not Scheduled Oct 11, got ' + JSON.stringify(t));
     } }
 ];
 

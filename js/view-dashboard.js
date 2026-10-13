@@ -807,11 +807,14 @@ PGRE.views.dashboard = (function () {
   }
 
   /* Next unused intact ETS form. Never GR8677/GR9277 as a fresh test.
+     A sitting counts as sat only when submittedAt is set (in-progress
+     and weighted rows stay unsat).
      Keep the scheduled date with the pointer so the lobby can protect a
      future diagnostic from an accidental early click. When that first
-     unsat form's plan date is already before today, jump to the next
-     unsat plan mock on or after today; if none remain, keep the first
-     unsat form so a past diagnostic stays the lobby's "next mock". */
+     unsat form has no plan date, or its plan date is already before
+     today, jump to the next unsat plan mock on or after today; if none
+     remain, keep the first unsat form so a past diagnostic stays the
+     lobby's "next mock". */
   function mockScheduleDate(id) {
     var plan = PGRE.PLAN || [];
     for (var pi = 0; pi < plan.length; pi++) {
@@ -839,8 +842,10 @@ PGRE.views.dashboard = (function () {
   function nextMockPointer() {
     var sat = {};
     (PGRE.store.state.exams || []).forEach(function (x) {
-      /* Recorded sitting source only — never infer from format or length. */
-      if (x && x.source) sat[String(x.source).toLowerCase()] = true;
+      /* Recorded sitting source only — never infer from format or length.
+         submittedAt must be set; an in-progress row does not skip the form. */
+      if (!x || !x.submittedAt || !x.source || x.source === 'weighted') return;
+      sat[String(x.source).toLowerCase()] = true;
     });
     var skip = { gr8677: 1, gr9277: 1 };
     function catalogEntry(id) {
@@ -901,7 +906,7 @@ PGRE.views.dashboard = (function () {
     var first = firstUnsat();
     if (!first) return null;
     var today = mockTodayIso();
-    if (first.scheduledFor && first.scheduledFor < today) {
+    if (!first.scheduledFor || first.scheduledFor < today) {
       var upcoming = upcomingPlanMock(today);
       if (upcoming) return upcoming;
     }
@@ -1008,7 +1013,8 @@ PGRE.views.dashboard = (function () {
         '<p class="rq-count" id="formula-readiness" hidden></p></div>' +
         '<button type="button" class="btn btn-ghost btn-sm" id="today-formulas-btn">Study →</button></div>';
     if (mock) {
-      var mockWhen = mock.scheduledFor
+      var todayIso = mockTodayIso();
+      var mockWhen = (mock.scheduledFor && mock.scheduledFor >= todayIso)
         ? 'Scheduled ' + new Date(mock.scheduledFor + 'T12:00:00').toLocaleDateString('en-US', {
           month: 'short', day: 'numeric'
         })
