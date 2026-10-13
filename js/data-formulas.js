@@ -520,8 +520,8 @@ PGRE.FORMULAS = [
     topic: "th",
     tag: "Heat engines",
     name: "Refrigerator and heat-pump coefficients (supplemental list)",
-    front: "State the coefficient of performance of any refrigerator and of any heat pump, and both Carnot temperature ratios. (4)",
-    back: "<ul class=\"recall-list\"><li>Heat and work are positive quantities per cycle. Any refrigerator: $Q_c/W$.</li><li>Any heat pump: $Q_h/W$.</li><li>Carnot, absolute temperature, reversible between those two reservoirs: $Q_c/W = T_c/(T_h-T_c)$.</li><li>The Carnot heat pump is that result plus one: $Q_h/W = T_h/(T_h-T_c)$.</li></ul>",
+    front: "State the coefficient of performance of any refrigerator and of any heat pump, how the two are related, and both Carnot temperature ratios. (5)",
+    back: "<ul class=\"recall-list\"><li>Heat and work are positive quantities per cycle. Any refrigerator: $Q_c/W$.</li><li>Any heat pump: $Q_h/W$.</li><li>The heat pump is the refrigerator plus one, because $Q_h = Q_c + W$ over a cycle: $Q_h/W = (Q_c+W)/W = Q_c/W + 1$. A heat pump that takes no heat from outside ($Q_c = 0$) still turns $1\\,\\mathrm{J}$ of work into $1\\,\\mathrm{J}$ of heat indoors, so its coefficient is $1$; one that also moves heat in from outside has $Q_h/W \\gt 1$.</li><li>Carnot, absolute temperature, reversible between those two reservoirs: $Q_c/W = T_c/(T_h-T_c)$.</li><li>The Carnot heat pump is that result plus one: $Q_h/W = T_h/(T_h-T_c)$.</li></ul>",
     note: "Supplemental — not a numbered CPG equation. Engine efficiency $1-T_c/T_h$ stays on cpgf-4.37."
   },
   {
