@@ -1,6 +1,8 @@
 /* Inline 3D diagrams drawn on a recall-card back in place of that card's
    .recall-list. Registry is keyed by card id. Not a visualizer: no Lab
-   entry, no js/visualizers/ file. Drag rotates; wheel / pinch / buttons zoom. */
+   entry, no js/visualizers/ file. Drag rotates about the view centre;
+   shift-drag, right-drag, two-finger drag, or Move pans. Wheel / pinch
+   zoom toward the pointer. Reset restores the default view. */
 window.PGRE = window.PGRE || {};
 PGRE.cardDiagrams = PGRE.cardDiagrams || {};
 
@@ -94,6 +96,12 @@ var CD_PITCH0 = 0.42;
 var CD_ZOOM_MIN = 0.6;
 var CD_ZOOM_MAX = 3;
 var CD_ZOOM_0 = 1;
+var CD_OPT_Y = 0.56;
+var CD_DOUGHNUT_DASH = [2.8, 5.4];
+PGRE.cardDiagramStroke = {
+  doughnutDash: CD_DOUGHNUT_DASH.slice(),
+  vectorDash: []
+};
 PGRE.clampCardDiagramZoom = function (z) {
   z = Number(z);
   if (!isFinite(z) || z < CD_ZOOM_MIN) return CD_ZOOM_MIN;
@@ -124,17 +132,31 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
   var yaw = CD_YAW0;
   var pitch = CD_PITCH0;
   var zoom = CD_ZOOM_0;
+  var viewCenter = [0, 0, 0];
+  var panMode = false;
   var dragging = false;
+  var gesture = 'rotate';
   var lastX = 0;
   var lastY = 0;
   var pointerId = null;
   var pointers = {};
   var pinching = false;
+  var pinchWorld = null;
   var pinchStartDist = 0;
   var pinchStartZoom = CD_ZOOM_0;
   var lastNarrow = null;
+  var lastShortVec = null;
+  var lastTapAt = 0;
+  var lastTapX = 0;
+  var lastTapY = 0;
   var eradLong = '\\mathbf{E}_{\\mathrm{rad}}\\ (q>0:\\ \\text{opp. }\\mathbf{a}_\\perp)';
   var eradShort = '\\mathbf{E}_{\\mathrm{rad}}';
+  var patternLong = '\\text{power pattern }dP/d\\Omega\\sim\\sin^{2}\\theta\\text{ (not field lines)}';
+  var patternShort = 'dP/d\\Omega\\sim\\sin^{2}\\theta\\text{ (not field lines)}';
+  var hintLong = 'Drag rotate. Shift/right-drag or Move pans. Scroll zooms at pointer.';
+  var hintShort = 'Drag rotate. Move pans. Scroll zooms here.';
+  var centreLong = 'Centre on field point';
+  var centreShort = 'Centre';
 
   host.setAttribute('role', 'img');
   host.setAttribute('aria-label',
@@ -144,8 +166,11 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     'the line of sight and the acceleration, and is perpendicular to the line of ' +
     'sight. Its magnitude is proportional to sine of theta and the power per solid ' +
     'angle is proportional to sine squared theta: both are zero on the acceleration ' +
-    'axis and largest at ninety degrees. Drag to rotate. Scroll, pinch, or use the ' +
-    'zoom buttons to zoom. Reset returns zoom and rotation to the default view.');
+    'axis and largest at ninety degrees. The dashed rings are the angular power ' +
+    'pattern, not electric field lines. Drag to rotate about the view centre. ' +
+    'Shift-drag, right-drag, two-finger drag, or Move pans. Scroll or pinch zooms ' +
+    'toward the pointer. Centre on field point or double-click the field point to ' +
+    'inspect it. Reset returns centre, zoom, and rotation to the default view.');
   host.innerHTML =
     '<canvas></canvas>' +
     '<div class="card-diagram-labels" aria-hidden="true">' +
@@ -156,14 +181,17 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
       '<span class="cd-lab" data-lab="rhat"></span>' +
       '<span class="cd-lab" data-lab="erad"></span>' +
       '<span class="cd-lab" data-lab="theta"></span>' +
+      '<span class="cd-lab cd-lab-muted cd-lab-pattern" data-lab="pattern"></span>' +
       '<span class="cd-lab cd-lab-sm cd-lab-plane" data-lab="plane"></span>' +
       '<span class="cd-lab cd-lab-muted cd-lab-corner" data-lab="ang"></span>' +
     '</div>' +
-    '<p class="card-diagram-hint">Drag to rotate. Scroll or pinch to zoom.</p>' +
-    '<div class="card-diagram-zoom" role="group" aria-label="Zoom">' +
+    '<p class="card-diagram-hint">Drag rotate. Shift/right-drag or Move pans. Scroll zooms at pointer.</p>' +
+    '<div class="card-diagram-zoom" role="group" aria-label="View">' +
       '<button type="button" class="cd-zoom-btn" data-cd-zoom="in" aria-label="Zoom in">+</button>' +
       '<button type="button" class="cd-zoom-btn" data-cd-zoom="out" aria-label="Zoom out">\u2212</button>' +
       '<button type="button" class="cd-zoom-btn cd-zoom-reset" data-cd-zoom="reset" aria-label="Reset view">Reset</button>' +
+      '<button type="button" class="cd-zoom-btn" data-cd-pan aria-pressed="false" aria-label="Move view">Move</button>' +
+      '<button type="button" class="cd-zoom-btn cd-zoom-centre" data-cd-centre aria-label="Centre on field point">Centre on field point</button>' +
     '</div>';
 
   var canvas = host.querySelector('canvas');
@@ -171,13 +199,17 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
   host.querySelectorAll('.cd-lab').forEach(function (el) {
     labels[el.getAttribute('data-lab')] = el;
   });
+  var hintEl = host.querySelector('.card-diagram-hint');
+  var panBtn = host.querySelector('[data-cd-pan]');
+  var centreBtn = host.querySelector('[data-cd-centre]');
   renderTex(labels.q, 'q');
   renderTex(labels.a, '\\mathbf{a}');
   renderTex(labels.apar, '\\mathbf{a}_\\parallel');
   renderTex(labels.aperp, '\\mathbf{a}_\\perp');
   renderTex(labels.rhat, '\\hat{\\mathbf{r}}');
-  renderTex(labels.erad, '\\mathbf{E}_{\\mathrm{rad}}\\ (q>0:\\ \\text{opp. }\\mathbf{a}_\\perp)');
+  renderTex(labels.erad, eradLong);
   renderTex(labels.theta, '\\theta');
+  renderTex(labels.pattern, patternLong);
   renderTex(labels.plane, '\\text{plane of }\\hat{\\mathbf{r}},\\,\\mathbf{a}');
   renderTex(labels.ang,
     '\\begin{array}{c}|\\mathbf{E}_{\\mathrm{rad}}|\\propto\\sin\\theta\\\\' +
@@ -200,22 +232,49 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     return { w: w, h: h };
   }
 
-  function project(p) {
-    var cy = Math.cos(yaw), sy = Math.sin(yaw);
-    var x1 = p[0] * cy - p[1] * sy;
-    var y1 = p[0] * sy + p[1] * cy;
-    var z1 = p[2];
+  function scaleOf() {
+    return Math.min(W, H) / (W < 420 ? 6.0 : 7.3) * zoom;
+  }
+
+  function camToWorldDelta(cam) {
+    var x1 = cam[0], y2 = cam[1], z2 = cam[2];
     var cp = Math.cos(pitch), sp = Math.sin(pitch);
-    var y2 = y1 * cp - z1 * sp;
-    var z2 = y1 * sp + z1 * cp;
-    var scale = Math.min(W, H) / (W < 420 ? 6.0 : 7.3) * zoom;
-    var persp = 7.4 / (7.4 + y2);
+    var y1 = y2 * cp + z2 * sp;
+    var z1 = -y2 * sp + z2 * cp;
+    var cy = Math.cos(yaw), sy = Math.sin(yaw);
+    return [x1 * cy + y1 * sy, -x1 * sy + y1 * cy, z1];
+  }
+
+  function worldToCam(p) {
+    var q = vsub(p, viewCenter);
+    var cy = Math.cos(yaw), sy = Math.sin(yaw);
+    var x1 = q[0] * cy - q[1] * sy;
+    var y1 = q[0] * sy + q[1] * cy;
+    var z1 = q[2];
+    var cp = Math.cos(pitch), sp = Math.sin(pitch);
+    return [x1, y1 * cp - z1 * sp, y1 * sp + z1 * cp];
+  }
+
+  function camToWorld(cam) {
+    return vadd(viewCenter, camToWorldDelta(cam));
+  }
+
+  function project(p) {
+    var cam = worldToCam(p);
+    var sc = scaleOf();
+    var persp = 7.4 / (7.4 + cam[1]);
     return {
-      x: W / 2 + x1 * scale * persp,
-      y: H * 0.56 - z2 * scale * persp,
-      z: y2,
+      x: W / 2 + cam[0] * sc * persp,
+      y: H * CD_OPT_Y - cam[2] * sc * persp,
+      z: cam[1],
       k: persp
     };
+  }
+
+  function unprojectViewPlane(sx, sy) {
+    var sc = scaleOf();
+    if (sc < 1e-9) return viewCenter.slice();
+    return camToWorld([(sx - W / 2) / sc, 0, (H * CD_OPT_Y - sy) / sc]);
   }
 
   function token() {
@@ -231,16 +290,92 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
   }
 
   function place(el, p, dx, dy) {
+    if (!el) return;
     var s = project(p);
-    var x = s.x + (dx || 0);
-    var y = s.y + (dy || 0);
-    if (x < 18) x = 18;
-    if (x > W - 18) x = W - 18;
-    if (y < 14) y = 14;
-    if (y > H - 22) y = H - 22;
-    el.style.left = x + 'px';
-    el.style.top = y + 'px';
-    el.style.visibility = s.k > 0.15 ? 'visible' : 'hidden';
+    var pad = 10;
+    if (s.k <= 0.15 || s.x < -pad || s.x > W + pad || s.y < -pad || s.y > H + pad) {
+      el.style.visibility = 'hidden';
+      return;
+    }
+    el.style.visibility = 'visible';
+    el.style.left = (s.x + (dx || 0)) + 'px';
+    el.style.top = (s.y + (dy || 0)) + 'px';
+  }
+
+  function boxesOverlap(a, b) {
+    return a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom;
+  }
+
+  function resolveLabels() {
+    /* Teaching quantities first so the power caption yields space rather
+       than suppressing acceleration / angle names. Collision tries another
+       screen position; a label is hidden only when no on-panel seat remains. */
+    var order = ['erad', 'a', 'aperp', 'theta', 'rhat', 'q', 'apar', 'pattern'];
+    var hostR = host.getBoundingClientRect();
+    var inset = 2;
+    function boxOf(el) {
+      if (!el || el.style.visibility === 'hidden' || !el.getClientRects().length) return null;
+      var r = el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) return null;
+      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    }
+    var chrome = [];
+    (function collectChrome() {
+      var els = [hintEl, host.querySelector('.card-diagram-zoom'), labels.plane, labels.ang];
+      var k, b;
+      for (k = 0; k < els.length; k++) {
+        b = boxOf(els[k]);
+        if (b) chrome.push(b);
+      }
+    })();
+    function overlapsList(a, list) {
+      var k;
+      for (k = 0; k < list.length; k++) {
+        if (boxesOverlap(a, list[k])) return true;
+      }
+      return false;
+    }
+    function seatOk(a, placed) {
+      if (!a) return false;
+      if (a.left < hostR.left + inset || a.right > hostR.right - inset ||
+          a.top < hostR.top + inset || a.bottom > hostR.bottom - inset) return false;
+      if (overlapsList(a, chrome)) return false;
+      if (overlapsList(a, placed)) return false;
+      return true;
+    }
+    var radii = [0, 10, 18, 26, 36, 48, 62, 78];
+    var nAng = 12;
+    var i, el, a, left0, top0, ok, ri, ai, rad, ang, dx, dy, placed = [];
+    for (i = 0; i < order.length; i++) {
+      el = labels[order[i]];
+      a = boxOf(el);
+      if (!a) continue;
+      left0 = parseFloat(el.style.left) || 0;
+      top0 = parseFloat(el.style.top) || 0;
+      ok = false;
+      for (ri = 0; ri < radii.length && !ok; ri++) {
+        rad = radii[ri];
+        var turns = rad === 0 ? 1 : nAng;
+        for (ai = 0; ai < turns; ai++) {
+          ang = (2 * Math.PI * ai) / turns;
+          dx = Math.round(rad * Math.cos(ang));
+          dy = Math.round(rad * Math.sin(ang));
+          el.style.left = (left0 + dx) + 'px';
+          el.style.top = (top0 + dy) + 'px';
+          a = boxOf(el);
+          if (seatOk(a, placed)) {
+            ok = true;
+            placed.push(a);
+            break;
+          }
+        }
+      }
+      if (!ok) {
+        el.style.left = left0 + 'px';
+        el.style.top = top0 + 'px';
+        el.style.visibility = 'hidden';
+      }
+    }
   }
 
   function drawArrow(from, to, color, width, dashed) {
@@ -270,13 +405,15 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     ctx.restore();
   }
 
-  function drawPolyline(pts, color, width, alpha) {
+  function drawPolyline(pts, color, width, alpha, dashed) {
     if (pts.length < 2) return;
     ctx.save();
     ctx.globalAlpha = alpha == null ? 1 : alpha;
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
     ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    if (dashed) ctx.setLineDash(CD_DOUGHNUT_DASH);
     ctx.beginPath();
     var p0 = project(pts[0]);
     ctx.moveTo(p0.x, p0.y);
@@ -285,6 +422,7 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
       ctx.lineTo(p.x, p.y);
     }
     ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
   }
 
@@ -370,22 +508,35 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
+    clampPan();
     var narrow = W < 420;
     if (narrow) host.classList.add('is-narrow');
     else host.classList.remove('is-narrow');
+    var shortVec = narrow || zoom < 0.85;
     if (narrow !== lastNarrow) {
       lastNarrow = narrow;
-      renderTex(labels.erad, narrow ? eradShort : eradLong);
+      if (hintEl) hintEl.textContent = panMode ? 'Drag to pan.' : (narrow ? hintShort : hintLong);
+      if (centreBtn) centreBtn.textContent = narrow ? centreShort : centreLong;
+      renderTex(labels.pattern, narrow ? patternShort : patternLong);
+    }
+    if (shortVec !== lastShortVec) {
+      lastShortVec = shortVec;
+      renderTex(labels.erad, shortVec ? eradShort : eradLong);
     }
     var c = token();
     host.setAttribute('data-yaw', String(yaw));
     host.setAttribute('data-pitch', String(pitch));
     host.setAttribute('data-zoom', zoom.toFixed(3));
+    host.setAttribute('data-cx', viewCenter[0].toFixed(4));
+    host.setAttribute('data-cy', viewCenter[1].toFixed(4));
+    host.setAttribute('data-cz', viewCenter[2].toFixed(4));
+    host.setAttribute('data-pan', panMode ? '1' : '0');
     host.setAttribute('data-ink', c.ink);
+    host.classList.toggle('is-move', panMode);
 
     var i;
     for (i = 0; i < doughnut.length; i++) {
-      drawPolyline(doughnut[i], c.ink3, 1.1, 0.45);
+      drawPolyline(doughnut[i], c.ink3, 1.15, 0.55, true);
     }
 
     var quad = planeQuad();
@@ -407,8 +558,8 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     ctx.stroke();
     ctx.restore();
 
-    drawPolyline([vec.origin, vec.field], c.ink2, 1.4, 1);
-    drawArrow(vec.origin, vec.aPar, c.ink2, 1.6, true);
+    drawPolyline([vec.origin, vec.field], c.ink2, 1.4, 1, false);
+    drawArrow(vec.origin, vec.aPar, c.ink2, 1.6, false);
     drawArrow(vec.origin, vec.aPerp, c.good, 2.1, false);
     drawArrow(vec.origin, vec.a, c.ink, 2.4, false);
     var rHatTip = vadd(vec.field, vscale(vec.rHat, 0.72));
@@ -441,10 +592,23 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     if (narrow) {
       place(labels.erad, vadd(vec.field, vec.eRad), 22, 28);
     } else {
-      place(labels.erad, vadd(vec.field, vec.eRad), 36, 6);
+      place(labels.erad, vadd(vec.field, vec.eRad), zoom < 0.85 ? 28 : 36, zoom < 0.85 ? 18 : 6);
     }
     var thLab = [0.78 * Math.sin(vec.theta * 0.5), 0, 0.78 * Math.cos(vec.theta * 0.5)];
-    place(labels.theta, thLab, narrow ? 8 : 10, narrow ? 14 : -6);
+    place(labels.theta, thLab, narrow ? 8 : 10, narrow ? 18 : (zoom < 0.85 ? 16 : -6));
+    /* Equatorial +y lobe of the power doughnut, off the xz vector plane. */
+    var pat = [0, 0.92, 0];
+    place(labels.pattern, pat, 0, narrow ? -20 : -16);
+
+    var oScr = project(vec.origin);
+    var fScr = project(vec.field);
+    host.setAttribute('data-ox', oScr.x.toFixed(2));
+    host.setAttribute('data-oy', oScr.y.toFixed(2));
+    host.setAttribute('data-fx', fScr.x.toFixed(2));
+    host.setAttribute('data-fy', fScr.y.toFixed(2));
+    host.setAttribute('data-ocx', (W / 2).toFixed(2));
+    host.setAttribute('data-ocy', (H * CD_OPT_Y).toFixed(2));
+    resolveLabels();
   }
 
   function pointerCount() {
@@ -460,12 +624,153 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     var a = pointers[ids[0]], b = pointers[ids[1]];
     return Math.hypot(a.x - b.x, a.y - b.y);
   }
+  function pinchMid() {
+    var ids = Object.keys(pointers);
+    if (ids.length < 2) return { x: 0, y: 0 };
+    var a = pointers[ids[0]], b = pointers[ids[1]];
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
   function isZoomControl(el) {
     return !!(el && el.closest && el.closest('.card-diagram-zoom'));
   }
 
+  function clientToLocal(cx, cy) {
+    var r = canvas.getBoundingClientRect();
+    var rw = r.width || 1, rh = r.height || 1;
+    return {
+      x: (cx - r.left) * (W / rw),
+      y: (cy - r.top) * (H / rh)
+    };
+  }
+
+  function panByScreen(dsx, dsy, skipClamp) {
+    var sc = scaleOf();
+    if (sc < 1e-9) return;
+    viewCenter = vadd(viewCenter, camToWorldDelta([-dsx / sc, 0, dsy / sc]));
+    if (!skipClamp) clampPan();
+  }
+
+  function keepWorldAt(world, sx, sy, skipClamp) {
+    var i, cur, dsx, dsy, cam, sc, persp, k;
+    for (i = 0; i < 6; i++) {
+      cur = project(world);
+      dsx = sx - cur.x;
+      dsy = sy - cur.y;
+      if (Math.hypot(dsx, dsy) < 0.05) break;
+      cam = worldToCam(world);
+      sc = scaleOf();
+      persp = 7.4 / (7.4 + cam[1]);
+      k = sc * persp;
+      if (Math.abs(k) < 1e-9) break;
+      viewCenter = vadd(viewCenter, camToWorldDelta([-dsx / k, 0, dsy / k]));
+    }
+    if (!skipClamp) clampPan();
+  }
+
+  function keyWorldPoints() {
+    return [vec.origin, vec.field];
+  }
+
+  function pointOnPanel(s, pad) {
+    return s && s.k > 0.25 &&
+      s.x >= pad && s.x <= W - pad &&
+      s.y >= pad && s.y <= H - pad;
+  }
+
+  function clampPan() {
+    var pad = 24;
+    var pts = keyWorldPoints();
+    var i, s, bestI = 0, bestD = Infinity, cx = W / 2, cy = H * CD_OPT_Y;
+    var visible = false;
+    for (i = 0; i < pts.length; i++) {
+      s = project(pts[i]);
+      if (pointOnPanel(s, pad)) visible = true;
+      var d = Math.hypot(s.x - cx, s.y - cy);
+      if (s.k > 0.15 && d < bestD) {
+        bestD = d;
+        bestI = i;
+      }
+    }
+    if (visible) return;
+    s = project(pts[bestI]);
+    var tx = s.x, ty = s.y;
+    if (tx > W - pad) tx = W - pad;
+    if (tx < pad) tx = pad;
+    if (ty > H - pad) ty = H - pad;
+    if (ty < pad) ty = pad;
+    keepWorldAt(pts[bestI], tx, ty, true);
+    if (pointOnPanel(project(pts[0]), pad) || pointOnPanel(project(pts[1]), pad)) return;
+    keepWorldAt(vec.origin, cx, cy, true);
+    if (pointOnPanel(project(vec.origin), pad) || pointOnPanel(project(vec.field), pad)) return;
+    viewCenter = vec.origin.slice();
+  }
+
+  function worldUnderPointer(sx, sy) {
+    var hits = [
+      { p: vec.field, r: 28 },
+      { p: vec.origin, r: 18 },
+      { p: viewCenter, r: 18 }
+    ];
+    var best = null, bestD = 1e9, i, s, d;
+    for (i = 0; i < hits.length; i++) {
+      s = project(hits[i].p);
+      d = Math.hypot(s.x - sx, s.y - sy);
+      if (d < hits[i].r && d < bestD) {
+        best = hits[i].p;
+        bestD = d;
+      }
+    }
+    if (best) return best.slice();
+    return unprojectViewPlane(sx, sy);
+  }
+
+  function zoomAtScreen(sx, sy, newZoom) {
+    newZoom = PGRE.clampCardDiagramZoom(newZoom);
+    if (newZoom === zoom) return;
+    var world = worldUnderPointer(sx, sy);
+    var before = project(world);
+    zoom = newZoom;
+    keepWorldAt(world, before.x, before.y);
+  }
+
+  function centreOnField() {
+    viewCenter = vec.field.slice();
+    draw();
+  }
+
+  function resetView() {
+    zoom = CD_ZOOM_0;
+    yaw = CD_YAW0;
+    pitch = CD_PITCH0;
+    viewCenter = [0, 0, 0];
+    draw();
+  }
+
+  function setPanMode(on) {
+    panMode = !!on;
+    if (panBtn) panBtn.setAttribute('aria-pressed', panMode ? 'true' : 'false');
+    if (hintEl) hintEl.textContent = panMode ? 'Drag to pan.' : (W < 420 ? hintShort : hintLong);
+    host.classList.toggle('is-move', panMode);
+    host.setAttribute('data-pan', panMode ? '1' : '0');
+  }
+
+  function nearFieldClient(cx, cy) {
+    var loc = clientToLocal(cx, cy);
+    var f = project(vec.field);
+    if (Math.hypot(loc.x - f.x, loc.y - f.y) < 28) return true;
+    var ids = ['rhat', 'erad'];
+    var i, el, r;
+    for (i = 0; i < ids.length; i++) {
+      el = labels[ids[i]];
+      if (!el || el.style.visibility === 'hidden') continue;
+      r = el.getBoundingClientRect();
+      if (cx >= r.left - 4 && cx <= r.right + 4 && cy >= r.top - 4 && cy <= r.bottom + 4) return true;
+    }
+    return false;
+  }
+
   function onDown(ev) {
-    if (ev.button != null && ev.button !== 0) return;
+    if (ev.button != null && ev.button !== 0 && ev.button !== 2) return;
     if (isZoomControl(ev.target)) return;
     pointers[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
     if (pointerCount() >= 2) {
@@ -473,12 +778,30 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
       pinching = true;
       pinchStartDist = pinchDist();
       pinchStartZoom = zoom;
+      var mid = pinchMid();
+      var loc = clientToLocal(mid.x, mid.y);
+      pinchWorld = worldUnderPointer(loc.x, loc.y);
       host.classList.remove('is-dragging');
       if (ev.cancelable) ev.preventDefault();
       ev.stopPropagation();
       return;
     }
+    var now = Date.now();
+    if ((ev.pointerType === 'touch' || ev.pointerType === 'pen') &&
+        now - lastTapAt < 350 &&
+        Math.hypot(ev.clientX - lastTapX, ev.clientY - lastTapY) < 28 &&
+        nearFieldClient(ev.clientX, ev.clientY)) {
+      lastTapAt = 0;
+      centreOnField();
+      if (ev.cancelable) ev.preventDefault();
+      ev.stopPropagation();
+      return;
+    }
+    lastTapAt = now;
+    lastTapX = ev.clientX;
+    lastTapY = ev.clientY;
     dragging = true;
+    gesture = (ev.button === 2 || ev.shiftKey || panMode) ? 'pan' : 'rotate';
     lastX = ev.clientX;
     lastY = ev.clientY;
     pointerId = ev.pointerId;
@@ -493,10 +816,13 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     }
     if (pinching && pointerCount() >= 2) {
       var d = pinchDist();
+      var mid = pinchMid();
+      var loc = clientToLocal(mid.x, mid.y);
       if (pinchStartDist > 1 && d > 1) {
         zoom = PGRE.clampCardDiagramZoom(pinchStartZoom * (d / pinchStartDist));
-        draw();
       }
+      if (pinchWorld) keepWorldAt(pinchWorld, loc.x, loc.y);
+      draw();
       if (ev.cancelable) ev.preventDefault();
       return;
     }
@@ -506,16 +832,27 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     var dy = ev.clientY - lastY;
     lastX = ev.clientX;
     lastY = ev.clientY;
-    yaw += dx * 0.008;
-    pitch += dy * 0.008;
-    if (pitch > 1.2) pitch = 1.2;
-    if (pitch < -1.2) pitch = -1.2;
+    var r = canvas.getBoundingClientRect();
+    var sx = dx * (W / (r.width || 1));
+    var sy = dy * (H / (r.height || 1));
+    if (gesture === 'pan') {
+      panByScreen(sx, sy);
+    } else {
+      yaw += dx * 0.008;
+      pitch += dy * 0.008;
+      if (pitch > 1.2) pitch = 1.2;
+      if (pitch < -1.2) pitch = -1.2;
+      clampPan();
+    }
     draw();
     if (ev.cancelable) ev.preventDefault();
   }
   function onUp(ev) {
     delete pointers[ev.pointerId];
-    if (pointerCount() < 2) pinching = false;
+    if (pointerCount() < 2) {
+      pinching = false;
+      pinchWorld = null;
+    }
     if (pointerId != null && ev.pointerId !== pointerId && pointerCount() > 0) return;
     dragging = false;
     pointerId = null;
@@ -529,17 +866,37 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     if (ev.deltaMode === 1) dy *= 16;
     if (ev.deltaMode === 2) dy *= 120;
     var k = ev.ctrlKey ? 0.012 : 0.0022;
-    zoom = PGRE.clampCardDiagramZoom(zoom * Math.exp(-dy * k));
+    var next = PGRE.clampCardDiagramZoom(zoom * Math.exp(-dy * k));
+    var rect = host.getBoundingClientRect();
+    var cx = ev.clientX, cy = ev.clientY;
+    if (cx >= rect.left && cx <= rect.right && cy >= rect.top && cy <= rect.bottom &&
+        (cx !== 0 || cy !== 0)) {
+      var loc = clientToLocal(cx, cy);
+      zoomAtScreen(loc.x, loc.y, next);
+    } else {
+      zoom = next;
+    }
     draw();
+  }
+
+  function onDblClick(ev) {
+    if (isZoomControl(ev.target)) return;
+    if (nearFieldClient(ev.clientX, ev.clientY)) {
+      ev.preventDefault();
+      centreOnField();
+    }
+  }
+
+  function onContextMenu(ev) {
+    ev.preventDefault();
   }
 
   function applyZoomOp(op) {
     if (op === 'in') zoom = PGRE.clampCardDiagramZoom(zoom * 1.25);
     else if (op === 'out') zoom = PGRE.clampCardDiagramZoom(zoom / 1.25);
     else if (op === 'reset') {
-      zoom = CD_ZOOM_0;
-      yaw = CD_YAW0;
-      pitch = CD_PITCH0;
+      resetView();
+      return;
     }
     draw();
   }
@@ -550,10 +907,20 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
   host.addEventListener('pointercancel', onUp);
   host.addEventListener('lostpointercapture', onUp);
   host.addEventListener('wheel', onWheel, { passive: false });
-  host.querySelectorAll('[data-cd-zoom]').forEach(function (btn) {
+  host.addEventListener('dblclick', onDblClick);
+  host.addEventListener('contextmenu', onContextMenu);
+  host.querySelectorAll('.card-diagram-zoom button').forEach(function (btn) {
     btn.addEventListener('click', function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
+      if (btn.hasAttribute('data-cd-pan')) {
+        setPanMode(!panMode);
+        return;
+      }
+      if (btn.hasAttribute('data-cd-centre')) {
+        centreOnField();
+        return;
+      }
       applyZoomOp(btn.getAttribute('data-cd-zoom'));
     });
     btn.addEventListener('pointerdown', function (ev) { ev.stopPropagation(); });

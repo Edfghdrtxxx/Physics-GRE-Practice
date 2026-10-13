@@ -161,5 +161,43 @@ assert(css.indexOf('.card-diagram-zoom') !== -1 &&
   css.indexOf('touch-action: none') !== -1,
   'zoom controls are styled and the host keeps touch-action: none');
 
+console.log('\npower-pattern rings and pan/recentre wiring');
+assert(Array.isArray(PGRE.cardDiagramStroke.doughnutDash) &&
+  PGRE.cardDiagramStroke.doughnutDash.length >= 2,
+  'rings use a dash pattern');
+assert(Array.isArray(PGRE.cardDiagramStroke.vectorDash) &&
+  PGRE.cardDiagramStroke.vectorDash.length === 0,
+  'vectors are solid (empty dash)');
+assert(PGRE.cardDiagramStroke.doughnutDash.join(',') !==
+  PGRE.cardDiagramStroke.vectorDash.join(','),
+  'ring dash style differs from vectors');
+assert(diagramsSrc.indexOf('data-lab="pattern"') !== -1 &&
+  diagramsSrc.indexOf('not field lines') !== -1,
+  'a KaTeX power-pattern label sits on the rings');
+assert(diagramsSrc.indexOf('data-cd-pan') !== -1,
+  'a Move toggle is in the diagram markup');
+assert(diagramsSrc.indexOf('data-cd-centre') !== -1 &&
+  diagramsSrc.indexOf('Centre on field point') !== -1,
+  'a Centre on field point control is in the diagram markup');
+assert(diagramsSrc.indexOf('data-cx') !== -1 &&
+  diagramsSrc.indexOf('viewCenter') !== -1,
+  'the view centre is published for pan and recentre');
+assert(diagramsSrc.indexOf('contextmenu') !== -1,
+  'right-drag pan suppresses the context menu over the diagram');
+assert(css.indexOf('.cd-lab-pattern') !== -1 &&
+  css.indexOf('.card-diagram-host.is-move') !== -1,
+  'pattern label and Move cursor are styled');
+assert(diagramsSrc.indexOf('W * 0.28') === -1 &&
+  diagramsSrc.indexOf('H * 0.38') === -1,
+  'the power caption is not pinned to a fixed panel position');
+var pitchAt = diagramsSrc.indexOf('pitch += dy');
+var clampAfterPitch = diagramsSrc.indexOf('clampPan()', pitchAt);
+assert(pitchAt >= 0 && clampAfterPitch > pitchAt && clampAfterPitch < pitchAt + 280,
+  'rotation re-applies the pan clamp');
+assert(!/boxesOverlap\(a, b\)[\s\S]{0,120}visibility = 'hidden'/.test(diagramsSrc),
+  'label-to-label collision finds another position instead of hiding');
+assert(diagramsSrc.indexOf("order = ['erad', 'a', 'aperp', 'theta'") !== -1,
+  'teaching-quantity labels are placed before the power caption');
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

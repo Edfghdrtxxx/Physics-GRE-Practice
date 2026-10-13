@@ -52,6 +52,15 @@ function staticChecks() {
     'zoom buttons and a non-passive wheel listener are present');
   check(css.indexOf('.card-diagram-zoom') !== -1,
     'style.css styles the zoom control cluster');
+  check(diagrams.indexOf('data-lab="pattern"') !== -1 &&
+    diagrams.indexOf('not field lines') !== -1,
+    'the diagram labels the dashed rings as the power pattern');
+  check(diagrams.indexOf('data-cd-pan') !== -1 &&
+    diagrams.indexOf('data-cd-centre') !== -1,
+    'Move and Centre controls are present');
+  check(css.indexOf('touch-action: none') !== -1 &&
+    diagrams.indexOf('touch-action') === -1,
+    'touch-action stays in CSS');
 }
 
 async function helpers(page) {
@@ -191,6 +200,8 @@ async function helpers(page) {
       document.querySelectorAll('#fcard-actions button, #fcard-actions a, #fcard-actions span').forEach(function (el) {
         similarBtns.push((el.textContent || '').trim());
       });
+      var pattern = host && host.querySelector('[data-lab="pattern"]');
+      var hint = host && host.querySelector('.card-diagram-hint');
       return JSON.stringify({
         name: name ? name.textContent.trim() : '',
         hidden: !!(back && back.hidden),
@@ -201,7 +212,20 @@ async function helpers(page) {
         yaw: host ? host.getAttribute('data-yaw') : '',
         pitch: host ? host.getAttribute('data-pitch') : '',
         zoom: host ? host.getAttribute('data-zoom') : '',
+        cx: host ? host.getAttribute('data-cx') : '',
+        cy: host ? host.getAttribute('data-cy') : '',
+        cz: host ? host.getAttribute('data-cz') : '',
+        fx: host ? host.getAttribute('data-fx') : '',
+        fy: host ? host.getAttribute('data-fy') : '',
+        ox: host ? host.getAttribute('data-ox') : '',
+        oy: host ? host.getAttribute('data-oy') : '',
+        ocx: host ? host.getAttribute('data-ocx') : '',
+        ocy: host ? host.getAttribute('data-ocy') : '',
+        pan: host ? host.getAttribute('data-pan') : '',
         ink: host ? host.getAttribute('data-ink') : '',
+        patternText: pattern ? (pattern.textContent || '') : '',
+        patternVisible: !!(pattern && getComputedStyle(pattern).visibility !== 'hidden'),
+        hintText: hint ? (hint.textContent || '') : '',
         hasCanvas: !!canvas,
         canvasW: canvas ? canvas.width : 0,
         canvasH: canvas ? canvas.height : 0,
@@ -281,6 +305,127 @@ async function helpers(page) {
     }));
   };
 
+  h.requiredLabels = async function () {
+    return JSON.parse(await page.eval(function () {
+      var host = document.querySelector('[data-card-diagram]');
+      var need = ['q', 'a', 'apar', 'aperp', 'rhat', 'erad', 'theta', 'pattern'];
+      var missing = [], i, el, ok;
+      for (i = 0; i < need.length; i++) {
+        el = host && host.querySelector('.cd-lab[data-lab="' + need[i] + '"]');
+        ok = !!(el && getComputedStyle(el).visibility !== 'hidden' &&
+          el.getClientRects().length);
+        if (!ok) missing.push(need[i]);
+      }
+      return JSON.stringify({ missing: missing, ok: missing.length === 0 });
+    }));
+  };
+
+  h.labelsInside = async function () {
+    return JSON.parse(await page.eval(function () {
+      var host = document.querySelector('[data-card-diagram]');
+      if (!host) return JSON.stringify({ ok: true, clipped: [] });
+      var hr = host.getBoundingClientRect();
+      var clipped = [];
+      host.querySelectorAll('.cd-lab').forEach(function (el) {
+        if (getComputedStyle(el).visibility === 'hidden' || !el.getClientRects().length) return;
+        var r = el.getBoundingClientRect();
+        var slop = 1.5;
+        if (r.left < hr.left - slop || r.right > hr.right + slop ||
+            r.top < hr.top - slop || r.bottom > hr.bottom + slop) {
+          clipped.push(el.getAttribute('data-lab'));
+        }
+      });
+      return JSON.stringify({ ok: clipped.length === 0, clipped: clipped });
+    }));
+  };
+
+  h.paintedCount = async function () {
+    return Number(await page.eval(function () {
+      var host = document.querySelector('[data-card-diagram]');
+      var canvas = host && host.querySelector('canvas');
+      if (!canvas) return 0;
+      var ctx = canvas.getContext('2d');
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      var n = 0, i;
+      for (i = 3; i < img.length; i += 4) {
+        if (img[i] > 8) n++;
+      }
+      return n;
+    }));
+  };
+
+  h.uiOverlap = async function () {
+    return JSON.parse(await page.eval(function () {
+      var host = document.querySelector('[data-card-diagram]');
+      if (!host) return JSON.stringify({ max: 0, pair: '', n: 0 });
+      var nodes = [];
+      host.querySelectorAll('.cd-lab').forEach(function (el) {
+        if (!el.getClientRects().length) return;
+        if (getComputedStyle(el).visibility === 'hidden') return;
+        nodes.push({ id: el.getAttribute('data-lab') || 'lab', r: el.getBoundingClientRect() });
+      });
+      var hint = host.querySelector('.card-diagram-hint');
+      if (hint && hint.getClientRects().length && getComputedStyle(hint).visibility !== 'hidden') {
+        nodes.push({ id: 'hint', r: hint.getBoundingClientRect() });
+      }
+      var zoom = host.querySelector('.card-diagram-zoom');
+      if (zoom && zoom.getClientRects().length) {
+        nodes.push({ id: 'zoom', r: zoom.getBoundingClientRect() });
+      }
+      var i, j, a, b, x, y, area, max = 0, pair = '';
+      for (i = 0; i < nodes.length; i++) {
+        for (j = i + 1; j < nodes.length; j++) {
+          a = nodes[i].r;
+          b = nodes[j].r;
+          x = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+          y = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+          area = x * y;
+          if (area > max) {
+            max = area;
+            pair = nodes[i].id + '+' + nodes[j].id;
+          }
+        }
+      }
+      return JSON.stringify({ max: max, pair: pair, n: nodes.length });
+    }));
+  };
+
+  h.scrollDiagram = async function () {
+    await page.eval(function () {
+      var host = document.querySelector('[data-card-diagram]');
+      if (host && host.scrollIntoView) host.scrollIntoView({ block: 'center' });
+    });
+    await sleep(200);
+  };
+
+  h.panDiagram = async function () {
+    await page.eval(function () {
+      var host = document.querySelector('[data-card-diagram]');
+      var canvas = host && host.querySelector('canvas');
+      if (!canvas) throw new Error('no diagram canvas');
+      var r = canvas.getBoundingClientRect();
+      var x = r.left + r.width * 0.4;
+      var y = r.top + r.height * 0.45;
+      function fire(type, cx, cy) {
+        host.dispatchEvent(new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          pointerId: 7,
+          pointerType: 'mouse',
+          clientX: cx,
+          clientY: cy,
+          shiftKey: true,
+          button: 0,
+          buttons: type === 'pointerup' ? 0 : 1
+        }));
+      }
+      fire('pointerdown', x, y);
+      fire('pointermove', x + 70, y + 24);
+      fire('pointerup', x + 70, y + 24);
+    });
+    await sleep(150);
+  };
+
   return h;
 }
 
@@ -323,6 +468,26 @@ var STAGES = [
       });
       h.assert(/Supplemental/.test(note),
         'the note line still renders under the diagram');
+      h.assert(snap.patternVisible && /not field/i.test(snap.patternText),
+        'the power-pattern label is on the rings (got "' + snap.patternText + '")');
+      var stroke = JSON.parse(await page.eval(function () {
+        return JSON.stringify(PGRE.cardDiagramStroke || {});
+      }));
+      h.assert(stroke.doughnutDash && stroke.doughnutDash.length >= 2 &&
+        (!stroke.vectorDash || stroke.vectorDash.length === 0),
+        'ring dash style differs from solid vectors');
+      h.assert(/Move pans|Move pan/i.test(snap.hintText),
+        'the hint names pan (got "' + snap.hintText + '")');
+      var ov0 = await h.uiOverlap();
+      h.assert(ov0.max === 0,
+        'no labels or chrome overlap at default view (got ' + ov0.max + ' px^2 on ' + ov0.pair + ')');
+      var req = await h.requiredLabels();
+      h.assert(req.ok,
+        'default view keeps the teaching labels visible (missing ' + req.missing.join(',') + ')');
+      var inside0 = await h.labelsInside();
+      h.assert(inside0.ok,
+        'default labels sit inside the panel (clipped ' + inside0.clipped.join(',') + ')');
+      await h.scrollDiagram();
     } },
 
   { name: 'pointer drag changes the projected view', shot: '03-back-rotated',
@@ -377,6 +542,8 @@ var STAGES = [
       h.assert(Math.abs(Number(snap.yaw) - 1.08) < 1e-6, 'reset restores yaw 1.08');
       h.assert(Math.abs(Number(snap.pitch) - 0.42) < 1e-6, 'reset restores pitch 0.42');
       h.assert(Math.abs(Number(snap.zoom) - 1) < 1e-6, 'reset restores zoom 1');
+      h.assert(Math.abs(Number(snap.cx)) < 1e-3 && Math.abs(Number(snap.cy)) < 1e-3 &&
+        Math.abs(Number(snap.cz)) < 1e-3, 'reset restores the view centre to the charge');
     } },
 
   { name: 'wheel over the diagram does not scroll the page',
@@ -421,6 +588,402 @@ var STAGES = [
       await h.clickZoom('reset');
     } },
 
+  { name: 'shift-drag pans the view centre without changing rotation', shot: '11-panned',
+    run: async function (page, h) {
+      await h.clickZoom('reset');
+      var before = await h.snapBack();
+      await h.panDiagram();
+      var after = await h.snapBack();
+      h.assert(after.yaw === before.yaw && after.pitch === before.pitch,
+        'pan keeps yaw/pitch (yaw ' + before.yaw + ' -> ' + after.yaw + ')');
+      h.assert(after.cx !== before.cx || after.cy !== before.cy || after.cz !== before.cz,
+        'pan changes the view centre');
+      h.assert(after.fx !== before.fx || after.fy !== before.fy,
+        'pan moves the field point on screen');
+      await h.scrollDiagram();
+    } },
+
+  { name: 'Move toggle makes a plain drag pan',
+    run: async function (page, h) {
+      await h.clickZoom('reset');
+      await page.eval(function () {
+        var b = document.querySelector('[data-cd-pan]');
+        if (!b) throw new Error('missing Move');
+        b.click();
+      });
+      await h.sleep(80);
+      var before = await h.snapBack();
+      h.assert(before.pan === '1', 'Move is pressed');
+      await page.eval(function () {
+        var host = document.querySelector('[data-card-diagram]');
+        var canvas = host.querySelector('canvas');
+        var r = canvas.getBoundingClientRect();
+        var x = r.left + r.width * 0.45;
+        var y = r.top + r.height * 0.5;
+        function fire(type, cx, cy) {
+          host.dispatchEvent(new PointerEvent(type, {
+            bubbles: true, cancelable: true, pointerId: 3, pointerType: 'mouse',
+            clientX: cx, clientY: cy, button: 0, buttons: type === 'pointerup' ? 0 : 1
+          }));
+        }
+        fire('pointerdown', x, y);
+        fire('pointermove', x + 60, y - 20);
+        fire('pointerup', x + 60, y - 20);
+      });
+      await h.sleep(120);
+      var after = await h.snapBack();
+      h.assert(after.yaw === before.yaw && after.pitch === before.pitch,
+        'Move-drag keeps rotation');
+      h.assert(after.cx !== before.cx || after.cy !== before.cy || after.cz !== before.cz,
+        'Move-drag pans the view centre');
+      await page.eval(function () { document.querySelector('[data-cd-pan]').click(); });
+    } },
+
+  { name: 'two-finger drag pans while pinch still zooms',
+    run: async function (page, h) {
+      await h.clickZoom('reset');
+      var before = await h.snapBack();
+      await page.eval(function () {
+        var host = document.querySelector('[data-card-diagram]');
+        var canvas = host.querySelector('canvas');
+        var r = canvas.getBoundingClientRect();
+        var x = r.left + r.width * 0.4;
+        var y = r.top + r.height * 0.45;
+        function fire(type, id, cx, cy) {
+          host.dispatchEvent(new PointerEvent(type, {
+            bubbles: true, cancelable: true, pointerId: id, pointerType: 'touch',
+            clientX: cx, clientY: cy, button: 0, buttons: type === 'pointerup' ? 0 : 1
+          }));
+        }
+        fire('pointerdown', 11, x, y);
+        fire('pointerdown', 12, x + 40, y);
+        fire('pointermove', 11, x + 50, y + 10);
+        fire('pointermove', 12, x + 90, y + 10);
+        fire('pointerup', 11, x + 50, y + 10);
+        fire('pointerup', 12, x + 90, y + 10);
+      });
+      await h.sleep(150);
+      var panned = await h.snapBack();
+      h.assert(panned.yaw === before.yaw && panned.pitch === before.pitch,
+        'two-finger translate keeps rotation');
+      h.assert(panned.cx !== before.cx || panned.cy !== before.cy || panned.cz !== before.cz,
+        'two-finger translate pans');
+      h.assert(Math.abs(Number(panned.zoom) - Number(before.zoom)) < 1e-3,
+        'two-finger translate does not zoom');
+      await h.clickZoom('reset');
+      var z0 = await h.snapBack();
+      await page.eval(function () {
+        var host = document.querySelector('[data-card-diagram]');
+        var canvas = host.querySelector('canvas');
+        var r = canvas.getBoundingClientRect();
+        var x = r.left + r.width * 0.5;
+        var y = r.top + r.height * 0.5;
+        function fire(type, id, cx, cy) {
+          host.dispatchEvent(new PointerEvent(type, {
+            bubbles: true, cancelable: true, pointerId: id, pointerType: 'touch',
+            clientX: cx, clientY: cy, button: 0, buttons: type === 'pointerup' ? 0 : 1
+          }));
+        }
+        fire('pointerdown', 21, x - 20, y);
+        fire('pointerdown', 22, x + 20, y);
+        fire('pointermove', 21, x - 45, y);
+        fire('pointermove', 22, x + 45, y);
+        fire('pointerup', 21, x - 45, y);
+        fire('pointerup', 22, x + 45, y);
+      });
+      await h.sleep(150);
+      var pinched = await h.snapBack();
+      h.assert(Number(pinched.zoom) > Number(z0.zoom),
+        'two-finger pinch zooms (' + z0.zoom + ' -> ' + pinched.zoom + ')');
+    } },
+
+  { name: 'wheel zoom toward the pointer keeps that point fixed',
+    run: async function (page, h) {
+      await h.clickZoom('reset');
+      var before = await h.snapBack();
+      var out = JSON.parse(await page.eval(function () {
+        var host = document.querySelector('[data-card-diagram]');
+        var canvas = host.querySelector('canvas');
+        var r = canvas.getBoundingClientRect();
+        var fx = Number(host.getAttribute('data-fx'));
+        var fy = Number(host.getAttribute('data-fy'));
+        var cw = canvas.clientWidth || r.width;
+        var ch = canvas.clientHeight || r.height;
+        var clientX = r.left + fx * (r.width / cw);
+        var clientY = r.top + fy * (r.height / ch);
+        var ev = new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          deltaY: -140,
+          deltaMode: 0,
+          clientX: clientX,
+          clientY: clientY
+        });
+        host.dispatchEvent(ev);
+        return JSON.stringify({
+          fx0: fx,
+          fy0: fy,
+          fx1: Number(host.getAttribute('data-fx')),
+          fy1: Number(host.getAttribute('data-fy')),
+          z0: host.getAttribute('data-zoom'),
+          z1: host.getAttribute('data-zoom')
+        });
+      }));
+      var after = await h.snapBack();
+      h.assert(Number(after.zoom) > Number(before.zoom),
+        'pointer wheel zoomed in (' + before.zoom + ' -> ' + after.zoom + ')');
+      h.assert(Math.abs(Number(after.fx) - Number(before.fx)) <= 1 &&
+        Math.abs(Number(after.fy) - Number(before.fy)) <= 1,
+        'the field point stayed under the pointer (before ' + before.fx + ',' + before.fy +
+        ' after ' + after.fx + ',' + after.fy + ')');
+    } },
+
+  { name: 'Centre on field point puts it at the panel centre', shot: '09-centred-field',
+    run: async function (page, h) {
+      await h.clickZoom('reset');
+      await page.eval(function () {
+        var b = document.querySelector('[data-cd-centre]');
+        if (!b) throw new Error('missing Centre');
+        b.click();
+      });
+      await h.sleep(100);
+      var snap = await h.snapBack();
+      h.assert(Math.abs(Number(snap.fx) - Number(snap.ocx)) <= 1.5 &&
+        Math.abs(Number(snap.fy) - Number(snap.ocy)) <= 1.5,
+        'field point is at the panel centre (fx,fy=' + snap.fx + ',' + snap.fy +
+        ' oc=' + snap.ocx + ',' + snap.ocy + ')');
+      h.assert(Math.abs(Number(snap.cx) - 2.85 * Math.sin(50 * Math.PI / 180)) < 0.02,
+        'view centre is the field point');
+      await h.scrollDiagram();
+    } },
+
+  { name: 'zoomed in on the recentred field point', shot: '12-zoomed-field',
+    run: async function (page, h) {
+      await h.clickZoom('in');
+      await h.clickZoom('in');
+      var snap = await h.snapBack();
+      h.assert(Number(snap.zoom) > 1.2, 'field point is zoomed in (zoom ' + snap.zoom + ')');
+      h.assert(Math.abs(Number(snap.fx) - Number(snap.ocx)) <= 2 &&
+        Math.abs(Number(snap.fy) - Number(snap.ocy)) <= 2,
+        'zoomed field point is still at the panel centre');
+      await h.scrollDiagram();
+    } },
+
+  { name: 'rotation pivots about the recentred field point', shot: '10-rotated-about-field',
+    run: async function (page, h) {
+      var before = await h.snapBack();
+      await h.dragDiagram();
+      var after = await h.snapBack();
+      h.assert(after.yaw !== before.yaw || after.pitch !== before.pitch,
+        'drag rotated after recentre');
+      h.assert(Math.abs(Number(after.fx) - Number(after.ocx)) <= 2 &&
+        Math.abs(Number(after.fy) - Number(after.ocy)) <= 2,
+        'the field point stayed at the panel centre while rotating');
+      await h.scrollDiagram();
+    } },
+
+  { name: 'double-click the field point recentres',
+    run: async function (page, h) {
+      await h.clickZoom('reset');
+      await page.eval(function () {
+        var host = document.querySelector('[data-card-diagram]');
+        var canvas = host.querySelector('canvas');
+        var r = canvas.getBoundingClientRect();
+        var fx = Number(host.getAttribute('data-fx'));
+        var fy = Number(host.getAttribute('data-fy'));
+        var cw = canvas.clientWidth || r.width;
+        var ch = canvas.clientHeight || r.height;
+        var ev = new MouseEvent('dblclick', {
+          bubbles: true,
+          cancelable: true,
+          clientX: r.left + fx * (r.width / cw),
+          clientY: r.top + fy * (r.height / ch)
+        });
+        host.dispatchEvent(ev);
+      });
+      await h.sleep(100);
+      var snap = await h.snapBack();
+      h.assert(Math.abs(Number(snap.fx) - Number(snap.ocx)) <= 1.5 &&
+        Math.abs(Number(snap.fy) - Number(snap.ocy)) <= 1.5,
+        'double-click recentred on the field point');
+    } },
+
+  { name: 'pan is clamped so the drawing stays on the panel',
+    run: async function (page, h) {
+      await h.clickZoom('reset');
+      await page.eval(function () {
+        var host = document.querySelector('[data-card-diagram]');
+        var canvas = host.querySelector('canvas');
+        var r = canvas.getBoundingClientRect();
+        var x = r.left + r.width * 0.5;
+        var y = r.top + r.height * 0.5;
+        function fire(type, cx, cy) {
+          host.dispatchEvent(new PointerEvent(type, {
+            bubbles: true, cancelable: true, pointerId: 9, pointerType: 'mouse',
+            clientX: cx, clientY: cy, shiftKey: true,
+            button: 0, buttons: type === 'pointerup' ? 0 : 1
+          }));
+        }
+        fire('pointerdown', x, y);
+        fire('pointermove', x + 4000, y + 3000);
+        fire('pointerup', x + 4000, y + 3000);
+      });
+      await h.sleep(120);
+      var out = JSON.parse(await page.eval(function () {
+        var host = document.querySelector('[data-card-diagram]');
+        var w = host.clientWidth, hgt = host.clientHeight;
+        var pts = [
+          [Number(host.getAttribute('data-ox')), Number(host.getAttribute('data-oy'))],
+          [Number(host.getAttribute('data-fx')), Number(host.getAttribute('data-fy'))]
+        ];
+        var pad = 24, i, on = false;
+        for (i = 0; i < pts.length; i++) {
+          if (pts[i][0] >= pad && pts[i][0] <= w - pad &&
+              pts[i][1] >= pad && pts[i][1] <= hgt - pad) on = true;
+        }
+        return JSON.stringify({ on: on, w: w, h: hgt, pts: pts });
+      }));
+      h.assert(out.on, 'after a huge pan a drawn point is still on the panel');
+    } },
+
+  { name: 'pan then rotate leaves painted content',
+    run: async function (page, h) {
+      await h.clickZoom('reset');
+      var i;
+      for (i = 0; i < 16; i++) await h.clickZoom('in');
+      var hi = await h.snapBack();
+      h.assert(Math.abs(Number(hi.zoom) - 3) < 1e-6, 'at zoom 3 for pan-then-rotate');
+      await page.eval(function () {
+        var host = document.querySelector('[data-card-diagram]');
+        var canvas = host.querySelector('canvas');
+        var r = canvas.getBoundingClientRect();
+        var x = r.left + r.width * 0.5;
+        var y = r.top + r.height * 0.5;
+        function fire(type, cx, cy, shift) {
+          host.dispatchEvent(new PointerEvent(type, {
+            bubbles: true, cancelable: true, pointerId: 11, pointerType: 'mouse',
+            clientX: cx, clientY: cy, shiftKey: !!shift,
+            button: 0, buttons: type === 'pointerup' ? 0 : 1
+          }));
+        }
+        var k;
+        for (k = 0; k < 20; k++) {
+          fire('pointerdown', x, y, true);
+          fire('pointermove', x - 30, y, true);
+          fire('pointerup', x - 30, y, true);
+        }
+        fire('pointerdown', x, y, false);
+        fire('pointermove', x + 33, y, false);
+        fire('pointerup', x + 33, y, false);
+      });
+      await h.sleep(120);
+      var painted = await h.paintedCount();
+      h.assert(painted >= 200,
+        'after pan then rotate the canvas still has painted content (got ' + painted + ')');
+      var on = JSON.parse(await page.eval(function () {
+        var host = document.querySelector('[data-card-diagram]');
+        var w = host.clientWidth, hgt = host.clientHeight;
+        var ox = Number(host.getAttribute('data-ox'));
+        var oy = Number(host.getAttribute('data-oy'));
+        var fx = Number(host.getAttribute('data-fx'));
+        var fy = Number(host.getAttribute('data-fy'));
+        return JSON.stringify({
+          originOn: ox >= 0 && ox <= w && oy >= 0 && oy <= hgt,
+          fieldOn: fx >= 0 && fx <= w && fy >= 0 && fy <= hgt
+        });
+      }));
+      h.assert(on.originOn || on.fieldOn,
+        'charge or field point remains on the panel after pan then rotate');
+      await h.clickZoom('reset');
+    } },
+
+  { name: 'panned labels stay inside the panel and clear of controls',
+    run: async function (page, h) {
+      async function shiftPan(dx, dy) {
+        await page.eval('() => { var host = document.querySelector("[data-card-diagram]"); var canvas = host.querySelector("canvas"); var r = canvas.getBoundingClientRect(); var x = r.left + r.width * 0.5; var y = r.top + r.height * 0.5; function fire(type, cx, cy) { host.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 12, pointerType: "mouse", clientX: cx, clientY: cy, shiftKey: true, button: 0, buttons: type === "pointerup" ? 0 : 1 })); } fire("pointerdown", x, y); fire("pointermove", x + ' + dx + ', y + ' + dy + '); fire("pointerup", x + ' + dx + ', y + ' + dy + '); }');
+        await h.sleep(80);
+      }
+      await h.clickZoom('reset');
+      await shiftPan(0, 220);
+      var downUi = await h.uiOverlap();
+      h.assert(downUi.max === 0,
+        'no label/control overlap after downward pan (got ' + downUi.max + ' on ' + downUi.pair + ')');
+      var downIn = await h.labelsInside();
+      h.assert(downIn.ok,
+        'visible labels stay inside after downward pan (clipped ' + downIn.clipped.join(',') + ')');
+      await h.clickZoom('reset');
+      var j;
+      for (j = 0; j < 16; j++) await h.clickZoom('in');
+      await shiftPan(-240, 0);
+      var leftUi = await h.uiOverlap();
+      h.assert(leftUi.max === 0,
+        'no label/control overlap after left pan at zoom 3 (got ' + leftUi.max + ' on ' + leftUi.pair + ')');
+      var leftIn = await h.labelsInside();
+      h.assert(leftIn.ok,
+        'visible labels stay inside after left pan at zoom 3 (clipped ' + leftIn.clipped.join(',') + ')');
+      await h.clickZoom('reset');
+      for (j = 0; j < 16; j++) await h.clickZoom('out');
+      await shiftPan(240, 0);
+      var rightUi = await h.uiOverlap();
+      h.assert(rightUi.max === 0,
+        'no label/control overlap after right pan at zoom 0.6 (got ' + rightUi.max + ' on ' + rightUi.pair + ')');
+      var rightIn = await h.labelsInside();
+      h.assert(rightIn.ok,
+        'visible labels stay inside after right pan at zoom 0.6 (clipped ' + rightIn.clipped.join(',') + ')');
+      await h.clickZoom('reset');
+    } },
+
+  { name: 'no label overlap at zoom 0.6, 1, and 3',
+    run: async function (page, h) {
+      await h.clickZoom('reset');
+      var z1 = await h.uiOverlap();
+      h.assert(z1.max === 0, 'no overlap at zoom 1 (got ' + z1.max + ' on ' + z1.pair + ')');
+      var i;
+      for (i = 0; i < 16; i++) await h.clickZoom('out');
+      var lo = await h.snapBack();
+      h.assert(Math.abs(Number(lo.zoom) - 0.6) < 1e-6, 'at zoom floor for overlap check');
+      var z06 = await h.uiOverlap();
+      h.assert(z06.max === 0, 'no overlap at zoom 0.6 (got ' + z06.max + ' on ' + z06.pair + ')');
+      var fs = JSON.parse(await page.eval(function () {
+        var el = document.querySelector('[data-card-diagram] .cd-lab[data-lab="a"]');
+        return JSON.stringify({ size: el ? getComputedStyle(el).fontSize : '' });
+      }));
+      h.assert(fs.size === '13px', 'label font size does not scale with zoom (got ' + fs.size + ')');
+      await h.clickZoom('reset');
+      for (i = 0; i < 16; i++) await h.clickZoom('in');
+      var hi = await h.snapBack();
+      h.assert(Math.abs(Number(hi.zoom) - 3) < 1e-6, 'at zoom ceiling for overlap check');
+      var z3 = await h.uiOverlap();
+      h.assert(z3.max === 0, 'no overlap at zoom 3 (got ' + z3.max + ' on ' + z3.pair + ')');
+      await h.clickZoom('reset');
+    } },
+
+  { name: 'twelve remounts leave one canvas and one host',
+    run: async function (page, h) {
+      var out = JSON.parse(await page.eval(function () {
+        var back = document.getElementById('fcard-back');
+        var i, host, parent, fresh;
+        for (i = 0; i < 12; i++) {
+          host = back.querySelector('[data-card-diagram]');
+          parent = host.parentNode;
+          parent.removeChild(host);
+          fresh = document.createElement('div');
+          fresh.className = 'card-diagram-host';
+          fresh.setAttribute('data-card-diagram', 'supp-radiation-field');
+          parent.insertBefore(fresh, parent.firstChild);
+          PGRE.mountCardDiagrams(back);
+        }
+        return JSON.stringify({
+          hosts: back.querySelectorAll('[data-card-diagram]').length,
+          canvases: back.querySelectorAll('canvas').length,
+          mounted: back.querySelectorAll('[data-card-diagram][data-mounted="1"]').length
+        });
+      }));
+      h.assert(out.hosts === 1 && out.canvases === 1 && out.mounted === 1,
+        'after 12 remounts there is one host and one canvas (hosts=' + out.hosts +
+        ' canvases=' + out.canvases + ')');
+    } },
+
   { name: 'diagram at a narrow phone width', shot: '04-back-phone', size: '390x844',
     run: async function (page, h) {
       await h.showCard('supp-drift-current');
@@ -439,6 +1002,49 @@ var STAGES = [
       h.assert(ov.n >= 6, 'vector labels are present at phone width');
       h.assert(ov.max === 0,
         'no two labels overlap at phone width (got ' + ov.max + ' px^2 on ' + ov.pair + ')');
+      var ui = await h.uiOverlap();
+      h.assert(ui.max === 0,
+        'no label/hint/control overlap at 390 px (got ' + ui.max + ' px^2 on ' + ui.pair + ')');
+      h.assert(/not field/i.test(snap.patternText),
+        'the power-pattern label is present at phone width');
+      var reqPhone = await h.requiredLabels();
+      h.assert(reqPhone.ok,
+        'phone default keeps the teaching labels visible (missing ' + reqPhone.missing.join(',') + ')');
+      var beforePat = JSON.parse(await page.eval(function () {
+        var el = document.querySelector('[data-card-diagram] [data-lab="pattern"]');
+        var r = el.getBoundingClientRect();
+        return JSON.stringify({ left: r.left, vis: getComputedStyle(el).visibility });
+      }));
+      await page.eval(function () {
+        var host = document.querySelector('[data-card-diagram]');
+        var canvas = host.querySelector('canvas');
+        var r = canvas.getBoundingClientRect();
+        var x = r.left + r.width * 0.5;
+        var y = r.top + r.height * 0.5;
+        function fire(type, cx, cy) {
+          host.dispatchEvent(new PointerEvent(type, {
+            bubbles: true, cancelable: true, pointerId: 13, pointerType: 'mouse',
+            clientX: cx, clientY: cy, shiftKey: true,
+            button: 0, buttons: type === 'pointerup' ? 0 : 1
+          }));
+        }
+        fire('pointerdown', x, y);
+        fire('pointermove', x + 60, y);
+        fire('pointerup', x + 60, y);
+      });
+      await h.sleep(100);
+      var afterPat = JSON.parse(await page.eval(function () {
+        var el = document.querySelector('[data-card-diagram] [data-lab="pattern"]');
+        var r = el.getBoundingClientRect();
+        return JSON.stringify({ left: r.left, vis: getComputedStyle(el).visibility });
+      }));
+      h.assert(afterPat.vis === 'hidden' || Math.abs(afterPat.left - beforePat.left) > 8,
+        'the power caption follows the pattern on phone pan (before ' +
+        beforePat.left + ' after ' + afterPat.left + ')');
+      var phonePanUi = await h.uiOverlap();
+      h.assert(phonePanUi.max === 0,
+        'no label/control overlap after phone pan (got ' + phonePanUi.max + ' on ' + phonePanUi.pair + ')');
+      await h.clickZoom('reset');
     } },
 
   { name: 'diagram in dark theme', shot: '06-back-dark', size: '1280x800',
