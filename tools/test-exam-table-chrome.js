@@ -830,6 +830,79 @@ async function main() {
         };
       })()`);
     }
+
+    /* Current-card judgment: the shown card with the largest visible height
+       below the top bar. Question 39's tail sits at the top; question 40
+       fills most of the window; the ring names 40, and Right moves from
+       that ringed card to 41. */
+    await send('Emulation.setDeviceMetricsOverride', {
+      width: 1280, height: 1360, deviceScaleFactor: 1, mobile: false
+    });
+    await sleep(200);
+    check(total >= 41, 'the sitting has at least 41 questions for the in-view ring case (' + total + ')');
+    await evaluate(`(function () {
+      var cards = document.querySelectorAll('#exam-root .exam-review-q');
+      [38, 39, 40].forEach(function (i, n) {
+        var card = cards[i];
+        if (!card) return;
+        card.style.height = n === 1 ? '530px' : (n === 2 ? '500px' : '400px');
+        card.style.overflow = 'hidden';
+      });
+      var card40 = cards[39];
+      var y = card40.getBoundingClientRect().top + window.scrollY - 398;
+      window.scrollTo(0, y);
+      window.dispatchEvent(new Event('scroll'));
+    })()`);
+    await sleep(200);
+    var filled = await evaluate(`(function () {
+      var topBar = 64;
+      var cards = Array.prototype.slice.call(document.querySelectorAll('#exam-root .exam-review-q'));
+      var cells = Array.prototype.slice.call(document.querySelectorAll('#exam-review-nav .pal-cell'));
+      function vis(el) {
+        var b = el.getBoundingClientRect();
+        if (!b.height) return 0;
+        return Math.max(0, Math.min(b.bottom, window.innerHeight) - Math.max(b.top, topBar));
+      }
+      var current = [];
+      cells.forEach(function (c, i) {
+        if (c.classList.contains('is-current') || c.getAttribute('aria-current') === 'true') current.push(i + 1);
+      });
+      var ring = current.length ? current[current.length - 1] : 0;
+      var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      return {
+        ring: ring,
+        current: current.join(','),
+        vis39: Math.round(vis(cards[38])),
+        vis40: Math.round(vis(cards[39])),
+        vis41: Math.round(vis(cards[40])),
+        top40: Math.round(cards[39].getBoundingClientRect().top),
+        scrollY: Math.round(window.scrollY),
+        maxScroll: Math.round(maxScroll),
+        atEnd: window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2,
+        innerHeight: window.innerHeight
+      };
+    })()`);
+    check(!filled.atEnd && filled.vis40 > filled.vis39 && filled.vis40 > filled.vis41 && filled.ring === 40,
+      'with question 39\'s tail at the top and question 40 filling most of the window, cell 40 is ringed (vis ' +
+      filled.vis39 + '/' + filled.vis40 + '/' + filled.vis41 + ' px, ring ' + filled.ring + ')');
+    await press('ArrowRight', 'ArrowRight', 39);
+    var afterFill = await keyState();
+    check(afterFill.ring === 41 && near(afterFill.top, 64),
+      'from that ringed card the Right arrow opens question 41 (top ' + afterFill.top + ' px)');
+    await evaluate(`(function () {
+      var cards = document.querySelectorAll('#exam-root .exam-review-q');
+      [38, 39, 40].forEach(function (i) {
+        if (!cards[i]) return;
+        cards[i].style.height = '';
+        cards[i].style.overflow = '';
+      });
+    })()`);
+    await send('Emulation.setDeviceMetricsOverride', {
+      width: 1280, height: 900, deviceScaleFactor: 1, mobile: false
+    });
+    await evaluate('window.scrollTo(0, 0)');
+    await sleep(200);
+
     await press('ArrowRight', 'ArrowRight', 39);
     var keys = await keyState();
     check(keys.ring === 1 && near(keys.top, 64) && keys.focusCard === 1,
