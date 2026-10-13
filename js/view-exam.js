@@ -1360,9 +1360,8 @@ PGRE.views.exam = (function () {
     });
   }
 
-  /* Every choice as the room showed it, in a closed band above the solution:
-     the card itself prints only the picked and the correct choice. Same
-     markup and marks as the practice review (js/view-practice.js renderReview). */
+  /* Every choice as the room showed it, in a closed band above the solution.
+     Same markup and marks as the practice review (js/view-practice.js renderReview). */
   function choicesBlock(q, picked) {
     var items = '';
     q.choices.forEach(function (c, idx) {
@@ -1376,6 +1375,33 @@ PGRE.views.exam = (function () {
     });
     return '<details class="miss exam-review-choices"><summary>All choices</summary>' +
       '<div class="choices">' + items + '</div></details>';
+  }
+
+  /* Picked and correct answers as closed details.miss bands, same chevron,
+     border, and native open/keyboard behaviour as All choices. Folded by
+     default; native details does not remember open state. Verdict tint stays
+     on the band. The summary is the label with the choice letter; the full
+     choice HTML (LaTeX included) is the expanded body. Left blank has no
+     choice body. Used only by the mock-exam results review page. */
+  function pickBand(kind, label, bodyHtml) {
+    return '<details class="miss exam-review-pick is-' + kind + '">' +
+      '<summary><strong>' + label + '</strong></summary>' +
+      (bodyHtml ? '<div class="exam-review-pick-body">' + bodyHtml + '</div>' : '') +
+      '</details>';
+  }
+
+  function reviewPickBandsHTML(q, picked) {
+    var html = '';
+    var correct = picked === q.answer;
+    if (picked == null) {
+      html += pickBand('bad', 'Left blank', '');
+    } else if (!correct) {
+      html += pickBand('bad', 'You picked ' + LETTERS[picked], q.choices[picked]);
+    }
+    html += pickBand('good',
+      (correct ? 'You picked ' : 'Correct: ') + LETTERS[q.answer],
+      q.choices[q.answer]);
+    return html;
   }
 
   function reviewCard(exam, qid, i) {
@@ -1397,24 +1423,14 @@ PGRE.views.exam = (function () {
         (flagged ? '<span class="chip exam-flagchip">Flagged</span>' : '') +
       '</div>' +
       '<div class="q-text">' + q.q + '</div>' +
-      '<div class="miss-picks">';
-    if (picked == null) {
-      html += '<div class="miss-pick is-bad"><strong>Left blank</strong></div>';
-    } else if (!correct) {
-      html += '<div class="miss-pick is-bad"><strong>You picked ' +
-        LETTERS[picked] + '</strong> — <span class="miss-pick-body">' + q.choices[picked] + '</span></div>';
-    }
-    html += '<div class="miss-pick is-good"><strong>' +
-      (correct ? 'You picked ' : 'Correct: ') + LETTERS[q.answer] + '</strong> — ' +
-      '<span class="miss-pick-body">' + q.choices[q.answer] + '</span></div>' +
-    '</div>' +
-    (correct ? guessControl(exam, qid) : '') +
-    choicesBlock(q, picked) +
-    '<details class="miss"><summary>Solution</summary>' +
-      '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div></details>' +
-    distractorBlock(q) +
-    notesBlock(q) +
-    '</div>';
+      reviewPickBandsHTML(q, picked) +
+      (correct ? guessControl(exam, qid) : '') +
+      choicesBlock(q, picked) +
+      '<details class="miss"><summary>Solution</summary>' +
+        '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div></details>' +
+      distractorBlock(q) +
+      notesBlock(q) +
+      '</div>';
     return html;
   }
 
@@ -1422,6 +1438,7 @@ PGRE.views.exam = (function () {
   return {
     pauseSnapshot: pauseSnapshot,
     pauseCardHTML: pauseCardHTML,
+    reviewPickBandsHTML: reviewPickBandsHTML,
     render: function () {
       return '<div id="exam-root"><div class="card"><p class="muted">Loading the exam simulator…</p></div></div>';
     },

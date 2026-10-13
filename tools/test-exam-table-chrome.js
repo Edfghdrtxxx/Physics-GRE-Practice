@@ -823,7 +823,7 @@ async function main() {
           bandSeen: band ? Array.prototype.filter.call(band.querySelectorAll('.choice'),
             function (row) { return row.checkVisibility(); }).length : 0,
           solutionsOpen: cards.map(function (c, i) {
-            var d = c.querySelector('details.miss:not(.exam-review-choices):not(.distractors)');
+            var d = c.querySelector('details.miss:not(.exam-review-choices):not(.exam-review-pick):not(.distractors)');
             return d && d.open ? i + 1 : 0;
           }).filter(Boolean).join(','),
           hint: (document.querySelector('#exam-review-nav .practice-keys') || {}).textContent || ''
@@ -850,7 +850,7 @@ async function main() {
     var base = sitting.order[0] === 'toi-q0' ? 2 : 1;
     if (base === 2) await press('ArrowRight', 'ArrowRight', 39);
     await clickAt('document.querySelectorAll("#exam-root .exam-review-q")[' + (base - 1) +
-      '].querySelector("details.miss:not(.exam-review-choices):not(.distractors) > summary")');
+      '].querySelector("details.miss:not(.exam-review-choices):not(.exam-review-pick):not(.distractors) > summary")');
     var opened = await keyState();
     await pressEnter();
     keys = await keyState();
@@ -908,6 +908,57 @@ async function main() {
       'every review card has an "All choices" band directly above "Solution": each choice with its letter, the key and ' +
       'the pick marked as the sitting recorded them, closed until opened (' + bands.closed + ' of ' + bands.cards +
       ' closed' + (bands.bad ? ', wrong on questions ' + bands.bad : '') + ')');
+
+    var pickBands = await evaluate(`(function () {
+      var exam = PGRE.examEngine.byId(${JSON.stringify(sitting.id)});
+      var LETTERS = 'ABCDE';
+      var cards = Array.prototype.slice.call(document.querySelectorAll('#exam-root .exam-review-q'));
+      var bad = [], open = 0, flaggedOk = true;
+      cards.forEach(function (card, i) {
+        var qid = exam.order[i];
+        var q = PGRE.questionById(qid);
+        var picked = exam.answers[qid];
+        var pickedNull = picked == null;
+        var correct = picked === q.answer;
+        var flagged = exam.flags.indexOf(qid) !== -1;
+        var rows = Array.prototype.slice.call(card.querySelectorAll('details.exam-review-pick'));
+        rows.forEach(function (row) { if (row.open) open++; });
+        var labels = rows.map(function (row) {
+          return (row.querySelector('summary') || {}).textContent.trim();
+        });
+        var expected;
+        if (pickedNull) expected = ['Left blank', 'Correct: ' + LETTERS.charAt(q.answer)];
+        else if (!correct) expected = ['You picked ' + LETTERS.charAt(picked), 'Correct: ' + LETTERS.charAt(q.answer)];
+        else expected = ['You picked ' + LETTERS.charAt(q.answer)];
+        var kinds = rows.map(function (row) {
+          return row.classList.contains('is-bad') ? 'bad' : (row.classList.contains('is-good') ? 'good' : '?');
+        });
+        var expectedKinds = correct ? ['good'] : ['bad', 'good'];
+        var bodiesOk = rows.every(function (row, ri) {
+          var bodyEl = row.querySelector('.exam-review-pick-body');
+          if (labels[ri] === 'Left blank') return !bodyEl;
+          return !!bodyEl && bodyEl.textContent.replace(/\s+/g, '').length > 0;
+        });
+        var allChoices = card.querySelector('details.exam-review-choices');
+        var afterPicks = rows.length ? rows[rows.length - 1].nextElementSibling : null;
+        if (correct && afterPicks && afterPicks.classList.contains('conf-row')) {
+          afterPicks = afterPicks.nextElementSibling;
+        }
+        var chip = card.querySelector('.exam-flagchip');
+        if (!!chip !== flagged) flaggedOk = false;
+        var ok = !!q && rows.length === expected.length &&
+          labels.join('|') === expected.join('|') &&
+          kinds.join('|') === expectedKinds.join('|') &&
+          bodiesOk && afterPicks === allChoices &&
+          rows.every(function (row) { return row.tagName === 'DETAILS' && !row.open; });
+        if (!ok) bad.push(i + 1);
+      });
+      return { cards: cards.length, open: open, bad: bad.join(','), flaggedOk: flaggedOk };
+    })()`);
+    check(pickBands.cards === total && pickBands.bad === '' && pickBands.open === 0 && pickBands.flaggedOk,
+      'every review card folds the pick and correct rows as closed details bands under the stem, with the same ' +
+      'labels as before (wrong / blank / correct) and the Flagged chip still on the card head' +
+      (pickBands.bad ? ' (wrong on questions ' + pickBands.bad + ')' : ''));
     // a dark-theme picture for a human check; transitions are off so the capture shows the final colours
     await evaluate(`(function () {
       var off = document.createElement('style');
