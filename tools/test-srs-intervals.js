@@ -203,6 +203,54 @@ assert(srs.examCap() === 2, 'exam in 3 days → cap 2');
 resetStore({ examDate: daysFromNow(4) });
 assert(srs.examCap() === 3, 'exam in 4 days → cap 3');
 
+console.log('\nmatureDays: exam-horizon solid-enough threshold');
+function expectMature(daysOut, want, msg) {
+  resetStore({ examDate: daysFromNow(daysOut) });
+  assert(srs.matureDays() === want, msg + ' (got ' + srs.matureDays() + ')');
+  assert(srs.matureDays() >= 1, msg + ': threshold never 0');
+}
+expectMature(19, 18, '19 days left → min(21, examCap 18) = 18');
+expectMature(8, 7, '8 days left → min(21, examCap 7) = 7');
+expectMature(7, 6, '7 days left (final-pass start) → min(21, examCap 6) = 6');
+expectMature(2, 1, '2 days left → examCap 1, threshold 1');
+expectMature(1, 1, 'exam eve (days=1, examCap null) → 1');
+resetStore({ examDate: daysFromNow(0) });
+assert(srs.matureDays() === 21, 'exam day → classic 21');
+resetStore({ examDate: daysFromNow(-2) });
+assert(srs.matureDays() === 21, 'past exam date → classic 21');
+resetStore({ examDate: 'not-a-date' });
+assert(srs.matureDays() === 21, 'invalid exam date → classic 21');
+resetStore({ examDate: daysFromNow(19), formulaExamCap: false });
+assert(srs.examCap() === null, 'cap off → examCap null');
+assert(srs.matureDays() === 21, 'formulaExamCap false → classic 21');
+
+resetStore({ examDate: daysFromNow(1) });
+storeState.cards.eve = { reps: 2, lapses: 0, interval: 1, ease: 2.5,
+  due: srs.today(), reviews: 2 };
+srs.gradeCard('eve', 'good');
+assert(storeState.cardReviews[storeState.cardReviews.length - 1].m === 1,
+  'exam eve: a just-passed card (interval 1) stores m=1');
+
+resetStore({ examDate: daysFromNow(2) });
+storeState.cards.wk = { reps: 2, lapses: 0, interval: 1, ease: 2.5,
+  due: srs.today(), reviews: 2 };
+srs.gradeCard('wk', 'good');
+assert(srs.matureDays() === 1 &&
+  storeState.cardReviews[storeState.cardReviews.length - 1].m === 1,
+  'final week with cap 1: interval 1 stores m=1');
+
+resetStore({ examDate: daysFromNow(19) });
+storeState.cards.hi = { reps: 4, lapses: 0, interval: 18, ease: 2.5,
+  due: srs.today(), reviews: 4 };
+storeState.cards.lo = { reps: 3, lapses: 0, interval: 17, ease: 2.5,
+  due: srs.today(), reviews: 3 };
+srs.gradeCard('hi', 'good');
+srs.gradeCard('lo', 'good');
+var hiRow = storeState.cardReviews.filter(function (r) { return r.id === 'hi'; })[0];
+var loRow = storeState.cardReviews.filter(function (r) { return r.id === 'lo'; })[0];
+assert(hiRow && hiRow.m === 1, '19 days left: interval 18 stores m=1');
+assert(loRow && loRow.m === 0, '19 days left: interval 17 stores m=0');
+
 console.log('\nbackward cascade clamping: cap < 3 vs cap >= 3');
 resetStore({ examDate: daysFromNow(3) }); // cap = 2
 var cap2 = srs.nextIntervals({ reps: 2, interval: 5, ease: 2.5 });

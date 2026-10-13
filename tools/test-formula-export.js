@@ -251,7 +251,21 @@ assert(r1 && r1.status === 'learning', 'interval 3 is learning status');
 assert(r1 && r1.back === '$E = \\frac{1}{2}m\\omega^2 A^2$', 'recalled item records formula LaTeX');
 
 var r2 = receipt2.recalledToday.filter(function (x) { return x.id === 'cpgf-2.4'; })[0];
-assert(r2 && r2.interval === 25 && r2.status === 'mature', 'interval >= 21 is mature status');
+var thresh = PGRE.srs.matureDays();
+assert(r2 && r2.interval === 25 && r2.status === 'mature',
+  'interval 25 is mature at live threshold ' + thresh);
+
+console.log('\nmature status follows exam-horizon threshold');
+var origExamDate = PGRE.store.state.settings.examDate;
+PGRE.store.state.settings.examDate = PGRE.srs.addDays(5);
+assert(PGRE.srs.matureDays() === 4, '5 days to exam → matureDays 4');
+var receiptNear = PGRE.buildFormulaReceipt();
+var r1Near = receiptNear.recalledToday.filter(function (x) { return x.id === 'cpgf-1.15'; })[0];
+var r2Near = receiptNear.recalledToday.filter(function (x) { return x.id === 'cpgf-2.4'; })[0];
+assert(r1Near && r1Near.status === 'learning', 'interval 3 is learning when threshold is 4');
+assert(r2Near && r2Near.status === 'mature', 'interval 25 is still mature when threshold is 4');
+assert(receiptNear.overallStatus.mature === 1, 'overall mature count stays 1 at threshold 4');
+PGRE.store.state.settings.examDate = origExamDate;
 
 console.log('\noverallStatus calculations');
 var os = receipt2.overallStatus;

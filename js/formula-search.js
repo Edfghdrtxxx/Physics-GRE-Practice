@@ -403,8 +403,8 @@ PGRE.formulaSearch = (function () {
     { key: 'learned', label: 'Introduced' },
     { key: 'due', label: 'Due now' },
     { key: 'today', label: 'In today’s batch' },
-    { key: 'mature', label: 'Mature (≥ 21 d)' },
-    { key: 'young', label: 'Young (< 21 d)' },
+    { key: 'mature', label: 'Mature' },
+    { key: 'young', label: 'Young' },
     { key: 'leech', label: 'Keeps slipping' },
     { key: 'away', label: 'Put away' },
     { key: 'mnemonic', label: 'Has a mnemonic' }
@@ -413,20 +413,34 @@ PGRE.formulaSearch = (function () {
                             suspended: 'away', leeches: 'leech', struggling: 'leech',
                             batch: 'today' });
 
+  function matureDays() {
+    return (PGRE.srs && typeof PGRE.srs.matureDays === 'function') ? PGRE.srs.matureDays() : 21;
+  }
+
+  /* Live chip copy for the status dropdown. Mature / Young carry the
+     current solid-enough threshold (srs.matureDays), e.g. "≥ 18 d". */
+  function statusLabel(entry) {
+    var n = matureDays();
+    if (entry.key === 'mature') return 'Mature (≥ ' + n + ' d)';
+    if (entry.key === 'young') return 'Young (< ' + n + ' d)';
+    return entry.label;
+  }
+
   function statusOk(rec, status, batchSet) {
     if (!status) return true;
     status = STATUS_ALIAS[status] || status;
     var srs = PGRE.srs, st = srs.cardState(rec.id);
+    var thresh = matureDays();
     switch (status) {
       case 'new': return !(st && st.reviews > 0);
       case 'learned': return !!(st && st.reviews > 0);
       case 'due': return !!st && srs.daysUntil(st.due) <= 0;
       case 'today': return !!batchSet && !!batchSet[rec.id];
-      case 'mature': return !!st && (st.interval || 0) >= 21;
+      case 'mature': return !!st && (st.interval || 0) >= thresh;
       // Learning = introduced (reviews > 0) minus solid, matching the recall
       // band's recallMix: a saved state with reviews 0 (a normalizeRecallState
       // repair) is not introduced, so it lists under new, not young.
-      case 'young': return !!st && st.reviews > 0 && (st.interval || 0) < 21;
+      case 'young': return !!st && st.reviews > 0 && (st.interval || 0) < thresh;
       case 'leech': return srs.isLeech(st);
       case 'away': return srs.isSuspended(rec.id);
       case 'mnemonic': return !!rec.f.mnem;
@@ -788,6 +802,7 @@ PGRE.formulaSearch = (function () {
     stem: stem,
     editDist: editDist,
     STATUSES: STATUSES,
+    statusLabel: statusLabel,
     FIELD_LABEL: FIELD_LABEL,
     KIND_LABEL: KIND_LABEL
   };
