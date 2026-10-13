@@ -187,6 +187,17 @@ assert(diagramsSrc.indexOf('contextmenu') !== -1,
 assert(css.indexOf('.cd-lab-pattern') !== -1 &&
   css.indexOf('.card-diagram-host.is-move') !== -1,
   'pattern label and Move cursor are styled');
+assert(diagramsSrc.indexOf('W * 0.28') === -1 &&
+  diagramsSrc.indexOf('H * 0.38') === -1,
+  'the power caption is not pinned to a fixed panel position');
+var pitchAt = diagramsSrc.indexOf('pitch += dy');
+var clampAfterPitch = diagramsSrc.indexOf('clampPan()', pitchAt);
+assert(pitchAt >= 0 && clampAfterPitch > pitchAt && clampAfterPitch < pitchAt + 280,
+  'rotation re-applies the pan clamp');
+assert(!/boxesOverlap\(a, b\)[\s\S]{0,120}visibility = 'hidden'/.test(diagramsSrc),
+  'label-to-label collision finds another position instead of hiding');
+assert(diagramsSrc.indexOf("order = ['erad', 'a', 'aperp', 'theta'") !== -1,
+  'teaching-quantity labels are placed before the power caption');
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

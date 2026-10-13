@@ -307,23 +307,27 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
   }
 
   function resolveLabels() {
-    var order = ['pattern', 'erad', 'rhat', 'a', 'aperp', 'q', 'apar', 'theta'];
+    /* Teaching quantities first so the power caption yields space rather
+       than suppressing acceleration / angle names. Collision tries another
+       screen position; a label is hidden only when no on-panel seat remains. */
+    var order = ['erad', 'a', 'aperp', 'theta', 'rhat', 'q', 'apar', 'pattern'];
     var hostR = host.getBoundingClientRect();
+    var inset = 2;
     function boxOf(el) {
       if (!el || el.style.visibility === 'hidden' || !el.getClientRects().length) return null;
       var r = el.getBoundingClientRect();
       if (r.width < 1 || r.height < 1) return null;
       return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
     }
-    function chromeBoxes() {
+    var chrome = [];
+    (function collectChrome() {
       var els = [hintEl, host.querySelector('.card-diagram-zoom'), labels.plane, labels.ang];
-      var out = [], k, b;
+      var k, b;
       for (k = 0; k < els.length; k++) {
         b = boxOf(els[k]);
-        if (b) out.push(b);
+        if (b) chrome.push(b);
       }
-      return out;
-    }
+    })();
     function overlapsList(a, list) {
       var k;
       for (k = 0; k < list.length; k++) {
@@ -331,49 +335,45 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
       }
       return false;
     }
-    var nudges = [
-      [0, -20], [0, 20], [-24, 0], [24, 0],
-      [-20, -20], [20, -20], [-20, 20], [20, 20],
-      [0, -36], [-36, -12], [0, 36], [36, -12]
-    ];
-    var i, j, n, a, b, el, left0, top0, ok, ch;
+    function seatOk(a, placed) {
+      if (!a) return false;
+      if (a.left < hostR.left + inset || a.right > hostR.right - inset ||
+          a.top < hostR.top + inset || a.bottom > hostR.bottom - inset) return false;
+      if (overlapsList(a, chrome)) return false;
+      if (overlapsList(a, placed)) return false;
+      return true;
+    }
+    var radii = [0, 10, 18, 26, 36, 48, 62, 78];
+    var nAng = 12;
+    var i, el, a, left0, top0, ok, ri, ai, rad, ang, dx, dy, placed = [];
     for (i = 0; i < order.length; i++) {
       el = labels[order[i]];
       a = boxOf(el);
       if (!a) continue;
-      if (a.right < hostR.left + 2 || a.left > hostR.right - 2 ||
-          a.bottom < hostR.top + 2 || a.top > hostR.bottom - 2) {
-        el.style.visibility = 'hidden';
-        continue;
-      }
-      ch = chromeBoxes();
-      if (overlapsList(a, ch)) {
-        left0 = parseFloat(el.style.left) || 0;
-        top0 = parseFloat(el.style.top) || 0;
-        ok = false;
-        for (n = 0; n < nudges.length; n++) {
-          el.style.left = (left0 + nudges[n][0]) + 'px';
-          el.style.top = (top0 + nudges[n][1]) + 'px';
+      left0 = parseFloat(el.style.left) || 0;
+      top0 = parseFloat(el.style.top) || 0;
+      ok = false;
+      for (ri = 0; ri < radii.length && !ok; ri++) {
+        rad = radii[ri];
+        var turns = rad === 0 ? 1 : nAng;
+        for (ai = 0; ai < turns; ai++) {
+          ang = (2 * Math.PI * ai) / turns;
+          dx = Math.round(rad * Math.cos(ang));
+          dy = Math.round(rad * Math.sin(ang));
+          el.style.left = (left0 + dx) + 'px';
+          el.style.top = (top0 + dy) + 'px';
           a = boxOf(el);
-          if (a && !overlapsList(a, chromeBoxes()) &&
-              a.left >= hostR.left && a.right <= hostR.right) {
+          if (seatOk(a, placed)) {
             ok = true;
+            placed.push(a);
             break;
           }
         }
-        if (!ok) {
-          el.style.left = left0 + 'px';
-          el.style.top = top0 + 'px';
-        }
       }
-      a = boxOf(el);
-      if (!a) continue;
-      for (j = 0; j < i; j++) {
-        b = boxOf(labels[order[j]]);
-        if (b && boxesOverlap(a, b)) {
-          el.style.visibility = 'hidden';
-          break;
-        }
+      if (!ok) {
+        el.style.left = left0 + 'px';
+        el.style.top = top0 + 'px';
+        el.style.visibility = 'hidden';
       }
     }
   }
@@ -508,6 +508,7 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
+    clampPan();
     var narrow = W < 420;
     if (narrow) host.classList.add('is-narrow');
     else host.classList.remove('is-narrow');
@@ -595,12 +596,9 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     }
     var thLab = [0.78 * Math.sin(vec.theta * 0.5), 0, 0.78 * Math.cos(vec.theta * 0.5)];
     place(labels.theta, thLab, narrow ? 8 : 10, narrow ? 18 : (zoom < 0.85 ? 16 : -6));
-    var pat = [1.12 * Math.cos(0.55), 1.12 * Math.sin(0.55), 0];
-    place(labels.pattern, pat, narrow ? 8 : 14, narrow ? -28 : -18);
-    if (narrow && labels.pattern && labels.pattern.style.visibility !== 'hidden') {
-      labels.pattern.style.left = Math.round(W * 0.28) + 'px';
-      labels.pattern.style.top = Math.round(H * 0.38) + 'px';
-    }
+    /* Equatorial +y lobe of the power doughnut, off the xz vector plane. */
+    var pat = [0, 0.92, 0];
+    place(labels.pattern, pat, 0, narrow ? -20 : -16);
 
     var oScr = project(vec.origin);
     var fScr = project(vec.field);
@@ -670,34 +668,30 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
   }
 
   function keyWorldPoints() {
-    return [
-      vec.origin,
-      vec.field,
-      vec.a,
-      vec.aPerp,
-      vadd(vec.field, vec.eRad),
-      vadd(vec.field, vscale(vec.rHat, 0.72)),
-      [0.88, 0, 0],
-      [0, 0.88, 0],
-      [-0.88, 0, 0]
-    ];
+    return [vec.origin, vec.field];
+  }
+
+  function pointOnPanel(s, pad) {
+    return s && s.k > 0.25 &&
+      s.x >= pad && s.x <= W - pad &&
+      s.y >= pad && s.y <= H - pad;
   }
 
   function clampPan() {
-    var pad = 48;
+    var pad = 24;
     var pts = keyWorldPoints();
-    var i, s, bestI = -1, bestD = Infinity, cx = W / 2, cy = H * CD_OPT_Y;
+    var i, s, bestI = 0, bestD = Infinity, cx = W / 2, cy = H * CD_OPT_Y;
     var visible = false;
     for (i = 0; i < pts.length; i++) {
       s = project(pts[i]);
-      if (s.x >= -pad && s.x <= W + pad && s.y >= -pad && s.y <= H + pad) visible = true;
+      if (pointOnPanel(s, pad)) visible = true;
       var d = Math.hypot(s.x - cx, s.y - cy);
-      if (d < bestD) {
+      if (s.k > 0.15 && d < bestD) {
         bestD = d;
         bestI = i;
       }
     }
-    if (visible || bestI < 0) return;
+    if (visible) return;
     s = project(pts[bestI]);
     var tx = s.x, ty = s.y;
     if (tx > W - pad) tx = W - pad;
@@ -705,6 +699,10 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
     if (ty > H - pad) ty = H - pad;
     if (ty < pad) ty = pad;
     keepWorldAt(pts[bestI], tx, ty, true);
+    if (pointOnPanel(project(pts[0]), pad) || pointOnPanel(project(pts[1]), pad)) return;
+    keepWorldAt(vec.origin, cx, cy, true);
+    if (pointOnPanel(project(vec.origin), pad) || pointOnPanel(project(vec.field), pad)) return;
+    viewCenter = vec.origin.slice();
   }
 
   function worldUnderPointer(sx, sy) {
@@ -844,6 +842,7 @@ PGRE.cardDiagrams['supp-radiation-field'] = function (host) {
       pitch += dy * 0.008;
       if (pitch > 1.2) pitch = 1.2;
       if (pitch < -1.2) pitch = -1.2;
+      clampPan();
     }
     draw();
     if (ev.cancelable) ev.preventDefault();

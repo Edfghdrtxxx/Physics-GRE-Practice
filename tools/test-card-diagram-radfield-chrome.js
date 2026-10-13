@@ -305,6 +305,55 @@ async function helpers(page) {
     }));
   };
 
+  h.requiredLabels = async function () {
+    return JSON.parse(await page.eval(function () {
+      var host = document.querySelector('[data-card-diagram]');
+      var need = ['q', 'a', 'apar', 'aperp', 'rhat', 'erad', 'theta', 'pattern'];
+      var missing = [], i, el, ok;
+      for (i = 0; i < need.length; i++) {
+        el = host && host.querySelector('.cd-lab[data-lab="' + need[i] + '"]');
+        ok = !!(el && getComputedStyle(el).visibility !== 'hidden' &&
+          el.getClientRects().length);
+        if (!ok) missing.push(need[i]);
+      }
+      return JSON.stringify({ missing: missing, ok: missing.length === 0 });
+    }));
+  };
+
+  h.labelsInside = async function () {
+    return JSON.parse(await page.eval(function () {
+      var host = document.querySelector('[data-card-diagram]');
+      if (!host) return JSON.stringify({ ok: true, clipped: [] });
+      var hr = host.getBoundingClientRect();
+      var clipped = [];
+      host.querySelectorAll('.cd-lab').forEach(function (el) {
+        if (getComputedStyle(el).visibility === 'hidden' || !el.getClientRects().length) return;
+        var r = el.getBoundingClientRect();
+        var slop = 1.5;
+        if (r.left < hr.left - slop || r.right > hr.right + slop ||
+            r.top < hr.top - slop || r.bottom > hr.bottom + slop) {
+          clipped.push(el.getAttribute('data-lab'));
+        }
+      });
+      return JSON.stringify({ ok: clipped.length === 0, clipped: clipped });
+    }));
+  };
+
+  h.paintedCount = async function () {
+    return Number(await page.eval(function () {
+      var host = document.querySelector('[data-card-diagram]');
+      var canvas = host && host.querySelector('canvas');
+      if (!canvas) return 0;
+      var ctx = canvas.getContext('2d');
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      var n = 0, i;
+      for (i = 3; i < img.length; i += 4) {
+        if (img[i] > 8) n++;
+      }
+      return n;
+    }));
+  };
+
   h.uiOverlap = async function () {
     return JSON.parse(await page.eval(function () {
       var host = document.querySelector('[data-card-diagram]');
@@ -432,6 +481,12 @@ var STAGES = [
       var ov0 = await h.uiOverlap();
       h.assert(ov0.max === 0,
         'no labels or chrome overlap at default view (got ' + ov0.max + ' px^2 on ' + ov0.pair + ')');
+      var req = await h.requiredLabels();
+      h.assert(req.ok,
+        'default view keeps the teaching labels visible (missing ' + req.missing.join(',') + ')');
+      var inside0 = await h.labelsInside();
+      h.assert(inside0.ok,
+        'default labels sit inside the panel (clipped ' + inside0.clipped.join(',') + ')');
       await h.scrollDiagram();
     } },
 
@@ -781,14 +836,101 @@ var STAGES = [
           [Number(host.getAttribute('data-ox')), Number(host.getAttribute('data-oy'))],
           [Number(host.getAttribute('data-fx')), Number(host.getAttribute('data-fy'))]
         ];
-        var pad = 80, i, on = false;
+        var pad = 24, i, on = false;
         for (i = 0; i < pts.length; i++) {
-          if (pts[i][0] >= -pad && pts[i][0] <= w + pad &&
-              pts[i][1] >= -pad && pts[i][1] <= hgt + pad) on = true;
+          if (pts[i][0] >= pad && pts[i][0] <= w - pad &&
+              pts[i][1] >= pad && pts[i][1] <= hgt - pad) on = true;
         }
         return JSON.stringify({ on: on, w: w, h: hgt, pts: pts });
       }));
       h.assert(out.on, 'after a huge pan a drawn point is still on the panel');
+    } },
+
+  { name: 'pan then rotate leaves painted content',
+    run: async function (page, h) {
+      await h.clickZoom('reset');
+      var i;
+      for (i = 0; i < 16; i++) await h.clickZoom('in');
+      var hi = await h.snapBack();
+      h.assert(Math.abs(Number(hi.zoom) - 3) < 1e-6, 'at zoom 3 for pan-then-rotate');
+      await page.eval(function () {
+        var host = document.querySelector('[data-card-diagram]');
+        var canvas = host.querySelector('canvas');
+        var r = canvas.getBoundingClientRect();
+        var x = r.left + r.width * 0.5;
+        var y = r.top + r.height * 0.5;
+        function fire(type, cx, cy, shift) {
+          host.dispatchEvent(new PointerEvent(type, {
+            bubbles: true, cancelable: true, pointerId: 11, pointerType: 'mouse',
+            clientX: cx, clientY: cy, shiftKey: !!shift,
+            button: 0, buttons: type === 'pointerup' ? 0 : 1
+          }));
+        }
+        var k;
+        for (k = 0; k < 20; k++) {
+          fire('pointerdown', x, y, true);
+          fire('pointermove', x - 30, y, true);
+          fire('pointerup', x - 30, y, true);
+        }
+        fire('pointerdown', x, y, false);
+        fire('pointermove', x + 33, y, false);
+        fire('pointerup', x + 33, y, false);
+      });
+      await h.sleep(120);
+      var painted = await h.paintedCount();
+      h.assert(painted >= 200,
+        'after pan then rotate the canvas still has painted content (got ' + painted + ')');
+      var on = JSON.parse(await page.eval(function () {
+        var host = document.querySelector('[data-card-diagram]');
+        var w = host.clientWidth, hgt = host.clientHeight;
+        var ox = Number(host.getAttribute('data-ox'));
+        var oy = Number(host.getAttribute('data-oy'));
+        var fx = Number(host.getAttribute('data-fx'));
+        var fy = Number(host.getAttribute('data-fy'));
+        return JSON.stringify({
+          originOn: ox >= 0 && ox <= w && oy >= 0 && oy <= hgt,
+          fieldOn: fx >= 0 && fx <= w && fy >= 0 && fy <= hgt
+        });
+      }));
+      h.assert(on.originOn || on.fieldOn,
+        'charge or field point remains on the panel after pan then rotate');
+      await h.clickZoom('reset');
+    } },
+
+  { name: 'panned labels stay inside the panel and clear of controls',
+    run: async function (page, h) {
+      async function shiftPan(dx, dy) {
+        await page.eval('() => { var host = document.querySelector("[data-card-diagram]"); var canvas = host.querySelector("canvas"); var r = canvas.getBoundingClientRect(); var x = r.left + r.width * 0.5; var y = r.top + r.height * 0.5; function fire(type, cx, cy) { host.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 12, pointerType: "mouse", clientX: cx, clientY: cy, shiftKey: true, button: 0, buttons: type === "pointerup" ? 0 : 1 })); } fire("pointerdown", x, y); fire("pointermove", x + ' + dx + ', y + ' + dy + '); fire("pointerup", x + ' + dx + ', y + ' + dy + '); }');
+        await h.sleep(80);
+      }
+      await h.clickZoom('reset');
+      await shiftPan(0, 220);
+      var downUi = await h.uiOverlap();
+      h.assert(downUi.max === 0,
+        'no label/control overlap after downward pan (got ' + downUi.max + ' on ' + downUi.pair + ')');
+      var downIn = await h.labelsInside();
+      h.assert(downIn.ok,
+        'visible labels stay inside after downward pan (clipped ' + downIn.clipped.join(',') + ')');
+      await h.clickZoom('reset');
+      var j;
+      for (j = 0; j < 16; j++) await h.clickZoom('in');
+      await shiftPan(-240, 0);
+      var leftUi = await h.uiOverlap();
+      h.assert(leftUi.max === 0,
+        'no label/control overlap after left pan at zoom 3 (got ' + leftUi.max + ' on ' + leftUi.pair + ')');
+      var leftIn = await h.labelsInside();
+      h.assert(leftIn.ok,
+        'visible labels stay inside after left pan at zoom 3 (clipped ' + leftIn.clipped.join(',') + ')');
+      await h.clickZoom('reset');
+      for (j = 0; j < 16; j++) await h.clickZoom('out');
+      await shiftPan(240, 0);
+      var rightUi = await h.uiOverlap();
+      h.assert(rightUi.max === 0,
+        'no label/control overlap after right pan at zoom 0.6 (got ' + rightUi.max + ' on ' + rightUi.pair + ')');
+      var rightIn = await h.labelsInside();
+      h.assert(rightIn.ok,
+        'visible labels stay inside after right pan at zoom 0.6 (clipped ' + rightIn.clipped.join(',') + ')');
+      await h.clickZoom('reset');
     } },
 
   { name: 'no label overlap at zoom 0.6, 1, and 3',
@@ -865,6 +1007,44 @@ var STAGES = [
         'no label/hint/control overlap at 390 px (got ' + ui.max + ' px^2 on ' + ui.pair + ')');
       h.assert(/not field/i.test(snap.patternText),
         'the power-pattern label is present at phone width');
+      var reqPhone = await h.requiredLabels();
+      h.assert(reqPhone.ok,
+        'phone default keeps the teaching labels visible (missing ' + reqPhone.missing.join(',') + ')');
+      var beforePat = JSON.parse(await page.eval(function () {
+        var el = document.querySelector('[data-card-diagram] [data-lab="pattern"]');
+        var r = el.getBoundingClientRect();
+        return JSON.stringify({ left: r.left, vis: getComputedStyle(el).visibility });
+      }));
+      await page.eval(function () {
+        var host = document.querySelector('[data-card-diagram]');
+        var canvas = host.querySelector('canvas');
+        var r = canvas.getBoundingClientRect();
+        var x = r.left + r.width * 0.5;
+        var y = r.top + r.height * 0.5;
+        function fire(type, cx, cy) {
+          host.dispatchEvent(new PointerEvent(type, {
+            bubbles: true, cancelable: true, pointerId: 13, pointerType: 'mouse',
+            clientX: cx, clientY: cy, shiftKey: true,
+            button: 0, buttons: type === 'pointerup' ? 0 : 1
+          }));
+        }
+        fire('pointerdown', x, y);
+        fire('pointermove', x + 60, y);
+        fire('pointerup', x + 60, y);
+      });
+      await h.sleep(100);
+      var afterPat = JSON.parse(await page.eval(function () {
+        var el = document.querySelector('[data-card-diagram] [data-lab="pattern"]');
+        var r = el.getBoundingClientRect();
+        return JSON.stringify({ left: r.left, vis: getComputedStyle(el).visibility });
+      }));
+      h.assert(afterPat.vis === 'hidden' || Math.abs(afterPat.left - beforePat.left) > 8,
+        'the power caption follows the pattern on phone pan (before ' +
+        beforePat.left + ' after ' + afterPat.left + ')');
+      var phonePanUi = await h.uiOverlap();
+      h.assert(phonePanUi.max === 0,
+        'no label/control overlap after phone pan (got ' + phonePanUi.max + ' on ' + phonePanUi.pair + ')');
+      await h.clickZoom('reset');
     } },
 
   { name: 'diagram in dark theme', shot: '06-back-dark', size: '1280x800',
