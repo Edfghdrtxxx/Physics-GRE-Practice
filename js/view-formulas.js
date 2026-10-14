@@ -2503,6 +2503,14 @@ PGRE.views.formulas = (function () {
     return -1;
   }
 
+  /* Count line above the card. The position is the card's number in the
+     navigator, not how many are finished, so done and left are named beside
+     it — the same two values the meter under the line draws. */
+  function studyCountText(pos, rosterN) {
+    return 'Card ' + pos + ' of ' + rosterN + ' · ' + study.done + ' done · ' +
+      study.queue.length + ' left';
+  }
+
   /* Stored SM-2 interval on this card, in days. "new" when the scheduler
      has never written one. Reads st.interval as gradeCard left it — not
      a days-until-due guess. */
@@ -2670,8 +2678,7 @@ PGRE.views.formulas = (function () {
       '<div class="study-scroll">' +
       '<div class="study-main">' +
       '<div class="practice-meta">' +
-        '<span>Card ' + (ri >= 0 ? ri + 1 : study.done + 1) + ' of ' + rosterN +
-          ' · ' + study.queue.length + ' left</span>' +
+        '<span>' + studyCountText(ri >= 0 ? ri + 1 : study.done + 1, rosterN) + '</span>' +
         '<span class="recall-timer" id="recall-timer" role="timer" aria-live="off">2:00</span>' +
         (study.history.length ? '<button class="btn btn-ghost btn-sm session-back" id="session-back">' +
           'Back <span class="key-hint">←</span></button>' : '') +
@@ -2790,7 +2797,7 @@ PGRE.views.formulas = (function () {
       '<div class="study-scroll">' +
       '<div class="study-main">' +
       '<div class="practice-meta">' +
-        '<span>Card ' + (ri >= 0 ? ri + 1 : 1) + ' of ' + rosterN + '</span>' +
+        '<span>' + studyCountText(ri >= 0 ? ri + 1 : 1, rosterN) + '</span>' +
         (study.history.length ? '<button class="btn btn-ghost btn-sm session-back" id="session-back">' +
           'Back <span class="key-hint">←</span></button>' : '') +
         undoBtn +
