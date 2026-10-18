@@ -9,6 +9,7 @@ I have little background in computer science. When a decision is required of me,
 - The studio behind that file:// tab is `/Users/Reid Hu/Physics GRE` — the primary checkout, not a disposable copy. Its `localStorage['pgre-state-v1']` on the file:// origin holds the captain's streaks, SRS schedules, decks, and progress. Treehouse copies under `/Users/leyi/.treehouse/` are in-flight worktrees; never treat them as the live studio.
 - Timed pack launch for the user is owned by OrbitOS `/practice-physics-gre-set` (reuse richest live tab; same-origin reload if packs scripts missing).
 - Automated verify/tests: isolated profile + non-user port only (see `.agents/skills/verify/SKILL.md`).
+- Status bridge guard: an automated Chrome session that loads `index.html` must block `127.0.0.1:4789` and `localhost:4789` before the page loads and assert the bridge answered nothing; otherwise `js/status.js` overwrites the real status snapshot with the test profile's. Recipes (CDP block in every tab, or a CSP header for `chrome-devtools-axi`) and their limits: `.agents/skills/verify/SKILL.md` Gotchas.
 
 # Review path
 - Default review is a **same-harness sub-agent** in the session that did the work: OMP `reviewer` / `swe-2`, Grok Build, or Anti-Gravity. Do not spawn a separate Claude session to review.
