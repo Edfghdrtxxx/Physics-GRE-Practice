@@ -321,8 +321,8 @@ PGRE.views.dashboard = (function () {
   }
 
   /* ————————————————————————————————————————————————————————————
-     Intensity card. PGRE.intensity.compute() gives the five banded
-     readings and PGRE.intensity.review() their words, their order and the
+     Intensity card. PGRE.intensity.compute() gives the five readings
+     (three banded) and PGRE.intensity.review() their words, their order and the
      next action (js/intensity.js holds both, with the definitions and the
      thresholds). Top to bottom: one headline with one button; the five
      readings, each a button that opens how the number is computed, its
@@ -340,40 +340,8 @@ PGRE.views.dashboard = (function () {
 
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
 
-  /* The next timed pack that still has untried questions: this week's plan
-     order first (the task the This week card launches), then the lowest
-     pack number. fresh counts only questions this page can load. */
-  function nextFreshPack(tried) {
-    var packs = PGRE.PACKS || {};
-    function info(id) {
-      var p = packs[id];
-      if (!p || !Array.isArray(p.ids)) return null;
-      var fresh = 0;
-      p.ids.forEach(function (qid) {
-        if (!tried[qid] && (typeof PGRE.questionById !== 'function' || PGRE.questionById(qid))) fresh++;
-      });
-      return fresh ? { id: id, title: p.title || '', n: p.ids.length, fresh: fresh } : null;
-    }
-    var order = [];
-    try {
-      var cw = PGRE.currentWeek && PGRE.currentWeek();
-      (cw ? PGRE.weekTasks(cw.week) : []).forEach(function (t) {
-        if ((t.kind !== 'timed' && t.kind !== 'extra-set') || PGRE.gamify.taskDone(t.id)) return;
-        var id = PGRE.packId ? PGRE.packId(t.id) : null;
-        if (id && order.indexOf(id) < 0) order.push(id);
-      });
-    } catch (e) { /* no plan data: pack order alone decides */ }
-    Object.keys(packs).sort().forEach(function (id) { if (order.indexOf(id) < 0) order.push(id); });
-    for (var i = 0; i < order.length; i++) {
-      var hit = info(order[i]);
-      if (hit) return hit;
-    }
-    return null;
-  }
-
   /* The facts review() cannot read from a readout: whether anything was
-     ever answered, what is still untried, and the next pack. "Tried" is
-     any attempt row, the same rule compute() uses for coverage. */
+     ever answered and what is still untried. "Tried" is any attempt row. */
   function intensityContext() {
     var s = PGRE.store.state;
     var rows = Array.isArray(s.attempts) ? s.attempts : [];
@@ -392,8 +360,7 @@ PGRE.views.dashboard = (function () {
     return {
       hasHistory: any,
       unseen: pool.length ? unseen : null,          // an empty pool is "not loaded", not "all tried"
-      unseenByTopic: pool.length ? byTopic : null,
-      nextPack: nextFreshPack(tried)
+      unseenByTopic: pool.length ? byTopic : null
     };
   }
 
@@ -420,8 +387,7 @@ PGRE.views.dashboard = (function () {
     if (!diff) return '';
     var unit = key === 'paceSec' ? ' s' : key === 'firstAttemptAccuracy' ? ' points'
       : key === 'repeatMinutes' ? ' min' : '';
-    var size = key === 'coverage' ? Math.abs(diff).toFixed(1) : String(Math.abs(diff));
-    return (diff > 0 ? '+' : '−') + size + unit;
+    return (diff > 0 ? '+' : '−') + Math.abs(diff) + unit;
   }
 
   function intensityAction(a, cls) {
@@ -483,7 +449,7 @@ PGRE.views.dashboard = (function () {
         : '') +
       '<div class="intensity-more" id="' + panelId + '"' + (open ? '' : ' hidden') + '>' +
         r.how.map(function (line) { return '<p>' + ui.esc(line) + '</p>'; }).join('') +
-        '<ul class="intensity-cuts" aria-label="Band limits">' + cuts + '</ul>' +
+        (cuts ? '<ul class="intensity-cuts" aria-label="Band limits">' + cuts + '</ul>' : '') +
         (links ? '<div class="intensity-links">' + links + '</div>' : '') +
       '</div>' +
     '</li>';
@@ -504,9 +470,10 @@ PGRE.views.dashboard = (function () {
     '</div>';
   }
 
-  /* "3 on target · 1 close · 1 off target", each with its band shape. The
-     five readings always add up: one shown without a target (a no-pack
-     day, or nothing left to try) is counted as that. */
+  /* "2 on target · 1 close · 2 without a target", each with its band
+     shape. The five readings always add up: one shown without a target
+     (New questions, Repeat time, Daily work after its last target day) is
+     counted as that. */
   function intensityTallyHTML(tally) {
     var I = PGRE.intensity;
     var parts = [['green', I.LABELS.green], ['amber', I.LABELS.amber], ['red', I.LABELS.red],
@@ -520,43 +487,66 @@ PGRE.views.dashboard = (function () {
     return '<p class="intensity-tally">' + parts.join('') + '</p>';
   }
 
-  /* Last 7 days in one strip: the count of new questions over its bar, the
-     weekday, then the median pace with its band shape. Scale: the larger
-     of 1.25 x the target and the tallest bar, so the dashed target line
-     always sits inside. A no-pack weekday with nothing answered reads
-     "no pack", not as a missed day. Every value is printed and each day
-     carries one sentence for screen readers, so nothing needs hover. */
+  /* Last N days of Daily work in one strip (N: 7, 30 or a custom 2-90,
+     kept in settings.intensityTrendDays): the count of mistake-book
+     retakes over its bar, the weekday, then the day's band shape with
+     "mock" on a day a full mock was submitted. Scale: the larger of 1.25 x
+     the target and the tallest bar, so the dashed target line always sits
+     inside. A day after the last target day with nothing answered reads
+     "no target", not as a missed day. Every value is printed and each day
+     carries one sentence for screen readers, so nothing needs hover. Past
+     7 days a column shows the day of the month, drops the foot word, and
+     the strip scrolls sideways when it runs out of width. */
   function intensityWeekHTML(r, T) {
     var ui = PGRE.ui, LABELS = PGRE.intensity.LABELS;
-    var target = T.newQuestions.green;
+    var target = T.dailyWork.green;
     var max = target * 1.25;
-    r.days.forEach(function (day) { if (day.newQuestions > max) max = day.newQuestions; });
+    r.days.forEach(function (day) { if (day.retakes > max) max = day.retakes; });
     var markPct = (100 * target / max).toFixed(1);
+    var nDays = r.days.length;
+    var long = nDays > 7;
     var cells = r.days.map(function (day) {
-      var n = day.newQuestions;
-      var idle = !day.workingDay && n === 0;
+      var n = day.retakes;
+      var rest = day.target == null;
+      var idle = rest && n === 0 && !day.mocks;
       var h = n > 0 ? Math.max(4, Math.round(100 * n / max)) : 0;
-      var paceText = day.paceSec == null ? (idle ? 'no pack' : '—') : day.paceSec + ' s';
-      var say = day.full + ': ' + (idle ? 'no timed pack planned, ' : '') + plural(n, 'new question') +
-        (day.paceSec == null ? '' : ', median pace ' + day.paceSec + ' seconds' +
-          (day.paceBand ? ' (' + LABELS[day.paceBand].toLowerCase() + ')' : '')) + '.';
-      return '<li class="iweek-day' + (day.isToday ? ' is-today' : '') + (day.workingDay ? '' : ' is-rest') +
-          (idle ? ' is-idle' : '') + (n ? '' : ' is-empty') + '" data-day="' + day.date + '" data-new="' + n + '" data-pace="' +
-          (day.paceSec == null ? '' : day.paceSec) + '" data-tip="' + ui.esc(say.replace(': ', '\\n')) + '">' +
+      var foot = day.mocks ? 'mock' : (idle ? 'no target' : '');
+      var say = day.full + ': ' + plural(n, 'mistake-book question') +
+        (day.mocks ? ', full mock submitted' : '') +
+        (day.workBand ? ' (' + LABELS[day.workBand].toLowerCase() + ')' : (rest ? ', no target' : '')) + '.';
+      return '<li class="iweek-day' + (day.isToday ? ' is-today' : '') + (rest ? ' is-rest' : '') +
+          (idle ? ' is-idle' : '') + (n ? '' : ' is-empty') + '" data-day="' + day.date + '" data-retakes="' + n +
+          '" data-mocks="' + day.mocks + '" data-band="' + (day.workBand || 'none') +
+          '" data-tip="' + ui.esc(say.replace(': ', '\\n')) + '">' +
         '<span class="iweek-n" aria-hidden="true">' + (idle ? '—' : n) + '</span>' +
         '<span class="iweek-plot" aria-hidden="true"><span class="iweek-mark" style="bottom:' + markPct + '%"></span>' +
           '<span class="iweek-bar" style="height:' + h + '%"></span></span>' +
-        '<span class="iweek-wd" aria-hidden="true">' + (day.isToday ? 'Today' : ui.esc(day.short)) + '</span>' +
+        '<span class="iweek-wd" aria-hidden="true">' +
+          (long ? +day.date.slice(8) : day.isToday ? 'Today' : ui.esc(day.short)) + '</span>' +
         '<span class="iweek-pace" aria-hidden="true">' +
-          (day.paceBand ? '<span class="band-dot band-' + day.paceBand + '"></span>' : '') + paceText + '</span>' +
+          (day.workBand ? '<span class="band-dot band-' + day.workBand + '"></span>' : '') +
+          (foot ? '<span class="iweek-foot">' + foot + '</span>' : '') + '</span>' +
         '<span class="ivh">' + ui.esc(say) + '</span>' +
       '</li>';
     }).join('');
-    return '<figure class="iweek" id="intensity-week">' +
-      '<figcaption class="iweek-cap"><strong>Last 7 days</strong>' +
-        '<span><span class="itrend-key" aria-hidden="true"></span>target ' + target + ' new questions · pace ' +
-          T.paceSec.green + ' s or under</span></figcaption>' +
-      '<ol class="iweek-days">' + cells + '</ol>' +
+    var custom = nDays !== 7 && nDays !== 30;
+    function preset(n) {
+      return '<button type="button" class="iweek-range-btn" id="iweek-range-' + n + '" data-trend-days="' + n +
+        '" aria-pressed="' + (nDays === n) + '">' + n + ' days</button>';
+    }
+    var range = '<span class="iweek-range" role="group" aria-label="Days shown">' + preset(7) + preset(30) +
+      '<label class="iweek-range-custom' + (custom ? ' is-on' : '') + '">Custom ' +
+        '<input type="number" id="iweek-range-custom" inputmode="numeric" min="' + T.trendDaysMin +
+          '" max="' + T.trendDaysMax + '" step="1" placeholder="' + T.trendDaysMin + '–' + T.trendDaysMax +
+          '" value="' + (custom ? nDays : '') + '" aria-label="Custom number of days, ' + T.trendDaysMin +
+          ' to ' + T.trendDaysMax + '"></label></span>';
+    var span = long ? ' <span class="iweek-span">' + ui.esc(r.days[0].full.replace(/^\w+, /, '')) + ' – today</span>' : '';
+    return '<figure class="iweek' + (long ? ' is-long' : '') + '" id="intensity-week">' +
+      '<figcaption class="iweek-cap"><span class="iweek-title"><strong>Last ' + nDays + ' days</strong>' + span +
+          range + '</span>' +
+        '<span><span class="itrend-key" aria-hidden="true"></span>target ' + target +
+          ' mistake-book questions, or a full mock</span></figcaption>' +
+      '<ol class="iweek-days" style="--iweek-n:' + nDays + '">' + cells + '</ol>' +
     '</figure>';
   }
 
@@ -615,7 +605,7 @@ PGRE.views.dashboard = (function () {
     if (!I || typeof I.compute !== 'function' || typeof I.review !== 'function') return null;
     o = o || {};
     var s = PGRE.store.state;
-    var d = I.compute(s);
+    var d = I.compute(s, { trendDays: s.settings && s.settings.intensityTrendDays });
     var ctx = intensityContext();
     var r = I.review(d, ctx);
     var seen = intensitySeen(d.date);
@@ -635,7 +625,7 @@ PGRE.views.dashboard = (function () {
       (r.empty ? '' : intensityWeekHTML(r, I.THRESHOLDS) + intensityTopicsHTML(d, r, tableOpen));
     // Everything the readings depend on. Which readings are open and whether
     // the topic table is open are the reader's choices, not part of it.
-    var sig = JSON.stringify([d, ctx.nextPack, ctx.unseen, ctx.hasHistory]);
+    var sig = JSON.stringify([d, ctx.unseen, ctx.hasHistory]);
     return { html: html, sig: sig, d: d, r: r, empty: r.empty };
   }
 
@@ -661,7 +651,28 @@ PGRE.views.dashboard = (function () {
       if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { requestAnimationFrame(run); });
       else run();
     }
+    // A long strip that scrolls opens on today.
+    var strip = card.querySelector('.iweek.is-long .iweek-days');
+    if (strip) strip.scrollLeft = strip.scrollWidth;
     intensityRemember(built.d, built.r);
+  }
+
+  /* Days shown in the strip: a preset button or the custom field. An entry
+     outside 2-90, or the length already shown, puts the field back. */
+  function intensitySetTrendDays(n) {
+    var settings = PGRE.store.state.settings;
+    if (!settings) return;
+    var I = PGRE.intensity;
+    var days = I.trendDays(n);
+    var current = I.trendDays(settings.intensityTrendDays);
+    if (days === n && days !== current) {
+      settings.intensityTrendDays = days;
+      PGRE.store.save();
+      intensityRefresh();
+      return;
+    }
+    var input = document.getElementById('iweek-range-custom');
+    if (input) input.value = current === 7 || current === 30 ? '' : current;
   }
 
   /* Where keyboard focus sits in the card, in terms that outlive a rebuild:
@@ -735,6 +746,11 @@ PGRE.views.dashboard = (function () {
     document.addEventListener('click', function (e) {
       var btn = e.target && e.target.closest ? e.target.closest('#intensity-card .intensity-toggle') : null;
       if (btn) intensityToggle(btn);
+      var range = e.target && e.target.closest ? e.target.closest('#intensity-card [data-trend-days]') : null;
+      if (range) intensitySetTrendDays(+range.getAttribute('data-trend-days'));
+    });
+    document.addEventListener('change', function (e) {
+      if (e.target && e.target.id === 'iweek-range-custom') intensitySetTrendDays(e.target.valueAsNumber);
     });
     // <details> toggle does not bubble: capture it.
     document.addEventListener('toggle', function (e) {

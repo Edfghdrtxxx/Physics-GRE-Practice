@@ -234,48 +234,32 @@ assert(book.today[1].added === false && book.today[1].luckyGuess === true,
   'a lucky-guess filing on an older entry is an update, not an addition');
 console.log('\nintensity');
 var it = summary.intensity;
-// No timed pack on Sunday (0) or Thursday (4), local time.
-function workingDays(from, to) {
-  var n = 0;
-  var d = new Date(from + 'T12:00:00');
-  var end = new Date(to + 'T12:00:00');
-  while (d <= end) { if (d.getDay() !== 0 && d.getDay() !== 4) n++; d.setDate(d.getDate() + 1); }
-  return n;
-}
-var lastPack = localDay(10);
-var wdl = workingDays(today, lastPack);
-var wd7 = workingDays(localDay(-6), today);
+var lastTarget = localDay(10);
 assert(it && it.date === today, 'intensity uses the summary date');
 assert(Object.keys(it).join(',') ===
-  'date,newQuestions,paceSec,firstAttemptAccuracy,repeatMinutes,coverage,topics,days',
+  'date,newQuestions,paceSec,firstAttemptAccuracy,repeatMinutes,dailyWork,topics,days',
   'intensity carries the five metrics, the topic rows and the 7-day trend');
-['newQuestions', 'paceSec', 'firstAttemptAccuracy', 'repeatMinutes', 'coverage'].forEach(function (k) {
+['newQuestions', 'paceSec', 'firstAttemptAccuracy', 'repeatMinutes', 'dailyWork'].forEach(function (k) {
   assert('value' in it[k] && 'threshold' in it[k] && 'band' in it[k],
     k + ' reports value, threshold and band');
 });
-assert(it.newQuestions.value === 2 && it.newQuestions.threshold === 15 && it.newQuestions.band === 'red',
-  'new questions today count first practice tries only (exam rows are not new): 2 / 15, red');
+assert(it.newQuestions.value === 2 && it.newQuestions.threshold === null && it.newQuestions.band === null,
+  'new questions today count first practice tries only (exam rows are not new): 2, no target');
 assert(it.paceSec.value === 63 && it.paceSec.threshold === 103 && it.paceSec.band === 'green',
   'pace is the median of today\'s new-question times in whole seconds: 63 / 103, green');
 assert(it.firstAttemptAccuracy.value === 33 && it.firstAttemptAccuracy.n === 3 &&
   it.firstAttemptAccuracy.correct === 1 && it.firstAttemptAccuracy.band === 'red',
   'first-try accuracy over 7 days: 1 of 3 = 33%, red');
-assert(it.repeatMinutes.value === 0 && it.repeatMinutes.band === 'green',
-  'no mistake-book retakes: 0 minutes, green');
-assert(it.coverage.remaining === 2 && it.coverage.packQuestions === 5,
-  'coverage counts pack questions (union of pack ids) with no attempt of any mode');
-assert(it.coverage.lastPackDay === lastPack && it.coverage.examDate === examDate,
-  'last pack day is the exam date minus 3 days');
-assert(sandbox.PGRE.intensity.NO_PACK_WEEKDAYS.join(',') === '0,4' &&
-  it.coverage.noPackWeekdays.join(',') === '0,4',
-  'Sunday and Thursday are the no-pack weekdays, in the module and the payload');
-assert(it.coverage.workingDaysLeft === wdl,
-  'working days run from today through the last pack day, Sundays and Thursdays excluded (' + wdl + ')');
-assert(wd7 === 5 && it.coverage.workingDays7 === 5,
-  'any 7 days hold one Sunday and one Thursday, so 5 working days');
-assert(it.coverage.required === Math.round(10 * 2 / wdl) / 10 && it.coverage.actual === 0.6 &&
-  it.coverage.band === 'green',
-  'required = remaining / working days; actual = 3 new in 7 days / 5 working days = 0.6; green');
+assert(it.repeatMinutes.value === 0 && it.repeatMinutes.threshold === null && it.repeatMinutes.band === null,
+  'no mistake-book retakes: 0 minutes, no limit');
+assert(it.dailyWork.value === 0 && it.dailyWork.threshold === 40 && it.dailyWork.band === 'green' &&
+  it.dailyWork.mocks.length === 1 && it.dailyWork.mocks[0].id === 'exam-today',
+  'Daily work: 0 retakes, but the exam submitted today meets the target of 40: green');
+assert(it.dailyWork.lastTargetDay === lastTarget && it.dailyWork.examDate === examDate,
+  'the last target day is the exam date minus 3 days');
+assert(it.days[5].mocks === 1 && it.days[5].workBand === 'green' && it.days[4].mocks === 0 &&
+  it.days[4].workBand === 'red',
+  'the 7-day trend marks yesterday\'s submitted exam; a day with neither retakes nor a mock is red');
 assert(it.topics.length === 9 && it.topics.every(function (t) { return !t.judged && t.band === null; }),
   'every topic has fewer than 5 new questions, so none gets a band');
 assert(it.topics.map(function (t) { return t.topic; }).join(',') === 'cm,em,qm,th,at,sp,ow,sr,lb',

@@ -2,8 +2,13 @@
    dashboard Intensity card (js/view-dashboard.js), the two pace lines on the
    practice summary (js/view-practice.js), and the `intensity` object of the
    agent status summary (js/status.js). It only reads state.attempts,
-   state.settings.examDate, PGRE.PACKS and PGRE.TOPICS, so the three surfaces
-   cannot disagree and nothing here writes study data.
+   state.exams, state.settings.examDate and PGRE.TOPICS, so the three
+   surfaces cannot disagree and nothing here writes study data.
+
+   The plan it measures (OrbitOS 8-Week-Syllabus, "Mock-first 2026-10-17"):
+   new material comes from the Sunday full mocks; the other days go to the
+   mistake book. So the daily target is Daily work, and New questions and
+   Repeat time are shown without a target or a band.
 
    Definitions
    - Day: a local calendar day, midnight to midnight. This is the key
@@ -14,20 +19,24 @@
    - New question: a first attempt whose mode is 'practice' (a row without
      a mode counts as 'practice', the default gamify.recordAnswer writes).
    - Repeat: any attempt in mode 'mistakes'.
-   - New questions (today): the number of today's new questions.
+   - Full mock: a state.exams row with submittedAt, any source (an intact
+     form or the weighted 70-question draw); every exam format is a full
+     sitting. Its day is the local day of submittedAt.
+   - New questions (today): the number of today's new questions. No band.
    - Pace (today): the median ms of today's new questions, in whole seconds.
      null (shown as "—") when there are none.
    - First-attempt accuracy (7 days): the share of new questions in the last
      7 days with correct === true, in whole percent.
    - Repeat minutes (today): the sum of ms over today's repeats, in whole
-     minutes.
-   - Coverage: remaining = qids in the union of PGRE.PACKS[*].ids that have
-     no attempt at all. lastPackDay = settings.examDate (default 2026-11-01)
-     minus 3 days. A working day is a day whose local weekday is not in
-     NO_PACK_WEEKDAYS (Sunday and Thursday). workingDaysLeft = the working
-     days from today through lastPackDay inclusive. required = remaining /
-     workingDaysLeft. actual = new questions in the last 7 days (any
-     weekday) / the working days among those 7. Both to one decimal.
+     minutes. No band.
+   - Daily work (today): value = today's repeats (each answered retake
+     counts once). lastTargetDay = settings.examDate (default 2026-11-01)
+     minus 3 days. Through lastTargetDay the band is green when value >= 40
+     or a full mock was submitted today, amber at 25-39, red under 25.
+     After lastTargetDay there is no target and no band.
+   - Day strip: the last N days, oldest first. N = opts.trendDays (the
+     dashboard passes settings.intensityTrendDays), a whole number from 2 to
+     90; anything else is 7. The status payload keeps 7.
    - Per topic (14 days): for each ETS topic in PGRE.TOPICS, the new
      questions of the last 14 days (row.topic), their first-attempt accuracy,
      and the ETS weight. Sorted by weight x (0.79 - accuracy), largest first.
@@ -46,25 +55,23 @@ window.PGRE = window.PGRE || {};
 PGRE.intensity = (function () {
   'use strict';
 
-  /* Local weekdays with no timed pack (0 = Sunday ... 6 = Saturday):
-     Sunday is the full-sitting day, Thursday the weekly group discussion.
-     Coverage counts every other weekday as a working day. */
-  var NO_PACK_WEEKDAYS = Object.freeze([0, 4]);
+  /* Local weekday of the scheduled full mock (0 = Sunday). It only picks
+     the words and the link of an unmet Daily work target, never a band. */
+  var MOCK_WEEKDAY = 0;
 
-  /* Every other tunable number lives here. */
+  /* Every tunable number lives here. */
   var THRESHOLDS = {
-    newQuestions: { green: 15, amber: 8 },   // today: 15+ green, 8-14 amber, under 8 red
+    dailyWork: { green: 40, amber: 25 },     // retakes today: 40+ (or a full mock) green, 25-39 amber, under 25 red
     paceSec: { green: 103, amber: 130 },     // median s: 103 or less green, 104-130 amber, over 130 red
     accuracyPct: { green: 75, amber: 60 },   // 7 days: 75%+ green, 60-74% amber, under 60% red
-    repeatMin: { green: 20, amber: 40 },     // today: 20 or less green, 21-40 amber, over 40 red
-    coverageSlack: 3,                        // actual >= required green; up to 3 below amber; more red
     topicMinNew: 5,                          // fewer new questions than this: too few to judge
     topicTargetAcc: 0.79,                    // per-topic sort key: weight x (0.79 - accuracy)
-    lastPackLeadDays: 3,                     // last pack day = exam date minus 3 days
+    lastTargetLeadDays: 3,                   // last day with a Daily work target = exam date minus 3 days
     accuracyDays: 7,
-    coverageDays: 7,
     topicDays: 14,
-    trendDays: 7,
+    trendDays: 7,                            // day strip default; 2-90 on request
+    trendDaysMin: 2,
+    trendDaysMax: 90,
     defaultExamDate: '2026-11-01'
   };
 
@@ -99,10 +106,6 @@ PGRE.intensity = (function () {
     return dayKey(d);
   }
 
-  function isWorkingDay(key) { return NO_PACK_WEEKDAYS.indexOf(parseDay(key).getDay()) < 0; }
-
-  function round1(x) { return Math.round(x * 10) / 10; }
-
   function finiteMs(ms) { return typeof ms === 'number' && isFinite(ms) && ms >= 0; }
 
   function medianOf(list) {
@@ -133,21 +136,20 @@ PGRE.intensity = (function () {
     return 'red';
   }
 
-  /* Band for one rounded value of a named metric. */
+  /* Band for one rounded value of a named metric. New questions and repeat
+     minutes have none. */
   function band(metric, value) {
-    if (metric === 'newQuestions') return bandHigh(value, THRESHOLDS.newQuestions);
     if (metric === 'paceSec') return bandLow(value, THRESHOLDS.paceSec);
     if (metric === 'accuracyPct') return bandHigh(value, THRESHOLDS.accuracyPct);
-    if (metric === 'repeatMin') return bandLow(value, THRESHOLDS.repeatMin);
+    if (metric === 'dailyWork') return bandHigh(value, THRESHOLDS.dailyWork);
     return null;
   }
 
-  function coverageBand(remaining, required, actual) {
-    if (remaining === 0) return 'green';
-    if (required == null) return 'red';                    // packs left and no working day left
-    if (actual >= required - 1e-9) return 'green';
-    if (actual >= required - THRESHOLDS.coverageSlack - 1e-9) return 'amber';
-    return 'red';
+  /* Daily work band for one day: none after the last target day; green on
+     a day with a full mock submitted. */
+  function workBand(day, lastTargetDay, retakes, mock) {
+    if (day > lastTargetDay) return null;
+    return mock ? 'green' : bandHigh(retakes, THRESHOLDS.dailyWork);
   }
 
   function topicOf(row) {
@@ -156,8 +158,8 @@ PGRE.intensity = (function () {
     return (q && q.topic) || null;
   }
 
-  /* One pass over the log in time order: new questions, repeats, and the
-     set of qids with any attempt. Sorts a copy; the log is not touched. */
+  /* One pass over the log in time order: new questions and repeats. Sorts
+     a copy; the log is not touched. */
   function classify(attempts) {
     var rows = [];
     (Array.isArray(attempts) ? attempts : []).forEach(function (row, i) {
@@ -180,21 +182,21 @@ PGRE.intensity = (function () {
       }
       if (mode === 'mistakes') repeats.push({ day: day, ms: row.ms });
     });
-    return { news: news, repeats: repeats, attempted: seen };
+    return { news: news, repeats: repeats };
   }
 
-  function packQuestionIds() {
-    var packs = PGRE.PACKS || {};
-    var seen = Object.create(null);
-    var out = [];
-    Object.keys(packs).forEach(function (k) {
-      var ids = packs[k] && Array.isArray(packs[k].ids) ? packs[k].ids : [];
-      ids.forEach(function (id) {
-        if (typeof id !== 'string' || !id || seen[id]) return;
-        seen[id] = true;
-        out.push(id);
+  /* Submitted full mocks by local day of submittedAt, in submit order. */
+  function mocksByDay(exams) {
+    var out = Object.create(null);
+    (Array.isArray(exams) ? exams : []).filter(function (x) { return x && x.submittedAt; })
+      .slice().sort(function (a, b) { return a.submittedAt < b.submittedAt ? -1 : a.submittedAt > b.submittedAt ? 1 : 0; })
+      .forEach(function (x) {
+        var day = localDay(x.submittedAt);
+        if (!day) return;
+        (out[day] = out[day] || []).push({
+          id: x.id || null, source: x.source || null, format: x.format || null, submittedAt: x.submittedAt
+        });
       });
-    });
     return out;
   }
 
@@ -203,8 +205,17 @@ PGRE.intensity = (function () {
     return isDayKey(s) ? s : THRESHOLDS.defaultExamDate;
   }
 
+  /* A day-strip length: a whole number from trendDaysMin to trendDaysMax,
+     else the default. */
+  function trendDaysOf(n) {
+    var T = THRESHOLDS;
+    n = Number(n);
+    return Math.floor(n) === n && n >= T.trendDaysMin && n <= T.trendDaysMax ? n : T.trendDays;
+  }
+
   /* compute(state?, opts?) -> the whole intensity readout.
-     opts.today: 'YYYY-MM-DD' (defaults to the local day of opts.now or now). */
+     opts.today: 'YYYY-MM-DD' (defaults to the local day of opts.now or now).
+     opts.trendDays: length of d.days (see trendDaysOf). */
   function compute(state, opts) {
     opts = opts || {};
     state = state || (PGRE.store && PGRE.store.state) || {};
@@ -233,24 +244,12 @@ PGRE.intensity = (function () {
     var right7 = news7.filter(function (r) { return r.correct; }).length;
     var accPct = news7.length ? Math.round(100 * right7 / news7.length) : null;
 
-    // Coverage
-    var packIds = packQuestionIds();
-    var remaining = packIds.filter(function (id) { return !c.attempted[id]; }).length;
+    // Daily work: today's retakes, or a full mock submitted today
     var examDate = examDateOf(state);
-    var lastPackDay = addDays(examDate, -T.lastPackLeadDays);
-    var workingDaysLeft = 0;
-    var guard = 0;
-    for (var d = today; d <= lastPackDay && guard < 400; d = addDays(d, 1), guard++) {
-      if (isWorkingDay(d)) workingDaysLeft++;
-    }
-    var required = remaining === 0 ? 0
-      : (workingDaysLeft > 0 ? round1(remaining / workingDaysLeft) : null);
-    var coverNews = c.news.filter(inLast(T.coverageDays)).length;
-    var coverWorking = 0;
-    for (var k = 0; k < T.coverageDays; k++) {
-      if (isWorkingDay(addDays(today, -k))) coverWorking++;
-    }
-    var actual = round1(coverNews / Math.max(1, coverWorking));
+    var lastTargetDay = addDays(examDate, -T.lastTargetLeadDays);
+    var mocks = mocksByDay(state.exams);
+    var mocksToday = mocks[today] || [];
+    var workTarget = today <= lastTargetDay;
 
     // Per topic, last 14 days
     var news14 = c.news.filter(inLast(T.topicDays));
@@ -282,23 +281,27 @@ PGRE.intensity = (function () {
     });
     topics.forEach(function (t) { delete t._order; });
 
-    // Seven-day trend, oldest first
+    // Day strip, oldest first
     var days = [];
-    for (var i = T.trendDays - 1; i >= 0; i--) {
+    for (var i = trendDaysOf(opts.trendDays) - 1; i >= 0; i--) {
       var key = addDays(today, -i);
       var rowsDay = c.news.filter(function (r) { return r.day === key; });
+      var retakesDay = c.repeats.filter(function (r) { return r.day === key; }).length;
+      var mockDay = (mocks[key] || []).length;
       days.push({
         date: key,
         newQuestions: rowsDay.length,
-        paceSec: medianSec(msOf(rowsDay))
+        paceSec: medianSec(msOf(rowsDay)),
+        retakes: retakesDay,
+        mocks: mockDay,
+        workBand: workBand(key, lastTargetDay, retakesDay, mockDay > 0)
       });
     }
 
     return {
       date: today,
       newQuestions: {
-        value: newToday.length, threshold: T.newQuestions.green,
-        band: bandHigh(newToday.length, T.newQuestions),
+        value: newToday.length, threshold: null, band: null,
         unit: 'questions', window: 'today'
       },
       paceSec: {
@@ -312,19 +315,15 @@ PGRE.intensity = (function () {
         unit: 'percent', window: 'last 7 days', n: news7.length, correct: right7
       },
       repeatMinutes: {
-        value: repMin, threshold: T.repeatMin.green,
-        band: bandLow(repMin, T.repeatMin),
+        value: repMin, threshold: null, band: null,
         unit: 'minutes', window: 'today', n: repToday.length
       },
-      coverage: {
-        value: actual, threshold: required,
-        band: coverageBand(remaining, required, actual),
-        unit: 'new questions per working day', window: 'last 7 days',
-        remaining: remaining, workingDaysLeft: workingDaysLeft,
-        workingDays7: coverWorking, noPackWeekdays: NO_PACK_WEEKDAYS.slice(),
-        required: required, actual: actual,
-        lastPackDay: lastPackDay, examDate: examDate,
-        packQuestions: packIds.length
+      dailyWork: {
+        value: repToday.length, threshold: workTarget ? T.dailyWork.green : null,
+        band: workBand(today, lastTargetDay, repToday.length, mocksToday.length > 0),
+        unit: 'mistake-book retakes', window: 'today',
+        retakes: repToday.length, mocks: mocksToday,
+        lastTargetDay: lastTargetDay, examDate: examDate
       },
       topics: topics,
       days: days
@@ -341,25 +340,17 @@ PGRE.intensity = (function () {
 
      ctx (every field optional; the view looks them up):
        hasHistory     false when the log holds no answered question
-       nextPack       { id, title, n, fresh }: the next timed pack that
-                      still has untried questions, fresh = how many
        unseen         untried questions left in the default practice pool
        unseenByTopic  topic id -> untried questions in that pool
 
-     Two display rules, both for New questions below its target. On a
-     weekday in NO_PACK_WEEKDAYS the chip reads "No pack today", because no
-     timed pack is planned on that day. When ctx.unseen is 0 it reads
-     "None left", because no first try is left to make. In both cases
-     row.band keeps the computed band and row.show (what the chip displays)
-     is 'rest'; such a row is not counted as needing attention. */
-  var NO_PACK_REASON = { 0: 'the full-sitting day', 4: 'the group discussion day' };
+     New questions and Repeat time have no target: row.band is null and
+     row.show (what the chip displays) is 'rest'. Daily work after its last
+     target day is shown the same way. A 'rest' row never needs attention. */
   var WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  /* When several readings are off, the first one here leads the headline:
-     stop repeating, then add new questions, then the two quality readings. */
-  var ATTENTION_ORDER = ['repeatMinutes', 'newQuestions', 'coverage', 'firstAttemptAccuracy', 'paceSec'];
+  /* When several readings are off, the first one here leads the headline. */
+  var ATTENTION_ORDER = ['dailyWork', 'firstAttemptAccuracy', 'paceSec'];
   /* Review-only numbers; no band reads them. */
   var REVIEW = {
-    heavyDayFactor: 2,      // today's new questions at 2x the target or more, with accuracy off: say so
     meterHeadroom: 1.25     // a meter runs to 1.25x its target, or to the value when that is larger
   };
 
@@ -367,11 +358,6 @@ PGRE.intensity = (function () {
 
   function shortDay(key) {
     return parseDay(key).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
-
-  function listWords(words) {
-    if (words.length < 2) return words.join('');
-    return words.slice(0, -1).join(', ') + ' or ' + words[words.length - 1];
   }
 
   function clampPct(x) { return Math.max(0, Math.min(100, Math.round(x * 10) / 10)); }
@@ -389,124 +375,86 @@ PGRE.intensity = (function () {
     };
   }
 
-  function packAction(pack) {
-    if (!pack || !pack.id) return null;
-    return { kind: 'pack', pack: pack.id, href: '#/practice/pack/' + pack.id, label: 'Start Set ' + pack.id };
-  }
+  /* A reading without a target draws no fill: there is nothing to fill toward. */
+  function bareMeter() { return { pct: 0, mark: null, lowIsGood: false, empty: true }; }
 
-  function packName(pack) { return 'Set ' + pack.id + (pack.title ? ' · ' + pack.title : ''); }
-
-  /* The date of the n-th working day counting from `from` (inclusive). */
-  function nthWorkingDay(from, n) {
-    var key = from;
-    var left = n;
-    for (var guard = 0; guard < 800; guard++) {
-      if (isWorkingDay(key)) { left--; if (left <= 0) return key; }
-      key = addDays(key, 1);
-    }
-    return null;
-  }
-
-  /* How long the untried pack questions take at the 7-day rate. A green
-     band never reads as late: required is rounded for display, so the
-     whole-day count is capped at the days left when the band is green. */
-  function coverageProjection(d) {
-    var cov = d.coverage;
-    if (!cov.remaining || !(cov.actual > 0)) return null;
-    var days = Math.ceil(cov.remaining / cov.actual - 1e-9);
-    if (cov.band === 'green' && days > cov.workingDaysLeft) days = cov.workingDaysLeft;
-    return {
-      workingDays: days,
-      finishDay: days > 0 && days <= 400 ? nthWorkingDay(d.date, days) : null,
-      spare: cov.workingDaysLeft - days
-    };
-  }
+  function mistakesAction() { return { kind: 'link', href: '#/mistakes', label: 'Open Mistake book' }; }
+  function mockAction() { return { kind: 'link', href: '#/exam', label: 'Open Mock exam' }; }
 
   function review(d, ctx) {
     ctx = ctx || {};
     var T = THRESHOLDS;
     var nq = d.newQuestions, pace = d.paceSec, acc = d.firstAttemptAccuracy,
-        rep = d.repeatMinutes, cov = d.coverage;
+        rep = d.repeatMinutes, work = d.dailyWork;
     var weekday = parseDay(d.date).getDay();
-    var noPack = cov.noPackWeekdays || NO_PACK_WEEKDAYS;
-    var workingDay = noPack.indexOf(weekday) < 0;
-    var pack = ctx.nextPack && ctx.nextPack.id ? ctx.nextPack : null;
-    // A reading that is behind never asks for a timed pack on a no-pack weekday.
-    var packNow = workingDay ? pack : null;
+    var mockDay = weekday === MOCK_WEEKDAY;
     var unseen = typeof ctx.unseen === 'number' ? ctx.unseen : null;
-    // The 7-day strip and the coverage window are the same days while both are 7.
-    var news7 = T.trendDays === T.coverageDays
-      ? d.days.reduce(function (sum, day) { return sum + day.newQuestions; }, 0)
-      : Math.round(cov.actual * cov.workingDays7);
+    var news7 = acc.n;
     var accOff = acc.band === 'amber' || acc.band === 'red';
-    var noPackNames = listWords(noPack.map(function (n) { return WEEKDAY_NAMES[n] + 's'; }));
     var historyAction = { kind: 'link', href: '#/history', label: 'Open History' };
     var off = function (b) { return b === 'amber' || b === 'red'; };
-    var packLine = pack ? packName(pack) + ' has ' + pack.fresh + ' you have not tried.' : '';
-    var nqNeed = '';
-    var nqGap = nq.threshold - nq.value;
-    // Fewer untried questions than the gap to the target: say that first.
-    var nqScarce = unseen != null && unseen > 0 && unseen < nqGap;
-    var onlyLeft = 'Only ' + plural(unseen || 0, 'untried question') + (unseen === 1 ? ' is' : ' are') +
-      ' left in the practice pool';
 
-    // ——— New questions ———
-    var nqRest = !workingDay && nq.band !== 'green';
-    var nqDone = !nqRest && unseen === 0 && nq.band !== 'green';
+    // ——— Daily work ———
+    var mocked = work.mocks.length > 0;
+    var hasTarget = work.threshold != null;
+    var workGap = hasTarget ? Math.max(0, work.threshold - work.value) : 0;
+    var lastDay = shortDay(work.lastTargetDay);
+    var targetSpan = T.lastTargetLeadDays + ' days before the exam on ' + shortDay(work.examDate);
+    var workRow = {
+      key: 'dailyWork', label: 'Daily work', window: 'today · mistake-book retakes, or a full mock',
+      value: String(work.value), unit: '',
+      target: !hasTarget ? 'no target today' : (mocked ? 'full mock submitted' : 'of ' + work.threshold),
+      band: work.band, show: work.band || 'rest', chip: work.band ? LABELS[work.band] : 'No target',
+      // A submitted mock meets the target, so its meter reads full.
+      meter: !hasTarget ? bareMeter()
+        : meterOf(mocked ? Math.max(work.value, work.threshold) : work.value, work.threshold, false),
+      hint: '', advice: '', action: null,
+      how: [
+        'Counts your answers in the mistake book today' +
+          (work.retakes ? ' (' + plural(work.retakes, 'retake') + ')' : '') +
+          '. A full mock submitted today meets the target on its own' +
+          (mocked ? ': ' + plural(work.mocks.length, 'mock') + ' submitted today.' : '.'),
+        'New material comes from the Sunday full mocks; the other days go to the mistake book.',
+        hasTarget
+          ? 'The target of ' + work.threshold + ' a day runs through ' + lastDay + ', ' + targetSpan + '.'
+          : 'The daily target ended on ' + lastDay + ', ' + targetSpan + '.'
+      ],
+      cuts: [
+        { band: 'green', text: T.dailyWork.green + ' or more, or a full mock' },
+        { band: 'amber', text: T.dailyWork.amber + ' to ' + (T.dailyWork.green - 1) },
+        { band: 'red', text: 'under ' + T.dailyWork.amber }
+      ],
+      links: [mistakesAction(), mockAction()]
+    };
+    var workNeed = 'Answer ' + plural(workGap, 'more mistake-book question') + ' to reach ' + work.threshold + '.';
+    if (off(work.band)) {
+      // advice follows a headline that already gives the count
+      workRow.advice = mockDay
+        ? 'Today is the full-mock day: a submitted mock meets the target on its own.'
+        : 'A full mock submitted today also meets the target.';
+      workRow.hint = workNeed + ' ' + workRow.advice;
+      workRow.action = mockDay ? mockAction() : mistakesAction();
+    } else if (!hasTarget) {
+      workRow.hint = 'The daily target ended on ' + lastDay + '.';
+    }
+
+    // ——— New questions (no target) ———
     var nqRow = {
       key: 'newQuestions', label: 'New questions', window: 'today',
-      value: String(nq.value), unit: '',
-      target: nqRest ? 'no target today' : (nqDone ? 'none left to try' : 'of ' + nq.threshold),
-      band: nq.band, show: nqRest || nqDone ? 'rest' : nq.band,
-      chip: nqRest ? 'No pack today' : (nqDone ? 'None left' : LABELS[nq.band]),
-      meter: meterOf(nq.value, nq.threshold, false),
+      value: String(nq.value), unit: '', target: 'no target',
+      band: null, show: 'rest', chip: 'No target',
+      meter: bareMeter(),
       hint: '', advice: '', action: null,
       how: [
         'Counts your first try at a question when you answer it in practice: a timed pack, mixed practice ' +
           'or a topic set. Mistake-book retakes, the question of the day and mock exams do not count, and a ' +
           'question you first answered in one of those does not count later.',
+        'No daily target: new material comes from the Sunday full mocks.',
         'Last 7 days: ' + plural(news7, 'new question') + '.'
       ],
-      cuts: [
-        { band: 'green', text: nq.threshold + ' or more' },
-        { band: 'amber', text: T.newQuestions.amber + ' to ' + (nq.threshold - 1) },
-        { band: 'red', text: 'under ' + T.newQuestions.amber }
-      ],
+      cuts: [],
       links: []
     };
-    // Same scale as on a pack day, without the target tick.
-    if (nqRest || nqDone) nqRow.meter.mark = null;
-    if (nqRest) {
-      nqRow.hint = 'No timed pack is planned on ' + WEEKDAY_NAMES[weekday] + 's' +
-        (NO_PACK_REASON[weekday] ? ' (' + NO_PACK_REASON[weekday] + ')' : '') +
-        '. The target of ' + nq.threshold + ' applies on pack days.';
-    } else if (nqDone) {
-      nqRow.hint = 'Every question in the practice pool has had a first try. With none left to try, the ' +
-        'target of ' + nq.threshold + ' is not applied.';
-    } else if (off(nq.band)) {
-      nqNeed = nqScarce
-        ? onlyLeft + '; reaching ' + nq.threshold + ' needs ' + nqGap + '.'
-        : 'Answer ' + plural(nqGap, 'more new question') + ' to reach ' + nq.threshold + '.';
-      var nqWhere;
-      if (pack) {
-        nqWhere = packLine;
-        nqRow.action = packAction(pack);
-      } else {
-        nqWhere = unseen && !nqScarce ? plural(unseen, 'untried question') + (unseen === 1 ? ' is' : ' are') +
-          ' in the practice pool.' : '';
-        nqRow.action = { kind: 'link', href: unseen ? '#/practice/all/new' : '#/practice/all',
-          label: unseen ? 'Practice untried questions' : 'Start mixed practice' };
-      }
-      // advice follows a headline that already gives the count
-      nqRow.advice = (nqScarce ? 'Reaching ' + nq.threshold + ' today needs ' + nqGap + '.' : '') +
-        (nqScarce && nqWhere ? ' ' : '') + nqWhere;
-      nqRow.hint = nqNeed + (nqWhere ? ' ' + nqWhere : '');
-    } else if (nq.value >= REVIEW.heavyDayFactor * nq.threshold && accOff && acc.value != null) {
-      // A note, not a call to action: the accuracy row carries the link.
-      nqRow.hint = 'At least twice the target today, while first-try accuracy is ' + acc.value +
-        '%. Read the solutions of today\'s sets before you start another.';
-    }
-    if (packNow) nqRow.links.push(packAction(packNow));
     if (unseen) nqRow.links.push({ kind: 'link', href: '#/practice/all/new', label: 'Practice untried questions' });
 
     // ——— Pace ———
@@ -580,110 +528,30 @@ PGRE.intensity = (function () {
       accRow.action = historyAction;
     }
 
-    // ——— Repeat time ———
+    // ——— Repeat time (no target) ———
     var repRow = {
       key: 'repeatMinutes', label: 'Repeat time', window: 'today · mistake-book retakes',
-      value: String(rep.value), unit: ' min', target: 'limit ' + rep.threshold + ' min',
-      band: rep.band, show: rep.band, chip: LABELS[rep.band],
-      meter: meterOf(rep.value, rep.threshold, true),
+      value: String(rep.value), unit: ' min', target: 'no limit',
+      band: null, show: 'rest', chip: 'No target',
+      meter: bareMeter(),
       hint: '', advice: '', action: null,
       how: [
         'The time of today\'s mistake-book retakes, added up' +
-          (rep.n ? ' (' + plural(rep.n, 'retake') + ')' : '') + '. The limit keeps retakes from taking ' +
-          'the time of new questions.'
+          (rep.n ? ' (' + plural(rep.n, 'retake') + ')' : '') + '.',
+        'No limit: the daily target counts retakes, not minutes (see Daily work).'
       ],
-      cuts: [
-        { band: 'green', text: rep.threshold + ' min or under' },
-        { band: 'amber', text: (rep.threshold + 1) + ' to ' + T.repeatMin.amber + ' min' },
-        { band: 'red', text: 'over ' + T.repeatMin.amber + ' min' }
-      ],
-      links: [{ kind: 'link', href: '#/mistakes', label: 'Open Mistake book' }]
+      cuts: [],
+      links: [mistakesAction()]
     };
-    if (off(rep.band)) {
-      // New questions already at their target (or none left to try): the
-      // advice is to stop, not to add more.
-      var enoughNew = nq.band === 'green' || nqDone || nqRest;
-      repRow.advice = enoughNew ? 'Leave the remaining retakes for another day.'
-        : 'Spend the rest of today on new questions.';
-      repRow.hint = (rep.value - rep.threshold) + ' min over the limit of ' + rep.threshold + '. ' + repRow.advice;
-      repRow.action = enoughNew ? null : packAction(pack);
-    }
-
-    // ——— Coverage ———
-    var proj = coverageProjection(d);
-    var lastPack = shortDay(cov.lastPackDay);
-    // Pack questions left and no working day to try them in: there is no
-    // rate to draw against, so the bar stays empty instead of reading as full.
-    var covStuck = cov.remaining > 0 && cov.required == null;
-    var covRow = {
-      key: 'coverage', label: 'Coverage', window: 'last 7 days · new questions per working day',
-      value: cov.actual.toFixed(1), unit: ' a day',
-      target: cov.remaining === 0 ? 'every pack question tried'
-        : (cov.required == null ? 'no working day left' : 'needed: ' + cov.required.toFixed(1)),
-      band: cov.band, show: cov.band, chip: LABELS[cov.band],
-      meter: meterOf(covStuck ? 0 : cov.actual, cov.remaining === 0 ? null : cov.required, false),
-      hint: '', advice: '', action: null, how: [],
-      cuts: [
-        { band: 'green', text: 'at or above the needed rate' },
-        { band: 'amber', text: 'up to ' + T.coverageSlack + ' below it' },
-        { band: 'red', text: 'more than ' + T.coverageSlack + ' below it' }
-      ],
-      links: [{ kind: 'link', href: '#/plan', label: 'Open Study plan' }]
-    };
-    if (packNow) covRow.links.unshift(packAction(packNow));
-    var rateLine = 'Last 7 days: ' + plural(news7, 'new question') + ' over ' +
-      plural(cov.workingDays7, 'working day') + ' = ' + cov.actual.toFixed(1) + ' a day.';
-    if (cov.remaining === 0) {
-      covRow.how.push('Every one of the ' + cov.packQuestions + ' pack questions has had a first try.');
-      covRow.how.push(rateLine);
-    } else {
-      covRow.how.push(cov.remaining + ' of ' + cov.packQuestions + ' pack questions have no first try yet.');
-      covRow.how.push(plural(cov.workingDaysLeft, 'working day') + (cov.workingDaysLeft === 1 ? ' is' : ' are') +
-        ' left through ' + lastPack + ', the pack cutoff date (' + T.lastPackLeadDays +
-        ' days before the exam on ' + shortDay(cov.examDate) + ')' +
-        (noPackNames ? ', with no timed pack on ' + noPackNames : '') + '.');
-      if (cov.required != null) {
-        covRow.how.push('Needed: ' + cov.remaining + ' / ' + cov.workingDaysLeft + ' = ' +
-          cov.required.toFixed(1) + ' new questions each working day.');
-      }
-      covRow.how.push(rateLine);
-      // Off target, the hint (or the headline) already gives this projection.
-      if (proj && cov.required != null && !off(cov.band)) {
-        covRow.how.push('At that rate the rest takes about ' + plural(proj.workingDays, 'working day') +
-          (proj.spare >= 0 && proj.finishDay
-            ? ', done around ' + shortDay(proj.finishDay) + ': ' + plural(proj.spare, 'working day') + ' to spare.'
-            : '; ' + cov.workingDaysLeft + (cov.workingDaysLeft === 1 ? ' is' : ' are') + ' left.'));
-      }
-    }
-    if (off(cov.band)) {
-      if (cov.required == null) {
-        covRow.hint = 'No working day is left through ' + lastPack + ', the pack cutoff date, with ' +
-          plural(cov.remaining, 'pack question') + ' not started.';
-        covRow.action = { kind: 'link', href: '#/plan', label: 'Open Study plan' };
-      } else {
-        // advice follows a headline that already names the date and the gap
-        var slow = proj
-          ? 'At ' + cov.actual.toFixed(1) + ' a working day, the ' + plural(cov.remaining, 'pack question') +
-            ' left take about ' + plural(proj.workingDays, 'working day') + '; ' + cov.workingDaysLeft +
-            (cov.workingDaysLeft === 1 ? ' is' : ' are') + ' left'
-          : 'No new questions in the last 7 days, with ' + plural(cov.remaining, 'pack question') + ' left';
-        covRow.advice = slow + '.';
-        covRow.hint = slow + (proj ? ' through ' + lastPack : '') + '. Finishing by ' + lastPack + ' needs ' +
-          cov.required.toFixed(1) + ' each working day.';
-        covRow.action = packAction(packNow) || { kind: 'link', href: '#/plan', label: 'Open Study plan' };
-      }
-    }
 
     // The new-user list shows each reading's target with no value beside it.
-    nqRow.preview = 'target ' + nq.threshold + ' a day';
+    workRow.preview = T.dailyWork.green + ' mistake-book questions a day, or a full mock';
+    nqRow.preview = nqRow.target;
     paceRow.preview = paceRow.target;
     accRow.preview = accRow.target;
     repRow.preview = repRow.target;
-    covRow.preview = cov.remaining === 0 || cov.required == null ? covRow.target
-      : plural(cov.remaining, 'pack question') + ' by ' + lastPack + ': ' + cov.required.toFixed(1) +
-        ' each working day';
 
-    var rows = [nqRow, paceRow, accRow, repRow, covRow];
+    var rows = [workRow, accRow, paceRow, repRow, nqRow];
     var byKey = {};
     rows.forEach(function (r) { byKey[r.key] = r; });
     var tally = { green: 0, amber: 0, red: 0, none: 0, rest: 0 };
@@ -699,31 +567,22 @@ PGRE.intensity = (function () {
     // ——— Headline and next action ———
     var verdict = { tone: 'good', headline: '', detail: '', action: null, mark: 'green' };
     var empty = ctx.hasHistory === false;
+    var restLine = tally.none ? 'The readings with data are on target.' : 'The other readings are on target.';
     if (empty) {
       verdict.tone = 'empty';
       verdict.mark = 'none';
       verdict.headline = 'Nothing measured yet.';
-      verdict.detail = 'Intensity reads your answers. After your first practice set, these five readings ' +
-        'fill in.';
-      verdict.action = packAction(pack) || { kind: 'link', href: '#/practice/all', label: 'Start mixed practice' };
-      if (pack) verdict.detail += ' ' + packName(pack) + ' is the next timed pack in your plan.';
+      verdict.detail = 'Intensity reads your answers. After your first full mock or mistake-book session, ' +
+        'these five readings fill in.';
+      verdict.action = mockAction();
     } else if (attention.length) {
       var top = attention[0];
       verdict.tone = 'attention';
       verdict.mark = top.show;
       verdict.focus = top.key;
-      if (top.key === 'newQuestions') {
-        verdict.headline = nqScarce ? onlyLeft + '.'
-          : (nq.value === 0 ? 'No new questions yet today.' : plural(nqGap, 'new question') + ' to go today.');
-      } else if (top.key === 'repeatMinutes') {
-        verdict.headline = rep.value + ' min of retakes today, ' + (rep.value - rep.threshold) +
-          ' over the limit.';
-      } else if (top.key === 'coverage') {
-        verdict.headline = cov.required == null
-          ? 'No working day is left through ' + lastPack + ', with ' + plural(cov.remaining, 'pack question') +
-            ' not started.'
-          : 'Coverage is ' + round1(cov.required - cov.actual).toFixed(1) + ' a day under the rate that ' +
-            'finishes the packs by ' + lastPack + '.';
+      if (top.key === 'dailyWork') {
+        verdict.headline = work.value === 0 ? 'No mistake-book questions yet today.'
+          : plural(workGap, 'mistake-book question') + ' to go today.';
       } else if (top.key === 'firstAttemptAccuracy') {
         verdict.headline = 'First-try accuracy is ' + acc.value + '% over the last 7 days.';
       } else {
@@ -736,64 +595,42 @@ PGRE.intensity = (function () {
       verdict.action = top.action;
       var also = [];
       if (top.advice) also.push(top.advice);
-      if (verdict.action && verdict.action.kind === 'pack' && pack && top.advice.indexOf(packLine) < 0) {
-        also.push(packLine);
-      }
       var others = attention.slice(1);
       var reds = others.filter(function (r) { return r.show === 'red'; }).map(function (r) { return r.label; });
       var ambers = others.filter(function (r) { return r.show === 'amber'; }).map(function (r) { return r.label; });
       if (reds.length) also.push('Also off target: ' + reds.join(', ') + '.');
       if (ambers.length) also.push('Also close: ' + ambers.join(', ') + '.');
       verdict.detail = also.join(' ');
-    } else if (nqRest) {
+    } else if (!hasTarget) {
       verdict.tone = 'rest';
       verdict.mark = 'none';
-      nqRow.lead = true;
-      verdict.headline = 'No timed pack today.';
-      verdict.detail = WEEKDAY_NAMES[weekday] + ' is ' + (NO_PACK_REASON[weekday] || 'a no-pack day') +
-        ', so the target of ' + nq.threshold + ' new questions applies on pack days only. ' +
-        (tally.none ? 'The readings with data are on target.' : 'The other readings are on target.');
-      if (weekday === 0) verdict.action = { kind: 'link', href: '#/exam', label: 'Open Mock exam' };
-    } else if (nqDone) {
-      verdict.tone = 'rest';
-      verdict.mark = 'none';
-      nqRow.lead = true;
-      verdict.headline = 'No untried practice question is left.';
-      verdict.detail = 'With none left to try, the target of ' + nq.threshold +
-        ' new questions is not applied. ' +
-        (tally.none ? 'The readings with data are on target.' : 'The other readings are on target.');
+      workRow.lead = true;
+      verdict.headline = 'No daily target today.';
+      verdict.detail = 'The daily target ended on ' + lastDay + ', ' + targetSpan + '. ' + restLine;
     } else {
-      verdict.headline = tally.none
-        ? 'On target on the ' + plural(tally.green, 'reading') + ' with data.'
-        : 'On target on all five readings.';
-      if (pack) {
-        verdict.detail = 'Next when you want it: ' + packName(pack) + ', ' +
-          plural(pack.fresh, 'untried question') + '.';
-        verdict.action = packAction(pack);
-      } else if (unseen === 0) {
-        verdict.detail = 'Every question in the practice pool has had a first try.';
-      }
+      verdict.headline = mocked ? 'Full mock submitted today.'
+        : 'Daily work done: ' + plural(work.value, 'mistake-book question') + '.';
+      verdict.detail = restLine;
     }
-    // A row does not repeat the headline's own button, nor the pack the
-    // headline block has just named.
+    // A row does not repeat the headline's own button.
     rows.forEach(function (r) {
       if (r.action && verdict.action && r.action.href === verdict.action.href) r.action = null;
     });
-    if (!nqRow.lead && nqNeed && pack && verdict.detail.indexOf(packLine) >= 0) nqRow.hint = nqNeed;
 
-    // ——— Seven days ———
+    // ——— Day strip ———
     var days = d.days.map(function (day, i) {
       var date = parseDay(day.date);
-      var wd = date.getDay();
       return {
         date: day.date,
         isToday: i === d.days.length - 1,
-        weekday: wd,
-        workingDay: noPack.indexOf(wd) < 0,
+        weekday: date.getDay(),
         short: date.toLocaleDateString('en-US', { weekday: 'short' }),
         full: date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }),
+        retakes: day.retakes,
+        mocks: day.mocks,
+        workBand: day.workBand,
+        target: day.date <= work.lastTargetDay ? T.dailyWork.green : null,
         newQuestions: day.newQuestions,
-        newBand: bandHigh(day.newQuestions, T.newQuestions),
         paceSec: day.paceSec,
         paceBand: bandLow(day.paceSec, T.paceSec)
       };
@@ -821,13 +658,12 @@ PGRE.intensity = (function () {
       date: d.date,
       empty: empty,
       weekday: weekday,
-      workingDay: workingDay,
+      mockDay: mockDay,
       rows: rows,
       row: byKey,
       tally: tally,
       attention: attention.map(function (r) { return r.key; }),
       verdict: verdict,
-      projection: proj,
       days: days,
       topic: topic,
       judgedTopics: judged.length
@@ -850,10 +686,11 @@ PGRE.intensity = (function () {
   }
 
   return {
-    NO_PACK_WEEKDAYS: NO_PACK_WEEKDAYS,
+    MOCK_WEEKDAY: MOCK_WEEKDAY,
     THRESHOLDS: THRESHOLDS,
     LABELS: LABELS,
     compute: compute,
+    trendDays: trendDaysOf,
     review: review,
     band: band,
     medianSec: medianSec,

@@ -1,6 +1,6 @@
 /* Read-only agent status summary and best-effort localhost publishing.
-   `intensity` is PGRE.intensity.compute() (js/intensity.js): the five banded
-   metrics, the coverage inputs, the per-topic rows and the 7-day trend. */
+   `intensity` is PGRE.intensity.compute() (js/intensity.js): the five
+   metrics (three banded), the per-topic rows and the 7-day trend. */
 window.PGRE = window.PGRE || {};
 
 (function () {
