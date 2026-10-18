@@ -2590,6 +2590,11 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .exam-review-q { scroll-margin-top: 64px; }
 .exam-review-q:focus { outline: none; }
 .exam-review-choices .choices { margin-top: 12px; }
+.exam-review-q .exam-review-pick.is-bad { background: var(--bad-tint); }
+.exam-review-q .exam-review-pick.is-good { background: var(--good-tint); }
+.exam-review-q .exam-review-pick.is-bad > summary strong { color: var(--bad); }
+.exam-review-q .exam-review-pick.is-good > summary strong { color: var(--good); }
+.exam-review-pick-body { margin-top: 12px; font-size: 14px; line-height: 1.5; }
 @container exam-results (max-width: 760px) {
   .exam-results-grid { grid-template-columns: minmax(0, 1fr); }
   .exam-review-nav { display: none; }

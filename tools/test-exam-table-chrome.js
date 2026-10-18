@@ -823,13 +823,86 @@ async function main() {
           bandSeen: band ? Array.prototype.filter.call(band.querySelectorAll('.choice'),
             function (row) { return row.checkVisibility(); }).length : 0,
           solutionsOpen: cards.map(function (c, i) {
-            var d = c.querySelector('details.miss:not(.exam-review-choices):not(.distractors)');
+            var d = c.querySelector('details.miss:not(.exam-review-choices):not(.exam-review-pick):not(.distractors)');
             return d && d.open ? i + 1 : 0;
           }).filter(Boolean).join(','),
           hint: (document.querySelector('#exam-review-nav .practice-keys') || {}).textContent || ''
         };
       })()`);
     }
+
+    /* Current-card judgment: the shown card with the largest visible height
+       below the top bar. Question 39's tail sits at the top; question 40
+       fills most of the window; the ring names 40, and Right moves from
+       that ringed card to 41. */
+    await send('Emulation.setDeviceMetricsOverride', {
+      width: 1280, height: 1360, deviceScaleFactor: 1, mobile: false
+    });
+    await sleep(200);
+    check(total >= 41, 'the sitting has at least 41 questions for the in-view ring case (' + total + ')');
+    await evaluate(`(function () {
+      var cards = document.querySelectorAll('#exam-root .exam-review-q');
+      [38, 39, 40].forEach(function (i, n) {
+        var card = cards[i];
+        if (!card) return;
+        card.style.height = n === 1 ? '530px' : (n === 2 ? '500px' : '400px');
+        card.style.overflow = 'hidden';
+      });
+      var card40 = cards[39];
+      var y = card40.getBoundingClientRect().top + window.scrollY - 398;
+      window.scrollTo(0, y);
+      window.dispatchEvent(new Event('scroll'));
+    })()`);
+    await sleep(200);
+    var filled = await evaluate(`(function () {
+      var topBar = 64;
+      var cards = Array.prototype.slice.call(document.querySelectorAll('#exam-root .exam-review-q'));
+      var cells = Array.prototype.slice.call(document.querySelectorAll('#exam-review-nav .pal-cell'));
+      function vis(el) {
+        var b = el.getBoundingClientRect();
+        if (!b.height) return 0;
+        return Math.max(0, Math.min(b.bottom, window.innerHeight) - Math.max(b.top, topBar));
+      }
+      var current = [];
+      cells.forEach(function (c, i) {
+        if (c.classList.contains('is-current') || c.getAttribute('aria-current') === 'true') current.push(i + 1);
+      });
+      var ring = current.length ? current[current.length - 1] : 0;
+      var maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      return {
+        ring: ring,
+        current: current.join(','),
+        vis39: Math.round(vis(cards[38])),
+        vis40: Math.round(vis(cards[39])),
+        vis41: Math.round(vis(cards[40])),
+        top40: Math.round(cards[39].getBoundingClientRect().top),
+        scrollY: Math.round(window.scrollY),
+        maxScroll: Math.round(maxScroll),
+        atEnd: window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2,
+        innerHeight: window.innerHeight
+      };
+    })()`);
+    check(!filled.atEnd && filled.vis40 > filled.vis39 && filled.vis40 > filled.vis41 && filled.ring === 40,
+      'with question 39\'s tail at the top and question 40 filling most of the window, cell 40 is ringed (vis ' +
+      filled.vis39 + '/' + filled.vis40 + '/' + filled.vis41 + ' px, ring ' + filled.ring + ')');
+    await press('ArrowRight', 'ArrowRight', 39);
+    var afterFill = await keyState();
+    check(afterFill.ring === 41 && near(afterFill.top, 64),
+      'from that ringed card the Right arrow opens question 41 (top ' + afterFill.top + ' px)');
+    await evaluate(`(function () {
+      var cards = document.querySelectorAll('#exam-root .exam-review-q');
+      [38, 39, 40].forEach(function (i) {
+        if (!cards[i]) return;
+        cards[i].style.height = '';
+        cards[i].style.overflow = '';
+      });
+    })()`);
+    await send('Emulation.setDeviceMetricsOverride', {
+      width: 1280, height: 900, deviceScaleFactor: 1, mobile: false
+    });
+    await evaluate('window.scrollTo(0, 0)');
+    await sleep(200);
+
     await press('ArrowRight', 'ArrowRight', 39);
     var keys = await keyState();
     check(keys.ring === 1 && near(keys.top, 64) && keys.focusCard === 1,
@@ -850,7 +923,7 @@ async function main() {
     var base = sitting.order[0] === 'toi-q0' ? 2 : 1;
     if (base === 2) await press('ArrowRight', 'ArrowRight', 39);
     await clickAt('document.querySelectorAll("#exam-root .exam-review-q")[' + (base - 1) +
-      '].querySelector("details.miss:not(.exam-review-choices):not(.distractors) > summary")');
+      '].querySelector("details.miss:not(.exam-review-choices):not(.exam-review-pick):not(.distractors) > summary")');
     var opened = await keyState();
     await pressEnter();
     keys = await keyState();
@@ -908,6 +981,145 @@ async function main() {
       'every review card has an "All choices" band directly above "Solution": each choice with its letter, the key and ' +
       'the pick marked as the sitting recorded them, closed until opened (' + bands.closed + ' of ' + bands.cards +
       ' closed' + (bands.bad ? ', wrong on questions ' + bands.bad : '') + ')');
+
+    var pickBands = await evaluate(`(function () {
+      var exam = PGRE.examEngine.byId(${JSON.stringify(sitting.id)});
+      var LETTERS = 'ABCDE';
+      var cards = Array.prototype.slice.call(document.querySelectorAll('#exam-root .exam-review-q'));
+      var bad = [], open = 0, flaggedOk = true, letterLeak = [];
+      function attrsLeak(el) {
+        if (!el || !el.attributes) return false;
+        return Array.prototype.some.call(el.attributes, function (a) {
+          var n = a.name, v = a.value || '';
+          return (n === 'aria-label' || n === 'title' || n.indexOf('data-') === 0) &&
+            /\\b[A-E]\\b/.test(v);
+        });
+      }
+      cards.forEach(function (card, i) {
+        var qid = exam.order[i];
+        var q = PGRE.questionById(qid);
+        var picked = exam.answers[qid];
+        var pickedNull = picked == null;
+        var hasKey = q && typeof q.answer === 'number';
+        var correct = hasKey && picked === q.answer;
+        var flagged = exam.flags.indexOf(qid) !== -1;
+        var rows = Array.prototype.slice.call(card.querySelectorAll('details.exam-review-pick'));
+        rows.forEach(function (row) { if (row.open) open++; });
+        var labels = rows.map(function (row) {
+          return (row.querySelector('summary') || {}).textContent.trim();
+        });
+        var expected;
+        if (pickedNull) expected = ['Left blank', 'Correct answer'];
+        else if (!correct) expected = ['You picked', 'Correct answer'];
+        else expected = ['You picked'];
+        var kinds = rows.map(function (row) {
+          return row.classList.contains('is-bad') ? 'bad' : (row.classList.contains('is-good') ? 'good' : '?');
+        });
+        var expectedKinds = correct ? ['good'] : ['bad', 'good'];
+        var bodiesOk = rows.every(function (row, ri) {
+          var bodyEl = row.querySelector('.exam-review-pick-body');
+          var text = bodyEl ? bodyEl.textContent.replace(/\\s+/g, ' ').trim() : '';
+          if (labels[ri] === 'Left blank') return !bodyEl;
+          if (!hasKey && labels[ri] === 'Correct answer') return !bodyEl;
+          var want = (labels[ri] === 'You picked' && !pickedNull) ? LETTERS.charAt(picked)
+            : LETTERS.charAt(q.answer);
+          return !!bodyEl && text.indexOf(want + ' —') === 0 && text.length > (want + ' —').length;
+        });
+        var allChoices = card.querySelector('details.exam-review-choices');
+        var afterPicks = rows.length ? rows[rows.length - 1].nextElementSibling : null;
+        if (correct && afterPicks && afterPicks.classList.contains('conf-row')) {
+          afterPicks = afterPicks.nextElementSibling;
+        }
+        var chip = card.querySelector('.exam-flagchip');
+        if (!!chip !== flagged) flaggedOk = false;
+        var foldedOk = rows.every(function (row) {
+          var summary = row.querySelector('summary');
+          var label = (summary || {}).textContent.trim();
+          return !/\\b[A-E]\\b/.test(label) && !attrsLeak(row) && !attrsLeak(summary);
+        });
+        if (!foldedOk) letterLeak.push(i + 1);
+        var ok = !!q && rows.length === expected.length &&
+          labels.join('|') === expected.join('|') &&
+          kinds.join('|') === expectedKinds.join('|') &&
+          bodiesOk && afterPicks === allChoices && foldedOk &&
+          rows.every(function (row) { return row.tagName === 'DETAILS' && !row.open; });
+        if (!ok) bad.push(i + 1);
+      });
+      return { cards: cards.length, open: open, bad: bad.join(','), flaggedOk: flaggedOk,
+        letterLeak: letterLeak.join(',') };
+    })()`);
+    check(pickBands.cards === total && pickBands.bad === '' && pickBands.open === 0 && pickBands.flaggedOk,
+      'every review card folds the pick and correct rows as closed details bands under the stem, with ' +
+      'letter-free headers (You picked / Correct answer / Left blank) and the Flagged chip still on the card head' +
+      (pickBands.bad ? ' (wrong on questions ' + pickBands.bad + ')' : ''));
+    check(pickBands.letterLeak === '',
+      'folded pick and key headers carry no choice letter in summary, aria-label, title, or data-*' +
+      (pickBands.letterLeak ? ' (leaked on questions ' + pickBands.letterLeak + ')' : ''));
+
+    var nokey = await evaluate(`(function () {
+      var q = {
+        id: 'bands-nokey', topic: 'cm', difficulty: 1,
+        q: 'A question whose bank row has no recorded key.',
+        choices: ['$C_P$', '$C_V$', '$\\\\gamma$', '$R$', '$T$'],
+        sol: 'No key was stored.'
+      };
+      PGRE.QUESTIONS.push(q);
+      if (typeof PGRE._resetBankCache === 'function') PGRE._resetBankCache();
+      var exam = {
+        id: 'ex-bands-nokey',
+        startedAt: new Date().toISOString(),
+        submittedAt: new Date().toISOString(),
+        format: '70x120', source: null, title: 'No-key fixture', seed: 1,
+        order: [q.id], answers: { 'bands-nokey': 0 }, flags: [],
+        cursor: 0, paused: false, durationSec: 1, limitSec: 7200,
+        raw: 0, total: 1, scaledEst: 390, perTopic: { cm: { right: 0, total: 1 } }
+      };
+      PGRE.store.state.exams.push(exam);
+      PGRE.store.save();
+      location.hash = '#/exam/review/ex-bands-nokey';
+      if (typeof PGRE.route === 'function') PGRE.route();
+      var card = document.querySelector('#exam-root .exam-review-q');
+      var rows = card ? Array.prototype.slice.call(card.querySelectorAll('details.exam-review-pick')) : [];
+      var labels = rows.map(function (row) {
+        return (row.querySelector('summary') || {}).textContent.trim();
+      });
+      var bodies = rows.map(function (row) {
+        var el = row.querySelector('.exam-review-pick-body');
+        return el ? el.textContent.replace(/\\s+/g, ' ').trim() : '';
+      });
+      function attrsLeak(el) {
+        if (!el || !el.attributes) return false;
+        return Array.prototype.some.call(el.attributes, function (a) {
+          var n = a.name, v = a.value || '';
+          return (n === 'aria-label' || n === 'title' || n.indexOf('data-') === 0) &&
+            /\\b[A-E]\\b/.test(v);
+        });
+      }
+      var foldedOk = rows.every(function (row) {
+        var summary = row.querySelector('summary');
+        return !row.open && !/\\b[A-E]\\b/.test((summary || {}).textContent.trim()) &&
+          !attrsLeak(row) && !attrsLeak(summary);
+      });
+      return {
+        labels: labels.join('|'),
+        kinds: rows.map(function (row) {
+          return row.classList.contains('is-bad') ? 'bad' : (row.classList.contains('is-good') ? 'good' : '?');
+        }).join('|'),
+        bodies: bodies,
+        foldedOk: foldedOk,
+        undefinedText: (card && card.innerHTML.indexOf('undefined') !== -1)
+      };
+    })()`);
+    check(nokey.labels === 'You picked|Correct answer' && nokey.kinds === 'bad|good' &&
+      nokey.bodies[0].indexOf('A —') === 0 && nokey.bodies[1] === '' &&
+      nokey.foldedOk && !nokey.undefinedText,
+      'a pick with no recorded key is two closed letter-free bands: "You picked" with the letter in the body, ' +
+      '"Correct answer" with no body');
+    await evaluate('location.hash = ' + JSON.stringify('#/exam/review/' + sitting.id) +
+      '; if (typeof PGRE.route === "function") PGRE.route();');
+    await until('document.querySelectorAll("#exam-root .exam-review-q").length === ' + total,
+      'original review sitting restored');
+
     // a dark-theme picture for a human check; transitions are off so the capture shows the final colours
     await evaluate(`(function () {
       var off = document.createElement('style');

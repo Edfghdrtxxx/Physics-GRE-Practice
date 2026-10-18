@@ -909,7 +909,6 @@ PGRE.views.exam = (function () {
      question (right or wrong, the flag marker, a ring on the question in
      view). A cell scrolls to its review card. It reuses the room palette's
      .pal-cell look and the drill palette's result tints. */
-  var REVIEW_LINE = 96;   // px from the viewport top: under the top bar and the cards' scroll margin
   var reviewSpy = null;   // scroll listener of the results page on screen
   var reviewAt = null;    // { i, y }: the card last asked for by a key or a cell, and the scroll position that left
 
@@ -948,16 +947,19 @@ PGRE.views.exam = (function () {
     return el ? Array.prototype.slice.call(el.querySelectorAll('.exam-review-q')) : [];
   }
 
-  /* Index of the review card in view: the last shown card whose top has
-     reached REVIEW_LINE, or the last shown card at the end of the page.
-     -1 above the list. Cards hidden by the flagged filter have no box. */
+  /* Index of the review card in view: the shown card with the largest
+     visible height inside the window below the top bar (the 64 px
+     scroll-margin-top of .exam-review-q). Ties go to the earlier card.
+     The last shown card at the end of the page. -1 above the list.
+     Cards hidden by the flagged filter have no box. */
   function reviewCardInView() {
-    var at = -1, last = -1;
+    var topBar = 64, at = -1, last = -1, best = 0;
     reviewCards().forEach(function (card, i) {
       var box = card.getBoundingClientRect();
       if (!box.height) return;
       last = i;
-      if (box.top <= REVIEW_LINE) at = i;
+      var vis = Math.min(box.bottom, window.innerHeight) - Math.max(box.top, topBar);
+      if (vis > best) { best = vis; at = i; }
     });
     var atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
     return atEnd ? last : at;
@@ -965,7 +967,7 @@ PGRE.views.exam = (function () {
 
   /* The card the reader is on: the one last asked for by a key or a cell while
      the page has not scrolled since, else the card in view. A card near the end
-     of the page cannot reach REVIEW_LINE, so the scroll position alone would
+     of the page cannot fill the window, so the scroll position alone would
      name a later card there, and the Left key would never leave the last one. */
   function reviewCurrent() {
     if (reviewAt && Math.abs(window.scrollY - reviewAt.y) < 2) {
@@ -1360,9 +1362,8 @@ PGRE.views.exam = (function () {
     });
   }
 
-  /* Every choice as the room showed it, in a closed band above the solution:
-     the card itself prints only the picked and the correct choice. Same
-     markup and marks as the practice review (js/view-practice.js renderReview). */
+  /* Every choice as the room showed it, in a closed band above the solution.
+     Same markup and marks as the practice review (js/view-practice.js renderReview). */
   function choicesBlock(q, picked) {
     var items = '';
     q.choices.forEach(function (c, idx) {
@@ -1376,6 +1377,41 @@ PGRE.views.exam = (function () {
     });
     return '<details class="miss exam-review-choices"><summary>All choices</summary>' +
       '<div class="choices">' + items + '</div></details>';
+  }
+
+  /* Picked and correct answers as closed details.miss bands, same chevron,
+     border, and native open/keyboard behaviour as All choices. Folded by
+     default; native details does not remember open state. Verdict tint stays
+     on the band. The folded summary is the label only (no choice letter);
+     the expanded body is the letter, an em dash, and the choice HTML
+     (LaTeX included). Left blank has no choice body. Used only by the
+     mock-exam results review page. */
+  function pickBand(kind, label, bodyHtml) {
+    return '<details class="miss exam-review-pick is-' + kind + '">' +
+      '<summary><strong>' + label + '</strong></summary>' +
+      (bodyHtml ? '<div class="exam-review-pick-body">' + bodyHtml + '</div>' : '') +
+      '</details>';
+  }
+
+  function pickChoiceBody(idx, q) {
+    var letter = LETTERS[idx];
+    var text = q && q.choices ? q.choices[idx] : null;
+    if (!letter || text == null || text === '') return '';
+    return letter + ' — ' + text;
+  }
+
+  function reviewPickBandsHTML(q, picked) {
+    var html = '';
+    var correct = picked === q.answer;
+    if (picked == null) {
+      html += pickBand('bad', 'Left blank', '');
+    } else if (!correct) {
+      html += pickBand('bad', 'You picked', pickChoiceBody(picked, q));
+    }
+    html += pickBand('good',
+      correct ? 'You picked' : 'Correct answer',
+      pickChoiceBody(q.answer, q));
+    return html;
   }
 
   function reviewCard(exam, qid, i) {
@@ -1397,24 +1433,14 @@ PGRE.views.exam = (function () {
         (flagged ? '<span class="chip exam-flagchip">Flagged</span>' : '') +
       '</div>' +
       '<div class="q-text">' + q.q + '</div>' +
-      '<div class="miss-picks">';
-    if (picked == null) {
-      html += '<div class="miss-pick is-bad"><strong>Left blank</strong></div>';
-    } else if (!correct) {
-      html += '<div class="miss-pick is-bad"><strong>You picked ' +
-        LETTERS[picked] + '</strong> — <span class="miss-pick-body">' + q.choices[picked] + '</span></div>';
-    }
-    html += '<div class="miss-pick is-good"><strong>' +
-      (correct ? 'You picked ' : 'Correct: ') + LETTERS[q.answer] + '</strong> — ' +
-      '<span class="miss-pick-body">' + q.choices[q.answer] + '</span></div>' +
-    '</div>' +
-    (correct ? guessControl(exam, qid) : '') +
-    choicesBlock(q, picked) +
-    '<details class="miss"><summary>Solution</summary>' +
-      '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div></details>' +
-    distractorBlock(q) +
-    notesBlock(q) +
-    '</div>';
+      reviewPickBandsHTML(q, picked) +
+      (correct ? guessControl(exam, qid) : '') +
+      choicesBlock(q, picked) +
+      '<details class="miss"><summary>Solution</summary>' +
+        '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div></details>' +
+      distractorBlock(q) +
+      notesBlock(q) +
+      '</div>';
     return html;
   }
 
@@ -1422,6 +1448,7 @@ PGRE.views.exam = (function () {
   return {
     pauseSnapshot: pauseSnapshot,
     pauseCardHTML: pauseCardHTML,
+    reviewPickBandsHTML: reviewPickBandsHTML,
     render: function () {
       return '<div id="exam-root"><div class="card"><p class="muted">Loading the exam simulator…</p></div></div>';
     },
