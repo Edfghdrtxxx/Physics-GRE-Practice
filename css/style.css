@@ -7004,6 +7004,39 @@ details.miss[open] > summary::before { transform: rotate(45deg) translate(-1px, 
   color: var(--ink-meta);
 }
 .iweek-cap strong { font-size: 13.5px; font-weight: 500; color: var(--ink); }
+.iweek-title { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.iweek-span { color: var(--ink-meta); }
+/* Days shown: 7, 30 or a custom 2-90. */
+.iweek-range { display: inline-flex; align-items: center; gap: 4px; }
+.iweek-range-btn,
+.iweek-range-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--ctl-r);
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--fs-cap);
+  color: var(--ink-meta);
+  cursor: pointer;
+}
+.iweek-range-btn:hover,
+.iweek-range-custom:hover { color: var(--ink); }
+.iweek-range-btn[aria-pressed="true"],
+.iweek-range-custom.is-on { border-color: var(--accent); background: var(--accent-tint); color: var(--accent-deep); }
+.iweek-range-custom input {
+  width: 4.2em;
+  padding: 1px 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  font: inherit;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
 .itrend-key {
   display: inline-block;
   width: 14px;
@@ -7011,7 +7044,16 @@ details.miss[open] > summary::before { transform: rotate(45deg) translate(-1px, 
   vertical-align: middle;
   border-top: 1.5px dashed var(--ink-2);
 }
-.iweek-days { list-style: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); margin: 0; padding: 0; }
+.iweek-days { list-style: none; display: grid; grid-template-columns: repeat(var(--iweek-n, 7), minmax(0, 1fr)); margin: 0; padding: 0; }
+/* Past 7 days: columns keep 22px and the strip scrolls inside the card. */
+.iweek.is-long .iweek-days {
+  grid-template-columns: repeat(var(--iweek-n), minmax(22px, 1fr));
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.iweek.is-long .iweek-n { font-size: 11px; }
+.iweek.is-long .iweek-bar { width: 60%; min-width: 6px; }
+.iweek.is-long .iweek-foot { display: none; }
 .iweek-day { position: relative; display: flex; flex-direction: column; align-items: center; min-width: 0; }
 .iweek-n {
   font-size: var(--fs-cap);
@@ -7033,7 +7075,7 @@ details.miss[open] > summary::before { transform: rotate(45deg) translate(-1px, 
 }
 .iweek-day:first-child .iweek-plot { border-radius: var(--ctl-r) 0 0 var(--ctl-r); }
 .iweek-day:last-child .iweek-plot { border-radius: 0 var(--ctl-r) var(--ctl-r) 0; }
-/* A no-pack weekday steps back to the card surface inside the strip. */
+/* A day without a Daily work target steps back to the card surface inside the strip. */
 .iweek-day.is-rest .iweek-plot { background: var(--surface); box-shadow: inset 0 0 0 1px var(--ivory); }
 .iweek-bar { width: 44%; max-width: 26px; min-width: 10px; border-radius: 4px 4px 0 0; background: var(--ink-2); }
 .iweek-day.is-today .iweek-bar { background: var(--accent-deep); }
@@ -7144,7 +7186,9 @@ details.miss[open] > summary::before { transform: rotate(45deg) translate(-1px, 
    44 px tall. */
 @media (pointer: coarse), (max-width: 560px) {
   .intensity-card .btn,
-  .intensity-topics > summary { min-height: 44px; }
+  .intensity-topics > summary,
+  .iweek-range-btn,
+  .iweek-range-custom { min-height: 44px; }
   .intensity-table td a { display: inline-block; padding: 9px 0; }
 }
 
@@ -7176,8 +7220,8 @@ details.miss[open] > summary::before { transform: rotate(45deg) translate(-1px, 
   .intensity-focus { flex-direction: column; align-items: flex-start; }
   .iweek-wd, .iweek-pace { font-size: 11px; }
   .iweek-pace { gap: 3px; }
-  /* "no pack" takes two lines in a 48 px column */
-  .iweek-day.is-idle .iweek-pace { white-space: normal; text-align: center; line-height: 1.2; max-width: 4ch; }
+  /* "no target" takes two lines in a 48 px column */
+  .iweek-day.is-idle .iweek-pace { white-space: normal; text-align: center; line-height: 1.2; max-width: 6ch; }
   .intensity-table th, .intensity-table td { padding: 7px 4px; }
   .intensity-table { font-size: 12.5px; }
   /* Weight and band move under the topic name, so three columns (topic,

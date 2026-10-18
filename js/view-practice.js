@@ -1250,16 +1250,16 @@ PGRE.views.practice = (function () {
 
   /* ——— Summary: instant intensity feedback ———
      Two banded lines (js/intensity.js): this sitting's median seconds per
-     answered question against the 103 s exam pace, and today's new
-     questions against the daily target. The second line reads the same
-     PGRE.intensity.compute() as the dashboard Intensity card, after this
-     sitting's attempts are already in the log. */
-  function intensityLineHTML(key, label, note, value, bandName) {
+     answered question against the 103 s exam pace, and today's Daily work
+     (mistake-book retakes) against the daily target. The second line reads
+     the same PGRE.intensity.compute() as the dashboard Intensity card, after
+     this sitting's attempts are already in the log. */
+  function intensityLineHTML(key, label, note, value, bandName, chipText) {
     return '<div class="intensity-line" data-line="' + key + '" data-band="' + (bandName || 'none') + '">' +
       '<span class="intensity-line-label">' + label +
         (note ? ' <span class="intensity-line-note">' + PGRE.ui.esc(note) + '</span>' : '') + '</span>' +
       '<span class="intensity-line-value">' + value + '</span>' +
-      PGRE.intensity.chipHTML(bandName) +
+      PGRE.intensity.chipHTML(bandName, chipText) +
     '</div>';
   }
 
@@ -1268,12 +1268,13 @@ PGRE.views.practice = (function () {
     if (!I) return '';
     var med = I.sessionMedianSec(session.answers);
     var today = I.compute(PGRE.store.state);
-    var nq = today.newQuestions;
+    var work = today.dailyWork;
     return '<div class="intensity-summary" id="intensity-summary">' +
       intensityLineHTML('pace', 'Median seconds per question', isPack ? 'this pack' : 'this set',
         (med == null ? '—' : med) + ' / ' + I.THRESHOLDS.paceSec.green, I.band('paceSec', med)) +
-      intensityLineHTML('new', 'New questions today', 'first tries in practice',
-        nq.value + ' / ' + nq.threshold, nq.band) +
+      intensityLineHTML('work', 'Mistake book today', work.mocks.length ? 'full mock submitted' : 'retakes',
+        work.value + (work.threshold == null ? '' : ' / ' + work.threshold), work.band,
+        work.band ? null : 'No target') +
       // data-dash-focus: the dashboard lands on this card, not on its first card
       '<a class="intensity-summary-link" href="#/" data-dash-focus="intensity-card">Intensity on the dashboard →</a>' +
     '</div>';

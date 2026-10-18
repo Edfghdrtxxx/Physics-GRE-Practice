@@ -1,19 +1,20 @@
 #!/usr/bin/env node
 /* Headless Chrome, end to end: the Intensity feedback (js/intensity.js) on
-   the shipped page. Three seeded study histories, ten days each, together
-   put every one of the five metrics in each band (green, amber, red). For
-   each history the test loads the dashboard and checks every row's value
-   and band, the headline and its one action, the 7-day strip, the "Where to
-   adjust" topic order, and PGRE.buildStatusSummary().intensity. In the
-   first history it also uses the card: opens a reading with the mouse and
-   the keyboard, opens the topic table, checks the phone layout, sits a
-   timed pack, follows the summary's link back and checks where it lands and
-   what changed, then lets a sibling tab write. Two more loads cover a new
-   user and a no-pack Sunday (page clock moved forward). Expected numbers
-   are worked out here from the seed, not read back from the module under
-   test. The question bank (content/bank/, gitignored) may be absent, as in
-   a fresh worktree: the page then loads only the sample questions in js/,
-   so the counts of untried questions are worked out from what it can load.
+   the shipped page. Five seeded study histories put each of the three
+   banded readings (Daily work, first-try accuracy, pace) in each band
+   (green, amber, red), with a full mock submitted today, and a day after
+   the last Daily work target day. For each history the test loads the
+   dashboard and checks every row's value and band, the headline and its
+   one action, the 7-day strip, the "Where to adjust" topic order, and
+   PGRE.buildStatusSummary().intensity. In the first history it also uses
+   the card: opens a reading with the mouse and the keyboard, opens the
+   topic table, checks the phone layout, sits a timed pack, follows the
+   summary's link back and checks where it lands and what changed, then
+   lets a sibling tab write. Two more loads cover a new user and the
+   Sunday mock day (page clock moved forward). Expected numbers are worked
+   out here from the seed, not read back from the module under test. The
+   question bank (content/bank/, gitignored) may be absent, as in a fresh
+   worktree: no expected number here depends on it.
 
    Isolated Chrome profile and ephemeral ports; nothing outside the temp
    profile is read or written. Requests to the OrbitOS status bridge
@@ -57,7 +58,7 @@ function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 /* ——— Dates: local calendar days, the Studio's day key ——— */
 function pad2(n) { return String(n).padStart(2, '0'); }
 function dayKey(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
-/* DAY_SHIFT moves "today" forward for the no-pack scenario, where the page
+/* DAY_SHIFT moves "today" forward for the mock-day scenario, where the page
    clock is shifted by the same number of days. */
 var DAY_SHIFT = 0;
 function dayAgo(k) { var d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + DAY_SHIFT - k); return dayKey(d); }
@@ -69,26 +70,10 @@ function tsAgo(k, h, m, s) {
   d.setHours(h, m || 0, s || 0, 0);
   return d.toISOString();
 }
-/* No timed pack on Sunday (0) or Thursday (4), local time. Written out here,
-   not read from js/intensity.js. SUNDAY_ONLY is the rule before Thursdays
-   were added, kept to show that the numbers change. */
-var NO_PACK = [0, 4];
-var SUNDAY_ONLY = [0];
-function workingDays(from, to, noPack) {
-  noPack = noPack || NO_PACK;
-  var n = 0;
-  var d = new Date(from + 'T12:00:00');
-  var end = new Date(to + 'T12:00:00');
-  while (d <= end) { if (noPack.indexOf(d.getDay()) < 0) n++; d.setDate(d.getDate() + 1); }
-  return n;
-}
-/* How many days ago the Thursday inside the last 7 days was (0 = today). */
-var THU_AGO = (new Date().getDay() - 4 + 7) % 7;
-/* On a no-pack weekday the card shows New questions below its target as
-   "No pack today" (js/intensity.js review()); the computed band is unchanged. */
-var NO_PACK_TODAY = NO_PACK.indexOf(new Date().getDay()) >= 0;
+/* Sunday is the full-mock day: an unmet Daily work target then links to
+   the mock exam, otherwise to the mistake book (js/intensity.js review()). */
+var MOCK_TODAY = new Date().getDay() === 0;
 var DAYS_TO_SUNDAY = (7 - new Date().getDay()) % 7 || 7;
-function round1(x) { return Math.round(x * 10) / 10; }
 function median(list) {
   var a = list.slice().sort(function (x, y) { return x - y; });
   var mid = Math.floor(a.length / 2);
@@ -96,16 +81,13 @@ function median(list) {
 }
 
 /* ——— Bands, written out from the spec table (not from js/intensity.js) ——— */
-function bandNew(v) { return v >= 15 ? 'green' : v >= 8 ? 'amber' : 'red'; }
+function bandWork(v, mock) { return mock || v >= 40 ? 'green' : v >= 25 ? 'amber' : 'red'; }
 function bandPace(v) { return v == null ? 'none' : v <= 103 ? 'green' : v <= 130 ? 'amber' : 'red'; }
 function bandAcc(v) { return v == null ? 'none' : v >= 75 ? 'green' : v >= 60 ? 'amber' : 'red'; }
-function bandRepeat(v) { return v <= 20 ? 'green' : v <= 40 ? 'amber' : 'red'; }
-function bandCoverage(actual, required) {
-  return actual >= required ? 'green' : actual >= required - 3 ? 'amber' : 'red';
-}
-var CHIP = { green: 'On target', amber: 'Close', red: 'Off target', none: 'No data' };
+var CHIP = { green: 'On target', amber: 'Close', red: 'Off target', none: 'No data', rest: 'No target' };
 
-/* ——— Pack question ids, read from the shipped data file ——— */
+/* ——— Pack question ids, read from the shipped data file ———
+   The seeds draw question ids from the packs, and history 1 sits a pack. */
 var dataCtx = { window: {} };
 vm.createContext(dataCtx);
 vm.runInContext('var window = this.window; window.PGRE = {}; var PGRE = window.PGRE;\n' +
@@ -125,7 +107,10 @@ var SEED_POOL = PACK_UNION.filter(function (id) { return !SIT_IDS[id]; });
 
 /* ——— Seed builder ———
    news: [dayAgo, topic, correct, seconds]; every entry is the first attempt
-   of a fresh pack qid in mode 'practice'. */
+   of a fresh pack qid in mode 'practice'.
+   retakes: [dayAgo, count, seconds each]; mistake-book retakes (mode
+   'mistakes') of fresh qids.
+   mocks: [dayAgo]; a submitted weighted 70-question sitting. */
 function buildSeed(spec) {
   var pool = SEED_POOL.slice();
   var attempts = [];
@@ -138,19 +123,21 @@ function buildSeed(spec) {
       correct: correct, ms: sec * 1000, sid: 'seed-' + k, mode: mode, confidence: null, tags: []
     });
   }
-  // Bulk history 20-25 days back: outside every window, only shrinks coverage.
-  for (var b = 0; b < (spec.bulk || 0); b++) push(20 + (b % 6), take(), 'cm', true, 100, 'practice');
-  var firstNewQid = null;
-  spec.news.forEach(function (n) {
-    var qid = take();
-    if (!firstNewQid) firstNewQid = qid;
-    push(n[0], qid, n[1], n[2], n[3], 'practice');
+  spec.news.forEach(function (n) { push(n[0], take(), n[1], n[2], n[3], 'practice'); });
+  (spec.extra || []).forEach(function (fn) { fn({ take: take, push: push }); });
+  (spec.retakes || []).forEach(function (r) {
+    for (var i = 0; i < r[1]; i++) push(r[0], take(), 'cm', true, r[2], 'mistakes');
   });
-  (spec.extra || []).forEach(function (fn) { fn({ take: take, push: push, firstNewQid: firstNewQid }); });
-  (spec.repeats || []).forEach(function (sec) { push(0, firstNewQid, 'cm', true, sec, 'mistakes'); });
+  var exams = (spec.mocks || []).map(function (k, i) {
+    return {
+      id: 'ex-seed-' + i, startedAt: tsAgo(k, 2), submittedAt: tsAgo(k, 4), format: '70x120', source: 'weighted',
+      title: null, seed: 1, order: [], answers: {}, flags: [], cursor: 0, paused: false, durationSec: 7200,
+      limitSec: 7200, raw: 40, total: 70, scaledEst: 800, perTopic: {}
+    };
+  });
   var iso = new Date().toISOString();
   return {
-    created: iso, xp: 0, attempts: attempts,
+    created: iso, xp: 0, attempts: attempts, exams: exams,
     settings: { theme: 'light', examDate: spec.examDate, keyboard: true, paceTrainer: true,
                 paceTargetSec: 103, dailyTargetMin: 120 },
     migrations: { ankiReset2026: iso, planRebuild2026: iso, easy10: iso },
@@ -158,92 +145,67 @@ function buildSeed(spec) {
   };
 }
 
-function attemptedPackCount(seed) {
-  var inPack = {};
-  PACK_UNION.forEach(function (id) { inPack[id] = 1; });
-  var seen = {};
-  var n = 0;
-  seed.attempts.forEach(function (a) { if (inPack[a.qid] && !seen[a.qid]) { seen[a.qid] = 1; n++; } });
-  return n;
-}
-
 /* What the card prints beside each number: the target in words. */
-function newText(n) { return n + (NO_PACK_TODAY && n < 15 ? ' no target today' : ' of 15'); }
-/* What the row's chip shows; only New questions differs from its band. */
-function shownAs(metric, bandName) {
-  if (metric === 'newQuestions' && NO_PACK_TODAY && bandName !== 'green') return { band: 'none', chip: 'No pack today', show: 'rest' };
-  return { band: bandName, chip: CHIP[bandName], show: bandName };
+function workText(n, mock, hasTarget) {
+  return n + ' ' + (!hasTarget ? 'no target today' : (mock ? 'full mock submitted' : 'of 40'));
 }
 /* The reading the headline is about: off target before close, and within
-   one band retakes, new questions, coverage, accuracy, pace. Written out
-   here, not read from js/intensity.js. */
-var LEAD_ORDER = ['repeatMinutes', 'newQuestions', 'coverage', 'firstAttemptAccuracy', 'paceSec'];
+   one band Daily work, accuracy, pace. New questions and Repeat time never
+   lead. Written out here, not read from js/intensity.js. */
+var LEAD_ORDER = ['dailyWork', 'firstAttemptAccuracy', 'paceSec'];
 function leadOf(want) {
-  var shown = {};
-  LEAD_ORDER.forEach(function (m) { shown[m] = shownAs(m, want[m].band).show; });
-  var reds = LEAD_ORDER.filter(function (m) { return shown[m] === 'red'; });
-  var ambers = LEAD_ORDER.filter(function (m) { return shown[m] === 'amber'; });
+  var reds = LEAD_ORDER.filter(function (m) { return want[m].band === 'red'; });
+  var ambers = LEAD_ORDER.filter(function (m) { return want[m].band === 'amber'; });
   return reds[0] || ambers[0] || null;
-}
-/* Untried questions of one pack in a seed, among those the page can load
-   (bank.has, from pageBank()). */
-function freshIn(packId, seed, bank) {
-  var tried = {};
-  seed.attempts.forEach(function (a) { tried[a.qid] = 1; });
-  return PACKS[packId].ids.filter(function (id) { return !tried[id] && bank.has[id]; }).length;
-}
-/* The headline when New questions leads and the practice pool (bank.pool)
-   holds fewer untried questions than the gap to 15; null otherwise. A
-   checkout without content/bank/ has a pool this small. */
-function scarceHeadline(n, seed, bank) {
-  var tried = {};
-  seed.attempts.forEach(function (a) { tried[a.qid] = 1; });
-  var unseen = bank.pool.filter(function (id) { return !tried[id]; }).length;
-  if (!(unseen > 0 && unseen < 15 - n)) return null;
-  return 'Only ' + unseen + (unseen === 1 ? ' untried question is' : ' untried questions are') +
-    ' left in the practice pool.';
 }
 
 /* Expected readout for a seed, from the definitions in the spec. */
-function expectFor(spec, seed) {
+function expectFor(spec) {
   var news = spec.news;
   var today = news.filter(function (n) { return n[0] === 0; });
   var pace = today.length ? Math.round(median(today.map(function (n) { return n[3]; }))) : null;
   var last7 = news.filter(function (n) { return n[0] <= 6; });
   var right7 = last7.filter(function (n) { return n[2]; }).length;
   var acc = last7.length ? Math.round(100 * right7 / last7.length) : null;
-  var repMin = Math.round((spec.repeats || []).reduce(function (s, x) { return s + x; }, 0) / 60);
-  var lastPackDay = dayAhead(spec.examAhead - 3);
-  var wdl = workingDays(dayAgo(0), lastPackDay);
-  var remaining = PACK_UNION.length - attemptedPackCount(seed);
-  var required = round1(remaining / wdl);
-  var working7 = workingDays(dayAgo(6), dayAgo(0));
-  var actual = round1(last7.length / working7);
-  var wdlSun = workingDays(dayAgo(0), lastPackDay, SUNDAY_ONLY);
-  var sundayOnly = { workingDaysLeft: wdlSun, required: round1(remaining / wdlSun),
-                     actual: round1(last7.length / workingDays(dayAgo(6), dayAgo(0), SUNDAY_ONLY)) };
-  var trendNew = [], trendPace = [];
+  var lastTargetDay = dayAhead(spec.examAhead - 3);
+  function retakesOn(k) {
+    return (spec.retakes || []).filter(function (r) { return r[0] === k; }).reduce(function (s, r) { return s + r[1]; }, 0);
+  }
+  function mocksOn(k) { return (spec.mocks || []).filter(function (m) { return m === k; }).length; }
+  var repSec = (spec.retakes || []).filter(function (r) { return r[0] === 0; })
+    .reduce(function (s, r) { return s + r[1] * r[2]; }, 0);
+  var repMin = Math.round(repSec / 60);
+  var hasTarget = dayAgo(0) <= lastTargetDay;
+  var work = retakesOn(0);
+  var mock = mocksOn(0) > 0;
+  var strip = [];
   for (var d = 6; d >= 0; d--) {
-    var rows = news.filter(function (n) { return n[0] === d; });
-    trendNew.push(rows.length);
-    trendPace.push(rows.length ? Math.round(median(rows.map(function (n) { return n[3]; }))) : null);
+    var target = dayAgo(d) <= lastTargetDay;
+    strip.push({ retakes: retakesOn(d), mocks: mocksOn(d),
+                 band: target ? bandWork(retakesOn(d), mocksOn(d) > 0) : 'none' });
   }
   return {
-    newQuestions: { value: today.length, band: bandNew(today.length), text: newText(today.length) },
+    dailyWork: { value: work, band: hasTarget ? bandWork(work, mock) : 'none', mock: mock, hasTarget: hasTarget,
+                 text: workText(work, mock, hasTarget), lastTargetDay: lastTargetDay },
     paceSec: { value: pace, band: bandPace(pace), text: (pace == null ? '—' : pace + ' s') + ' target 103 s or under' },
     firstAttemptAccuracy: { value: acc, band: bandAcc(acc), text: (acc == null ? '—' : acc + '%') + ' target 75% or more',
                             n: last7.length, correct: right7 },
-    repeatMinutes: { value: repMin, band: bandRepeat(repMin), text: repMin + ' min limit 20 min' },
-    coverage: { value: actual, band: bandCoverage(actual, required),
-                text: actual.toFixed(1) + ' a day needed: ' + required.toFixed(1),
-                remaining: remaining, workingDaysLeft: wdl, required: required, actual: actual,
-                lastPackDay: lastPackDay, working7: working7, new7: last7.length, sundayOnly: sundayOnly },
-    trendNew: trendNew, trendPace: trendPace
+    repeatMinutes: { value: repMin, band: 'none', text: repMin + ' min no limit' },
+    newQuestions: { value: today.length, band: 'none', text: today.length + ' no target' },
+    strip: strip
   };
 }
+/* What a row's chip shows: readings without a target read "No target";
+   a reading without data reads "No data". */
+function shownAs(m, bandName) {
+  if (m === 'newQuestions' || m === 'repeatMinutes' || (m === 'dailyWork' && bandName === 'none')) {
+    return { band: 'none', chip: CHIP.rest, show: 'rest' };
+  }
+  return { band: bandName, chip: CHIP[bandName], show: bandName };
+}
 
-/* ——— The three histories ——— */
-var EXAM_AHEAD = 20;   // exam 20 days out, last pack day 17 days out
+/* ——— The histories ——— */
+var EXAM_AHEAD = 20;   // exam 20 days out, last target day 17 days out
 var T = true, F = false;
 var SPECS = [
   {
@@ -272,48 +234,61 @@ var SPECS = [
       // first try in a mock exam 2 days ago, practice today: not new
       function (h) { var q = h.take(); h.push(2, q, 'qm', F, 90, 'exam'); h.push(0, q, 'qm', T, 600, 'practice'); }
     ],
-    repeats: [900, 900, 900],          // 45 min of mistake-book retakes today
+    retakes: [[0, 30, 90], [1, 45, 60], [3, 12, 60]],   // today 30 retakes, 45 min
+    mocks: [5],
     topicOrder: ['cm', 'em', 'th', 'qm', 'at', 'sp', 'ow', 'sr', 'lb'],
     topicBands: { cm: 'red', em: 'amber', th: 'green', qm: 'green', at: 'none', sp: 'none', ow: 'none', sr: 'none', lb: 'none' },
     topicNew: { cm: 10, em: 8, th: 5, qm: 6, at: 4, sp: 3, ow: 2, sr: 1, lb: 1 },
     topicAcc: { cm: '50%', em: '63%', th: '80%', qm: '100%' },
-    bands: { newQuestions: 'amber', paceSec: 'amber', firstAttemptAccuracy: 'amber', repeatMinutes: 'red', coverage: 'red' },
-    // 45 min of retakes against the limit of 20 leads; 11 new is short of 15, so the action is the next pack
-    // (on a no-pack weekday New questions has no target, so the advice is to stop and there is no button)
-    lead: 'repeatMinutes', headline: '45 min of retakes today, 25 over the limit.', tone: 'attention',
-    actionIsPack: !NO_PACK_TODAY
+    bands: { dailyWork: 'amber', paceSec: 'amber', firstAttemptAccuracy: 'amber' },
+    // all three judged readings are close: Daily work leads
+    lead: 'dailyWork', headline: '10 mistake-book questions to go today.', tone: 'attention'
   },
   {
     n: 2, name: 'all green',
     examAhead: EXAM_AHEAD,
-    bulk: 300,
     news: (function () {
       var out = [];
       for (var i = 0; i < 16; i++) out.push([0, ['cm', 'em', 'qm', 'th'][i % 4], i < 13, 90]);
       for (var j = 0; j < 20; j++) out.push([1 + (j % 6), ['cm', 'em', 'qm', 'th', 'at'][j % 5], j < 17, 95]);
-      out.push([THU_AGO, 'cm', T, 95]);  // a new question on the Thursday: it still counts
       return out;
     }()),
-    thursdayNew: true,
-    repeats: [540, 540],               // 18 min
-    bands: { newQuestions: 'green', paceSec: 'green', firstAttemptAccuracy: 'green', repeatMinutes: 'green', coverage: 'green' },
-    lead: null, headline: 'On target on all five readings.', tone: 'good', actionIsPack: true
+    retakes: [[0, 40, 45]],             // 40 retakes, 30 min
+    bands: { dailyWork: 'green', paceSec: 'green', firstAttemptAccuracy: 'green' },
+    lead: null, headline: 'Daily work done: 40 mistake-book questions.', tone: 'good'
   },
   {
     n: 3, name: 'slow and short',
     examAhead: EXAM_AHEAD,
-    bulk: 252,
     news: (function () {
       var out = [[0, 'cm', T, 140], [0, 'em', F, 150], [0, 'qm', T, 160], [0, 'th', F, 170], [0, 'at', F, 180]];
       for (var j = 0; j < 19; j++) out.push([1 + (j % 6), ['cm', 'em', 'qm'][j % 3], j < 10, 120]);
       return out;
     }()),
-    repeats: [900, 900],               // 30 min
-    bands: { newQuestions: 'red', paceSec: 'red', firstAttemptAccuracy: 'red', repeatMinutes: 'amber', coverage: 'amber' },
-    // 5 new of 15 leads on a pack day; on a no-pack weekday accuracy (10 + 2 right of 24 = 50%) leads
-    lead: NO_PACK_TODAY ? 'firstAttemptAccuracy' : 'newQuestions',
-    headline: NO_PACK_TODAY ? 'First-try accuracy is 50% over the last 7 days.' : '10 new questions to go today.',
-    tone: 'attention', actionIsPack: !NO_PACK_TODAY
+    retakes: [[0, 10, 60]],             // 10 retakes, 10 min
+    bands: { dailyWork: 'red', paceSec: 'red', firstAttemptAccuracy: 'red' },
+    // all three off target: Daily work leads; accuracy is 2 + 10 right of 24 = 50%
+    lead: 'dailyWork', headline: '30 mistake-book questions to go today.', tone: 'attention'
+  },
+  {
+    n: 4, name: 'mock today',
+    examAhead: EXAM_AHEAD,
+    news: (function () {
+      var out = [];
+      for (var i = 0; i < 16; i++) out.push([1, ['cm', 'em', 'qm', 'th'][i % 4], true, 95]);
+      return out;
+    }()),
+    mocks: [0],
+    bands: { dailyWork: 'green', paceSec: 'none', firstAttemptAccuracy: 'green' },
+    lead: null, headline: 'Full mock submitted today.', tone: 'good'
+  },
+  {
+    n: 5, name: 'after the last target day',
+    examAhead: 2,                       // exam in 2 days: the last target day was yesterday
+    news: [[1, 'cm', T, 95], [1, 'em', T, 95]],
+    retakes: [[0, 5, 60], [1, 41, 60]],
+    bands: { dailyWork: 'none', paceSec: 'none', firstAttemptAccuracy: 'green' },
+    lead: null, headline: 'No daily target today.', tone: 'rest'
   }
 ];
 
@@ -476,19 +451,11 @@ async function main() {
       await waitFor('!!document.getElementById("intensity-card")', 'the Intensity card');
       await sleep(300);
     }
-    /* What the page can load: which pack questions, and the ids of its
-       default practice pool. */
-    function pageBank() {
-      return ev('(function(){var has={};Object.keys(PGRE.PACKS).forEach(function(k){' +
-        'PGRE.PACKS[k].ids.forEach(function(id){if(PGRE.questionById(id))has[id]=1;});});' +
-        'return {has:has,pool:PGRE.allQuestions().map(function(q){return q.id;})};})()');
-    }
-
     /* The card as a reader meets it. A row's own chip is the direct child of
        its button (the opened panel lists all three bands). The topic table
        sits in a closed disclosure, so its cells are read as textContent. */
     async function readCard() {
-      return ev('(function(){var out={rows:{},trend:{newQuestions:[],paceSec:[]},topics:[]};' +
+      return ev('(function(){var out={rows:{},strip:[],topics:[]};' +
         'function t(el){return el?el.textContent.replace(/\\s+/g," ").trim():"";}' +
         'var card=document.getElementById("intensity-card");' +
         'card.querySelectorAll(".intensity-row").forEach(function(r){' +
@@ -500,8 +467,8 @@ async function main() {
           'chipBand:chip&&chip.getAttribute("data-band"),hint:t(hint),link:link?link.getAttribute("href"):null,' +
           'delta:delta?t(delta).replace(" since your last look,",""):"",expanded:btn.getAttribute("aria-expanded"),' +
           'meter:!!r.querySelector(".imeter")};});' +
-        'card.querySelectorAll(".iweek-day").forEach(function(c){var p=c.getAttribute("data-pace");' +
-          'out.trend.newQuestions.push(Number(c.getAttribute("data-new")));out.trend.paceSec.push(p===""?null:Number(p));});' +
+        'card.querySelectorAll(".iweek-day").forEach(function(c){out.strip.push({retakes:Number(c.getAttribute("data-retakes")),' +
+          'mocks:Number(c.getAttribute("data-mocks")),band:c.getAttribute("data-band")});});' +
         'card.querySelectorAll("#intensity-adjust tbody tr").forEach(function(tr){var td=tr.querySelectorAll("td");' +
           'out.topics.push({topic:tr.getAttribute("data-topic"),band:tr.getAttribute("data-band"),' +
           'weight:t(td[1]),n:Number(t(td[2])),acc:t(td[3]),bandText:t(td[4])});});' +
@@ -565,23 +532,27 @@ async function main() {
         'links:Array.prototype.map.call(p.querySelectorAll("a"),function(a){return a.getAttribute("href");})};})()');
     }
 
-    var METRICS = ['newQuestions', 'paceSec', 'firstAttemptAccuracy', 'repeatMinutes', 'coverage'];
+    var METRICS = ['dailyWork', 'firstAttemptAccuracy', 'paceSec', 'repeatMinutes', 'newQuestions'];
+    var WORK_ADVICE = MOCK_TODAY ? 'Today is the full-mock day: a submitted mock meets the target on its own.'
+      : 'A full mock submitted today also meets the target.';
+    var WORK_HREF = MOCK_TODAY ? '#/exam' : '#/mistakes';
 
     for (var s = 0; s < SPECS.length; s++) {
       var spec = SPECS[s];
       spec.examDate = dayAhead(spec.examAhead);
       var seed = buildSeed(spec);
-      var want = expectFor(spec, seed);
+      var want = expectFor(spec);
       pageErrors.length = 0;
       console.log('\nhistory ' + spec.n + ' (' + spec.name + ')');
       await seedAndOpen(seed);
       var card = await readCard();
-      var bank = await pageBank();
 
       if (s === 0) {
         var at = card.order.indexOf('st-active-target');
         check(at >= 0 && card.order[at + 1] === 'intensity-card',
           'the Intensity card sits right after the Daily activity target card');
+        check(Object.keys(card.rows).join(',') === METRICS.join(','),
+          'five readings, Daily work first: ' + Object.keys(card.rows).join(', '));
       }
       var lead = leadOf(want);
       METRICS.forEach(function (m) {
@@ -591,36 +562,32 @@ async function main() {
         check(row.band === want[m].band && row.chipBand === shown.band && row.chip === shown.chip && row.show === shown.show,
           m + ' band is ' + want[m].band + ' with the label "' + shown.chip + '" (got ' +
           row.band + ' / ' + row.chip + ')');
-        check(want[m].band === spec.bands[m], m + ' lands in the ' + spec.bands[m] + ' band this history was built for');
+        if (spec.bands[m]) {
+          check(want[m].band === spec.bands[m], m + ' lands in the ' + spec.bands[m] + ' band this history was built for');
+        }
         // The headline block speaks for the leading row, so that row prints no hint.
-        var wantsHint = want[m].band !== 'green' && m !== lead;
-        check(wantsHint === (row.hint !== ''),
-          m + (want[m].band === 'green' ? ' has no hint when green'
-            : (m === lead ? ' is the headline, so it prints no second hint' : ' carries a hint when ' + want[m].band)));
+        var off = shown.show === 'amber' || shown.show === 'red';
+        check((off && m !== lead) === (row.hint !== '') || (m === 'dailyWork' && !want.dailyWork.hasTarget && row.hint !== ''),
+          m + (!off ? ' has no hint when ' + shown.show
+            : (m === lead ? ' is the headline, so it prints no second hint' : ' carries a hint when ' + shown.show)));
         check(row.meter && row.expanded === 'false', m + ' has a meter and starts closed');
       });
-      var headline = (lead === 'newQuestions' && scarceHeadline(want.newQuestions.value, seed, bank)) || spec.headline;
-      check(lead === spec.lead && card.verdict.focus === lead && card.verdict.tone === spec.tone &&
-        card.verdict.headline === headline,
-        'headline: "' + headline + '" (got "' + card.verdict.headline + '", about ' + card.verdict.focus + ')');
-      check(card.verdict.mark === (lead ? shownAs(lead, want[lead].band).band : 'green'),
+      check(lead === spec.lead && (card.verdict.focus || null) === lead && card.verdict.tone === spec.tone &&
+        card.verdict.headline === spec.headline,
+        'headline: "' + spec.headline + '" (got "' + card.verdict.headline + '", about ' + card.verdict.focus + ')');
+      check(card.verdict.mark === (lead ? want[lead].band : (spec.tone === 'good' ? 'green' : 'none')),
         'the headline carries the band shape of the reading it is about (' + card.verdict.mark + ')');
-      if (spec.actionIsPack) {
-        var packId = (/^#\/practice\/pack\/(\d\d)$/.exec(card.verdict.href || '') || [])[1];
-        var fresh = packId ? freshIn(packId, seed, bank) : 0;
-        check(!!packId && fresh > 0 && card.verdict.label === 'Start Set ' + packId + ' →',
-          'the one button launches a pack that still has untried questions: ' + card.verdict.href + ', ' + fresh + ' untried');
-        check(packId && card.verdict.detail.indexOf('Set ' + packId + ' · ' + PACKS[packId].title) >= 0 &&
-          card.verdict.detail.indexOf(fresh + (lead ? ' you have not tried' : ' untried question')) >= 0,
-          'the headline block names that pack and its ' + fresh + ' untried questions');
-        check(card.verdict.primary === (spec.tone === 'attention'),
-          spec.tone === 'attention' ? 'the button is the primary button when a reading needs attention'
-            : 'the button is a quiet one when everything is on target');
+      if (lead === 'dailyWork') {
+        check(card.verdict.href === WORK_HREF && card.verdict.primary === true &&
+          card.verdict.label === (MOCK_TODAY ? 'Open Mock exam →' : 'Open Mistake book →'),
+          'the one button opens ' + (MOCK_TODAY ? 'the mock exam (today is Sunday)' : 'the mistake book') +
+          ' (got ' + card.verdict.href + ')');
+        check(card.verdict.detail.indexOf(WORK_ADVICE) === 0,
+          'the detail says a full mock also meets the target (got "' + card.verdict.detail + '")');
         check(METRICS.every(function (m) { return card.rows[m].link !== card.verdict.href; }),
           'no row repeats the headline button');
       } else {
-        check(card.verdict.href !== null ? !/\/practice\/pack\//.test(card.verdict.href) : true,
-          'the headline does not ask for another pack (' + (card.verdict.href || 'no button') + ')');
+        check(card.verdict.href === null, 'with nothing to do the headline has no button (' + card.verdict.href + ')');
       }
       var counts = { green: 0, amber: 0, red: 0, none: 0, rest: 0 };
       METRICS.forEach(function (m) { counts[shownAs(m, want[m].band).show]++; });
@@ -629,60 +596,64 @@ async function main() {
         .filter(function (x) { return x[0]; }).map(function (x) { return x[0] + ' ' + x[1]; }).join(' ');
       check(card.tally === tallyWant, 'tally: "' + tallyWant + '" (got "' + card.tally + '")');
       check(card.tabindex0 === 0, 'no chart bar is a tab stop');
-      check(JSON.stringify(card.trend.newQuestions) === JSON.stringify(want.trendNew),
-        'new-question strip, oldest first: ' + JSON.stringify(want.trendNew) + ' (got ' + JSON.stringify(card.trend.newQuestions) + ')');
-      check(JSON.stringify(card.trend.paceSec) === JSON.stringify(want.trendPace),
-        'median-pace strip, oldest first: ' + JSON.stringify(want.trendPace) + ' (got ' + JSON.stringify(card.trend.paceSec) + ')');
+      var stripWant = want.strip.map(function (x) { return x.retakes + ':' + x.mocks + ':' + x.band; }).join(' ');
+      var stripGot = card.strip.map(function (x) { return x.retakes + ':' + x.mocks + ':' + x.band; }).join(' ');
+      check(stripGot === stripWant, 'Daily work strip (retakes:mocks:band), oldest first: ' + stripWant + ' (got ' + stripGot + ')');
 
       var payload = await ev('PGRE.buildStatusSummary().intensity');
       METRICS.forEach(function (m) {
         check(payload[m].value === want[m].value && payload[m].band === (want[m].band === 'none' ? null : want[m].band),
           'status payload ' + m + ' = ' + want[m].value + ' (' + want[m].band + ')');
       });
-      check(payload.coverage.remaining === want.coverage.remaining &&
-        payload.coverage.workingDaysLeft === want.coverage.workingDaysLeft &&
-        payload.coverage.required === want.coverage.required &&
-        payload.coverage.actual === want.coverage.actual &&
-        payload.coverage.lastPackDay === want.coverage.lastPackDay,
-        'status payload coverage inputs: remaining ' + want.coverage.remaining + ', working days ' +
-        want.coverage.workingDaysLeft + ', required ' + want.coverage.required + ', actual ' + want.coverage.actual);
-      check(want.coverage.working7 === 5 && payload.coverage.workingDays7 === 5 &&
-        JSON.stringify(payload.coverage.noPackWeekdays) === '[0,4]',
-        'the last 7 days (' + dayAgo(6) + ' to ' + dayAgo(0) + ') hold Thursday ' + dayAgo(THU_AGO) +
-        ' and one Sunday, so actual divides by 5 working days (got ' + payload.coverage.workingDays7 + ')');
-      if (s === 0) {
-        var so = want.coverage.sundayOnly;
-        check(JSON.stringify(await ev('Array.prototype.slice.call(PGRE.intensity.NO_PACK_WEEKDAYS)')) === '[0,4]',
-          'PGRE.intensity.NO_PACK_WEEKDAYS is [0, 4]: Sunday and Thursday');
-        check(want.coverage.actual !== so.actual && payload.coverage.actual === want.coverage.actual,
-          'Thursday changes actual: ' + want.coverage.new7 + ' new / 5 working days = ' + want.coverage.actual +
-          ' (Sundays only: / 6 = ' + so.actual + ')');
-        check(want.coverage.workingDaysLeft < so.workingDaysLeft && want.coverage.required !== so.required &&
-          payload.coverage.required === want.coverage.required,
-          'Thursdays change required: ' + want.coverage.remaining + ' / ' + want.coverage.workingDaysLeft +
-          ' working days = ' + want.coverage.required + ' (Sundays only: / ' + so.workingDaysLeft + ' = ' + so.required + ')');
+      check(payload.dailyWork.lastTargetDay === want.dailyWork.lastTargetDay &&
+        payload.dailyWork.threshold === (want.dailyWork.hasTarget ? 40 : null) &&
+        payload.dailyWork.mocks.length === (want.dailyWork.mock ? 1 : 0) &&
+        payload.newQuestions.threshold === null && payload.repeatMinutes.threshold === null,
+        'status payload: last target day ' + want.dailyWork.lastTargetDay + ', target ' +
+        (want.dailyWork.hasTarget ? 40 : 'none') + '; no target for new questions or repeat time');
+      check(payload.firstAttemptAccuracy.n === want.firstAttemptAccuracy.n &&
+        payload.firstAttemptAccuracy.correct === want.firstAttemptAccuracy.correct,
+        'status payload accuracy counts ' + want.firstAttemptAccuracy.correct + ' of ' + want.firstAttemptAccuracy.n);
+      check(payload.topics.map(function (t) { return t.topic; }).join(',') ===
+        card.topics.map(function (t) { return t.topic; }).join(','),
+        'status payload topic rows are in the same order as the table');
 
+      if (spec.n === 4) {
+        var foot = await ev('document.querySelector("#intensity-card .iweek-day.is-today .iweek-pace").textContent.trim()');
+        check(foot === 'mock' && card.rows.dailyWork.value === '0 full mock submitted',
+          'a mock submitted today: the row reads "0 full mock submitted" and the strip marks today "mock"');
+      }
+      if (spec.n === 5) {
+        var rest = await ev('Array.prototype.map.call(document.querySelectorAll("#intensity-card .iweek-day"),function(c){' +
+          'return c.classList.contains("is-rest")?"rest":"target";}).join(" ")');
+        check(rest === 'target target target target target target rest',
+          'the strip steps back on the day without a target (got "' + rest + '")');
+        check(card.verdict.detail.indexOf('The daily target ended on ' +
+          new Date(want.dailyWork.lastTargetDay + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+          ', 3 days before the exam on ') === 0, 'the detail gives the end date (got "' + card.verdict.detail + '")');
+      }
+
+      if (s === 0) {
         /* Use the card: open a reading with the mouse, then with the keyboard. */
         console.log('\nopening a reading (history 1)');
-        var covBefore = await panelOf('coverage');
-        check(covBefore.expanded === 'false' && covBefore.hidden === true && covBefore.height === 0,
-          'the coverage explanation is closed and takes no room at first');
-        await clickOn(rowSel('coverage') + ' .intensity-toggle');
-        var covOpen = await panelOf('coverage');
-        check(covOpen.expanded === 'true' && covOpen.hidden === false && covOpen.height > 40,
-          'a click on the Coverage row opens how it is computed');
-        check(covOpen.text.indexOf(want.coverage.remaining + ' of ' + PACK_UNION.length + ' pack questions have no first try yet.') >= 0 &&
-          covOpen.text.indexOf('Needed: ' + want.coverage.remaining + ' / ' + want.coverage.workingDaysLeft + ' = ' +
-            want.coverage.required.toFixed(1) + ' new questions each working day.') >= 0 &&
-          covOpen.text.indexOf('Last 7 days: ' + want.coverage.new7 + ' new questions over 5 working days = ' +
-            want.coverage.actual.toFixed(1) + ' a day.') >= 0,
-          'it shows both divisions: ' + want.coverage.remaining + ' / ' + want.coverage.workingDaysLeft + ' and ' +
-          want.coverage.new7 + ' / 5');
-        check(/with no timed pack on Sundays or Thursdays\./.test(covOpen.text),
-          'it says there is no timed pack on Sundays or Thursdays');
-        check(/On target at or above the needed rate Close up to 3 below it Off target more than 3 below it/.test(covOpen.text),
+        var workBefore = await panelOf('dailyWork');
+        check(workBefore.expanded === 'false' && workBefore.hidden === true && workBefore.height === 0,
+          'the Daily work explanation is closed and takes no room at first');
+        await clickOn(rowSel('dailyWork') + ' .intensity-toggle');
+        var workOpen = await panelOf('dailyWork');
+        check(workOpen.expanded === 'true' && workOpen.hidden === false && workOpen.height > 40,
+          'a click on the Daily work row opens how it is computed');
+        check(workOpen.text.indexOf('Counts your answers in the mistake book today (30 retakes). ' +
+            'A full mock submitted today meets the target on its own.') >= 0 &&
+          workOpen.text.indexOf('New material comes from the Sunday full mocks; the other days go to the mistake book.') >= 0 &&
+          workOpen.text.indexOf('The target of 40 a day runs through ' +
+            new Date(want.dailyWork.lastTargetDay + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+            ', 3 days before the exam on ') >= 0,
+          'it says what counts, why, and through which date');
+        check(/On target 40 or more, or a full mock Close 25 to 39 Off target under 25/.test(workOpen.text),
           'it lists the three bands and their limits');
-        check(covOpen.links.indexOf('#/plan') >= 0, 'it links to the Study plan');
+        check(workOpen.links.indexOf('#/mistakes') >= 0 && workOpen.links.indexOf('#/exam') >= 0,
+          'it links to the mistake book and the mock exam');
         var marks = await bandMarks();
         check(METRICS.every(function (m) {
           var judged = marks[m].show === 'green' || marks[m].show === 'amber' || marks[m].show === 'red';
@@ -690,21 +661,22 @@ async function main() {
         }), 'in each reading the one band limit marked as current is the band on its chip; a reading without a band marks none');
         var daySay = await ev('Array.prototype.map.call(document.querySelectorAll("#intensity-card .iweek-day .ivh"),' +
           'function(e){return e.textContent;})');
-        check(daySay.length === 7 && daySay.some(function (t) { return /median pace/.test(t); }) &&
-          daySay.every(function (t) { return !/median pace/.test(t) || /median pace \d+ seconds \((on target|close|off target)\)\.$/.test(t); }),
-          'each day\'s sentence for screen readers gives the pace band as a word, for example "' +
-          (daySay.filter(function (t) { return /median pace/.test(t); })[0] || '') + '"');
+        check(daySay.length === 7 && daySay.every(function (t) {
+          return /^\w+, \w+ \d+: \d+ mistake-book questions?(, full mock submitted)? \((on target|close|off target)\)\.$/.test(t);
+        }) && daySay.some(function (t) { return /full mock submitted \(on target\)/.test(t); }),
+          'each day\'s sentence for screen readers gives the count and the band as a word, for example "' + daySay[6] + '"');
         await clickOn(rowSel('newQuestions') + ' .intensity-toggle');
         var nqOpen = await panelOf('newQuestions');
-        check(nqOpen.expanded === 'true' && (await panelOf('coverage')).expanded === 'true',
+        check(nqOpen.expanded === 'true' && (await panelOf('dailyWork')).expanded === 'true',
           'a second reading opens without closing the first');
-        check(/15 or more Close 8 to 14 Off target under 8/.test(nqOpen.text) &&
-          /Mistake-book retakes, the question of the day and mock exams do not count/.test(nqOpen.text),
-          'New questions explains what counts and prints its limits: 15 or more, 8 to 14, under 8');
+        check(/No daily target: new material comes from the Sunday full mocks\./.test(nqOpen.text) &&
+          /Mistake-book retakes, the question of the day and mock exams do not count/.test(nqOpen.text) &&
+          !/On target|Off target/.test(nqOpen.text),
+          'New questions explains what counts and why it has no target, and prints no band limits');
         await shotOf('#intensity-card', 'intensity-card-open.png');
         await clickOn(rowSel('newQuestions') + ' .intensity-toggle');
-        await clickOn(rowSel('coverage') + ' .intensity-toggle');
-        check((await panelOf('coverage')).hidden === true && (await panelOf('newQuestions')).hidden === true,
+        await clickOn(rowSel('dailyWork') + ' .intensity-toggle');
+        check((await panelOf('dailyWork')).hidden === true && (await panelOf('newQuestions')).hidden === true,
           'a second click closes each one again');
         await ev('document.querySelector(' + JSON.stringify(rowSel('paceSec') + ' .intensity-toggle') + ').focus(); true');
         await pressKey('Enter', 'Enter', 13);
@@ -718,7 +690,7 @@ async function main() {
           'return e.offsetParent!==null && !e.closest("[hidden]") && !(e.closest("details:not([open])") && e.tagName!=="SUMMARY");})' +
           '.map(function(e){return e.tagName.toLowerCase()+(e.classList.contains("intensity-toggle")?":reading":"");});})()');
         check(tabOrder.filter(function (x) { return x === 'button:reading'; }).length === 5 && tabOrder.length <= 12,
-          'the card has ' + tabOrder.length + ' tab stops: the five readings, the links and the topic table (it had 23, 14 of them chart bars)');
+          'the card has ' + tabOrder.length + ' tab stops: the five readings, the links and the topic table');
 
         /* The topic table: closed at first, and it remembers being opened. */
         var topicsOpen0 = await ev('document.getElementById("intensity-topics").open');
@@ -740,19 +712,51 @@ async function main() {
         var stateKeys = await ev('Object.keys(JSON.parse(localStorage.getItem("pgre-state-v1")).settings).sort().join(",")');
         check(/(^|,)intensityTopicsOpen(,|$)/.test(stateKeys) && /(^|,)examDate(,|$)/.test(stateKeys) && /(^|,)paceTargetSec(,|$)/.test(stateKeys),
           'the new preference sits beside the existing settings, which are kept');
+
+        /* Days shown in the strip: 7 by default, 30 or a custom 2-90 on request, kept across a reload. */
+        function strip() {
+          return ev('(function(){var f=document.getElementById("intensity-week"),l=f.querySelector(".iweek-days");' +
+            'return {n:f.querySelectorAll(".iweek-day").length,title:f.querySelector(".iweek-title strong").textContent,' +
+            'long:f.classList.contains("is-long"),p7:document.getElementById("iweek-range-7").getAttribute("aria-pressed"),' +
+            'p30:document.getElementById("iweek-range-30").getAttribute("aria-pressed"),' +
+            'custom:document.getElementById("iweek-range-custom").value,last:f.querySelector(".iweek-day:last-child").getAttribute("data-day"),' +
+            'atEnd:l.scrollLeft+l.clientWidth>=l.scrollWidth-1,' +
+            'saved:JSON.parse(localStorage.getItem("pgre-state-v1")).settings.intensityTrendDays};})()');
+        }
+        var r7 = await strip();
+        check(r7.n === 7 && r7.title === 'Last 7 days' && r7.p7 === 'true' && r7.p30 === 'false' && r7.custom === '',
+          'the strip shows 7 days by default with "7 days" pressed (got ' + JSON.stringify(r7) + ')');
+        await clickOn('#iweek-range-30');
+        var r30 = await strip();
+        check(r30.n === 30 && r30.title === 'Last 30 days' && r30.long && r30.p30 === 'true' && r30.p7 === 'false' &&
+          r30.saved === 30 && r30.last === dayAgo(0) && r30.atEnd,
+          '"30 days" shows 30 columns ending today, scrolled to today, saved as settings.intensityTrendDays (got ' +
+          JSON.stringify(r30) + ')');
+        await shotOf('#intensity-week', 'intensity-strip-30.png');
+        await clickOn('#iweek-range-custom');
+        await send('Input.insertText', { text: '14' });
+        await ev('document.getElementById("iweek-range-custom").blur(); true');
+        await sleep(250);
+        var r14 = await strip();
+        check(r14.n === 14 && r14.title === 'Last 14 days' && r14.custom === '14' && r14.p7 === 'false' &&
+          r14.p30 === 'false' && r14.saved === 14,
+          'a custom 14 shows 14 days and keeps 14 in the field (got ' + JSON.stringify(r14) + ')');
+        await ev('(function(){var i=document.getElementById("iweek-range-custom");i.value="200";' +
+          'i.dispatchEvent(new Event("change",{bubbles:true}));return true;})()');
+        await sleep(250);
+        var rBad = await strip();
+        check(rBad.n === 14 && rBad.custom === '14' && rBad.saved === 14,
+          'a custom 200 (over 90) changes nothing and puts 14 back in the field (got ' + JSON.stringify(rBad) + ')');
+        await go(base + '/#/');
+        await waitFor('!!document.getElementById("intensity-week")', 'the strip after a reload');
+        await sleep(300);
+        var rReload = await strip();
+        check(rReload.n === 14 && rReload.custom === '14', 'the custom 14 days survive a reload');
+        await clickOn('#iweek-range-7');
+        var rBack = await strip();
+        check(rBack.n === 7 && !rBack.long && rBack.p7 === 'true' && rBack.custom === '' && rBack.saved === 7,
+          '"7 days" goes back to the week strip and clears the field (got ' + JSON.stringify(rBack) + ')');
       }
-      if (spec.thursdayNew) {
-        check(spec.news.some(function (n) { return n[0] === THU_AGO; }) &&
-          payload.coverage.actual === round1(want.coverage.new7 / 5),
-          'a new question answered on Thursday ' + dayAgo(THU_AGO) + ' still counts: ' + want.coverage.new7 +
-          ' new / 5 working days = ' + payload.coverage.actual);
-      }
-      check(payload.firstAttemptAccuracy.n === want.firstAttemptAccuracy.n &&
-        payload.firstAttemptAccuracy.correct === want.firstAttemptAccuracy.correct,
-        'status payload accuracy counts ' + want.firstAttemptAccuracy.correct + ' of ' + want.firstAttemptAccuracy.n);
-      check(payload.topics.map(function (t) { return t.topic; }).join(',') ===
-        card.topics.map(function (t) { return t.topic; }).join(','),
-        'status payload topic rows are in the same order as the table');
 
       if (spec.topicOrder) {
         check(card.topics.map(function (t) { return t.topic; }).join(',') === spec.topicOrder.join(','),
@@ -782,7 +786,7 @@ async function main() {
           'return r.right <= window.innerWidth + 0.5 && r.left >= -0.5;})()');
         check(cardFits, 'at 375 px the Intensity card fits the viewport');
         // The topic table is open here (see above); open one reading too.
-        await ev('document.querySelector(' + JSON.stringify(rowSel('coverage') + ' .intensity-toggle') + ').click(); true');
+        await ev('document.querySelector(' + JSON.stringify(rowSel('dailyWork') + ' .intensity-toggle') + ').click(); true');
         await sleep(250);
         var tableFits = await ev('(function(){var c=document.getElementById("intensity-card").getBoundingClientRect();' +
           'var bad=[];document.querySelectorAll("#intensity-card .intensity-table td, #intensity-card .intensity-toggle > *, ' +
@@ -795,12 +799,21 @@ async function main() {
         var overflow2 = await ev('document.documentElement.scrollWidth - window.innerWidth');
         check(overflow2 <= 0, 'with a reading and the table open the page still has no horizontal scroll (overflow ' + overflow2 + ' px)');
         var touch = await ev('(function(){var small=[];document.querySelectorAll("#intensity-card .intensity-toggle, ' +
-          '#intensity-card a.btn, #intensity-card summary").forEach(function(el){if(el.closest("[hidden]"))return;' +
+          '#intensity-card a.btn, #intensity-card summary, #intensity-card .iweek-range-btn, #intensity-card .iweek-range-custom").forEach(function(el){if(el.closest("[hidden]"))return;' +
           'var r=el.getBoundingClientRect();if(r.height&&r.height<43.5)small.push(el.className+":"+Math.round(r.height));});return small;})()');
         check(touch.length === 0, 'on a touch screen every control in the card is at least 44 px tall' +
           (touch.length ? ' (short: ' + touch.join(', ') + ')' : ''));
         await shotOf('#intensity-card', 'intensity-card-phone.png');
-        await ev('document.querySelector(' + JSON.stringify(rowSel('coverage') + ' .intensity-toggle') + ').click();' +
+        await clickOn('#iweek-range-30');
+        var phone30 = await ev('(function(){var c=document.getElementById("intensity-card").getBoundingClientRect(),' +
+          'l=document.querySelector("#intensity-week .iweek-days").getBoundingClientRect();' +
+          'return {page:document.documentElement.scrollWidth-window.innerWidth,inside:l.left>=c.left-0.5&&l.right<=c.right+0.5};})()');
+        check(phone30.page <= 0 && phone30.inside,
+          'at 375 px the 30-day strip scrolls inside the card and the page has no horizontal scroll (got ' +
+          JSON.stringify(phone30) + ')');
+        await shotOf('#intensity-week', 'intensity-strip-30-phone.png');
+        await clickOn('#iweek-range-7');
+        await ev('document.querySelector(' + JSON.stringify(rowSel('dailyWork') + ' .intensity-toggle') + ').click();' +
           'document.querySelector("#intensity-topics > summary").click(); true');
         await sleep(250);
         check(await ev('JSON.parse(localStorage.getItem("pgre-state-v1")).settings.intensityTopicsOpen') === false,
@@ -850,7 +863,7 @@ async function main() {
         var summary = await ev('(function(){function line(k){var l=document.querySelector("[data-line=\\""+k+"\\"]");' +
           'return {band:l.getAttribute("data-band"),value:l.querySelector(".intensity-line-value").innerText.trim(),' +
           'label:l.querySelector(".intensity-line-label").innerText.trim(),chip:l.querySelector(".band-chip").innerText.trim()};}' +
-          'return {pace:line("pace"),fresh:line("new"),heading:document.querySelector("#practice-root h1").innerText};})()');
+          'return {pace:line("pace"),work:line("work"),heading:document.querySelector("#practice-root h1").innerText};})()');
         await sleep(1000); // the score percentage counts up for 900 ms
         await shotOf('#practice-root .practice-card', 'practice-summary-light.png', '#intensity-summary');
         var newAfter = want.newQuestions.value + sat;
@@ -859,11 +872,10 @@ async function main() {
           'summary line 1 reads "Median seconds per question" for this pack');
         check(summary.pace.value === '120 / 103' && summary.pace.band === 'amber' && summary.pace.chip === CHIP.amber,
           'summary pace line: 120 / 103, amber (got ' + summary.pace.value + ', ' + summary.pace.band + ')');
-        check(/^New questions today/.test(summary.fresh.label) &&
-          summary.fresh.value === newAfter + ' / 15' && summary.fresh.band === bandNew(newAfter) &&
-          summary.fresh.chip === CHIP[bandNew(newAfter)],
-          'summary new-question line: ' + newAfter + ' / 15, ' + bandNew(newAfter) +
-          ' (got ' + summary.fresh.value + ', ' + summary.fresh.band + ')');
+        check(/^Mistake book today/.test(summary.work.label) && summary.work.value === '30 / 40' &&
+          summary.work.band === 'amber' && summary.work.chip === CHIP.amber,
+          'summary line 2: Mistake book today 30 / 40, amber; a pack does not move it (got ' +
+          summary.work.value + ', ' + summary.work.band + ')');
 
         var receipts = await ev('(function(){var st=PGRE.store.state;return {last:st.lastAgentReceipt&&st.lastAgentReceipt.medianSec,' +
           'pack:st.packReceipts&&st.packReceipts[' + JSON.stringify(SIT_PACK) + ']&&st.packReceipts[' + JSON.stringify(SIT_PACK) + '].medianSec,' +
@@ -897,11 +909,11 @@ async function main() {
           'flag:sessionStorage.getItem("pgre-dash-focus")};})()');
         check(landed.scrollY > 200 && landed.top >= landed.bar && landed.top <= landed.bar + 40,
           'the link lands on the card, just under the top bar (card top ' + landed.top + ' px, bar ends ' + landed.bar +
-          ' px, page scrolled ' + landed.scrollY + ' px; it used to land on the top of the page)');
+          ' px, page scrolled ' + landed.scrollY + ' px)');
         check(landed.focus === 'intensity-title' && landed.flag === null,
           'keyboard focus moves to the card heading, and the one-shot note is cleared');
         var card2 = await readCard();
-        check(card2.rows.newQuestions.value === newText(newAfter) &&
+        check(card2.rows.newQuestions.value === newAfter + ' no target' &&
           card2.rows.paceSec.value === paceAfter + ' s target 103 s or under',
           'the dashboard agrees with the summary and the payload after the pack');
         var paceDelta = paceAfter - want.paceSec.value;
@@ -910,8 +922,9 @@ async function main() {
           'each reading shows what the pack changed: new questions +' + sat + ', pace ' +
           (paceDelta ? (paceDelta > 0 ? '+' : '−') + Math.abs(paceDelta) + ' s' : 'unchanged') +
           ' (got "' + card2.rows.newQuestions.delta + '", "' + card2.rows.paceSec.delta + '")');
-        check(card2.rows.repeatMinutes.delta === '', 'a reading the pack did not move shows no change');
-        await shotOf('#intensity-card', 'intensity-card-after-pack.png', rowSel('coverage'));
+        check(card2.rows.repeatMinutes.delta === '' && card2.rows.dailyWork.delta === '',
+          'a reading the pack did not move shows no change');
+        await shotOf('#intensity-card', 'intensity-card-after-pack.png', rowSel('newQuestions'));
         await ev('location.hash = "#/plan"; true');
         await waitFor('!document.getElementById("intensity-card")', 'another page');
         await ev('location.hash = "#/"; true');
@@ -922,16 +935,14 @@ async function main() {
           await ev('window.scrollY') === 0,
           'the next visit opens at the top of the page with no change markers');
 
-        /* A sibling tab records two more new questions; this tab repaints the
-           card in place and keeps the opened reading and the focus. */
-        await ev('(function(){var b=document.querySelector(' + JSON.stringify(rowSel('coverage') + ' .intensity-toggle') + ');' +
+        /* A sibling tab records two more retakes; this tab repaints the card
+           in place and keeps the opened reading and the focus. */
+        await ev('(function(){var b=document.querySelector(' + JSON.stringify(rowSel('dailyWork') + ' .intensity-toggle') + ');' +
           'b.click();b.focus();return true;})()');
         var siblingSave = function (n) {
-          return ev('(function(){var raw=localStorage.getItem("pgre-state-v1");var st=JSON.parse(raw);var tried={};' +
-            'st.attempts.forEach(function(a){tried[a.qid]=1;});var ids=[];Object.keys(PGRE.PACKS).sort().forEach(function(k){' +
-            'PGRE.PACKS[k].ids.forEach(function(id){if(!tried[id]&&ids.indexOf(id)<0)ids.push(id);});});' +
-            'ids.slice(0,' + n + ').forEach(function(id,i){st.attempts.push({ts:new Date(window.__pgreRealNow.call(Date)-i*1000).toISOString(),' +
-            'qid:id,topic:"cm",picked:0,answer:0,correct:true,ms:120000,sid:"sibling",mode:"practice",confidence:null,tags:[]});});' +
+          return ev('(function(){var raw=localStorage.getItem("pgre-state-v1");var st=JSON.parse(raw);' +
+            'var qid=st.attempts[0].qid;for(var i=0;i<' + n + ';i++){st.attempts.push({ts:new Date(window.__pgreRealNow.call(Date)-i*1000).toISOString(),' +
+            'qid:qid,topic:"cm",picked:0,answer:0,correct:true,ms:60000,sid:"sibling",mode:"mistakes",confidence:null,tags:[]});}' +
             'st._rev=(st._rev||0)+3;var next=JSON.stringify(st);localStorage.setItem("pgre-state-v1",next);' +
             'window.dispatchEvent(new StorageEvent("storage",{key:"pgre-state-v1",oldValue:raw,newValue:next,' +
             'storageArea:localStorage,url:location.href}));return true;})()');
@@ -941,10 +952,10 @@ async function main() {
         var card4 = await readCard();
         var keptFocus = await ev('(function(){var a=document.activeElement;var r=a&&a.closest&&a.closest(".intensity-row");' +
           'return r?r.getAttribute("data-metric"):null;})()');
-        check(card4.rows.newQuestions.value === newText(newAfter + 2) && card4.rows.newQuestions.delta === '+2',
-          'after a sibling tab saves 2 new questions the card reads ' + (newAfter + 2) + ' with "+2", without a reload (got "' +
-          card4.rows.newQuestions.value + '", "' + card4.rows.newQuestions.delta + '")');
-        check(card4.rows.coverage.expanded === 'true' && keptFocus === 'coverage',
+        check(card4.rows.dailyWork.value === '32 of 40' && card4.rows.dailyWork.delta === '+2',
+          'after a sibling tab saves 2 retakes the card reads 32 of 40 with "+2", without a reload (got "' +
+          card4.rows.dailyWork.value + '", "' + card4.rows.dailyWork.delta + '")');
+        check(card4.rows.dailyWork.expanded === 'true' && keptFocus === 'dailyWork',
           'the opened reading stays open and keeps the keyboard focus through that repaint');
         // Focus on a control that is not a reading: the topic disclosure, then a link in the opened panel.
         await ev('document.querySelector("#intensity-topics > summary").focus(); true');
@@ -952,14 +963,14 @@ async function main() {
         await sleep(700);
         var card4b = await readCard();
         var keptTag = await ev('document.activeElement ? document.activeElement.tagName : null');
-        check(card4b.rows.newQuestions.value === newText(newAfter + 3) && keptTag === 'SUMMARY',
+        check(card4b.rows.dailyWork.value === '33 of 40' && keptTag === 'SUMMARY',
           'focus on the topic disclosure survives a repaint too (now on ' + keptTag + ')');
-        await ev('document.querySelector(' + JSON.stringify(rowSel('coverage') + ' .intensity-links a[href="#/plan"]') + ').focus(); true');
+        await ev('document.querySelector(' + JSON.stringify(rowSel('dailyWork') + ' .intensity-links a[href="#/exam"]') + ').focus(); true');
         await siblingSave(1);
         await sleep(700);
         var keptLink = await ev('(function(){var a=document.activeElement;return a&&a.closest("#intensity-card")?' +
           'a.tagName+" "+a.getAttribute("href"):(a?a.tagName:null);})()');
-        check(keptLink === 'A #/plan', 'and so does focus on a link inside an opened reading (now on ' + keptLink + ')');
+        check(keptLink === 'A #/exam', 'and so does focus on a link inside an opened reading (now on ' + keptLink + ')');
         await ev('Date.now = window.__pgreRealNow; true');
 
         /* The tab stays open past midnight: coming back to the window
@@ -971,9 +982,9 @@ async function main() {
         var kicker = await ev('document.querySelector("#intensity-card .kicker").innerText');
         var tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
         var tomorrowLine = tomorrow.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }).toUpperCase();
-        check(kicker.toUpperCase() === tomorrowLine && /^0 /.test(card5.rows.newQuestions.value) &&
-          card5.rows.paceSec.value === '— target 103 s or under',
-          'after midnight the card shows the new day (' + kicker + ') with 0 new questions and no pace, without a reload');
+        check(kicker.toUpperCase() === tomorrowLine && card5.rows.dailyWork.value === '0 of 40' &&
+          card5.rows.newQuestions.value === '0 no target' && card5.rows.paceSec.value === '— target 103 s or under',
+          'after midnight the card shows the new day (' + kicker + ') with 0 retakes, 0 new questions and no pace, without a reload');
       }
 
       check(pageErrors.length === 0, 'no page errors' + (pageErrors.length ? ': ' + pageErrors.join(' | ') : ''));
@@ -988,79 +999,53 @@ async function main() {
     var fresh0 = await readCard();
     check(fresh0.empty === true && fresh0.verdict.tone === 'empty' && fresh0.verdict.headline === 'Nothing measured yet.',
       'the card says "Nothing measured yet."');
-    check(/^#\/practice\/pack\/\d\d$/.test(fresh0.verdict.href || '') && fresh0.verdict.primary === true,
-      'its one button starts the first timed pack (' + fresh0.verdict.href + ')');
+    check(fresh0.verdict.href === '#/exam' && fresh0.verdict.primary === true,
+      'its one button opens the mock exam (' + fresh0.verdict.href + ')');
     check(METRICS.every(function (m) { return fresh0.rows[m].chip === null && fresh0.rows[m].meter === false &&
       fresh0.rows[m].value === '' && fresh0.rows[m].hint === ''; }),
-      'no reading is judged: no band chip, no meter, no value and no hint (it used to open with two red chips)');
-    var needAll = round1(PACK_UNION.length / workingDays(dayAgo(0), dayAhead(EXAM_AHEAD - 3)));
-    check(fresh0.rows.newQuestions.preview === 'target 15 a day' && fresh0.rows.paceSec.preview === 'target 103 s or under' &&
-      fresh0.rows.firstAttemptAccuracy.preview === 'target 75% or more' && fresh0.rows.repeatMinutes.preview === 'limit 20 min' &&
-      fresh0.rows.coverage.preview === PACK_UNION.length + ' pack questions by ' +
-        new Date(dayAhead(EXAM_AHEAD - 3) + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
-        ': ' + needAll.toFixed(1) + ' each working day',
-      'each row shows its target instead: 15 a day, 103 s or under, 75% or more, 20 min, and ' + needAll.toFixed(1) +
-      ' a working day for all ' + PACK_UNION.length + ' pack questions (got "' + fresh0.rows.coverage.preview + '")');
+      'no reading is judged: no band chip, no meter, no value and no hint');
+    check(fresh0.rows.dailyWork.preview === '40 mistake-book questions a day, or a full mock' &&
+      fresh0.rows.paceSec.preview === 'target 103 s or under' &&
+      fresh0.rows.firstAttemptAccuracy.preview === 'target 75% or more' &&
+      fresh0.rows.repeatMinutes.preview === 'no limit' && fresh0.rows.newQuestions.preview === 'no target',
+      'each row shows its target instead: 40 a day or a full mock, 103 s or under, 75% or more, no limit, no target');
     check(fresh0.week === false && fresh0.adjust === false && fresh0.tally === '',
       'the 7-day strip, the topic table and the tally wait for the first answers');
     await clickOn(rowSel('repeatMinutes') + ' .intensity-toggle');
     var repOpen = await panelOf('repeatMinutes');
-    check(repOpen.expanded === 'true' && /20 min or under Close 21 to 40 min Off target over 40 min/.test(repOpen.text),
+    check(repOpen.expanded === 'true' && /No limit: the daily target counts retakes, not minutes \(see Daily work\)\./.test(repOpen.text),
       'a reading still opens to explain itself');
     var freshMarks = await bandMarks();
     check(METRICS.every(function (m) { return freshMarks[m].n === 0; }),
-      'and marks none of its three band limits as the current one');
+      'and marks none of its band limits as the current one');
     await shotOf('#intensity-card', 'intensity-card-new-user.png');
     var emptyPayload = await ev('PGRE.buildStatusSummary().intensity');
-    check(emptyPayload.newQuestions.band === 'red' && emptyPayload.newQuestions.value === 0 && emptyPayload.paceSec.band === null,
-      'the status payload is unchanged by this: it still reports 0 new questions as red');
+    check(emptyPayload.dailyWork.band === 'red' && emptyPayload.dailyWork.value === 0 &&
+      emptyPayload.newQuestions.band === null && emptyPayload.paceSec.band === null,
+      'the status payload still reports 0 retakes as red; the card only waits for the first answers');
     check(pageErrors.length === 0, 'no page errors' + (pageErrors.length ? ': ' + pageErrors.join(' | ') : ''));
 
-    /* ——— A no-pack Sunday: the page clock is moved to the next Sunday ——— */
-    console.log('\nno-pack Sunday (page clock +' + DAYS_TO_SUNDAY + ' days)');
+    /* ——— The mock day: the page clock is moved to the next Sunday ——— */
+    console.log('\nmock day (page clock +' + DAYS_TO_SUNDAY + ' days, a Sunday)');
     pageErrors.length = 0;
     DAY_SHIFT = DAYS_TO_SUNDAY;
     var shim = await send('Page.addScriptToEvaluateOnNewDocument',
       { source: '(' + clockShim.toString() + ')(' + (DAYS_TO_SUNDAY * 86400000) + ');' });
-    var sunSpec = {
-      n: 9, examAhead: EXAM_AHEAD, examDate: dayAhead(EXAM_AHEAD), bulk: 270,
-      news: (function () {
-        var out = [];
-        [1, 2, 4, 5].forEach(function (k) { for (var i = 0; i < 16; i++) out.push([k, ['cm', 'em', 'qm', 'th'][i % 4], i < 14, 95]); });
-        return out;
-      }())
-    };
-    var sunSeed = buildSeed(sunSpec);
-    var sunWant = expectFor(sunSpec, sunSeed);
-    await seedAndOpen(sunSeed);
+    var sunSpec = { n: 9, examAhead: EXAM_AHEAD, news: [[1, 'cm', T, 95], [1, 'em', T, 95]], retakes: [[1, 40, 60]] };
+    sunSpec.examDate = dayAhead(EXAM_AHEAD);
+    await seedAndOpen(buildSeed(sunSpec));
     var sun = await readCard();
     var pageDay = await ev('new Date().getDay()');
-    check(pageDay === 0 && sunWant.newQuestions.value === 0 && sunWant.newQuestions.band === 'red',
-      'the page clock reads Sunday, and the history has no new question on it');
-    check(sun.rows.newQuestions.band === 'red' && sun.rows.newQuestions.show === 'rest' &&
-      sun.rows.newQuestions.chip === 'No pack today' && sun.rows.newQuestions.chipBand === 'none' &&
-      sun.rows.newQuestions.value === '0 no target today',
-      'New questions reads "0, no target today" with the chip "No pack today", not "Off target" (got "' +
-      sun.rows.newQuestions.value + '" / ' + sun.rows.newQuestions.chip + ')');
-    check(sun.verdict.tone === 'rest' && sun.verdict.headline === 'No timed pack today.' &&
-      /^Sunday is the full-sitting day/.test(sun.verdict.detail) && sun.verdict.href === '#/exam' && sun.verdict.primary === false,
-      'headline: "No timed pack today." with a quiet link to the mock exam (it used to say "Answer 15 more new questions ... Start the next pack.")');
-    check(sun.rows.coverage.band === 'green' && sun.rows.firstAttemptAccuracy.band === 'green' &&
-      sun.tally === '3 on target 1 no data 1 without a target',
-      'the other readings are judged as on any day; tally "3 on target 1 no data 1 without a target" (got "' + sun.tally + '")');
-    var strip = await ev('Array.prototype.map.call(document.querySelectorAll("#intensity-card .iweek-day"),function(c){' +
-      'return (c.classList.contains("is-rest")?"rest":"pack")+":"+c.querySelector(".iweek-pace").textContent.trim();}).join(" ")');
-    check(strip === 'pack:— pack:95 s pack:95 s rest:no pack pack:95 s pack:95 s rest:no pack',
-      'the 7-day strip marks Thursday and Sunday as "no pack", apart from a pack day with nothing answered (got "' + strip + '")');
-    var sunMarks = await bandMarks();
+    check(pageDay === 0, 'the page clock reads Sunday');
+    check(sun.rows.dailyWork.value === '0 of 40' && sun.rows.dailyWork.band === 'red' &&
+      sun.verdict.headline === 'No mistake-book questions yet today.' && sun.verdict.href === '#/exam' &&
+      sun.verdict.label === 'Open Mock exam →' && sun.verdict.primary === true &&
+      sun.verdict.detail.indexOf('Today is the full-mock day: a submitted mock meets the target on its own.') === 0,
+      'Sunday with nothing done: the button opens the mock exam and the detail says the mock meets the target (got "' +
+      sun.verdict.detail + '")');
     var sunPackLinks = await ev('document.querySelectorAll(\'#intensity-card a[href^="#/practice/pack/"]\').length');
-    check(sunMarks.newQuestions.n === 0 && sunMarks.coverage.n === 1 && sunMarks.coverage.same && sunPackLinks === 0,
-      'the New questions row marks no band limit as current, and no link on the card starts a timed pack (' +
-      sunPackLinks + ' pack links)');
-    var sunPayload = await ev('PGRE.buildStatusSummary().intensity.newQuestions');
-    check(sunPayload.value === 0 && sunPayload.threshold === 15 && sunPayload.band === 'red',
-      'PGRE.intensity.compute() and the status payload still report 0 of 15, red: only the card wording differs');
-    await shotOf('#intensity-card', 'intensity-card-no-pack-day.png');
+    check(sunPackLinks === 0, 'no link on the card starts a timed pack (' + sunPackLinks + ')');
+    await shotOf('#intensity-card', 'intensity-card-mock-day.png');
     await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: shim.identifier });
     DAY_SHIFT = 0;
     check(pageErrors.length === 0, 'no page errors' + (pageErrors.length ? ': ' + pageErrors.join(' | ') : ''));
