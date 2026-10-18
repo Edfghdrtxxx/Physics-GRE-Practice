@@ -629,6 +629,16 @@ PGRE.FORMULAS = [
     note: "Supplemental. From $\\mathcal{E} = -d\\Phi_B/dt$ with $\\Phi_B = BLx$; Kahn §2.3.2, p.50."
   },
   {
+    id: "supp-displacement-current",
+    eq: "supp",
+    topic: "em",
+    tag: "Displacement current",
+    name: "Displacement current: definition and the capacitor gap (supplemental)",
+    front: "How is the displacement current $I_d$ through a surface $S$ defined? While a current $I$ charges a parallel-plate capacitor, how large is $I_d$ through the gap between the plates?",
+    back: "$$I_d = \\epsilon_0\\frac{d\\Phi_E}{dt}, \\qquad \\Phi_E = \\int_S \\mathbf{E}\\cdot d\\mathbf{S}$$ It is the rate of change of the electric flux: not the flux itself, and nothing magnetic (the rate of change of the magnetic flux is Faraday's emf). In the gap $E = Q/(\\epsilon_0 A)$, so $I_d = \\epsilon_0 A\\,dE/dt = dQ/dt = I$: the gap carries exactly the wire's current. Ampère's law becomes $\\oint \\mathbf{B}\\cdot d\\mathbf{l} = \\mu_0\\left(I_{\\text{enc}} + I_d\\right)$, so between circular plates $B = \\mu_0 I r/(2A)$, growing linearly with $r$.",
+    note: "Supplemental. Kahn (2.41), §2.3.1, p.50; charging capacitor in §2.3.4 Problem 4, solution p.60–61."
+  },
+  {
     id: "supp-scintillation-detector",
     eq: "supp",
     topic: "lb",
