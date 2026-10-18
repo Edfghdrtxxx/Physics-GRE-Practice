@@ -862,6 +862,10 @@ PGRE.store = {
     try {
       if (PGRE.srs && PGRE.srs.migrateEasy10) PGRE.srs.migrateEasy10();
     } catch (e) { console.warn('Easy-interval migration skipped', e); }
+    // Recall curation 2026-10-14: rewritten cards come due (see srs.js).
+    try {
+      if (PGRE.srs && PGRE.srs.requeueCuratedCards) PGRE.srs.requeueCuratedCards();
+    } catch (eReq) { console.warn('Curated-card requeue skipped', eReq); }
     return this.state;
   },
 
