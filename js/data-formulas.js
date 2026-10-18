@@ -775,7 +775,7 @@ PGRE.FORMULAS = [
     tag: "Heat engines",
     name: "Work and heat from cycle diagrams (supplemental)",
     front: "A gas runs a closed cycle. How do you read the net work from a $P$–$V$ diagram, and what is the net heat absorbed?",
-    back: "$$W_{\\mathrm{net}} = \\oint P\\,dV = \\text{enclosed area}$$ Clockwise on a $P$–$V$ diagram, the gas does positive net work (an engine); counterclockwise, net work is done on it. $\\Delta U = 0$ per cycle, so $Q_{\\mathrm{net}} = W_{\\mathrm{net}}$. On a $T$–$S$ diagram the enclosed area is $Q_{\\mathrm{net}}$; a Carnot cycle is a rectangle there.",
+    back: "$$W_{\\mathrm{net}} = \\oint P\\,dV = \\text{enclosed area}$$ Clockwise on a $P$–$V$ diagram, the gas does positive net work (an engine); counterclockwise, net work is done on it. Breathing picture (an analogy only; the gas stays sealed): inhale hard in the heat (expand along the high-$P$ path), exhale easily in the cold (compress along the low-$P$ path), so more work comes out than goes in. $\\Delta U = 0$ per cycle, so $Q_{\\mathrm{net}} = W_{\\mathrm{net}}$. On a $T$–$S$ diagram the enclosed area is $Q_{\\mathrm{net}}$; a Carnot cycle is a rectangle there.",
     note: "Supplemental — Kahn §4.2.6, Figs. 4.2 and 4.3."
   },
   {
