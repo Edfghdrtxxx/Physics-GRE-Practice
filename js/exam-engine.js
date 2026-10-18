@@ -289,6 +289,7 @@ PGRE.examEngine = (function () {
       cursor: 0,          // resume position
       paused: false,
       durationSec: 0,     // elapsed seconds (advances only while running)
+      qSec: {},           // qid -> seconds on screen while the clock ran (see Per-question time)
       limitSec: meta.minutes * 60,
       raw: null, total: built.order.length, scaledEst: null, perTopic: null
     };
@@ -316,6 +317,61 @@ PGRE.examEngine = (function () {
     else exam.answers[qid] = idx;
     PGRE.store.save();
     return true;
+  }
+
+  /* ——— Per-question time ———
+     `exam.qSec` maps a qid to the seconds that question was on screen while
+     the clock ran. It is a running total: leaving a question and coming back
+     adds to the same entry. The room (js/view-exam.js) calls dwellSync on
+     every change that can start or stop the count: another question, Pause
+     and Resume, a hidden or shown tab, leaving the room. Exactly one span is
+     open at a time, and a span counts only while the clock runs, the sitting
+     is not paused, and the tab is visible. Submit closes the last span and
+     writes each total to that question's attempt row as `ms`. A sitting saved
+     before this field existed has no qSec: questionSec reads null for every
+     question and its attempt rows keep `ms: null`. */
+  var dwellSpan = null;   // { exam, qid, at } while one question is being timed
+
+  /* Add the open span to its question and close it. Returns the seconds added. */
+  function dwellClose(now) {
+    var s = dwellSpan;
+    dwellSpan = null;
+    if (!s) return 0;
+    if (typeof now !== 'number') now = Date.now();
+    var sec = (now - s.at) / 1000;
+    if (!(sec > 0) || !isFinite(sec) || s.exam.submittedAt) return 0;
+    var m = s.exam.qSec;
+    if (!m || typeof m !== 'object' || Array.isArray(m)) m = s.exam.qSec = {};
+    var before = typeof m[s.qid] === 'number' && isFinite(m[s.qid]) ? m[s.qid] : 0;
+    m[s.qid] = Math.round((before + sec) * 1000) / 1000;
+    return sec;
+  }
+
+  /* Close any open span, then open one on the question at exam.cursor when
+     gate = { running, visible } says the count may run. */
+  function dwellSync(exam, gate, now) {
+    if (typeof now !== 'number') now = Date.now();
+    dwellClose(now);
+    if (!exam || exam.submittedAt || exam.paused || !gate || !gate.running || !gate.visible) return false;
+    var qid = exam.order && exam.order[exam.cursor];
+    if (!qid) return false;
+    dwellSpan = { exam: exam, qid: qid, at: now };
+    return true;
+  }
+
+  /* Move the open span's seconds into qSec without ending it, so a periodic
+     save and a reload keep the latest time. No span open: nothing happens. */
+  function dwellFlush(now) {
+    var s = dwellSpan;
+    if (!s) return false;
+    return dwellSync(s.exam, { running: true, visible: true }, now);
+  }
+
+  /* Seconds recorded for one question, or null when there is none. */
+  function questionSec(exam, qid) {
+    var m = exam && exam.qSec;
+    var v = (m && typeof m === 'object' && !Array.isArray(m)) ? m[qid] : null;
+    return (typeof v === 'number' && isFinite(v) && v > 0) ? v : null;
   }
 
 
@@ -358,6 +414,9 @@ PGRE.examEngine = (function () {
       retrying = true;
       PGRE.store._persistFailed = false;
     }
+    // The question on screen gets its time up to this click. Closed before
+    // the snapshot, so a refused write puts that time back with the rest.
+    if (dwellSpan && dwellSpan.exam === exam) dwellClose(Date.now());
     var snap = JSON.parse(JSON.stringify(PGRE.store.state));
     var diskBefore = diskBlob();
     var perTopic = {}, raw = 0, missing = 0, answered = 0, incorrect = 0;
@@ -372,8 +431,11 @@ PGRE.examEngine = (function () {
       var pt = perTopic[q.topic] || { right: 0, total: 0 };
       pt.total += 1; if (correct) pt.right += 1;
       perTopic[q.topic] = pt;
-      // durable attempt row + mistake-book upkeep, WITHOUT recordAnswer's XP
-      PGRE.gamify.recordExamAnswer(q, correct, null, { picked: picked, sid: exam.id });
+      // durable attempt row + mistake-book upkeep, WITHOUT recordAnswer's XP;
+      // ms is the question's recorded time, null when the sitting has none
+      var sec = questionSec(exam, qid);
+      PGRE.gamify.recordExamAnswer(q, correct, sec == null ? null : Math.round(sec * 1000),
+        { picked: picked, sid: exam.id });
     });
     exam.raw = raw;
     exam.total = exam.order.length;
@@ -551,6 +613,10 @@ PGRE.examEngine = (function () {
     history: history,
     submit: submit,
     persistAnswer: persistAnswer,
+    dwellSync: dwellSync,
+    dwellFlush: dwellFlush,
+    dwellClose: dwellClose,
+    questionSec: questionSec,
     discard: discard,
     isMarkedGuess: isMarkedGuess,
     flaggedCorrectIds: flaggedCorrectIds,

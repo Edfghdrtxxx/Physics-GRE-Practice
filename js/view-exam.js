@@ -47,8 +47,27 @@ PGRE.views.exam = (function () {
 
   /* ——— Full-screen takeover + timer lifecycle ——— */
   function setFullscreen(on) { document.body.classList.toggle('exam-fullscreen', !!on); }
-  function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
+  function stopTimer() {
+    if (timer) { clearInterval(timer); timer = null; }
+    dwellStop();
+  }
   function leaveRoom() { stopTimer(); setFullscreen(false); }
+
+  /* ——— Per-question time (model: examEngine.dwellSync, exam.qSec) ———
+     The question on screen is timed while the clock runs and the tab is
+     visible. Every change that can start or stop that goes through here:
+     the countdown starting or stopping (Pause, Resume, leaving the room,
+     Submit), another question, and the tab being hidden or shown. */
+  function tabVisible() { return !document.hidden; }
+  function dwellSync(exam) {
+    var eng = PGRE.examEngine;
+    if (!eng || typeof eng.dwellSync !== 'function') return;
+    eng.dwellSync(exam, { running: !!timer, visible: tabVisible() }, Date.now());
+  }
+  function dwellStop() {
+    var eng = PGRE.examEngine;
+    if (eng && typeof eng.dwellClose === 'function') eng.dwellClose(Date.now());
+  }
 
   /* Clean up the takeover whenever we navigate away from the sitting. */
   window.addEventListener('hashchange', function () {
@@ -56,7 +75,18 @@ PGRE.views.exam = (function () {
   });
   window.addEventListener('pagehide', function () {
     var ex = PGRE.examEngine && PGRE.examEngine.active();
-    if (ex) PGRE.store.save(); // last unsaved seconds survive a reload
+    if (ex) { dwellStop(); PGRE.store.save(); } // last unsaved seconds survive a reload
+  });
+  /* A page restored from the back/forward cache starts counting again. */
+  window.addEventListener('pageshow', function (e) {
+    if (!e || !e.persisted || !document.body.classList.contains('exam-fullscreen')) return;
+    var ex = PGRE.examEngine && PGRE.examEngine.active();
+    if (ex) dwellSync(ex);
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.body.classList.contains('exam-fullscreen')) return;
+    var ex = PGRE.examEngine && PGRE.examEngine.active();
+    if (ex) dwellSync(ex);
   });
 
   /* Keyboard: A–E / 1–5 to (de)select, ←/→ to navigate, Enter for the next
@@ -529,6 +559,7 @@ PGRE.views.exam = (function () {
 
   function goTo(exam, i) {
     exam.cursor = i;
+    dwellSync(exam);   // the question just left keeps its time; the new one starts
     PGRE.store.save();
     renderQuestion(exam);
     refreshPaletteActive(exam);
@@ -599,8 +630,9 @@ PGRE.views.exam = (function () {
     stopTimer();
     lastTickAt = Date.now();  // (re)anchor: paused/hidden spans before this don't count
     updateTimer(exam);
-    if (exam.paused) return; // resumes when the pause overlay is dismissed
-    timer = setInterval(function () { tick(exam); }, 1000);
+    // a paused sitting resumes when the pause overlay is dismissed
+    if (!exam.paused) timer = setInterval(function () { tick(exam); }, 1000);
+    dwellSync(exam);
   }
   function tick(exam) {
     // Count real elapsed wall-clock, not one second per fire: a throttled
@@ -610,6 +642,8 @@ PGRE.views.exam = (function () {
     var delta = (now - lastTickAt) / 1000;
     lastTickAt = now;
     if (delta > 0) exam.durationSec += delta;   // guard against clock skew
+    // keep the question on screen's saved time current (no-op in a hidden tab)
+    if (PGRE.examEngine && PGRE.examEngine.dwellFlush) PGRE.examEngine.dwellFlush(now);
     updateTimer(exam);
     if (now - lastPersist > 4000) { lastPersist = now; PGRE.store.save(); }
     if (exam.durationSec >= exam.limitSec) {
@@ -826,6 +860,7 @@ PGRE.views.exam = (function () {
       // neither scored into a void nor torn down under the user. On the
       // time-limit path tick() has already stopped the clock; the sticky
       // persist toast is up from submit(). Manual Submit retries it.
+      dwellSync(exam);   // submit() closed the per-question count; the sitting goes on
       if (auto) PGRE.toast('Time is up, but saving failed. Your answers stay on screen; press Submit once saving works again.', 'error', true);
       return;
     }
@@ -1414,6 +1449,16 @@ PGRE.views.exam = (function () {
     return html;
   }
 
+  /* Time spent on one question, from the sitting's own record (exam.qSec).
+     A sitting saved before the count existed has none: no chip. */
+  function timeChip(exam, qid) {
+    var eng = PGRE.examEngine;
+    var sec = eng && typeof eng.questionSec === 'function' ? eng.questionSec(exam, qid) : null;
+    if (sec == null) return '';
+    return '<span class="muted exam-review-time" title="Time on this question">Time ' +
+      fmtClock(sec) + '</span>';
+  }
+
   function reviewCard(exam, qid, i) {
     var ui = PGRE.ui, q = PGRE.questionById(qid);
     var flagged = exam.flags.indexOf(qid) !== -1;
@@ -1430,6 +1475,7 @@ PGRE.views.exam = (function () {
         '<span class="hist-mark ' + (correct ? 'is-good' : 'is-bad') + '">' + (correct ? 'Right' : 'Wrong') + '</span>' +
         (t ? ui.monogram(t) : '') +
         '<span class="muted">Question ' + (i + 1) + '</span>' +
+        timeChip(exam, qid) +
         (flagged ? '<span class="chip exam-flagchip">Flagged</span>' : '') +
       '</div>' +
       '<div class="q-text">' + q.q + '</div>' +
