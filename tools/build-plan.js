@@ -295,10 +295,14 @@ const liveWeeks = rows.map(function (line, idx) {
     week.reviewSlot = true;
   }
   if (num === 6) {
-    if (!/GR9677/.test(notesCell)) fail('week 6 notes missing GR9677');
+    // The form comes from the Mock schedule section (REQUIRED_MOCKS); the
+    // calendar notes cell only has to mark the Oct 25 intact mock.
+    if (!/Oct 25/.test(notesCell) || !/intact mock/i.test(notesCell)) {
+      fail('week 6 notes missing the Sun Oct 25 intact mock');
+    }
     week.checkpoint = {
       id: 'w6-checkpoint',
-      label: 'Sun Oct 25 — GR9677 100q intact mock (replaces the 5th timed)'
+      label: 'Sun Oct 25 — ets2024 70q intact mock (replaces the 5th timed)'
     };
   }
   if (num === 7) {
@@ -374,9 +378,9 @@ if (/\bGR8677\b|\bGR9277\b/i.test(mockTableMatch[0])) {
 
 
 const REQUIRED_MOCKS = {
-  ets2024: '2026-10-11',
+  gr0877: '2026-10-11',
   gr1777: '2026-10-18',
-  gr9677: '2026-10-25'
+  ets2024: '2026-10-25'
 };
 const FORBIDDEN_MOCKS = { gr8677: 1, gr9277: 1 };
 const seenMockIds = {};
@@ -475,7 +479,7 @@ const plan = [
   {
     id: 'p1',
     name: 'Live calendar · Sep 14 – Oct 25',
-    desc: '5+6+2 weekly load (~16 h): timed sets, formula recall, misses-first extras. Checkpoints Oct 4 and Oct 25. Intact mocks Oct 11 (ets2024), Oct 18 (GR1777), Oct 25 (GR9677).',
+    desc: '5+6+2 weekly load (~16 h): timed sets, formula recall, misses-first extras. Checkpoints Oct 4 and Oct 25. Intact mocks Oct 11 (GR0877), Oct 18 (GR1777), Oct 25 (ets2024).',
     weeks: weeks.slice(1, 7)
   },
   {

@@ -123,8 +123,8 @@ var w3 = PGRE.weekTasks(weekById('w3'));
 var w6 = PGRE.weekTasks(weekById('w6'));
 assert(w3.some(function (t) { return t.id === 'w3-checkpoint' && t.kind === 'checkpoint'; }),
   'w3 checkpoint task present');
-assert(w6.some(function (t) { return t.id === 'gr9677' && t.kind === 'mock'; }),
-  'w6 emits the GR9677 mock task');
+assert(w6.some(function (t) { return t.id === 'ets2024' && t.kind === 'mock'; }),
+  'w6 emits the ets2024 mock task');
 assert(!w6.some(function (t) { return t.id === 'w6-checkpoint'; }),
   'w6 checkpoint folds into the mock row (no duplicate sitting)');
 
@@ -165,7 +165,7 @@ function allMocks() {
 }
 var mocks = allMocks();
 var mockIds = mocks.map(function (t) { return String(t.id).toLowerCase(); });
-['ets2024', 'gr1777', 'gr9677'].forEach(function (id) {
+['gr0877', 'gr1777', 'ets2024'].forEach(function (id) {
   assert(mockIds.indexOf(id) !== -1, 'PLAN schedules ' + id);
 });
 var mockDates = mocks.map(function (t) { return t.date; });

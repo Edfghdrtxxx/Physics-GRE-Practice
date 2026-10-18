@@ -865,10 +865,9 @@ PGRE.views.dashboard = (function () {
       return (ex && ex.id) || id;
     }
     function firstUnsat() {
-      if (!sat.ets2024) {
-        return { id: 'ets2024', title: catalogTitle('ets2024', 'ETS 2024'),
-          scheduledFor: mockScheduleDate('ets2024') };
-      }
+      // Plan order first: the earliest-dated unsat plan mock, past or not.
+      var planFirst = upcomingPlanMock('');
+      if (planFirst) return planFirst;
       var list = PGRE.ETS_EXAMS || [];
       for (var i = 0; i < list.length; i++) {
         var ex = list[i];
