@@ -675,6 +675,9 @@ assert(store.state.mistakes[failRight] && store.state.mistakes[failRight].lucky 
 assert(store.state.mistakes[failMiss].lucky !== true, 'a flagged wrong answer is a miss, not a lucky guess');
 assert(engine.unmarkGuessed(retried, failRight) === true && !store.state.mistakes[failRight],
   'unmarking an auto mark takes the lucky entry out of the book');
+engine.submit(failExam);
+assert(!retried.guessed.length && !store.state.mistakes[failRight],
+  'a second submit does not mark the unmarked answer again');
 engine.markGuessed(retried, failRight);
 assert(store.canWrite() === true, 'a successful retry can write again');
 engine.submit(failExam);
