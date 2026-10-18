@@ -413,6 +413,11 @@ PGRE.examEngine = (function () {
       if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
       return exam;
     }
+    // A flag the sitter answered correctly is a lucky guess: file it now, once
+    // the submit is on disk. Unmarking on the results page still works.
+    if (!(typeof PGRE.store.canWrite === 'function') || PGRE.store.canWrite()) {
+      markFlaggedGuessed(exam);
+    }
     return exam;
   }
 

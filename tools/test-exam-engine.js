@@ -642,6 +642,7 @@ var failMiss = failExam.order[0];
 var failRight = failExam.order[1];
 failExam.answers[failMiss] = (ansOf(failMiss) + 1) % 5;
 failExam.answers[failRight] = ansOf(failRight);
+failExam.flags = [failMiss, failRight];
 store.save();
 var diskBefore = localStorage.getItem(store.KEY);
 var xpBefore = store.state.xp;
@@ -659,12 +660,22 @@ assert(!store.state.mistakes[failMiss], 'a failed save does not keep the miss in
 assert(store.state.attempts.length === attemptsBefore, 'a failed save does not keep the new attempt rows');
 assert(store.state.xp === xpBefore, 'a failed save does not keep the completion XP');
 assert(store.canWrite() === false, 'a failed save still reports that writing failed');
+assert(!failExam.guessed && !failExam.guessOrigin, 'a failed save marks no flagged answer as guessed');
+assert(!store.state.mistakes[failRight], 'a failed save files no lucky guess');
 localStorage.setItem = realSetItem;
 var retried = engine.submit(failExam);
 assert(!!retried.submittedAt, 'Submit after the write works records the sitting');
 assert(store.state.mistakes[failMiss] && store.state.mistakes[failMiss].misses === 1,
   'the retried submit files the wrong answer once');
-assert(!store.state.mistakes[failRight], 'the retried submit does not file a right answer');
+assert(retried.guessed.length === 1 && retried.guessed[0] === failRight,
+  'the retried submit marks only the flagged correct answer as guessed');
+assert(retried.guessOrigin[failRight] === 'created', 'the auto mark records that it created the book entry');
+assert(store.state.mistakes[failRight] && store.state.mistakes[failRight].lucky === true &&
+  store.state.mistakes[failRight].misses === 0, 'the flagged correct answer is filed as a lucky guess');
+assert(store.state.mistakes[failMiss].lucky !== true, 'a flagged wrong answer is a miss, not a lucky guess');
+assert(engine.unmarkGuessed(retried, failRight) === true && !store.state.mistakes[failRight],
+  'unmarking an auto mark takes the lucky entry out of the book');
+engine.markGuessed(retried, failRight);
 assert(store.canWrite() === true, 'a successful retry can write again');
 engine.submit(failExam);
 assert(store.state.mistakes[failMiss].misses === 1, 'a second submit does not file the miss again');
