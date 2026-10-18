@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /* Real-page check of the dashboard Mock exam tile: with a fixed local
-   "today", the tile names the next unsat plan mock on or after that day.
+   "today", the tile names the next unsat plan mock on or after that day,
+   in plan date order (gr0877 Oct 11, gr1777 Oct 18, ets2024 Oct 25).
    Catalog is the real five-id ETS order (ets2024, gr1777, gr0877, gr0177,
    gr9677) — never a three-form stub that hides undated forms between
    plan mocks. Isolated Chrome profile on a throwaway 127.0.0.1 port;
@@ -216,14 +217,15 @@ var STAGES = [
       await h.showDashboard();
       var t = await h.tile();
       h.assert(t.today === '2026-10-10', 'store.today is 2026-10-10, got ' + t.today);
-      h.assert(t.pointer && t.pointer.id === 'ets2024' && t.pointer.scheduledFor === '2026-10-11',
-        'pointer is ets2024 scheduled 2026-10-11, got ' + JSON.stringify(t.pointer));
+      h.assert(t.pointer && t.pointer.id === 'gr0877' && t.pointer.scheduledFor === '2026-10-11',
+        'pointer is gr0877 scheduled 2026-10-11 (plan order, not catalog order), got ' +
+        JSON.stringify(t.pointer));
       h.assert(t.status === 'Scheduled Oct 11', 'tile status Scheduled Oct 11, got ' + t.status);
-      h.assert(t.title === 'ETS Official Practice Test (2024)', 'tile title ETS 2024, got ' + t.title);
+      h.assert(t.title === 'GR0877 Released Exam (2008)', 'tile title GR0877, got ' + t.title);
       await h.showExam();
       var L = await h.lobby();
-      h.assert(L.heading === 'Next scheduled mock' && L.nextId === 'ets2024' && L.nextDisabled === true,
-        'lobby locks ets2024 until its date, got ' + JSON.stringify(L));
+      h.assert(L.heading === 'Next scheduled mock' && L.nextId === 'gr0877' && L.nextDisabled === true,
+        'lobby locks gr0877 until its date, got ' + JSON.stringify(L));
     } },
 
   { name: 'on the plan date (2026-10-11)', shot: 'tile-2026-10-11',
@@ -232,13 +234,13 @@ var STAGES = [
       await h.showDashboard();
       var t = await h.tile();
       h.assert(t.today === '2026-10-11', 'store.today is 2026-10-11, got ' + t.today);
-      h.assert(t.pointer && t.pointer.id === 'ets2024' && t.status === 'Scheduled Oct 11' &&
-        t.title === 'ETS Official Practice Test (2024)',
-        'on the date the tile still names ets2024, got ' + JSON.stringify(t));
+      h.assert(t.pointer && t.pointer.id === 'gr0877' && t.status === 'Scheduled Oct 11' &&
+        t.title === 'GR0877 Released Exam (2008)',
+        'on the date the tile still names gr0877, got ' + JSON.stringify(t));
       await h.showExam();
       var L = await h.lobby();
-      h.assert(L.nextId === 'ets2024' && L.nextDisabled === false && L.heading === 'Your next mock',
-        'on the date ets2024 is selectable as next mock, got ' + JSON.stringify(L));
+      h.assert(L.nextId === 'gr0877' && L.nextDisabled === false && L.heading === 'Your next mock',
+        'on the date gr0877 is selectable as next mock, got ' + JSON.stringify(L));
     } },
 
   { name: 'after the plan date (2026-10-12)', shot: 'tile-2026-10-12',
@@ -257,12 +259,32 @@ var STAGES = [
         'lobby protects GR1777 until Oct 18, got ' + JSON.stringify({
           heading: L.heading, nextId: L.nextId, nextDisabled: L.nextDisabled, nextText: L.nextText
         }));
-      h.assert(L.ets2024 && L.ets2024.inNext === false && L.ets2024.disabled === false,
-        'unsat ets2024 whose date has passed stays selectable in Other, got ' +
-        JSON.stringify(L.ets2024));
+      h.assert(L.gr0877 && L.gr0877.inNext === false && L.gr0877.disabled === false,
+        'unsat gr0877 whose date has passed stays selectable in Other, got ' +
+        JSON.stringify(L.gr0877));
     } },
 
-  { name: 'sat 100Q form (gr1777) with ets2024 still unsat after its date',
+  { name: 'gr0877 submitted, on the GR1777 date (2026-10-18)', shot: 'tile-2026-10-18',
+    run: async function (page, h) {
+      await h.ensureCatalog();
+      await h.setSat(['gr0877']);
+      await h.pinToday('2026-10-18');
+      await h.showDashboard();
+      var t = await h.tile();
+      h.assert(t.today === '2026-10-18', 'store.today is 2026-10-18, got ' + t.today);
+      h.assert(t.pointer && t.pointer.id === 'gr1777' && t.pointer.scheduledFor === '2026-10-18',
+        'after gr0877 submitted, today the pointer is gr1777, got ' + JSON.stringify(t.pointer));
+      h.assert(t.status === 'Scheduled Oct 18', 'tile status Scheduled Oct 18, got ' + t.status);
+      h.assert(t.title === 'GR1777 Released Exam (2017)', 'tile title GR1777, got ' + t.title);
+      await h.showExam();
+      var L = await h.lobby();
+      h.assert(L.nextId === 'gr1777' && L.nextDisabled === false && L.heading === 'Your next mock',
+        'on its date gr1777 is selectable as next mock, got ' + JSON.stringify({
+          heading: L.heading, nextId: L.nextId, nextDisabled: L.nextDisabled, nextText: L.nextText
+        }));
+    } },
+
+  { name: 'sat 100Q form (gr1777) with gr0877 still unsat after its date',
     shot: 'tile-sat-gr1777',
     run: async function (page, h) {
       await h.ensureCatalog();
@@ -273,70 +295,69 @@ var STAGES = [
       h.assert(t.today === '2026-10-12', 'store.today is 2026-10-12, got ' + t.today);
       h.assert(t.pointer && t.pointer.id !== 'gr1777',
         'the sat 100Q form is never the next mock, got ' + JSON.stringify(t.pointer));
-      h.assert(t.pointer && t.pointer.id === 'gr9677' && t.pointer.scheduledFor === '2026-10-25',
-        'skips passed ets2024 and sat gr1777, next is gr9677 on 2026-10-25, got ' +
+      h.assert(t.pointer && t.pointer.id === 'ets2024' && t.pointer.scheduledFor === '2026-10-25',
+        'skips passed gr0877 and sat gr1777, next is ets2024 on 2026-10-25, got ' +
         JSON.stringify(t.pointer));
       h.assert(t.status === 'Scheduled Oct 25', 'tile status Scheduled Oct 25, got ' + t.status);
-      h.assert(t.title === 'GR9677 Released Exam (1996)', 'tile title GR9677, got ' + t.title);
+      h.assert(t.title === 'ETS Official Practice Test (2024)', 'tile title ETS 2024, got ' + t.title);
       await h.showExam();
       var L = await h.lobby();
-      h.assert(L.nextId === 'gr9677' && L.nextId !== 'gr1777',
-        'lobby next is gr9677 not the sat 100Q form, got ' + L.nextId);
-      h.assert(L.ets2024 && L.ets2024.inNext === false && L.ets2024.disabled === false,
-        'unsat ets2024 stays selectable, got ' + JSON.stringify(L.ets2024));
+      h.assert(L.nextId === 'ets2024' && L.nextId !== 'gr1777',
+        'lobby next is ets2024 not the sat 100Q form, got ' + L.nextId);
+      h.assert(L.gr0877 && L.gr0877.inNext === false && L.gr0877.disabled === false,
+        'unsat gr0877 stays selectable, got ' + JSON.stringify(L.gr0877));
       h.assert(L.gr1777 && L.gr1777.inNext === false,
         'sat gr1777 is not the next-mock card, got ' + JSON.stringify(L.gr1777));
     } },
 
-  { name: 'ets2024 and gr1777 submitted (real five-id catalog)',
-    shot: 'tile-sat-ets2024-gr1777',
+  { name: 'gr0877 and gr1777 submitted (real five-id catalog)',
+    shot: 'tile-sat-gr0877-gr1777',
     run: async function (page, h) {
       await h.ensureCatalog();
       await h.assertCatalogOrder();
-      await h.setSat(['ets2024', 'gr1777']);
+      await h.setSat(['gr0877', 'gr1777']);
       await h.pinToday('2026-10-19');
       await h.showDashboard();
       var t = await h.tile();
       h.assert(t.today === '2026-10-19', 'store.today is 2026-10-19, got ' + t.today);
-      h.assert(t.pointer && t.pointer.id !== 'gr0877' && t.pointer.id !== 'gr0177',
-        'undated catalog forms between the plan mocks are not next, got ' +
-        JSON.stringify(t.pointer));
-      h.assert(t.pointer && t.pointer.id === 'gr9677' && t.pointer.scheduledFor === '2026-10-25',
-        'after ets2024 and gr1777 submitted, next is gr9677 on 2026-10-25, got ' +
+      h.assert(t.pointer && t.pointer.id !== 'gr0177' && t.pointer.id !== 'gr9677',
+        'undated catalog forms are not next, got ' + JSON.stringify(t.pointer));
+      h.assert(t.pointer && t.pointer.id === 'ets2024' && t.pointer.scheduledFor === '2026-10-25',
+        'after gr0877 and gr1777 submitted, next is ets2024 on 2026-10-25, got ' +
         JSON.stringify(t.pointer));
       h.assert(t.status === 'Scheduled Oct 25', 'tile status Scheduled Oct 25, got ' + t.status);
-      h.assert(t.title === 'GR9677 Released Exam (1996)', 'tile title GR9677, got ' + t.title);
+      h.assert(t.title === 'ETS Official Practice Test (2024)', 'tile title ETS 2024, got ' + t.title);
       await h.showExam();
       var L = await h.lobby();
-      h.assert(L.nextId === 'gr9677' && L.nextDisabled === true &&
+      h.assert(L.nextId === 'ets2024' && L.nextDisabled === true &&
         L.heading === 'Next scheduled mock',
-        'lobby locks gr9677 until Oct 25, got ' + JSON.stringify({
+        'lobby locks ets2024 until Oct 25, got ' + JSON.stringify({
           heading: L.heading, nextId: L.nextId, nextDisabled: L.nextDisabled, nextText: L.nextText
         }));
-      h.assert(L.gr0877 && L.gr0877.inNext === false && L.gr0877.disabled === false,
-        'undated gr0877 stays selectable in Other, got ' + JSON.stringify(L.gr0877));
+      h.assert(L.gr9677 && L.gr9677.inNext === false && L.gr9677.disabled === false,
+        'undated spare gr9677 stays selectable in Other, got ' + JSON.stringify(L.gr9677));
       await h.showDashboard();
     } },
 
-  { name: 'unsubmitted in-progress ets2024 sitting stays unsat',
-    shot: 'tile-inprogress-ets2024',
+  { name: 'unsubmitted in-progress gr0877 sitting stays unsat',
+    shot: 'tile-inprogress-gr0877',
     run: async function (page, h) {
       await h.ensureCatalog();
       await h.setExams([{
-        id: 'ex-inprog-ets2024', source: 'ets2024', format: '70x120',
+        id: 'ex-inprog-gr0877', source: 'gr0877', format: '100x170',
         startedAt: '2026-10-10T16:00:00.000Z', submittedAt: null,
-        order: ['ets2024-q1'], answers: {}, flags: [], cursor: 0,
-        durationSec: 0, limitSec: 7200, paused: false
+        order: ['gr0877-q1'], answers: {}, flags: [], cursor: 0,
+        durationSec: 0, limitSec: 10200, paused: false
       }]);
       await h.pinToday('2026-10-10');
       await h.showDashboard();
       var t = await h.tile();
       h.assert(t.today === '2026-10-10', 'store.today is 2026-10-10, got ' + t.today);
-      h.assert(t.pointer && t.pointer.id === 'ets2024' && t.pointer.scheduledFor === '2026-10-11',
-        'in-progress ets2024 is not sat; pointer stays ets2024, got ' +
+      h.assert(t.pointer && t.pointer.id === 'gr0877' && t.pointer.scheduledFor === '2026-10-11',
+        'in-progress gr0877 is not sat; pointer stays gr0877, got ' +
         JSON.stringify(t.pointer));
       h.assert(t.status === 'Scheduled Oct 11', 'tile status Scheduled Oct 11, got ' + t.status);
-      h.assert(t.title === 'ETS Official Practice Test (2024)', 'tile title ETS 2024, got ' + t.title);
+      h.assert(t.title === 'GR0877 Released Exam (2008)', 'tile title GR0877, got ' + t.title);
     } },
 
   { name: 'no upcoming plan mock (2026-10-26)', shot: 'tile-2026-10-26',
@@ -347,11 +368,11 @@ var STAGES = [
       await h.showDashboard();
       var t = await h.tile();
       h.assert(t.today === '2026-10-26', 'store.today is 2026-10-26, got ' + t.today);
-      h.assert(t.pointer && t.pointer.id === 'ets2024',
-        'with no upcoming plan mock the pointer keeps the first unsat form, got ' +
+      h.assert(t.pointer && t.pointer.id === 'gr0877',
+        'with no upcoming plan mock the pointer keeps the earliest unsat plan mock, got ' +
         JSON.stringify(t.pointer));
       h.assert(t.status === 'Next intact form' &&
-        t.title === 'ETS Official Practice Test (2024)',
+        t.title === 'GR0877 Released Exam (2008)',
         'a past plan date is Next intact form, not Scheduled Oct 11, got ' + JSON.stringify(t));
     } }
 ];
