@@ -700,6 +700,76 @@ PGRE.srs = {
     PGRE.store.save();
   },
 
+  /* Recall deck curation 2026-10-14 (99_System/Handoff documents/
+     recall-deck-curation-2026-10-14/). These ids kept their SRS history but now
+     ask a substantially different question, so an old long interval could hide
+     the new question until after the exam. Bring each one due today unless it
+     has been graded since the curation went live (its lastReviewedAt is then
+     newer than the cutoff, so it was already graded on the new wording).
+     Condition-based, not a one-shot flag: the cards merge rule prefers the
+     later due on a tie, so a stale sibling tab can push a due date back; the
+     next load re-applies it. Saves only when something moved. */
+  CURATION_REQUEUE_CUTOFF: '2026-10-14T14:45:00.000Z',
+  CURATION_REQUEUE_IDS: [
+    'cpgf-1.4',
+    'cpgf-1.20',
+    'cpgf-1.24',
+    'cpgf-1.26',
+    'cpgf-1.27',
+    'cpgf-1.38',
+    'cpgf-1.39',
+    'cpgf-1.41',
+    'cpgf-1.42',
+    'cpgf-2.8',
+    'cpgf-2.16',
+    'cpgf-2.20',
+    'cpgf-2.70',
+    'cpgf-2.74',
+    'cpgf-2.85',
+    'cpgf-6.1',
+    'cpgf-6.6',
+    'cpgf-5.27',
+    'cpgf-4.10',
+    'cpgl-1.03',
+    'cpgl-1.04',
+    'cpgl-3.10a',
+    'cpgl-4.02',
+    'cpgl-4.03h',
+    'cpgl-7.04',
+    'cpgl-7.05a',
+    'cpgl-8.13',
+    'cpgl-9.01',
+    'cpgl-5.01',
+    'cpgl-5.02',
+    'cpgl-5.05',
+    'cpgl-5.07',
+    'cpgl-5.08',
+    'cpgl-5.09',
+    'cpgl-5.15',
+    'cpgl-5.17',
+    'supp-newton-momentum',
+    'supp-friction',
+    'supp-gravity-orbits',
+    'supp-image-plane'
+  ],
+  requeueCuratedCards: function () {
+    var s = PGRE.store.state;
+    var cards = s && s.cards;
+    if (!cards || typeof cards !== 'object') return false;
+    var today = this.today(), cutoff = this.CURATION_REQUEUE_CUTOFF, moved = false;
+    this.CURATION_REQUEUE_IDS.forEach(function (id) {
+      if (!Object.prototype.hasOwnProperty.call(cards, id)) return;   // never seen: already new
+      var st = cards[id];
+      if (!st || typeof st !== 'object') return;
+      if (typeof st.lastReviewedAt === 'string' && st.lastReviewedAt >= cutoff) return;
+      if (typeof st.due === 'string' && st.due <= today) return;
+      st.due = today;
+      moved = true;
+    });
+    if (moved && PGRE.store.canWrite && PGRE.store.canWrite()) PGRE.store.save();
+    return moved;
+  },
+
   /* Was this card graded today (local date)? Prefer the local lastReviewedDay
      stamp; fall back to a local re-derivation of the ISO lastReviewedAt for
      cards graded before the stamp existed. NEVER compares a UTC ISO prefix to a
