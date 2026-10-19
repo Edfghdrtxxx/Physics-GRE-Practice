@@ -375,7 +375,7 @@ var STAGES = [
     // The session order is shuffled. When rr-a is the last question the Right
     // arrow has nothing to open, so the check starts from the question before it.
     var start = 'rr-a', startOn = p.on;
-    if (await page.eval(function () { return /(\d+) of \1$/.test(document.querySelector('.practice-meta span').textContent); })) {
+    if (await page.eval(function () { return document.getElementById('review-next').disabled; })) {
       await page.press('ArrowLeft');
       start = await h.onScreen();
       startOn = (await h.panel()).on;
@@ -390,6 +390,7 @@ var STAGES = [
     await page.press('ArrowLeft');
     h.assert(byArrow !== start && byEnter === byArrow && await h.onScreen() === start && (await h.panel()).on === startOn,
       'Enter opens the question the Right arrow opens (' + start + ' to ' + byArrow + ') and does not press the grading chip that holds focus');
+    if (start !== 'rr-a') await page.press('ArrowRight');   // the screenshot shows rr-a reopened
     await h.frame();
   } },
 
