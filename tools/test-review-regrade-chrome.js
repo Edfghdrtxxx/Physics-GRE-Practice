@@ -372,6 +372,14 @@ var STAGES = [
       'reopening a regraded question paints what was saved');
     h.assert(s.attempts === base.attempts && s.diskAttempts === base.attempts && s.xp === base.xp && s.diskXp === base.xp,
       'after every practice regrade: still four attempts and the same XP, in memory and on disk');
+    // The session order is shuffled. When rr-a is the last question the Right
+    // arrow has nothing to open, so the check starts from the question before it.
+    var start = 'rr-a', startOn = p.on;
+    if (await page.eval(function () { return document.getElementById('review-next').disabled; })) {
+      await page.press('ArrowLeft');
+      start = await h.onScreen();
+      startOn = (await h.panel()).on;
+    }
     // Enter is the Right arrow here, also while a grading chip holds focus: it must not press the chip
     await page.press('ArrowRight');
     var byArrow = await h.onScreen();
@@ -380,8 +388,9 @@ var STAGES = [
     await page.press('Enter');
     var byEnter = await h.onScreen();
     await page.press('ArrowLeft');
-    h.assert(byArrow !== 'rr-a' && byEnter === byArrow && await h.onScreen() === 'rr-a' && (await h.panel()).on === p.on,
-      'Enter opens the question the Right arrow opens (' + byArrow + ') and does not press the grading chip that holds focus');
+    h.assert(byArrow !== start && byEnter === byArrow && await h.onScreen() === start && (await h.panel()).on === startOn,
+      'Enter opens the question the Right arrow opens (' + start + ' to ' + byArrow + ') and does not press the grading chip that holds focus');
+    if (start !== 'rr-a') await page.press('ArrowRight');   // the screenshot shows rr-a reopened
     await h.frame();
   } },
 
