@@ -1118,9 +1118,12 @@ PGRE.views.mistakes = (function () {
     html += '</div>' +
       '<div id="feedback">' + feedbackHTML(q, st, false, true) + '</div>' +
       '<div class="btn-row drill-navrow">' +
-        '<button class="btn btn-ghost" id="review-prev"' + (prev < 0 ? ' disabled' : '') + '>← Back</button>' +
-        '<button class="btn btn-ghost" id="review-next"' + (next < 0 ? ' disabled' : '') + '>Next →</button>' +
-        '<button class="btn btn-primary drill-finish" id="review-summary">Back to results</button>' +
+        '<button class="btn btn-ghost" id="review-prev" title="Previous question (Left arrow)"' +
+          (prev < 0 ? ' disabled' : '') + '>← Back</button>' +
+        '<button class="btn btn-ghost" id="review-next" title="Next question (Right arrow or Enter)"' +
+          (next < 0 ? ' disabled' : '') + '>Next →</button>' +
+        '<button class="btn btn-primary drill-finish" id="review-summary" title="Back to results (Esc)">' +
+          'Back to results</button>' +
       '</div>' +
       paletteHTML(true, idx) +
       '</div>';
@@ -1196,7 +1199,8 @@ PGRE.views.mistakes = (function () {
   /* ——— Keyboard (same opt-in setting as practice: settings.keyboard) ———
      A–E / 1–5 select, Enter confirms (or re-answers), ← / → browse, S skip,
      Enter/Space/N advance when nothing is pending, K / G / T / F / R self-assess
-     (while a result's chip row is on screen, the review page included). */
+     (while a result's chip row is on screen, the review page included). The
+     review page: ← / → / Enter browse the results, Esc back to them. */
   function onKey(e) {
     if (!drill) return;
     if (drill.done && !drill.reviewing) return;             // the summary is up
@@ -1208,9 +1212,9 @@ PGRE.views.mistakes = (function () {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     var k = e.key;
 
-    // Review page: questions are not re-answerable and the nav is click only,
-    // but the grading chips keep the answer page's letters.
-    if (drill.reviewing) { assessKey(e, k); return; }
+    // Review page: questions are not re-answerable; the nav takes the practice
+    // review's keys and the grading chips keep the answer page's letters.
+    if (drill.reviewing) { reviewKey(e, k); return; }
 
     if (/^[a-eA-E]$/.test(k) || /^[1-5]$/.test(k)) {
       var idx = /^[1-5]$/.test(k) ? parseInt(k, 10) - 1 : k.toUpperCase().charCodeAt(0) - 65;
@@ -1239,6 +1243,26 @@ PGRE.views.mistakes = (function () {
       var nb = document.getElementById('drill-next');
       if (nb && !nb.disabled) nb.click();
       else document.getElementById('drill-finish').click();
+    } else {
+      assessKey(e, k);
+    }
+  }
+
+  /* Review page keys, as on the practice review (js/view-practice.js onKey):
+     ← / → the previous / next answered question, Enter the next one (unless a
+     Tab-focused control owns it), Esc back to the results. */
+  function reviewKey(e, k) {
+    if (k === 'ArrowLeft' || k === 'ArrowRight') {
+      var to = neighborAnswered(drill.i, k === 'ArrowLeft' ? -1 : 1);
+      if (to >= 0) { e.preventDefault(); renderDrillReview(to); }
+    } else if (k === 'Enter' && !PGRE.enterPressesControl()) {
+      // on the last question too: Enter must not press a chip a click left focused
+      e.preventDefault();
+      var after = neighborAnswered(drill.i, 1);
+      if (after >= 0) renderDrillReview(after);
+    } else if (k === 'Escape') {
+      e.preventDefault();
+      renderDrillSummary();
     } else {
       assessKey(e, k);
     }
