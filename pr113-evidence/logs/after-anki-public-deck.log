@@ -1,0 +1,10 @@
+the status bridge on port 4789 received nothing (2 request(s) blocked, 0 answered)
+PASS — Anki grades + end-to-end Today due pickup, backlog cap, mixed due+new auto-pick, repeat-click safety, persistence, deliberate-batch preservation, rollover, date stamping, overflow copy, cross-tab conflict safety, and an ordinary exam week
+  review (cap 13): { again: 'today', hard: '11 d', good: '12 d', easy: '13 d' }
+  young review (uncapped): { again: 'today', hard: '2 d', good: '3 d', easy: '4 d' }
+  new card: {
+  again: 'today',
+  hard: 'returns this session',
+  good: 'returns this session',
+  easy: '4 d'
+}

@@ -1,0 +1,9 @@
+conflict while replaying 4d15e6b: index.html
+d226a1b Show a new card's first Hard or Good as a learning pass
+d90a67d Start Recall's day at 03:00, like the study-time day
+3f996b0 Retry the save on the next grade or undo after a refused save
+b9800d1 Keep a new card on screen when its learning-pass save fails
+e8fae3d Keep a card graded before midnight out of a resumed Study session
+drop-be51232: 33 unit files, local and TZ=Etc/GMT+5 (01:29), failing: test-packs test-packs(night)
+schedule rc=0
+learning-pass rc=0

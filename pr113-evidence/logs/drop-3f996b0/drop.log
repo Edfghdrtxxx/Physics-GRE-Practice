@@ -1,0 +1,10 @@
+conflict while replaying d90a67d: index.html
+conflict while replaying d90a67d: tools/test-session-park.js
+a08694d Show a new card's first Hard or Good as a learning pass
+3c2b330 Turn off the final pass: exam week cards keep their graded intervals
+ee40e37 Start Recall's day at 03:00, like the study-time day
+b9800d1 Keep a new card on screen when its learning-pass save fails
+e8fae3d Keep a card graded before midnight out of a resumed Study session
+drop-3f996b0: 33 unit files, local and TZ=Etc/GMT+5 (01:20), failing: test-packs test-packs(night)
+schedule rc=0
+learning-pass rc=0

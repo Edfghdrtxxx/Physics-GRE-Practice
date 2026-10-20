@@ -1,0 +1,27 @@
+PASS: review 7 of 20 opens ungraded on its 3 d window (correct answer)
+PASS: K selects sure exactly as a click does (window 3 d, stored 3 d, row sure)
+PASS: K again unpicks it and restores the saved window
+PASS: G selects guess exactly as a click does (window 3 d → 2 d, stored 2 d, row guess)
+PASS: G again unpicks it and restores the saved window
+PASS: T selects slow exactly as a click does (window 3 d → 2 d, stored 2 d, row  slow)
+PASS: T again unpicks it and restores the saved window
+PASS: F selects forgot exactly as a click does (window 3 d → 1 d, stored 1 d, row  forgot)
+PASS: F again unpicks it and restores the saved window
+PASS: R opens the Keep failing confirmation and writes nothing, as the click does
+PASS: R then Confirm flags Keep failing exactly as click then Confirm (stored 1 d)
+PASS: R on an active Keep failing unpicks it at once
+PASS: K then G replaces Knew it with Guessed: window 3 d → 2 d, banner 2 d, stored 2 d
+PASS: F adds Forgot something: window 3 d → 1 d, stored tomorrow
+PASS: no key added an attempt or XP
+PASS: K and → do nothing while a text field has focus
+PASS: → opens review 8, ← comes back to 7 with its grading kept
+PASS: Enter opens the next result and does not press the chip a click left focused
+PASS: the chip clicked before Enter kept its one toggle
+PASS: ← on the first result stays put
+PASS: → and Enter on the last result stay put
+PASS: Esc goes back to the results
+PASS: keys on the results page change nothing
+PASS: no page exceptions
+PASS: the status bridge on port 4789 answered nothing (2 blocked request(s))
+
+ALL OK

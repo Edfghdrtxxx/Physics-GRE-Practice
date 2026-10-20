@@ -1,0 +1,2 @@
+FAIL Error: real formula pickup did not offer the real cards: {"text":"3 left today","batch":{"date":"2026-10-20","reviewIds":["supp-coaxial","supp-pec-reflect","supp-em-triad"],"newIds":[],"_opAt":1792480882652,"_opId":"mvgcu4t8-7dy27bmcazc","_opKind":"add"}}
+    at main (<checkout>/tools/zz-anki-public.js:243:11)

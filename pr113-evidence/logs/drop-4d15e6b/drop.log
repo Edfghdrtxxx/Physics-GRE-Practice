@@ -1,0 +1,7 @@
+be51232 Turn off the final pass: exam week cards keep their graded intervals
+d90a67d Start Recall's day at 03:00, like the study-time day
+3f996b0 Retry the save on the next grade or undo after a refused save
+b9800d1 Keep a new card on screen when its learning-pass save fails
+e8fae3d Keep a card graded before midnight out of a resumed Study session
+drop-4d15e6b: 33 unit files, local and TZ=Etc/GMT+5 (01:34), failing: test-packs test-packs(night)
+schedule rc=0

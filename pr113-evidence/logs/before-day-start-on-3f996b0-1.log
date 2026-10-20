@@ -1,0 +1,28 @@
+
+day start: a card graded Good at 23:55 is not due in a session at 00:30
+PASS: at 23:55 on November 10, Good gives ds-a and ds-b a 1-day interval, due November 11
+BROWSER_TEST_FAILED: Error: at 00:30 on November 11, ds-a, ds-b and ds-x, due November 11, are not due yet
+    at h.assert (<temp dir>)
+    at <temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async <temp dir>
+
+day start: after 03:00 the next day that card is due again
+PASS: at 03:05 on November 11 Recall counts November 11, and ds-a, ds-b and ds-x are due
+PASS: Reviewed today starts again at 0, and Recall offers a session
+PASS: the new session holds ds-a and ds-b (queue: ds-b, ds-a)
+
+day start: a session started at 01:00 counts as the day before for the list and studied-today
+BROWSER_TEST_FAILED: Error: at 01:00 on November 13, dn-x, due November 13, is not due yet
+    at h.assert (<temp dir>)
+    at <temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async <temp dir>
+
+day start: the final pass and the exam cap change at 03:00 on October 25
+BROWSER_TEST_FAILED: Error: at 02:30 on October 25, fp-z is not on the list, and there is no final-pass banner
+    at h.assert (<temp dir>)
+    at <temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async <temp dir>
+FAILED stages: day start: a card graded Good at 23:55 is not due in a session at 00:30; day start: a session started at 01:00 counts as the day before for the list and studied-today; day start: the final pass and the exam cap change at 03:00 on October 25

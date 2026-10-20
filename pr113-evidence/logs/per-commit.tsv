@@ -52,3 +52,42 @@ b9800d1	test-session-park	100 passed, 0 failed
 b9800d1	test-srs-intervals	243 passed, 0 failed
 b9800d1	test-store-persist	75 passed, 0 failed
 b9800d1	test-ux-interaction	ALL OK
+3f996b0	test-session-park	100 passed, 0 failed
+3f996b0	test-session-park (TZ=Etc/GMT+6, 01:07)	100 passed, 0 failed
+3f996b0	test-srs-intervals	245 passed, 0 failed
+3f996b0	test-srs-intervals (TZ=Etc/GMT+6, 01:07)	245 passed, 0 failed
+3f996b0	test-store-persist	75 passed, 0 failed
+3f996b0	test-store-persist (TZ=Etc/GMT+6, 01:07)	75 passed, 0 failed
+3f996b0	test-ux-interaction	ALL OK
+3f996b0	test-ux-interaction (TZ=Etc/GMT+6, 01:07)	ALL OK
+3f996b0	test-mistakes-srs	96 passed, 0 failed
+3f996b0	test-mistakes-srs (TZ=Etc/GMT+6, 01:07)	96 passed, 0 failed
+3f996b0	test-status	55 passed, 0 failed
+3f996b0	test-status (TZ=Etc/GMT+6, 01:07)	55 passed, 0 failed
+3f996b0	test-recall-schedule-chrome	ALL OK (90 PASS lines)
+d90a67d	test-session-park	100 passed, 0 failed
+d90a67d	test-session-park (TZ=Etc/GMT+6, 01:10)	100 passed, 0 failed
+d90a67d	test-srs-intervals	245 passed, 0 failed
+d90a67d	test-srs-intervals (TZ=Etc/GMT+6, 01:10)	245 passed, 0 failed
+d90a67d	test-store-persist	75 passed, 0 failed
+d90a67d	test-store-persist (TZ=Etc/GMT+6, 01:10)	75 passed, 0 failed
+d90a67d	test-ux-interaction	ALL OK
+d90a67d	test-ux-interaction (TZ=Etc/GMT+6, 01:10)	ALL OK
+d90a67d	test-mistakes-srs	102 passed, 0 failed
+d90a67d	test-mistakes-srs (TZ=Etc/GMT+6, 01:10)	102 passed, 0 failed
+d90a67d	test-status	59 passed, 0 failed
+d90a67d	test-status (TZ=Etc/GMT+6, 01:10)	59 passed, 0 failed
+d90a67d	test-recall-schedule-chrome	ALL OK (112 PASS lines)
+be51232	test-session-park	100 passed, 0 failed
+be51232	test-session-park (TZ=Etc/GMT+6, 01:13)	100 passed, 0 failed
+be51232	test-srs-intervals	233 passed, 0 failed
+be51232	test-srs-intervals (TZ=Etc/GMT+6, 01:13)	233 passed, 0 failed
+be51232	test-store-persist	75 passed, 0 failed
+be51232	test-store-persist (TZ=Etc/GMT+6, 01:13)	75 passed, 0 failed
+be51232	test-ux-interaction	ALL OK
+be51232	test-ux-interaction (TZ=Etc/GMT+6, 01:14)	ALL OK
+be51232	test-mistakes-srs	102 passed, 0 failed
+be51232	test-mistakes-srs (TZ=Etc/GMT+6, 01:14)	102 passed, 0 failed
+be51232	test-status	59 passed, 0 failed
+be51232	test-status (TZ=Etc/GMT+6, 01:14)	59 passed, 0 failed
+be51232	test-recall-schedule-chrome	ALL OK (117 PASS lines)

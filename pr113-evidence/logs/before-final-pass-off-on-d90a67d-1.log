@@ -1,0 +1,30 @@
+
+day start: the exam cap changes at 03:00 on October 25, and no final pass begins
+PASS: at 02:30 on October 25 Recall counts October 24, and the exam cap is 7 days
+PASS: Good shows and stores 6 days, due October 30 (button: 6 d)
+PASS: at 03:05 October 25 begins, and the exam cap is 6 days
+BROWSER_TEST_FAILED: Error: today's list holds only fp-a, the card still due: no learned-card fill and no final-pass banner (left: fp-a, fp-b, fp-z)
+    at h.assert (<temp dir>)
+    at <temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async <temp dir>
+
+exam week: five days before the exam, today's list is the due cards plus the new-card fill
+PASS: the exam cap is 4 days, and Recall offers a session
+BROWSER_TEST_FAILED: Error: today's list is fw-a and fw-b, which are due, plus 2 new cards (fw-a, fw-b, fw-z)
+    at h.assert (<temp dir>)
+    at <temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async <temp dir>
+
+exam week: Good on a learned card stores its exam-capped interval, not 1 day
+BROWSER_TEST_FAILED: CdpError: Error: missing #fcard-actions [data-grade="good"]
+    at mapErrorMessage (file://<local path>:639:12)
+    at callTool (file://<local path>:521:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async evalJs (file://<local path>:134:24)
+    at async h.click (<temp dir>)
+    at async h.press (<temp dir>)
+    at async <temp dir>
+    at async <temp dir>
+FAILED stages: day start: the exam cap changes at 03:00 on October 25, and no final pass begins; exam week: five days before the exam, today's list is the due cards plus the new-card fill; exam week: Good on a learned card stores its exam-capped interval, not 1 day

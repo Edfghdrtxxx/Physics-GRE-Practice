@@ -1,0 +1,11 @@
+conflict while replaying be51232: index.html
+conflict while replaying be51232: tools/test-recall-schedule-chrome.js
+conflict while replaying be51232: tools/test-session-park.js
+182cfe0 Show a new card's first Hard or Good as a learning pass
+83e3025 Turn off the final pass: exam week cards keep their graded intervals
+3f996b0 Retry the save on the next grade or undo after a refused save
+b9800d1 Keep a new card on screen when its learning-pass save fails
+e8fae3d Keep a card graded before midnight out of a resumed Study session
+drop-d90a67d: 33 unit files, local and TZ=Etc/GMT+5 (01:25), failing: test-packs test-packs(night)
+schedule rc=0
+learning-pass rc=0
