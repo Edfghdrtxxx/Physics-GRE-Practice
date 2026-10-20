@@ -316,10 +316,10 @@ PGRE.FORMULAS = [
     eq: "supp",
     topic: "th",
     tag: "Heat engines",
-    name: "Refrigerator and heat-pump coefficients (supplemental list)",
-    front: "A refrigerator or heat pump takes heat $Q_C$ from the cold side, uses work $W$ and delivers $Q_H$. State the energy balance, both coefficients of performance, and their Carnot limits. (3)",
-    back: "<ul class=\"recall-list\"><li>Over a cycle $\\Delta U = 0$, so $Q_H = Q_C + W$, with all three positive.</li><li>Refrigerator: $Q_C/W$. Heat pump: $Q_H/W = Q_C/W + 1$, which cannot fall below $1$.</li><li>No device can exceed the Carnot values: refrigerator $T_C/(T_H - T_C)$, heat pump $T_H/(T_H - T_C)$, with absolute temperatures.</li></ul>",
-    note: "Supplemental — energy balance as in Kahn §4.2.6, p.85."
+    name: "Heat engine, refrigerator and heat pump compared (supplemental list)",
+    front: "A heat engine, a refrigerator and a heat pump are each rated as goal divided by cost. State each one's ratio and the Carnot value it cannot exceed. (3)",
+    back: "<ul class=\"recall-list\"><li>Heat engine: goal $W$, cost $Q_H$. $e = W/Q_H = 1 - Q_C/Q_H$, which cannot exceed $1 - T_C/T_H$.</li><li>Refrigerator: goal $Q_C$, cost $W$. $Q_C/W$, which cannot exceed $T_C/(T_H - T_C)$.</li><li>Heat pump: goal $Q_H$, cost $W$. $Q_H/W = Q_C/W + 1$, which cannot exceed $T_H/(T_H - T_C)$ and cannot fall below $1$.</li></ul>",
+    note: "All three obey $Q_H = Q_C + W$ in magnitudes; use kelvin. A smaller $T_H - T_C$ raises both coefficients of performance but lowers $e$. Kahn §4.2.6, p.85, (4.36)–(4.37) covers the engine; the refrigerator and heat pump are supplemental."
   },
   {
     id: "supp-step-barrier",
