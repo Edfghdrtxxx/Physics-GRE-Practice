@@ -13,6 +13,7 @@ PGRE.backup = (function () {
   var INTERVAL_MS = 5 * 60 * 1000;
   var SCHEMA = 1;
   var KIND = 'pgre-progress-snapshot';
+  var SNAP_ID = /^snap-\d{8}T\d{6}Z-rev-\d+-[0-9a-f]{12}$/;
 
   var pendingTimer = null;
   var inFlight = null;
@@ -94,9 +95,24 @@ PGRE.backup = (function () {
     paint();
   }
 
+  function hasVerifiedSnapshot() {
+    var ack = (PGRE.backup && PGRE.backup.lastAck) || readAck();
+    return !!(ack && ack.verified && ack.sha256);
+  }
+
   function dropLegacyBackup() {
+    if (!hasVerifiedSnapshot()) return;
     if (!PGRE.store || !PGRE.store.KEY) return;
     try { localStorage.removeItem(PGRE.store.KEY + '-backup'); } catch (e) { /* leftover stays */ }
+  }
+
+  function ackLooksWritten(ack, digest) {
+    return !!(ack
+      && ack.ok === true
+      && typeof digest === 'string'
+      && ack.sha256 === digest
+      && typeof ack.id === 'string'
+      && SNAP_ID.test(ack.id));
   }
 
   function headers() {
@@ -123,7 +139,9 @@ PGRE.backup = (function () {
     }
     return sha256hex(blob).then(function (digest) {
       var last = PGRE.backup.lastAck;
-      if (last && last.sha256 === digest) return { ok: true, skipped: true, id: last.id, savedAt: last.savedAt, sha256: digest };
+      if (last && last.verified && last.sha256 === digest) {
+        return { ok: true, skipped: true, verified: true, id: last.id, savedAt: last.savedAt || last.at, sha256: digest };
+      }
       var body = JSON.stringify({
         schema: SCHEMA,
         kind: KIND,
@@ -145,7 +163,30 @@ PGRE.backup = (function () {
           if (!response.ok || payload.ok !== true) {
             return { ok: false, error: payload.error || ('helper HTTP ' + response.status) };
           }
-          return payload;
+          if (!ackLooksWritten(payload, digest)) {
+            return { ok: false, error: 'helper ack is not a written snapshot' };
+          }
+          var getUrl = endpoint() + (endpoint().indexOf('?') >= 0 ? '&' : '?') +
+            'id=' + encodeURIComponent(payload.id);
+          return window.fetch(getUrl, { method: 'GET', headers: headers() }).then(function (got) {
+            return got.json().then(function (envelope) {
+              if (!got.ok || !envelope || envelope.sha256 !== digest) {
+                return { ok: false, error: (envelope && envelope.error) || 'snapshot missing after ack' };
+              }
+              return {
+                ok: true,
+                verified: true,
+                id: payload.id,
+                sha256: digest,
+                savedAt: payload.savedAt || envelope.writtenAt || envelope.savedAt,
+                counts: payload.counts || envelope.counts
+              };
+            }, function () {
+              return { ok: false, error: 'helper returned non-JSON' };
+            });
+          }, function () {
+            return { ok: false, error: 'could not read the snapshot back' };
+          });
         }, function () {
           return { ok: false, error: 'helper returned non-JSON' };
         });
@@ -155,16 +196,19 @@ PGRE.backup = (function () {
     }, function (err) {
       return { ok: false, error: (err && err.message) || 'checksum failed' };
     }).then(function (result) {
-      if (result && result.ok) {
+      if (result && result.ok && result.verified) {
         if (!result.skipped) {
           writeAck({
             at: result.savedAt || new Date().toISOString(),
             id: result.id,
             sha256: result.sha256,
-            counts: result.counts || null
+            counts: result.counts || null,
+            verified: true
           });
           dropLegacyBackup();
         }
+        clearWarning();
+      } else if (result && result.ok && result.skipped) {
         clearWarning();
       } else {
         showWarning((result && result.error) || 'backup was refused');
@@ -265,30 +309,38 @@ PGRE.backup = (function () {
   }
 
   function restoreSnapshot(id) {
-    return fetchSnapshot(id).then(function (envelope) {
-      if (!envelope || envelope.ok === false) {
-        return { ok: false, error: (envelope && envelope.error) || 'snapshot missing' };
+    var current = null;
+    try { current = localStorage.getItem(PGRE.store.KEY); } catch (e) { current = null; }
+    if (!current) return Promise.resolve({ ok: false, error: 'no committed progress to secure' });
+    return postSnapshot(current).then(function (ack) {
+      if (!ack || !ack.ok || !ack.verified) {
+        return { ok: false, error: 'current progress could not be snapshotted before restore' };
       }
-      var blob = envelope.blob;
-      var digest = envelope.sha256;
-      if (typeof blob !== 'string' || typeof digest !== 'string') {
-        return { ok: false, error: 'snapshot envelope incomplete' };
-      }
-      return sha256hex(blob).then(function (actual) {
-        if (actual !== digest) {
-          return { ok: false, error: 'checksum mismatch' };
+      return fetchSnapshot(id).then(function (envelope) {
+        if (!envelope || envelope.ok === false) {
+          return { ok: false, error: (envelope && envelope.error) || 'snapshot missing' };
         }
-        if (!PGRE.store || typeof PGRE.store.importJSON !== 'function') {
-          return { ok: false, error: 'store import is unavailable' };
+        var blob = envelope.blob;
+        var digest = envelope.sha256;
+        if (typeof blob !== 'string' || typeof digest !== 'string') {
+          return { ok: false, error: 'snapshot envelope incomplete' };
         }
-        PGRE.store.importJSON(blob);
-        if (PGRE.store._persistFailed) {
-          return { ok: false, error: 'imported into this tab, but saving still fails' };
-        }
-        var readBack = null;
-        try { readBack = localStorage.getItem(PGRE.store.KEY); } catch (e) { readBack = null; }
-        if (!readBack) return { ok: false, error: 'saved progress could not be read back' };
-        return { ok: true, id: envelope.id || id, savedAt: envelope.savedAt, counts: envelope.counts };
+        return sha256hex(blob).then(function (actual) {
+          if (actual !== digest) {
+            return { ok: false, error: 'checksum mismatch' };
+          }
+          if (!PGRE.store || typeof PGRE.store.importJSON !== 'function') {
+            return { ok: false, error: 'store import is unavailable' };
+          }
+          PGRE.store.importJSON(blob);
+          if (PGRE.store._persistFailed) {
+            return { ok: false, error: 'imported into this tab, but saving still fails' };
+          }
+          var readBack = null;
+          try { readBack = localStorage.getItem(PGRE.store.KEY); } catch (e) { readBack = null; }
+          if (!readBack) return { ok: false, error: 'saved progress could not be read back' };
+          return { ok: true, id: envelope.id || id, savedAt: envelope.savedAt, counts: envelope.counts };
+        });
       });
     });
   }
@@ -315,9 +367,13 @@ PGRE.backup = (function () {
     if (tokenInput && tokenInput !== document.activeElement) tokenInput.value = token();
     if (status) {
       var ack = PGRE.backup.lastAck;
-      status.textContent = ack
-        ? ('Last disk backup: ' + formatTime(ack.at || ack.savedAt))
-        : 'No disk backup has been acknowledged yet.';
+      if (!token()) {
+        status.textContent = 'No backup token is set. The browser safety copy still refreshes every 20 saves until a disk snapshot is verified. Paste the helper token to start disk snapshots.';
+      } else if (ack && ack.verified) {
+        status.textContent = 'Last disk backup: ' + formatTime(ack.at || ack.savedAt);
+      } else {
+        status.textContent = 'No disk backup has been verified yet. The browser safety copy still refreshes every 20 saves.';
+      }
     }
     if (warn) {
       if (PGRE.backup.lastError) {
@@ -465,6 +521,7 @@ PGRE.backup = (function () {
     fetchSnapshot: fetchSnapshot,
     restoreSnapshot: restoreSnapshot,
     exportCurrent: exportCurrent,
+    hasVerifiedSnapshot: hasVerifiedSnapshot,
     dropLegacyBackup: dropLegacyBackup,
     paint: paint,
     wireLibrary: wireLibrary,

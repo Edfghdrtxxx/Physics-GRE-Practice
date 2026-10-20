@@ -33,6 +33,7 @@ function sha256(text) {
 async function helpers(page) {
   var URL = process.env.PGRE_BACKUP_TEST_URL;
   var ENDPOINT = process.env.PGRE_BACKUP_HELPER_URL;
+  var FAKE = process.env.PGRE_BACKUP_FAKE_URL;
   var TOKEN = process.env.PGRE_BACKUP_TEST_TOKEN;
   function sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
   var h = { sleep: sleep };
@@ -62,6 +63,12 @@ async function helpers(page) {
       '; PGRE.backup.setToken(' + JSON.stringify(TOKEN) + '); }');
   };
 
+  h.configureFake = async function () {
+    await h.wait('!!(window.PGRE && PGRE.store && PGRE.backup)', 'PGRE.backup');
+    await page.eval('() => { PGRE.backup.endpoint = ' + JSON.stringify(FAKE) +
+      '; PGRE.backup.setToken(' + JSON.stringify(TOKEN) + '); }');
+  };
+
   h.seed = async function () {
     await page.eval(function () {
       var st = PGRE.store.state;
@@ -87,13 +94,52 @@ async function helpers(page) {
 }
 
 var STAGES = [
+  { name: 'without a disk helper, 25 saves still refresh the browser copy', size: '1100x900', shot: 'backup-no-token', run: async function (page, h) {
+    await page.open(process.env.PGRE_BACKUP_TEST_URL + '#/library');
+    await h.wait('!!document.getElementById("main")', '#main');
+    await h.seed();
+    await h.openLibrary();
+    var line = await page.eval('() => document.getElementById("backup-status") ? document.getElementById("backup-status").textContent : ""');
+    h.assert(line.indexOf('No backup token is set') !== -1, 'Library says no backup token is set');
+    await page.eval(function () {
+      for (var n = 0; n < 25; n++) {
+        PGRE.store.state.xp = 100 + n;
+        PGRE.store.save();
+      }
+    });
+    var info = JSON.parse(await page.eval(function () {
+      var raw = localStorage.getItem(PGRE.store.KEY + '-backup');
+      return JSON.stringify({
+        copy: raw ? JSON.parse(raw).xp : null,
+        primary: JSON.parse(localStorage.getItem(PGRE.store.KEY)).xp
+      });
+    }));
+    h.assert(info.primary === 124, 'primary reached the last of 25 saves');
+    h.assert(info.copy != null && info.copy !== 42,
+      'the browser copy refreshed during those saves, got ' + info.copy);
+  } },
+  { name: 'a bare ok true reply does not delete the browser copy', size: '1100x900', shot: 'backup-fake-ok', run: async function (page, h) {
+    await h.configureFake();
+    await h.seed();
+    await page.eval('() => { PGRE.store.state.xp = 50; PGRE.store.save(); }');
+    await h.sleep(600);
+    var info = JSON.parse(await page.eval(function () {
+      return JSON.stringify({
+        leftover: localStorage.getItem(PGRE.store.KEY + '-backup'),
+        verified: !!(PGRE.backup.hasVerifiedSnapshot && PGRE.backup.hasVerifiedSnapshot()),
+        error: PGRE.backup.lastError
+      });
+    }));
+    h.assert(!!info.leftover, 'the browser copy remains after a fake ok:true reply');
+    h.assert(!info.verified, 'a fake ok:true reply is not a verified snapshot');
+  } },
   { name: 'backup success and leftover copy removed after ack', size: '1100x900', shot: 'backup-success', run: async function (page, h) {
     await page.open(process.env.PGRE_BACKUP_TEST_URL + '#/library');
     await h.wait('!!document.getElementById("main")', '#main');
     await h.configure();
     await h.seed();
     await page.eval('() => { PGRE.store.save(); }');
-    await h.wait('!!(PGRE.backup.lastAck && PGRE.backup.lastAck.sha256)', 'an acknowledged disk backup');
+    await h.wait('!!(PGRE.backup.lastAck && PGRE.backup.lastAck.verified)', 'a verified disk backup');
     await h.openLibrary();
     var info = JSON.parse(await page.eval(function () {
       return JSON.stringify({
@@ -303,7 +349,22 @@ async function main() {
   var helperPort = await freePort();
   var helper = await startHelper(backupDir, helperPort, token);
   var helperUrl = 'http://127.0.0.1:' + helperPort + '/pgre-backup';
-  var PAGE_CSP = "connect-src 'self' http://127.0.0.1:" + helperPort + '; report-uri ' + CSP_REPORT_PATH;
+  var fake = http.createServer(function (req, res) {
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-PGRE-Client, X-PGRE-Backup-Token',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+    });
+    if (req.method === 'OPTIONS') { res.end(); return; }
+    var sink = '';
+    req.on('data', function (chunk) { sink += chunk; });
+    req.on('end', function () { res.end(JSON.stringify({ ok: true })); });
+  });
+  await new Promise(function (resolve) { fake.listen(0, '127.0.0.1', resolve); });
+  var fakePort = fake.address().port;
+  var PAGE_CSP = "connect-src 'self' http://127.0.0.1:" + helperPort +
+    ' http://127.0.0.1:' + fakePort + '; report-uri ' + CSP_REPORT_PATH;
   var bridge = { refused: 0 };
   var server = http.createServer(function (request, response) {
     var pathname = decodeURIComponent(request.url.split('?')[0]);
@@ -332,6 +393,7 @@ async function main() {
     CHROME_DEVTOOLS_AXI_BROWSER_URL: '',
     CHROME_DEVTOOLS_AXI_USER_DATA_DIR: profile,
     PGRE_BACKUP_HELPER_URL: helperUrl,
+    PGRE_BACKUP_FAKE_URL: 'http://127.0.0.1:' + fakePort + '/pgre-backup',
     PGRE_BACKUP_TEST_TOKEN: token
   });
   if (!env.CHROME_DEVTOOLS_AXI_MCP_PATH) {
@@ -370,6 +432,7 @@ async function main() {
     await run(['stop'], env).catch(function (error) { console.error(error.message); });
     await new Promise(function (resolve) { server.close(resolve); });
     try { helper.kill('SIGTERM'); } catch (e) {}
+    await new Promise(function (resolve) { fake.close(resolve); });
     fs.rmSync(profile, { recursive: true, force: true });
     fs.rmSync(backupDir, { recursive: true, force: true });
   }

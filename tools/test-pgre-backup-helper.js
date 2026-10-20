@@ -204,32 +204,58 @@ async function main() {
     }, null);
     assert(traversal.status === 400, 'a path-like id is refused');
 
-    console.log('\nretention keeps 12 recent plus a daily file');
+    console.log('\npage savedAt does not escape the backup folder');
+    var parentDir = path.dirname(dir);
+    var parentModeBefore = fs.statSync(parentDir).mode;
+    var escapeBlob = stateBlob({ _rev: 8, xp: 8 });
+    var escaped = await postSnap(port, token, escapeBlob, {
+      savedAt: 'x/..-/.-./Taa:bb:cc',
+      rev: 8
+    });
+    assert(escaped.status === 200, 'a slash-filled savedAt is still accepted as data');
+    assert(escaped.json && escaped.json.id && escaped.json.id.indexOf('/') === -1
+      && escaped.json.id.indexOf('..') === -1,
+      'the snapshot id has no path separators, got ' + (escaped.json && escaped.json.id));
+    assert(!fs.existsSync(path.join(parentDir, 'snap-x')),
+      'no snap-x folder is created beside the backup dir');
+    assert((fs.statSync(parentDir).mode) === parentModeBefore,
+      'the parent folder mode is unchanged');
+
+    console.log('\nretention uses the helper clock, not the page date');
     for (var i = 0; i < 14; i++) {
       var dayBlob = stateBlob({ _rev: 100 + i, xp: 100 + i });
-      var hour = (i % 10).toString().padStart(2, '0');
-      var savedAt = '2026-10-20T12:' + hour + ':' + String(i).padStart(2, '0') + 'Z';
-      var res = await postSnap(port, token, dayBlob, { savedAt: savedAt, rev: 100 + i });
+      var res = await postSnap(port, token, dayBlob, {
+        savedAt: '2099-01-01T12:' + String(i).padStart(2, '0') + ':00Z',
+        rev: 100 + i
+      });
       assert(res.status === 200, 'retention POST ' + i + ' acked');
+      assert(res.json.id.indexOf('2099') === -1,
+        'a far-future page savedAt does not name the file, got ' + res.json.id);
     }
     var oldBlob = stateBlob({ _rev: 5, xp: 1 });
-    var old = await postSnap(port, token, oldBlob, {
-      savedAt: '2026-09-01T12:00:00Z',
-      rev: 5
-    });
-    assert(old.status === 200, 'an older-day snapshot is accepted');
-    var recentBlob = stateBlob({ _rev: 200, xp: 200 });
-    var recent = await postSnap(port, token, recentBlob, {
-      savedAt: '2026-10-21T01:00:00Z',
+    var oldName = 'snap-20260901T120000Z-rev-5-aaaaaaaaaaaa.json';
+    fs.writeFileSync(path.join(dir, oldName), JSON.stringify({
+      schema: 1,
+      kind: 'pgre-progress-snapshot',
+      savedAt: '2099-01-01T00:00:00Z',
+      writtenAt: '2026-09-01T12:00:00Z',
+      sha256: sha256(oldBlob),
+      blob: oldBlob,
+      epoch: 1,
+      rev: 5,
+      counts: {}
+    }));
+    var trigger = await postSnap(port, token, stateBlob({ _rev: 200, xp: 200 }), {
+      savedAt: '2099-12-31T23:59:59Z',
       rev: 200
     });
-    assert(recent.status === 200, 'a newer-day snapshot is accepted');
+    assert(trigger.status === 200, 'a prune-trigger POST is acknowledged');
     var kept = fs.readdirSync(dir).filter(function (n) { return n.startsWith('snap-'); });
     assert(kept.length <= 14, 'retention pruned extra same-day files, kept ' + kept.length);
-    assert(kept.some(function (n) { return n.indexOf('20261021') !== -1; }),
-      'the newest day is kept');
     assert(kept.every(function (n) { return n.indexOf('20260901') === -1; }),
-      'a snapshot older than 30 days is pruned after a newer validated snapshot');
+      'a snapshot older than 30 helper-clock days is pruned after a newer validated snapshot');
+    assert(kept.every(function (n) { return n.indexOf('2099') === -1; }),
+      'page-supplied future dates do not appear in file names');
 
     console.log('\nhelper stays inside the temp directory');
     assert(dir.indexOf(ORBITOS) === -1, 'the test directory is not ~/.orbitos');

@@ -77,11 +77,18 @@ def ensure_dir(path):
 
 
 def write_atomically(path, payload):
-    """Write payload, flush, fsync, chmod 0600, then replace."""
-    ensure_dir(path.parent)
+    """Write payload, flush, fsync, chmod 0600, then replace.
+
+    path must already resolve to a file whose parent is BACKUP_DIR.
+    """
+    backup = BACKUP_DIR.resolve()
+    dest = path.resolve()
+    if dest.parent != backup:
+        raise ValueError("path escapes backup folder")
+    ensure_dir(backup)
     fd, temporary_name = tempfile.mkstemp(
-        dir=str(path.parent),
-        prefix=".{0}.".format(path.name),
+        dir=str(backup),
+        prefix=".{0}.".format(dest.name),
     )
     try:
         with os.fdopen(fd, "wb") as temporary_file:
@@ -89,8 +96,8 @@ def write_atomically(path, payload):
             temporary_file.flush()
             os.fsync(temporary_file.fileno())
         os.chmod(temporary_name, 0o600)
-        os.replace(temporary_name, path)
-        os.chmod(path, 0o600)
+        os.replace(temporary_name, dest)
+        os.chmod(dest, 0o600)
     finally:
         try:
             os.unlink(temporary_name)
@@ -151,19 +158,32 @@ def counts_from_state(state):
     }
 
 
-def snapshot_id(saved_at, rev, digest):
-    # saved_at is YYYY-MM-DDTHH:MM:SSZ -> YYYYMMDDTHHMMSSZ
+def snapshot_id(written_at, rev, digest):
+    # written_at is the helper's UTC clock, YYYY-MM-DDTHH:MM:SSZ
     stamp = (
-        saved_at[0:4]
-        + saved_at[5:7]
-        + saved_at[8:10]
+        written_at[0:4]
+        + written_at[5:7]
+        + written_at[8:10]
         + "T"
-        + saved_at[11:13]
-        + saved_at[14:16]
-        + saved_at[17:19]
+        + written_at[11:13]
+        + written_at[14:16]
+        + written_at[17:19]
         + "Z"
     )
     return "snap-{0}-rev-{1}-{2}".format(stamp, int(rev), digest[:12])
+
+
+def backup_file(name):
+    """Resolve a snapshot filename inside BACKUP_DIR or raise ValueError."""
+    if not isinstance(name, str) or "/" in name or "\\" in name or name in (".", ".."):
+        raise ValueError("invalid snapshot name")
+    if not SNAP_NAME.match(name):
+        raise ValueError("invalid snapshot name")
+    backup = BACKUP_DIR.resolve()
+    path = (backup / name).resolve()
+    if path.parent != backup:
+        raise ValueError("path escapes backup folder")
+    return path
 
 
 def list_snapshot_files():
@@ -191,7 +211,9 @@ def metadata_of(path, envelope=None):
     return {
         "id": path.name[:-5] if path.name.endswith(".json") else path.name,
         "file": path.name,
-        "savedAt": envelope.get("savedAt"),
+        "savedAt": envelope.get("writtenAt") or envelope.get("savedAt"),
+        "pageSavedAt": envelope.get("savedAt"),
+        "writtenAt": envelope.get("writtenAt"),
         "epoch": envelope.get("epoch"),
         "rev": envelope.get("rev"),
         "sha256": envelope.get("sha256"),
@@ -210,8 +232,10 @@ def prune_snapshots(keep_path):
     for path in files:
         try:
             envelope = read_envelope(path)
-            saved_at = str(envelope.get("savedAt") or "")
-            records.append((saved_at, path.name, path))
+            written_at = str(
+                envelope.get("writtenAt") or envelope.get("savedAt") or ""
+            )
+            records.append((written_at, path.name, path))
         except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
             continue
     records.sort()
@@ -342,10 +366,11 @@ class BackupHandler(BaseHTTPRequestHandler):
         snap_id = (query.get("id") or [""])[0].strip()
         if snap_id:
             name = snap_id if snap_id.endswith(".json") else snap_id + ".json"
-            if not SNAP_NAME.match(name):
+            try:
+                path = backup_file(name)
+            except ValueError:
                 self.send_error_json(400, "invalid snapshot id")
                 return
-            path = BACKUP_DIR / name
             try:
                 envelope = read_envelope(path)
             except FileNotFoundError:
@@ -370,7 +395,10 @@ class BackupHandler(BaseHTTPRequestHandler):
                 snapshots.append(metadata_of(path))
             except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
                 continue
-        snapshots.sort(key=lambda row: str(row.get("savedAt") or ""), reverse=True)
+        snapshots.sort(
+            key=lambda row: str(row.get("writtenAt") or row.get("savedAt") or ""),
+            reverse=True,
+        )
         self.send_json(200, {"ok": True, "snapshots": snapshots})
 
     def read_body(self):
@@ -450,18 +478,24 @@ class BackupHandler(BaseHTTPRequestHandler):
         except (TypeError, ValueError):
             self.send_error_json(400, "epoch and rev must be numbers")
             return
-        saved_at = body.get("savedAt")
-        if not isinstance(saved_at, str) or len(saved_at) < 19:
-            saved_at = iso_z(utc_now())
+        page_saved_at = body.get("savedAt")
+        if not isinstance(page_saved_at, str):
+            page_saved_at = ""
+        written_at = iso_z(utc_now())
         origin = body.get("origin")
         if not isinstance(origin, str):
             origin = ""
-        snap_id = snapshot_id(saved_at, rev, actual)
-        path = BACKUP_DIR / (snap_id + ".json")
+        snap_id = snapshot_id(written_at, rev, actual)
+        try:
+            path = backup_file(snap_id + ".json")
+        except ValueError:
+            self.send_error_json(400, "invalid snapshot id")
+            return
         envelope = {
             "schema": SCHEMA,
             "kind": KIND,
-            "savedAt": saved_at,
+            "savedAt": page_saved_at,
+            "writtenAt": written_at,
             "origin": origin,
             "epoch": epoch,
             "rev": rev,
@@ -473,13 +507,18 @@ class BackupHandler(BaseHTTPRequestHandler):
             json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
             + "\n"
         ).encode("utf-8")
-        write_atomically(path, payload)
+        try:
+            write_atomically(path, payload)
+        except ValueError:
+            self.send_error_json(400, "path escapes backup folder")
+            return
         prune_snapshots(path)
         ack = {
             "ok": True,
             "id": snap_id,
             "file": path.name,
-            "savedAt": saved_at,
+            "savedAt": page_saved_at,
+            "writtenAt": written_at,
             "sha256": actual,
             "epoch": epoch,
             "rev": rev,

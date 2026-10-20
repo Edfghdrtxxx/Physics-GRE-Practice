@@ -960,6 +960,14 @@ PGRE.store = {
         this._persistFailed = false;
         if (PGRE.persistWarning) PGRE.persistWarning(false);
       }
+      var diskVerified = PGRE.backup
+        && typeof PGRE.backup.hasVerifiedSnapshot === 'function'
+        && PGRE.backup.hasVerifiedSnapshot();
+      if (!diskVerified && this.state._rev % 20 === 0) {
+        try {
+          localStorage.setItem(this.KEY + '-backup', blob);
+        } catch (be) { /* browser copy is best-effort — do not flip _persistFailed */ }
+      }
       try {
         if (PGRE.backup && typeof PGRE.backup.noteCommitted === 'function') {
           PGRE.backup.noteCommitted(blob);
