@@ -1371,6 +1371,37 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 .drill-palette .drill-legend {
   flex-direction: row; flex-wrap: wrap; gap: 16px; border-top: none; padding-top: 12px;
 }
+.practice-card .drill-palette + h2 { margin-top: 22px; }
+.record-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+.record-kicker-line {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-3);
+}
+.chip.record-past {
+  font-size: 11px;
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid var(--line);
+  padding: 2px 8px;
+}
+.record-missing {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--ctl-r);
+  background: var(--ivory);
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
 .pal-swatch.sw-correct { background: var(--good-tint); border-color: var(--good); }
 .pal-swatch.sw-wrong { background: var(--bad-tint); border-color: var(--bad); }
 
@@ -1379,14 +1410,70 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 .hist-session summary {
   cursor: pointer;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   font-size: 14px;
 }
 .hist-sess-when { color: var(--ink-3); font-size: 12.5px; white-space: nowrap; }
-.hist-sess-score { font-weight: 700; }
+.hist-sess-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-sess-score { font-weight: 700; white-space: nowrap; }
 .hist-sess-meta { margin-left: auto; color: var(--ink-3); font-size: 12.5px; white-space: nowrap; }
+.hist-session summary .hist-drill-open,
+.hist-session summary .hist-set-open {
+  margin: 0;
+  align-self: center;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+}
+.hist-review-chev {
+  color: var(--ink-3);
+  margin-left: 0.35em;
+}
+.hist-drill-open::after,
+.hist-set-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(105deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.6) 50%,
+    transparent 100%);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  background-position: 160% 0;
+  opacity: 0;
+}
+[data-theme="dark"] .hist-drill-open::after,
+[data-theme="dark"] .hist-set-open::after {
+  background-image: linear-gradient(105deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.28) 50%,
+    transparent 100%);
+}
+.hist-drill-open:hover::after,
+.hist-set-open:hover::after,
+.hist-drill-open:focus-visible::after,
+.hist-set-open:focus-visible::after {
+  animation: hist-review-sheen 0.8s ease-out 1;
+}
+.hist-drill-open.hist-review-sheen-mid::after,
+.hist-set-open.hist-review-sheen-mid::after {
+  opacity: 1;
+  background-position: 30% 0;
+  animation: none;
+}
+@keyframes hist-review-sheen {
+  from { opacity: 1; background-position: 160% 0; }
+  to   { opacity: 0.45; background-position: -40% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hist-drill-open::after,
+  .hist-set-open::after { content: none; animation: none; }
+}
 .hist-rows { margin-top: 10px; border-top: 1px solid var(--line); }
 .hist-row {
   display: flex;
