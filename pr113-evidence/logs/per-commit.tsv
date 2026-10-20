@@ -40,3 +40,15 @@ ed0b886	test-ux-interaction	ALL OK
 3be83d5	test-srs-intervals	243 passed, 0 failed
 3be83d5	test-store-persist	75 passed, 0 failed
 3be83d5	test-ux-interaction	ALL OK
+e8fae3d	test-recall-schedule-chrome-1	ALL OK
+e8fae3d	test-recall-schedule-chrome-2	ALL OK
+e8fae3d	test-session-park	100 passed, 0 failed
+e8fae3d	test-srs-intervals	243 passed, 0 failed
+e8fae3d	test-store-persist	75 passed, 0 failed
+e8fae3d	test-ux-interaction	ALL OK
+b9800d1	test-recall-schedule-chrome-1	ALL OK
+b9800d1	test-recall-schedule-chrome-2	ALL OK
+b9800d1	test-session-park	100 passed, 0 failed
+b9800d1	test-srs-intervals	243 passed, 0 failed
+b9800d1	test-store-persist	75 passed, 0 failed
+b9800d1	test-ux-interaction	ALL OK

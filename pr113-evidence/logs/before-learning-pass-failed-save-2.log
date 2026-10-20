@@ -1,0 +1,12 @@
+
+a learning-pass press whose save fails stays on screen
+PASS: saving worked until this press, and the failed write is noticed
+BROWSER_TEST_FAILED: Error: the new card stays on screen with its answer open and no grade marked (on screen: lf-c)
+    at h.assert (file://<temp dir>)
+    at file://<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file://<temp dir>
+
+once saving works the same learning pass goes through
+PASS: once saving works, the same Good moves on and stores learning step 1, with the card later in the queue
+FAILED stages: a learning-pass press whose save fails stays on screen

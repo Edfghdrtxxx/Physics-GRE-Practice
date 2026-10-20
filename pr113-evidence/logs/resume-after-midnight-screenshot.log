@@ -1,0 +1,7 @@
+
+probe: the resumed session after midnight, on screen
+OBSERVED graded before midnight: ro-c; after Resume: line "Card 2 of 4 · 1 done · 3 left", queue ro-b, ro-a, ro-d, boxes {"ro-c":{"grade":"good"},"ro-b":{"grade":""},"ro-a":{"grade":""},"ro-d":{"grade":""}}
+
+PASS: the status bridge on port 4789 received nothing (Chrome refused the request on 1 page load(s))
+
+ALL OK

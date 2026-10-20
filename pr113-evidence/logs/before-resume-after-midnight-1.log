@@ -1,0 +1,12 @@
+
+after midnight the open session and its Resume take in new-day cards, not a card it graded
+PASS: Good before midnight gives ro-c a 1-day interval and takes it out of the session; ro-d, due the same day, is not in the session
+PASS: on the new day ro-c and ro-d are both on today's remaining list
+PASS: the open session takes in ro-d but not ro-c, which it graded (queue: ro-b, ro-a, ro-d)
+PASS: Resume continues the same session (Card 2 of 4 · 1 done · 4 left)
+BROWSER_TEST_FAILED: Error: after Resume the session still holds ro-d and not ro-c (queue: ro-b, ro-a, ro-d, ro-c)
+    at h.assert (file://<temp dir>)
+    at file://<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file://<temp dir>
+FAILED stages: after midnight the open session and its Resume take in new-day cards, not a card it graded
