@@ -21,7 +21,7 @@ function assert(cond, msg) {
   else { failed++; console.log('  FAIL — ' + msg); }
 }
 
-var CONFIRM_TEXT = 'Replace the current progress with the last browser safety copy? Progress saved after that copy (up to 19 saves) will be lost.';
+var CONFIRM_TEXT = 'Replace the current progress with the last browser safety copy? Progress saved after that copy will be lost.';
 
 function fakeEl(id) {
   var el = {
