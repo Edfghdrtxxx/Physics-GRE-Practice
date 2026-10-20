@@ -1,0 +1,9 @@
+
+a regrade to Again whose save fails keeps the stored Good
+PASS: Good stores 3 reviews
+BROWSER_TEST_FAILED: Error: the regrade did not reach storage, and memory keeps Good too (3 reviews)
+    at h.assert (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+FAILED stages: a regrade to Again whose save fails keeps the stored Good

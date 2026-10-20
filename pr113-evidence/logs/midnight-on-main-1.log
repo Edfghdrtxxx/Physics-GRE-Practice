@@ -1,0 +1,10 @@
+
+after midnight the open session takes in new-day cards, not a card it graded
+PASS: Good before midnight gives ro-c a 1-day interval and takes it out of the session; ro-d, due the same day, is not in the session
+PASS: on the new day ro-c and ro-d are both on today's remaining list
+PASS: the open session takes in ro-d but not ro-c, which it graded (queue: ro-b, ro-a, ro-d)
+PASS: ro-c is not shown again before the session ends, and ro-d is (shown: ro-b, ro-a, ro-d)
+
+PASS: the status bridge on port 4789 received nothing (Chrome refused the request on 1 page load(s))
+
+ALL OK

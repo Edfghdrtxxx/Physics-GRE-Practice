@@ -1,0 +1,130 @@
+
+regrade Good to Again puts the card back in the session
+PASS: live good leaves 0 copy of the card in the queue
+PASS: regrade to Again stores Again, due today
+BROWSER_TEST_FAILED: Error: the card is in the queue once, at the end (queue: rg-c, rg-b)
+    at h.assert (file:///private<temp dir>
+    at h.regradeTrial (file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+    at async file:///private<temp dir>
+
+regrade Hard to Again puts the card back in the session
+PASS: live hard leaves 0 copy of the card in the queue
+PASS: regrade to Again stores Again, due today
+BROWSER_TEST_FAILED: Error: the card is in the queue once, at the end (queue: rg-c, rg-b)
+    at h.assert (file:///private<temp dir>
+    at h.regradeTrial (file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+    at async file:///private<temp dir>
+
+regrade a requeued card: live Again, then Hard, then Again
+PASS: live again leaves 1 copy of the card in the queue
+PASS: regrade to hard schedules a later day and takes the card out of the queue
+PASS: regrade to Again stores Again, due today
+BROWSER_TEST_FAILED: Error: the card is in the queue once, at the end (queue: rg-a, rg-b)
+    at h.assert (file:///private<temp dir>
+    at h.regradeTrial (file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+    at async file:///private<temp dir>
+
+regrade from Again to Good takes the repeat out of the session
+PASS: live again leaves 1 copy of the card in the queue
+PASS: regrade to good schedules a later day and takes the card out of the queue
+PASS: the card is shown 0 more time(s) before the session ends (shown: rg-b, rg-a)
+PASS: the session ends
+PASS: the card ends scheduled for a later day
+BROWSER_TEST_FAILED: Error: the summary counts 0 card that came back
+    at h.assert (file:///private<temp dir>
+    at h.regradeTrial (file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+    at async file:///private<temp dir>
+
+regrade Good to Again: the card is back on screen later in the session
+PASS: leaving the regrade view shows the live card (rs-c), not the Again card
+BROWSER_TEST_FAILED: Error: the card regraded to Again is the live card again, its box still marked Again ()
+    at h.assert (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+
+regrade a new card from Easy to Again starts its learning over
+PASS: Easy on a new card schedules it 4 days out
+BROWSER_TEST_FAILED: Error: the regrade to Again leaves the card with no schedule, as a live Again on a new card does
+    at h.assert (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+
+a Study grade whose save fails stays on screen, unrecorded
+PASS: saving worked until this press
+PASS: the failed write is noticed (canWrite is false)
+PASS: the stored card still has 2 reviews
+BROWSER_TEST_FAILED: Error: the card stays on screen and in the queue (on screen: fs-b)
+    at h.assert (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+
+once saving works the same Good goes through, and a reload keeps it
+PASS: saving works again with the same card on screen
+PASS: Good now stores 3 reviews and moves on
+PASS: after a reload and Resume the graded card is not in the queue
+
+a Study Undo whose save fails keeps the stored grade
+PASS: Good stores 3 reviews and takes the card out
+BROWSER_TEST_FAILED: Error: the undo did not reach storage, and memory keeps the grade too (3 reviews)
+    at h.assert (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+
+a regrade to Again whose save fails keeps the stored Good
+PASS: Good stores 3 reviews
+BROWSER_TEST_FAILED: Error: the regrade did not reach storage, and memory keeps Good too (3 reviews)
+    at h.assert (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+
+a Type grade whose save fails stays on screen, unrecorded
+BROWSER_TEST_FAILED: Error: Type: the failed save leaves the card ungraded in storage and in memory
+    at h.assert (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+
+after midnight the open session takes in new-day cards, not a card it graded
+PASS: Good before midnight gives ro-b a 1-day interval and takes it out of the session; ro-d, due the same day, is not in the session
+PASS: on the new day ro-b and ro-d are both on today's remaining list
+PASS: the open session takes in ro-d but not ro-b, which it graded (queue: ro-c, ro-a, ro-d)
+PASS: ro-b is not shown again before the session ends, and ro-d is (shown: ro-c, ro-a, ro-d)
+
+a stale tab adopts a sibling's Add before its own Add
+PASS: the stale tab had not seen the first Add
+BROWSER_TEST_FAILED: Error: today's stored list keeps both Adds (sa-first)
+    at h.assert (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+
+a stale tab's Add does not bring back a card a sibling removed
+PASS: the stale tab still listed the removed card
+BROWSER_TEST_FAILED: Error: today's stored list keeps the removal and the Add (sr-gone, sr-keep, sr-new)
+    at h.assert (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+
+a stale tab's Again is kept over a sibling's earlier Good
+PASS: the sibling stored Again then Good (4 reviews)
+PASS: the stale tab still had 2 reviews when Again was pressed
+BROWSER_TEST_FAILED: Error: the stored card is the later Again, due today, on top of the sibling's 4 reviews (got good, 2026-10-21, 4)
+    at h.assert (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+FAILED stages: regrade Good to Again puts the card back in the session; regrade Hard to Again puts the card back in the session; regrade a requeued card: live Again, then Hard, then Again; regrade from Again to Good takes the repeat out of the session; regrade Good to Again: the card is back on screen later in the session; regrade a new card from Easy to Again starts its learning over; a Study grade whose save fails stays on screen, unrecorded; a Study Undo whose save fails keeps the stored grade; a regrade to Again whose save fails keeps the stored Good; a Type grade whose save fails stays on screen, unrecorded; a stale tab adopts a sibling's Add before its own Add; a stale tab's Add does not bring back a card a sibling removed; a stale tab's Again is kept over a sibling's earlier Good

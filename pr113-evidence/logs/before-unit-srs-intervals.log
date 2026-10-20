@@ -1,0 +1,304 @@
+new cards
+  ok  — stateless: Hard/Good 1 d, Easy 4 d
+  ok  — stateless: Hard ≤ Good ≤ Easy
+  ok  — reps=0 uses the new-card Easy interval of 4
+
+review after Easy (the screenshot inversion)
+  ok  — ivl=10: Hard = round(10×1.2) = 12
+  ok  — ivl=10 ease=2.5: Good = round(10×2.5) = 25, not 3
+  ok  — ivl=10: Easy = round(10×2.5×1.3) = 33
+  ok  — after Easy: Hard ≤ Good ≤ Easy (uncapped)
+  ok  — ivl=10: strict monotonicity Again < Hard < Good < Easy
+
+horizon examCap: uncapped vs clamped
+  ok  — exam in 65 days → horizon cap 64
+  ok  — horizon cap 64: ivl=10 produces 12, 25, 33 (uncapped since 33 <= 64)
+  ok  — horizon cap 64: Again < Hard < Good < Easy strictly monotonic
+  ok  — exam in 51 days → cap 50
+  ok  — cap 50: large ivl (raw easy=130) produces easy=50, good=49, hard=48 with strict inequality
+  ok  — cap 50: Again < Hard < Good < Easy strict monotonicity preserved
+  ok  — exam in 14 days → cap 13
+  ok  — cap 13: Hard 11, Good 12, Easy 13 (backward cascade preserves Hard < Good < Easy)
+  ok  — cap 13: strict monotonicity Again < Hard < Good < Easy
+  ok  — after Easy + cap: Hard ≤ Good ≤ Easy
+
+cap switch
+  ok  — formulaExamCap false → examCap is null
+  ok  — uncapped switch: Good/Easy keep full Anki length even with an exam date set
+  ok  — missing formulaExamCap key still caps (default ON)
+
+first review after graduating Good (interval 1)
+  ok  — ivl=1 ease=2.5: Hard 2, Good 3, Easy 4 (Hard at least current+1)
+  ok  — young review: ordered
+  ok  — Anki rust test: ivl=1 ease=1.3 → Hard 2, Good 3, Easy 4
+  ok  — ivl=2 ease=2.5: Hard 3 (not 2), Good 5, Easy 7
+
+low ease never inverts
+  ok  — ease at floor 1.3: Hard ≤ Good ≤ Easy
+  ok  — constrainedIvl: Good at least Hard
+  ok  — constrainedIvl: Easy at least Good
+
+overdue review gets Anki days-late bonus on Good/Easy, not Hard
+  ok  — 4 days late: Hard still round(10×1.2)=12 (no late bonus)
+  ok  — Good = round((10+4/2)×2.5)=30
+  ok  — Easy = round((10+4)×2.5×1.3)=46
+  ok  — overdue: ordered
+
+gradeCard writes the previewed interval
+  ok  — gradeCard Good stores the same interval nextIntervals previewed (25)
+  ok  — gradeCard Good is not the old hardcoded 3-day shortcut
+
+examCap horizon edge cases
+  ok  — exam today (days=0) → null
+  ok  — exam tomorrow (days=1) → null
+  ok  — exam in past (days=-2) → null
+  ok  — invalid exam date → null
+  ok  — exam in 2 days → cap 1
+  ok  — exam in 3 days → cap 2
+  ok  — exam in 4 days → cap 3
+
+matureDays: exam-horizon solid-enough threshold
+  ok  — 19 days left → min(21, examCap 18) = 18 (got 18)
+  ok  — 19 days left → min(21, examCap 18) = 18: threshold never 0
+  ok  — 8 days left → min(21, examCap 7) = 7 (got 7)
+  ok  — 8 days left → min(21, examCap 7) = 7: threshold never 0
+  ok  — 7 days left (final-pass start) → min(21, examCap 6) = 6 (got 6)
+  ok  — 7 days left (final-pass start) → min(21, examCap 6) = 6: threshold never 0
+  ok  — 2 days left → examCap 1, threshold 1 (got 1)
+  ok  — 2 days left → examCap 1, threshold 1: threshold never 0
+  ok  — exam eve (days=1, examCap null) → 1 (got 1)
+  ok  — exam eve (days=1, examCap null) → 1: threshold never 0
+  ok  — exam day → classic 21
+  ok  — past exam date → classic 21
+  ok  — invalid exam date → classic 21
+  ok  — cap off → examCap null
+  ok  — formulaExamCap false → classic 21
+  ok  — exam eve: a just-passed card (interval 1) stores m=1
+  ok  — final week with cap 1: interval 1 stores m=1
+  ok  — 19 days left: interval 18 stores m=1
+  ok  — 19 days left: interval 17 stores m=0
+
+backward cascade clamping: cap < 3 vs cap >= 3
+  ok  — cap 2 clamps all to at most 2
+  ok  — cap 7 cascades to easy=7, good=6, hard=5
+  ok  — final pass holds all grades at 1 day
+
+store.resetFormulaCards
+  ok  — cards reset to empty object
+  ok  — cardReviews reset to empty array
+  ok  — formulaDay reset to null
+  ok  — formulaStudy reset to null
+  ok  — formulaSuspended reset to empty object
+  ok  — reset leaves easy10 satisfied (was: flag deleted, re-arming the migration)
+  ok  — attempts preserved
+  ok  — mistakes preserved
+  ok  — settings.theme preserved
+
+store.load and importJSON ankiReset2026 migration
+  ok  — load() resets cards when ankiReset2026 missing
+  ok  — load() stamps ankiReset2026
+  ok  — load() preserves non-card state
+  ok  — load() does not re-reset after ankiReset2026 stamped
+  ok  — importJSON() resets cards when ankiReset2026 missing
+  ok  — importJSON() stamps ankiReset2026
+  ok  — importJSON() preserves attempts
+
+S1 refused gradeCard returns null and changes nothing
+  ok  — refused gradeCard returns null
+  ok  — refused grade leaves the card unchanged
+  ok  — refused grade appends no review row
+  ok  — refused grade leaves softIds unchanged
+
+S11 a committed grade consumes the soft pin
+  ok  — accepted grade carries lastReviewOpId
+  ok  — accepted grade removes that id from softIds
+  ok  — a different pin is left in place
+  ok  — the review log row carries the same op
+  ok  — a pin consumed on the grade day is not owed on a later day
+
+S4 undo names the op and will not erase a newer grade
+  ok  — undoReview of the latest op returns ok and a null card when the grade created it
+  ok  — undo removes a card the grade created
+  ok  — a sibling copy of the undone grade does not come back
+  ok  — the undone op is not resurrected in the review log
+  ok  — undoReview refuses an op a later grade superseded
+  ok  — the newer Again is still the card
+  ok  — the newer op is still lastReviewOpId
+
+S6 reset does not re-arm easy10, and current-scheme cards are not stretched
+  ok  — resetFormulaCards keeps an existing easy10 stamp
+  ok  — a new Easy outside final pass is 4 days
+  ok  — gradeCard marks the card as the current scheme
+  ok  — reload does not stretch a current-scheme Easy to 10
+  ok  — reload keeps the 4-day due date
+  ok  — migrateEasy10 does not stretch a card graded under the current scheme
+  ok  — migrateEasy10 still stamps the flag when it was absent
+  ok  — a legacy Easy without scheme is still migrated once
+  ok  — the current-scheme Easy stays 4 while a legacy card is migrated
+  ok  — an Easy reviewed on 2026-10-01 is not stretched when scheme is missing
+  ok  — a final-pass Easy reviewed on 2026-09-07 is not stretched when scheme is missing
+  ok  — final-pass Easy is 1 day
+  ok  — reload does not stretch a final-pass Easy to 10
+  ok  — reload keeps the final-pass due date
+
+S8 import repairs a missing due and a malformed batch without throwing
+  ok  — import of a batch with null reviewIds does not throw
+  ok  — a card with no due is repaired to a date
+  ok  — the repaired card is due instead of invisible
+  ok  — the repaired card is offered as a due review
+  ok  — formulaDayRemaining does not throw on the repaired batch
+  ok  — null reviewIds was replaced with an array
+  ok  — import of a string reviewIds does not throw
+  ok  — formulaDayRemaining does not throw after a string reviewIds import
+  ok  — a non-array reviewIds becomes an empty id list
+
+F7 duplicate daily ids collapse to one occurrence
+  ok  — a duplicated id is kept once on the review list when it has state
+  ok  — the same id is not also left on the new list
+  ok  — softIds keeps the duplicated pin at most once
+  ok  — a soft pin for an id outside the batch is dropped
+  ok  — a duplicated id with no card state is kept once on the new list
+
+A1 a grade does not replace a sibling add, and the pin stays consumed
+  ok  — a missed-event add stays in the batch after the grade
+  ok  — a missed-event new id stays in the batch after the grade
+  ok  — the consumed pin does not come back from the stale batch
+  ok  — the grade does not restamp the batch
+  ok  — addFormulaDaySoft can pin that id again after the grade
+  ok  — the later pin survives a merge against the consume fact
+  ok  — the re-pin keeps the sibling id
+
+A2 shipped undo still shows a saved soft pin
+  ok  — the saved pin starts with no hold field
+  ok  — normalize stamps a hold for the saved pin
+  ok  — the pin not studied today receives the hold
+  ok  — normalize does not stamp a card already studied today
+  ok  — gradeCard clears the hold only on the card it commits
+  ok  — the pre-grade snapshot still has the hold
+  ok  — restoring the snapshot and popping the log row keeps the pin in formulaDayRemaining
+  ok  — the studied-today filter clears the hold
+  ok  — the studied-today filter drops that pin
+
+A3 chained undos rewind a sibling that still has both grades
+  ok  — undo of Again is accepted
+  ok  — undo of the earlier Good is accepted
+  ok  — both undos restore the pre-grade card locally
+  ok  — the sibling copy rewinds past the intermediate Good
+  ok  — the sibling copy keeps the pre-grade due
+
+A5 final pass keeps a prototype-name id
+  ok  — final pass still appends an ordinary learned card
+  ok  — final pass appends a learned card whose id is constructor
+
+B1 picker Save re-pins a consumed id, and a later stale batch does not
+  ok  — a later stale batch keeps its new id
+  ok  — a later stale batch does not resurrect the consumed pin
+  ok  — picker Save puts the consumed id back in softIds
+  ok  — picker Save records a restored fact later than the consume
+  ok  — a merge of the pre-pick snapshot still owes the re-pinned card
+
+B2 taking a card off today clears its soft hold
+  ok  — the pinned card starts with a hold
+  ok  — a pin that stays in the batch keeps its hold
+  ok  — unchecking the pin clears its hold
+  ok  — an exam three days out is the final pass
+  ok  — a far exam turns the final pass off
+  ok  — after the final pass ends the unchecked pin is not owed
+  ok  — removeFormulaDaySoft clears the hold on the id it drops
+  ok  — after the final pass ends a removed pin is not owed
+
+C unchecking a re-pinned card consumes the pin across a merge
+  ok  — picker Save of the graded card records restored
+  ok  — picker Save stamps a hold on the pin it keeps
+  ok  — a first pin that stays has no pin fact
+  ok  — unchecking the restored pin records consumed
+  ok  — a pin that stays is not given a consumed fact
+  ok  — a pin that stays keeps its hold
+  ok  — unchecking the restored pin clears its hold
+  ok  — the unchecked pin leaves the batch
+  ok  — the merge sequence starts with final pass on
+  ok  — the merge does not soft-pin the removed card during the final week
+  ok  — final pass still owes the removed card while the week is on
+  ok  — moving the exam to 2027-06-01 ends the final pass
+  ok  — after the week the removed card is not owed
+  ok  — after the week the removed card is not soft-pinned
+  ok  — removeFormulaDaySoft records consumed for a restored pin
+  ok  — removeFormulaDaySoft still clears the hold
+  ok  — removeFormulaDaySoft takes the restored pin off the batch
+  ok  — the merge does not soft-pin the removed card during the final week
+  ok  — final pass still owes the removed card while the week is on
+  ok  — moving the exam to 2027-06-01 ends the final pass
+  ok  — after the week the removed card is not owed
+  ok  — after the week the removed card is not soft-pinned
+
+T soft pin, pin fact, and hold transitions
+  ok  — add first pin [1 1 1 - 1]
+  ok  — grade consumes the pin and clears the live hold [1 0 0 consumed 0]
+  ok  — undoReview of that grade is accepted
+  ok  — undoReview restores the pin and the hold [1 1 1 restored 1]
+  ok  — add after a consume records restored and a hold [1 1 1 restored 1]
+  ok  — a first pin added beside it has a hold and no fact [1 1 1 - 1]
+  ok  — picker keeps a restored pin [1 1 1 restored 1]
+  ok  — picker keeps the other pin [1 1 1 - 1]
+  ok  — remove of a restored pin consumes it [0 0 0 consumed 0]
+  ok  — remove of one pin leaves the other [1 1 1 - 1]
+  ok  — picker re-pin of a consumed id restores it and stamps a hold [1 1 1 restored 1]
+  ok  — shipped undo after a picker pin still owes the card [1 1 1 restored 1]
+  ok  — picker uncheck consumes the restored pin [0 0 0 consumed 0]
+  ok  — picker uncheck does not consume the pin that stays [1 1 1 - 1]
+  ok  — final pass appends the consumed card without soft-pinning it [1 0 0 consumed 1]
+  ok  — a newer stale batch keeps its extra id
+  ok  — a newer stale batch does not restore a consumed pin [1 0 0 consumed 1]
+  ok  — after the week the consumed card is not owed [0 0 0 consumed 0]
+  ok  — a newer batch that dropped the other pin cleared its hold [0 0 0 - 0]
+
+S put away consumes a restored pin across a merge
+  ok  — the suspend sequence starts from a restored pin
+  ok  — the suspend sequence starts with a hold
+  ok  — suspendCard records consumed for a restored pin
+  ok  — suspendCard clears the hold
+  ok  — suspendCard takes the pin off the batch
+  ok  — suspendCard takes the pin out of softIds
+  ok  — suspendCard does not stamp the batch
+  ok  — suspendCard still marks the card suspended
+  ok  — unsuspendCard clears the suspended flag
+  ok  — unsuspend does not restore the pin fact
+  ok  — unsuspend does not put the card back on today
+  ok  — the suspend merge starts with final pass on
+  ok  — the merge does not soft-pin the removed card during the final week
+  ok  — final pass still owes the removed card while the week is on
+  ok  — moving the exam to 2027-06-01 ends the final pass
+  ok  — after the week the removed card is not owed
+  ok  — after the week the removed card is not soft-pinned
+  ok  — a first pin still has no fact before suspend
+  ok  — suspend of a first pin records no fact
+  ok  — suspend of a first pin still clears the hold
+  ok  — final pass still owes the unsuspended first pin while the week is on
+  ok  — a first pin is not soft-pinned by final pass
+  ok  — a merge does not soft-pin a first pin
+  ok  — after the week a suspended first pin is not owed
+  ok  — after the week a suspended first pin is not soft-pinned
+  ok  — the first pin still has no fact after the merge
+  ok  — suspend of an already consumed pin does not record another fact
+  ok  — suspend of an id that is not in the batch records no fact
+  ok  — suspend does not consume a restored pin that was already off the batch
+
+U each drop path records consumed through one helper
+  ok  — picker uncheck consumes the restored pin [0 0 0 consumed 0]
+  ok  — picker uncheck leaves the pin that stays [1 1 1 - 1]
+  ok  — removeFormulaDaySoft consumes the restored pin [0 0 0 consumed 0]
+  ok  — removeFormulaDaySoft leaves the pin that stays [1 1 1 - 1]
+  ok  — suspendCard consumes the restored pin [0 0 0 consumed 0]
+  ok  — suspendCard leaves the pin that stays [1 1 1 - 1]
+  ok  — grade consumes the restored pin [1 0 0 consumed 0]
+  ok  — grade leaves the other pin [1 1 1 - 1]
+  ok  — reconcile prunes a restored id that lost its pin [0 0 0 consumed 0]
+  ok  — reconcile keeps the pin that is still soft [1 1 1 - 1]
+  ok  — reconcile does not consume a restored id the batch already omitted [0 0 0 restored 0]
+  ok  — the pin that stayed in that batch is unchanged [1 1 1 - 1]
+
+review log cap
+  FAIL — a grade on a log already over 8000 rows trims it to 8000, got 8005
+  FAIL — the trim drops the oldest rows and keeps the new one last
+
+241 passed, 2 failed

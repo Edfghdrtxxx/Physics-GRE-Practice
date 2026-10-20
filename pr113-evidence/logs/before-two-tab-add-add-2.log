@@ -1,0 +1,9 @@
+
+a stale tab adopts a sibling's Add before its own Add
+PASS: the stale tab had not seen the first Add
+BROWSER_TEST_FAILED: Error: today's stored list keeps both Adds (sa-first)
+    at h.assert (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+FAILED stages: a stale tab adopts a sibling's Add before its own Add

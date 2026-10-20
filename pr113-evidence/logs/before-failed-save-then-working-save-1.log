@@ -1,0 +1,9 @@
+
+probe: a failed save, then a reload
+OBSERVED after the failed save: on screen fs-a (graded fs-b), line "Card 2 of 3 · 1 done · 2 left", memory reviews 3, stored reviews 2, saved session queue ["fs-b","fs-a","fs-c"]
+OBSERVED after the next working save: stored reviews 3, saved session queue ["fs-a","fs-c"]
+OBSERVED after reload and Resume: on screen fs-a, queue ["fs-a","fs-c"], stored reviews of fs-b: 3
+
+PASS: the status bridge on port 4789 received nothing (Chrome refused the request on 2 page load(s))
+
+ALL OK

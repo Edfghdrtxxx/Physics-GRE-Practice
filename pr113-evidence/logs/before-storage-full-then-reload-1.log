@@ -1,0 +1,8 @@
+
+probe: storage stays full, then a reload
+OBSERVED storage full, after Good on fs-b: on screen fs-c, line "Card 2 of 3 · 1 done · 2 left", memory reviews 3, stored reviews 2
+OBSERVED after reload and Resume: on screen fs-b, line "Card 1 of 3 · 0 done · 3 left", queue ["fs-b","fs-c","fs-a"], stored reviews of fs-b: 2
+
+PASS: the status bridge on port 4789 received nothing (Chrome refused the request on 2 page load(s))
+
+ALL OK

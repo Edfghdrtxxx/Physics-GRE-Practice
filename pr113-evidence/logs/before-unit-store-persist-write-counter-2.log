@@ -1,0 +1,126 @@
+baseline: both tabs loaded, rev counter present
+  ok  — state carries _rev after load
+  ok  — state carries _epoch after load
+
+storage event keeps the idle tab current
+  ok  — idle tab adopted the sibling attempt via storage event
+  ok  — idle tab adopted sibling xp
+  ok  — idle tab tracks the written _rev
+
+THE CLOBBER: idle tab pagehide save must not erase sibling work
+  ok  — attempt survives the idle tab's save (was: erased by stale heap)
+  ok  — xp survives the idle tab's save
+
+missed storage event: save() still merges disk before writing
+  ok  — tab2 heap is stale (missed event)
+  ok  — disk unions both tabs' attempts after missed event, got q01,q02,q03
+  ok  — saving tab absorbed sibling attempt into its heap
+
+per-day studyLog merge takes max, never sums
+  ok  — studyLog day keeps the larger value
+
+reset() bumps epoch: siblings adopt wholesale, no resurrection
+  ok  — reset writes a clean state
+  ok  — sibling adopted the reset wholesale via storage event
+  ok  — post-reset save keeps only genuinely new work (epoch blocks resurrecting q01-q03)
+  ok  — pre-reset attempts stay deleted
+
+tombstones: a missed-event sibling cannot resurrect a deleted note
+  ok  — deleted note stays deleted after stale sibling save
+  ok  — tombstone persisted to disk
+  ok  — deliberate re-add clears the tombstone and persists
+
+epoch: a missed sibling wipe beats a stale heap save
+  ok  — higher-epoch wipe wins over stale sibling save
+  ok  — sibling adopted the wipe epoch
+
+formulaDay merge unions softIds and drops orphaned pins
+  ok  — reviewIds unioned
+  ok  — softIds unioned (was: silently dropped)
+
+onStateAdopted hook fires on adopt
+  ok  — hook fired once on the sibling's write
+  ok  — hook saw the adopted state
+
+single-tab regression: save round-trips and rev increments
+  ok  — _rev increments each save
+  ok  — normal writes still persist
+
+cards: stale sibling save must not rewind a newer review
+  ok  — tab2 heap is stale (missed event)
+  ok  — disk kept the newer card (was: stale reviews/due clobber)
+  ok  — disk kept the later due
+
+cards: live stale heap heals when disk has higher reviews
+  ok  — storage event adopted the newer disk card into the stale heap
+  ok  — healed card kept the later due
+
+cards: equal reviews, later lastReviewedAt wins
+  ok  — later lastReviewedAt wins on a reviews tie
+  ok  — tied-reviews winner keeps its due
+
+mistakes: higher misses+solves wins on collision
+  ok  — disk kept the more-advanced mistake record
+  ok  — stale archive flag did not beat higher misses+solves
+
+cards: equal reviews+lastReviewedAt, later due wins (migrateEasy10 shape)
+  ok  — later due survives a stale sibling save (was: migrateEasy10 clobber)
+
+mistakes: equal counters, later lastTouchedAt wins (archive flag)
+  ok  — disk kept the archived record (later lastTouchedAt, equal counters)
+  ok  — disk kept the newer lastTouchedAt
+
+S5 same-millisecond Again beats a longer Good
+  ok  — merge keeps Again when the Good due is later
+  ok  — merge keeps the Again due, not the longer Good due
+
+S3 formulaStudy treats done as a count
+  ok  — a stale done:0 snapshot does not beat a session with done 1
+  ok  — the more advanced queue is the one that persists
+  ok  — a cleared session is not resurrected by a stale snapshot
+  ok  — a newer session after a clear is kept
+  ok  — a different session with no timestamp does not resurrect a finished one
+  ok  — a finished snapshot beats a higher press count at the same time
+  ok  — equal _opAt keeps the greater _opId
+
+S4 an undo tombstone beats a sibling copy of the grade
+  ok  — undo keeps the pre-grade card when a sibling still has the grade
+  ok  — the undone review row stays out of the merged log
+
+review log: a merge keeps it at 8000 rows, newest days last
+  ok  — the merged log holds 8000 rows, got 8000
+  ok  — the newest day's rows are kept, last
+
+a save that fails to serialize leaves _rev alone (storage event missed)
+  ok  — the save reports the failure
+  ok  — nothing was written
+  FAIL — _rev is not counted for the failed save, got 36, want 35
+  ok  — the next save works
+  FAIL — the sibling's card survives the recovering save
+
+a save that fails to serialize leaves _rev alone (storage event delivered)
+  ok  — the save reports the failure
+  ok  — nothing was written
+  FAIL — _rev is not counted for the failed save, got 39, want 38
+  ok  — the next save works
+  FAIL — the sibling's card survives the recovering save
+
+subscribeStateAdopted runs beside onStateAdopted
+  ok  — the timer hook and a subscriber both see one adopt
+  ok  — unsubscribe removes only the subscriber
+
+I2 and I3 formulaDeck reports missing sources and keeps prototype ids
+  ok  — formulaDeck still resolves to an array when a private source is missing
+  ok  — the public cards are still in the partial deck
+  ok  — a missing private source sets formulaDeckStatus.partial
+  ok  — formulaDeckStatus.missing names bookFormulas
+  ok  — sources.bookFormulas is missing
+  ok  — a missing IndexedDB is reported as unavailable
+  ok  — formulaDeckStatus.missing names indexedDB
+  ok  — constructor survives dedupe
+  ok  — toString survives dedupe
+  ok  — __proto__ survives dedupe
+  ok  — an ordinary id still survives beside prototype names
+  ok  — script cards stay in front of the IndexedDB cards
+
+71 passed, 4 failed

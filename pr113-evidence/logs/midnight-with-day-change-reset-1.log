@@ -1,0 +1,10 @@
+
+after midnight the open session takes in new-day cards, not a card it graded
+PASS: Good before midnight gives ro-b a 1-day interval and takes it out of the session; ro-d, due the same day, is not in the session
+PASS: on the new day ro-b and ro-d are both on today's remaining list
+BROWSER_TEST_FAILED: Error: the open session takes in ro-d but not ro-b, which it graded (queue: ro-c, ro-a, ro-b, ro-d)
+    at h.assert (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+FAILED stages: after midnight the open session takes in new-day cards, not a card it graded

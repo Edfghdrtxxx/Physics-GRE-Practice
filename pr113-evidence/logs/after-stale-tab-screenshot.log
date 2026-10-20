@@ -1,0 +1,12 @@
+
+a stale tab's Again is kept over a sibling's earlier Good
+PASS: the sibling stored Again then Good (4 reviews)
+PASS: the stale tab still had 2 reviews when Again was pressed
+PASS: the stored card is the later Again, due today, on top of the sibling's 4 reviews (got again, 2026-10-20, 5)
+
+probe: this tab's next Study after the stale tab's Again
+OBSERVED this tab's Study after the stale tab's Again on sx-a: on screen sx-a, line "Card 1 of 2 · 1 done · 2 left", queue ["sx-b","sx-a"], stored {"lastGrade":"again","due":"2026-10-20","today":"2026-10-20"}
+
+PASS: the status bridge on port 4789 received nothing (Chrome refused the request on 2 page load(s))
+
+ALL OK

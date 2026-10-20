@@ -1,0 +1,39 @@
+
+trial 1: first Good on a new card is a learning pass
+PASS: a new card is on screen with its grade buttons
+BROWSER_TEST_FAILED: Error: the new card's Hard and Good say "returns this session"
+    at h.assert (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+
+trial 1: the graded card comes back
+OBSERVED trial 1: {"trial":1,"shown":["lp-z","lp-x","lp-w","lp-l","lp-v","lp-z","lp-y","lp-u"],"subject":"lp-z","firstLabels":{"again":"today","hard":"soon","good":"soon","easy":"4 d"},"afterFirst":{"inQueue":true,"step":1,"hasState":false,"rows":0,"cell":{"grade":"good","tip":"Good, new","label":"Card 1, Good, new"},"legend":["Not yet graded","Again","Hard","Good","Easy"]},"back":{"position":6,"chip":true,"labels":{"again":"today","hard":"1 d","good":"1 d","easy":"4 d"},"between":4},"afterSecond":{"inQueue":false,"interval":1,"due":"2026-10-21","tomorrow":"2026-10-21","rows":1,"cell":{"grade":"good","tip":"Good, 1 day","label":"Card 1, Good, 1 day"}},"subjectShown":2,"controlEasy":"lp-x","controlEasyShown":1,"learnedShown":1}
+PASS: trial 1: the new card graded Good once is shown twice in one session
+PASS: trial 1: the first Good writes no schedule and no review row; the card stays queued at learning step 1
+PASS: trial 1: the card returns after at most five other cards, with the learning 1/2 chip
+PASS: trial 1: the second Good schedules the card for tomorrow and it leaves the session
+PASS: trial 1: a new card graded Easy is shown once
+PASS: trial 1: a learned card graded Good is shown once
+BROWSER_TEST_FAILED: Error: trial 1: Hard and Good on a new card say "returns this session"
+    at h.assert (file:///private<temp dir>
+    at checkTrial (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+
+trial 2: the graded card comes back
+OBSERVED trial 2: {"trial":2,"shown":["lp-x","lp-u","lp-l","lp-z","lp-y","lp-x","lp-v","lp-w"],"subject":"lp-x","firstLabels":{"again":"today","hard":"soon","good":"soon","easy":"4 d"},"afterFirst":{"inQueue":true,"step":1,"hasState":false,"rows":0,"cell":{"grade":"good","tip":"Good, new","label":"Card 1, Good, new"},"legend":["Not yet graded","Again","Hard","Good","Easy"]},"back":{"position":6,"chip":true,"labels":{"again":"today","hard":"1 d","good":"1 d","easy":"4 d"},"between":4},"afterSecond":{"inQueue":false,"interval":1,"due":"2026-10-21","tomorrow":"2026-10-21","rows":1,"cell":{"grade":"good","tip":"Good, 1 day","label":"Card 1, Good, 1 day"}},"subjectShown":2,"controlEasy":"lp-u","controlEasyShown":1,"learnedShown":1}
+PASS: trial 2: the new card graded Good once is shown twice in one session
+PASS: trial 2: the first Good writes no schedule and no review row; the card stays queued at learning step 1
+PASS: trial 2: the card returns after at most five other cards, with the learning 1/2 chip
+PASS: trial 2: the second Good schedules the card for tomorrow and it leaves the session
+PASS: trial 2: a new card graded Easy is shown once
+PASS: trial 2: a learned card graded Good is shown once
+BROWSER_TEST_FAILED: Error: trial 2: Hard and Good on a new card say "returns this session"
+    at h.assert (file:///private<temp dir>
+    at checkTrial (file:///private<temp dir>
+    at file:///private<temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///private<temp dir>
+FAILED stages: trial 1: first Good on a new card is a learning pass; trial 1: the graded card comes back; trial 2: the graded card comes back
