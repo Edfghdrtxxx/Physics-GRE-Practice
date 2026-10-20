@@ -2605,9 +2605,10 @@ PGRE.views.formulas = (function () {
   }
 
   /* Replace the last committed review for this card. Session counters,
-     XP, streaks and the remaining queue's live grade path stay put; the
-     SRS row is undone and rewritten the way practice review chips stamp
-     an existing attempt. */
+     XP and streaks stay put; the SRS row is undone and rewritten the way
+     practice review chips stamp an existing attempt. The queue follows the
+     new grade as a live press would: Again brings the card back once at
+     the end of this session, a passing grade takes it out. */
   function regrade(g) {
     if (!study || study.overlay) return;
     var c = shownCard();
@@ -2628,7 +2629,8 @@ PGRE.views.formulas = (function () {
       return;
     }
     entry.grade = g;
-    takeQueueCard(c.id);
+    while (takeQueueCard(c.id)) { /* drop every queued copy */ }
+    if (g === 'again') study.queue.push(c);
     persistStudy();
     PGRE.store.save();
     renderGradedCard(c);
