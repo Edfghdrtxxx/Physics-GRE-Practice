@@ -562,6 +562,9 @@ PGRE.srs = {
       if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
       return null;
     }
+    // Grade on top of a sibling tab's latest review of this card, or the
+    // merge keeps the sibling's record (more reviews) and drops this grade.
+    if (typeof PGRE.store.adoptDisk === 'function') PGRE.store.adoptDisk();
     var s = PGRE.store.state;
     // Review-log capture (bundle 2) — read BEFORE the default-object creation:
     // hadState (n) separates a real review from a card's first-ever grade;
@@ -627,6 +630,8 @@ PGRE.srs = {
       if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
       return null;
     }
+    // A sibling's newer review of this card supersedes the op (checked below).
+    if (typeof PGRE.store.adoptDisk === 'function') PGRE.store.adoptDisk();
     var s = PGRE.store.state;
     if (s.reviewUndos && Object.prototype.hasOwnProperty.call(s.reviewUndos, opId)) return null;
     var log = s.cardReviews || [];
@@ -1061,6 +1066,13 @@ PGRE.srs = {
     return out;
   },
 
+  /* An edit of today's list is merged whole (the newest _opAt wins), so it
+     must start from a sibling tab's latest list, or it drops that tab's
+     Add or Remove. */
+  _adoptBeforeListEdit: function () {
+    if (typeof PGRE.store.adoptDisk === 'function') PGRE.store.adoptDisk();
+  },
+
   /* Append the auto-pick to the saved batch and persist. Existing picks —
      active, completed-today or deliberate future adds — are never replaced;
      with no room left under the target this is a no-op. The first population
@@ -1068,6 +1080,7 @@ PGRE.srs = {
      suggestFormulaDay. The caller owns the Study transition. */
   autoFillFormulaDay: function (deck, opts) {
     deck = deck || [];
+    this._adoptBeforeListEdit();
     var batch = this.formulaDay(deck);
     if (!deck.length) return batch;
     var pick = this.suggestFormulaDay(deck, opts);
@@ -1089,6 +1102,7 @@ PGRE.srs = {
   fillFormulaDayFinalPass: function (deck) {
     deck = deck || [];
     if (!deck.length || !this.finalPassActive()) return this.formulaDay(deck);
+    this._adoptBeforeListEdit();
     var batch = this.formulaDay(deck), self = this, inBatch = Object.create(null);
     batch.reviewIds.concat(batch.newIds).forEach(function (id) { inBatch[id] = 1; });
     var ids = [];
@@ -1130,6 +1144,7 @@ PGRE.srs = {
       return { batch: { date: this.today(), reviewIds: [], newIds: [] },
         added: added, already: already, skipped: skipped };
     }
+    this._adoptBeforeListEdit();
     var batch = this.formulaDay(deck);
     var byId = Object.create(null);
     deck.forEach(function (c) {
@@ -1190,6 +1205,7 @@ PGRE.srs = {
     if (!deck.length || !ids.length) {
       return this.formulaDay(deck);
     }
+    this._adoptBeforeListEdit();
     var batch = this.formulaDay(deck);
     var drop = Object.create(null);
     var changed = false;
@@ -1288,6 +1304,7 @@ PGRE.srs = {
      @returns the updated batch */
   setFormulaDayPicks: function (deck, ids) {
     var self = this;
+    this._adoptBeforeListEdit();
     var batch = this.formulaDay(deck);
     var byId = Object.create(null);
     (deck || []).forEach(function (c) {

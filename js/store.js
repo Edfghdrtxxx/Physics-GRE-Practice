@@ -808,6 +808,19 @@ PGRE.store = {
     });
   },
 
+  /* Absorb a sibling tab's newer write now, before building a change on the
+     live heap (a grade, an undo, an edit of today's list). save() adopts
+     too, but only after the change is made, and the merge then keeps
+     whichever whole record looks newer: a grade or a list edit built on a
+     stale heap can replace the sibling's. The storage event that normally
+     adopts first can arrive late or not at all. */
+  adoptDisk: function () {
+    var raw = null;
+    try { raw = localStorage.getItem(this.KEY); } catch (e) { return; }
+    if (!raw) return;
+    try { this._adopt(JSON.parse(raw)); } catch (err) { /* disk unreadable: save() reports it */ }
+  },
+
   load: function () {
     this._bindAdoptHook();
     var raw = null;

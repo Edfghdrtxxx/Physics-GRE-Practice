@@ -497,6 +497,83 @@ var STAGES = [
         location.hash = '#/';
       });
       await h.sleep(250);
+    } },
+
+  { name: 'a stale tab adopts a sibling\'s Add before its own Add',
+    run: async function (page, h) {
+      var spec = [{ id: 'sa-first', topic: 'cm' }, { id: 'sa-second', topic: 'em' }, { id: 'sa-other', topic: 'qm' }];
+      await h.seed(spec);
+      await page.eval(function () {
+        PGRE.store.state.formulaDay = { date: PGRE.srs.today(), reviewIds: [], newIds: [] };
+        PGRE.store.save();
+      });
+      await h.openStaleTab(spec);
+      var res = JSON.parse(await page.eval('() => { var f = document.getElementById("stale-tab").contentWindow;' +
+        'PGRE.srs.addFormulaDaySoft(PGRE.FORMULAS, ["sa-first"]);' +
+        'var staleSaw = (f.PGRE.store.state.formulaDay.newIds || []).slice();' +
+        'f.PGRE.srs.addFormulaDaySoft(f.PGRE.FORMULAS, ["sa-second"]);' +
+        'var disk = JSON.parse(localStorage.getItem("pgre-state-v1")).formulaDay;' +
+        'return JSON.stringify({ staleSaw: staleSaw, disk: disk.newIds.concat(disk.reviewIds) }); }'));
+      h.assert(res.staleSaw.indexOf('sa-first') === -1, 'the stale tab had not seen the first Add');
+      h.assert(res.disk.indexOf('sa-first') !== -1 && res.disk.indexOf('sa-second') !== -1,
+        'today\'s stored list keeps both Adds (' + res.disk.join(', ') + ')');
+      await h.closeStaleTab();
+    } },
+
+  { name: 'a stale tab\'s Add does not bring back a card a sibling removed',
+    run: async function (page, h) {
+      var spec = [{ id: 'sr-gone', topic: 'cm' }, { id: 'sr-keep', topic: 'em' }, { id: 'sr-new', topic: 'qm' }];
+      await h.seed(spec);
+      await page.eval(function () {
+        PGRE.store.state.formulaDay = { date: PGRE.srs.today(), reviewIds: [], newIds: ['sr-gone', 'sr-keep'] };
+        PGRE.store.save();
+      });
+      await h.openStaleTab(spec);
+      var res = JSON.parse(await page.eval('() => { var f = document.getElementById("stale-tab").contentWindow;' +
+        'PGRE.srs.removeFormulaDaySoft(PGRE.FORMULAS, ["sr-gone"]);' +
+        'var staleSaw = (f.PGRE.store.state.formulaDay.newIds || []).slice();' +
+        'f.PGRE.srs.addFormulaDaySoft(f.PGRE.FORMULAS, ["sr-new"]);' +
+        'var disk = JSON.parse(localStorage.getItem("pgre-state-v1")).formulaDay;' +
+        'return JSON.stringify({ staleSaw: staleSaw, disk: disk.newIds.concat(disk.reviewIds) }); }'));
+      h.assert(res.staleSaw.indexOf('sr-gone') !== -1, 'the stale tab still listed the removed card');
+      h.assert(res.disk.indexOf('sr-gone') === -1 && res.disk.indexOf('sr-new') !== -1 && res.disk.indexOf('sr-keep') !== -1,
+        'today\'s stored list keeps the removal and the Add (' + res.disk.join(', ') + ')');
+      await h.closeStaleTab();
+    } },
+
+  { name: 'a stale tab\'s Again is kept over a sibling\'s earlier Good', shot: '03-stale-tab-again-kept',
+    run: async function (page, h) {
+      var spec = [{ id: 'sx-a', topic: 'cm', learned: true }, { id: 'sx-b', topic: 'em', learned: true }];
+      await h.seed(spec);
+      await h.openStaleTab(spec);
+      // The stale tab opens Study and shows a card.
+      await page.eval('() => { document.getElementById("stale-tab").contentWindow.location.hash = "#/formulas"; }');
+      for (var i = 0; i < 50; i++) {
+        if (await page.eval('!!document.getElementById("stale-tab").contentDocument.getElementById("study-btn")')) break;
+        await h.sleep(100);
+      }
+      var target = await page.eval('() => { var d = document.getElementById("stale-tab").contentDocument;' +
+        'd.getElementById("study-btn").click(); d.getElementById("flip-btn").click();' +
+        'return d.querySelector(".formula-palette .pal-cell.is-current").getAttribute("data-id"); }');
+      await h.sleep(200);
+      // This tab grades the same card Again, then Good; afterwards the stale
+      // tab's Again is pressed on the card it still shows. One task, so no
+      // timer in the stale tab can save (and adopt) in between.
+      var res = JSON.parse(await page.eval('() => { var id = ' + JSON.stringify(target) + ';' +
+        'PGRE.srs.gradeCard(id, "again"); PGRE.srs.gradeCard(id, "good"); PGRE.store.save();' +
+        'var sibling = JSON.parse(JSON.stringify(PGRE.store.state.cards[id]));' +
+        'var f = document.getElementById("stale-tab").contentWindow;' +
+        'var staleBefore = f.PGRE.store.state.cards[id].reviews;' +
+        'f.document.querySelector(\'#fcard-actions [data-grade="again"]\').click();' +
+        'var disk = JSON.parse(localStorage.getItem("pgre-state-v1")).cards[id];' +
+        'return JSON.stringify({ sibling: sibling, staleBefore: staleBefore, disk: disk, today: PGRE.srs.today() }); }'));
+      var sibling = res.sibling;
+      h.assert(sibling.lastGrade === 'good' && sibling.reviews === 4, 'the sibling stored Again then Good (4 reviews)');
+      h.assert(res.staleBefore === 2, 'the stale tab still had 2 reviews when Again was pressed');
+      h.assert(res.disk.lastGrade === 'again' && res.disk.due === res.today && res.disk.reviews === 5,
+        'the stored card is the later Again, due today, on top of the sibling\'s 4 reviews (got ' +
+        res.disk.lastGrade + ', ' + res.disk.due + ', ' + res.disk.reviews + ')');
+      await h.closeStaleTab();
     } }
 ];
 
