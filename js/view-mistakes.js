@@ -739,6 +739,49 @@ PGRE.views.mistakes = (function () {
     };
   }
 
+  function recordKicker(sess, kind, extra) {
+    var when = '';
+    if (sess && sess.startedAt) {
+      var d = new Date(sess.startedAt);
+      when = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' +
+             d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    }
+    var parts = [kind];
+    if (extra) parts.push(extra);
+    if (when) parts.push(when);
+    return '<div class="record-kicker">' +
+      '<span class="record-kicker-line">' + PGRE.ui.esc(parts.join(' · ')) + '</span>' +
+      '<span class="chip record-past">Past record</span></div>';
+  }
+
+  function assessBits(row) {
+    var bits = [];
+    if (!row) return bits;
+    if (row.confidence) bits.push(row.confidence === 'guess' ? 'Guessed' : 'Knew it');
+    (row.tags || []).forEach(function (tg) {
+      bits.push((PGRE.assess && PGRE.assess.LABELS && PGRE.assess.LABELS[tg]) || tg);
+    });
+    return bits;
+  }
+
+  function assessChipHTML(row) {
+    var bits = assessBits(row);
+    if (!bits.length) return '';
+    return '<span class="chip record-assess">Self-assessment: ' +
+      PGRE.ui.esc(bits.join(' · ')) + '</span>';
+  }
+
+  function letterOf(i) {
+    return (typeof i === 'number' && i >= 0 && LETTERS[i]) ? LETTERS[i] : '—';
+  }
+
+  function missingBankNote(q, st) {
+    return '<div class="record-missing" id="missing-q-note">' +
+      'This question has left the bank. Your pick: ' + letterOf(st && st.picked) +
+      ' · Correct answer: ' + letterOf(q && q.answer) +
+      '. Its wording and solution were not stored.</div>';
+  }
+
   function reconstructArchive(sid) {
     if (!sid || !PGRE.gamify || typeof PGRE.gamify._session !== 'function') return null;
     var sess = PGRE.gamify._session(sid);
@@ -969,22 +1012,22 @@ PGRE.views.mistakes = (function () {
       // window; a tap regrades that row and never records a new attempt
       html += PGRE.assess.html(PGRE.store.state.settings.keyboard, { review: true });
       if (!locked) html += reanswerHint();
-    } else {
+    } else if (!readonly) {
       // read the assessment off THIS drill's own attempt row (st.row, which
       // PGRE.assess stamps in place) — lastAssess() would happily surface a
       // tag from some practice session weeks ago as if it belonged here
-      var bits = [];
-      if (st.row && st.row.confidence) bits.push(st.row.confidence === 'guess' ? 'Guessed' : 'Knew it');
-      ((st.row && st.row.tags) || []).forEach(function (tg) { bits.push(PGRE.assess.LABELS[tg] || tg); });
+      var bits = assessBits(st.row);
       if (bits.length) {
         html += '<div class="conf-note muted">Your self-assessment: <strong>' +
           bits.join(' · ') + '</strong></div>';
       }
-      if (!locked && !readonly) html += reanswerHint();
+      if (!locked) html += reanswerHint();
     }
     if (q.missing) {
-      html += '<p class="muted" id="missing-q-note">This question is no longer in the bank. ' +
-        'The original wording and solution are not stored.</p>';
+      if (!readonly) {
+        html += '<p class="muted" id="missing-q-note">This question is no longer in the bank. ' +
+          'The original wording and solution are not stored.</p>';
+      }
     } else {
       html += '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
         distractorBlock(q);
@@ -1188,26 +1231,32 @@ PGRE.views.mistakes = (function () {
     var t = PGRE.topicById(q.topic) || { id: 'xx', short: '?', name: 'Unknown topic' };
     var prev = neighborAnswered(idx, -1);
     var next = neighborAnswered(idx, 1);
+    var readonly = !!d.readonly;
+    var gone = readonly && q.missing;
     var html = '<div class="card practice-card">' +
       '<div class="practice-meta">' +
         '<span>Review — ' + (idx + 1) + ' of ' + d.qs.length + '</span>' +
         '<span class="chip">' + t.name + '</span>' +
         '<span class="chip">' + (st.correct ? 'Correct' : 'Missed') + '</span>' +
         (st.ms != null ? '<span class="chip">' + fmtAttemptMs(st.ms) + '</span>' : '') +
-      '</div>' +
-      '<div class="q-text">' + q.q + '</div>' +
-      '<div class="choices">';
-    q.choices.forEach(function (c, cidx) {
-      var cls = 'choice';
-      if (cidx === q.answer) cls += ' is-answer';
-      if (cidx === st.picked && !st.correct) cls += ' is-wrong';
-      html += '<button class="' + cls + '" disabled aria-pressed="' +
-        (cidx === st.picked ? 'true' : 'false') + '">' +
-        '<span class="choice-letter">' + LETTERS[cidx] + '</span>' +
-        '<span class="choice-body">' + c + '</span></button>';
-    });
-    html += '</div>' +
-      '<div id="feedback">' + feedbackHTML(q, st, false, true) + '</div>' +
+        (readonly ? assessChipHTML(st.row) : '') +
+      '</div>';
+    if (!gone) {
+      html += '<div class="q-text">' + q.q + '</div>' +
+        '<div class="choices">';
+      q.choices.forEach(function (c, cidx) {
+        var cls = 'choice';
+        if (cidx === q.answer) cls += ' is-answer';
+        if (cidx === st.picked && !st.correct) cls += ' is-wrong';
+        html += '<button class="' + cls + '" disabled aria-pressed="' +
+          (cidx === st.picked ? 'true' : 'false') + '">' +
+          '<span class="choice-letter">' + LETTERS[cidx] + '</span>' +
+          '<span class="choice-body">' + c + '</span></button>';
+      });
+      html += '</div>';
+    }
+    html += '<div id="feedback">' + feedbackHTML(q, st, false, true) +
+      (gone ? missingBankNote(q, st) : '') + '</div>' +
       '<div class="btn-row drill-navrow">' +
         '<button class="btn btn-ghost" id="review-prev" title="Previous question (Left arrow)"' +
           (prev < 0 ? ' disabled' : '') + '>← Back</button>' +
@@ -1261,9 +1310,11 @@ PGRE.views.mistakes = (function () {
     var untouched = [];
     if (d.skipped) untouched.push(d.skipped + ' skipped');
     if (left) untouched.push(left + ' left unanswered');
-    var heading = (readonly && d.sess && !d.sess.endedAt) ? 'Mistake drill' : 'Drill complete';
+    var heading = readonly
+      ? recordKicker(d.sess, 'Mistake drill')
+      : '<h1>Drill complete</h1>';
     root().innerHTML = '<div class="card practice-card">' +
-      '<h1>' + heading + '</h1>' +
+      heading +
       // every question skipped or left behind: a score of 0 / 0 would read as a
       // wipeout rather than as "nothing was answered, so nothing changed"
       (done ? '<div class="summary-score">' + correct + ' / ' + done +
@@ -1274,12 +1325,11 @@ PGRE.views.mistakes = (function () {
         ? '<p class="muted">' + untouched.join(' · ') + ' — those kept their place in the book ' +
           'and their existing review date.</p>'
         : '') +
-      (readonly
-        ? '<p class="muted">Stored record of this drill — opening it does not change the book.</p>'
-        : (done ? '<p class="muted">Solved mistakes stay in the book — their next review just moved ' +
-              'further out. ' +
-              (stillDue ? stillDue + ' still due now.' : 'Nothing else is due right now.') + '</p>'
-            : '')) +
+      (!readonly && done
+        ? '<p class="muted">Solved mistakes stay in the book — their next review just moved ' +
+          'further out. ' +
+          (stillDue ? stillDue + ' still due now.' : 'Nothing else is due right now.') + '</p>'
+        : '') +
       // tinted map: answered cells open read-only review; nothing is re-recorded
       (d.qs.length ? paletteHTML(true) : '') +
       '<div class="btn-row">' +

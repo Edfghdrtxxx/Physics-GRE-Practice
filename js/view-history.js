@@ -61,20 +61,21 @@ PGRE.views.history = (function () {
       : 'unfinished';
     var review = sess.mode === 'mistakes'
       ? '<a class="btn btn-ghost btn-sm hist-drill-open" href="#/mistakes/drill/' +
-        encodeURIComponent(sess.id) + '">Review this drill</a>'
+        encodeURIComponent(sess.id) + '">Review <span aria-hidden="true">›</span></a>'
       : sess.mode === 'practice'
       ? '<a class="btn btn-ghost btn-sm hist-set-open" href="#/practice/session/' +
-        encodeURIComponent(sess.id) + '">Review this set</a>'
+        encodeURIComponent(sess.id) + '">Review <span aria-hidden="true">›</span></a>'
       : '';
     // attempt rows are filled lazily on first open (renderSessions) so a long
     // history doesn't render + typeset every answer ever given up front
     return '<details class="hist-session" data-sid="' + ui.esc(sess.id) + '">' +
       '<summary><span class="hist-sess-when">' + fmtWhen(sess.startedAt) + '</span>' +
-        '<span>' + ui.esc(MODE_LABEL[sess.mode] || sess.mode) + ' · ' + ui.esc(scope) + '</span>' +
+        '<span class="hist-sess-name">' + ui.esc(MODE_LABEL[sess.mode] || sess.mode) +
+          ' · ' + ui.esc(scope) + '</span>' +
         '<span class="hist-sess-score">' + sess.correct + '/' + sess.answered +
           (open ? ' of ' + sess.planned : '') + '</span>' +
-        review +
         '<span class="hist-sess-meta">' + dur + ' · +' + sess.xp + ' XP</span>' +
+        review +
       '</summary><div class="hist-rows"></div></details>';
   }
 

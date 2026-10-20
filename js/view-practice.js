@@ -366,11 +366,7 @@ PGRE.views.practice = (function () {
   }
 
   function reviewAssessNote(ans) {
-    var bits = [];
-    if (ans.row && ans.row.confidence) bits.push(ans.row.confidence === 'guess' ? 'Guessed' : 'Knew it');
-    ((ans.row && ans.row.tags) || []).forEach(function (tg) {
-      bits.push((PGRE.assess && PGRE.assess.LABELS && PGRE.assess.LABELS[tg]) || tg);
-    });
+    var bits = assessBits(ans && ans.row);
     if (bits.length) {
       return '<div class="conf-note muted">Your self-assessment: <strong>' +
         bits.join(' · ') + '</strong></div>';
@@ -514,6 +510,59 @@ PGRE.views.practice = (function () {
       sol: '',
       missing: true
     };
+  }
+
+  function recordKicker(sess, kind, extra) {
+    var when = '';
+    if (sess && sess.startedAt) {
+      var d = new Date(sess.startedAt);
+      when = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' +
+             d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    }
+    var parts = [kind];
+    if (extra) parts.push(extra);
+    if (when) parts.push(when);
+    return '<div class="record-kicker">' +
+      '<span class="record-kicker-line">' + PGRE.ui.esc(parts.join(' · ')) + '</span>' +
+      '<span class="chip record-past">Past record</span></div>';
+  }
+
+  function practiceRecordExtra(s) {
+    if (s.label) return s.label;
+    if (s.custom || s.topicId === 'custom') return 'Custom quiz';
+    if (s.topicId && s.topicId !== 'all') {
+      var t = PGRE.topicById(s.topicId);
+      return t ? t.name : s.topicId;
+    }
+    return 'All topics';
+  }
+
+  function assessBits(row) {
+    var bits = [];
+    if (!row) return bits;
+    if (row.confidence) bits.push(row.confidence === 'guess' ? 'Guessed' : 'Knew it');
+    (row.tags || []).forEach(function (tg) {
+      bits.push((PGRE.assess && PGRE.assess.LABELS && PGRE.assess.LABELS[tg]) || tg);
+    });
+    return bits;
+  }
+
+  function assessChipHTML(row) {
+    var bits = assessBits(row);
+    if (!bits.length) return '';
+    return '<span class="chip record-assess">Self-assessment: ' +
+      PGRE.ui.esc(bits.join(' · ')) + '</span>';
+  }
+
+  function letterOf(i) {
+    return (typeof i === 'number' && i >= 0 && LETTERS[i]) ? LETTERS[i] : '—';
+  }
+
+  function missingBankNote(q, ans) {
+    return '<div class="record-missing" id="missing-q-note">' +
+      'This question has left the bank. Your pick: ' + letterOf(ans && ans.picked) +
+      ' · Correct answer: ' + letterOf(q && q.answer) +
+      '. Its wording and solution were not stored.</div>';
   }
 
   function reconstructArchive(sid) {
@@ -1280,6 +1329,7 @@ PGRE.views.practice = (function () {
     var title = ans.correct
       ? (readonly ? 'Correct' : correctTitle(q))
       : 'Incorrect — the answer is ' + LETTERS[q.answer];
+    var gone = readonly && q.missing;
     var html = '<div class="card practice-card">' +
       '<div class="practice-meta">' +
         '<span>Review — ' + (idx + 1) + ' of ' + s.qs.length + '</span>' +
@@ -1288,28 +1338,33 @@ PGRE.views.practice = (function () {
         '<span class="chip chip-diff">' + PGRE.ui.diffDots(q.difficulty) + '</span>' +
         '<span class="chip">' + (ans.correct ? 'Correct' : 'Missed') + '</span>' +
         (ans.ms != null ? '<span class="chip">' + fmtAttemptMs(ans.ms) + '</span>' : '') +
-      '</div>' +
-      '<div class="q-text">' + q.q + '</div>' +
-      '<div class="choices">';
-    q.choices.forEach(function (c, cidx) {
-      var cls = 'choice';
-      if (cidx === q.answer) cls += ' is-answer';
-      if (cidx === ans.picked && !ans.correct) cls += ' is-wrong';
-      html += '<button class="' + cls + '" disabled aria-pressed="' +
-        (cidx === ans.picked ? 'true' : 'false') + '">' +
-        '<span class="choice-letter">' + LETTERS[cidx] + '</span>' +
-        '<span class="choice-body">' + c + '</span></button>';
-    });
-    html += '</div>' +
-      '<div id="feedback">' +
+        (readonly ? assessChipHTML(ans.row) : '') +
+      '</div>';
+    if (!gone) {
+      html += '<div class="q-text">' + q.q + '</div>' +
+        '<div class="choices">';
+      q.choices.forEach(function (c, cidx) {
+        var cls = 'choice';
+        if (cidx === q.answer) cls += ' is-answer';
+        if (cidx === ans.picked && !ans.correct) cls += ' is-wrong';
+        html += '<button class="' + cls + '" disabled aria-pressed="' +
+          (cidx === ans.picked ? 'true' : 'false') + '">' +
+          '<span class="choice-letter">' + LETTERS[cidx] + '</span>' +
+          '<span class="choice-body">' + c + '</span></button>';
+      });
+      html += '</div>';
+    }
+    html += '<div id="feedback">' +
         '<div class="feedback reveal-in ' + (ans.correct ? 'feedback-good' : 'feedback-bad') + '">' +
           '<span class="fb-icon">' + (ans.correct ? '✓' : '✗') + '</span>' +
           '<strong>' + title + '</strong>' +
           (ans.xp != null ? '<span class="fb-xp">+' + ans.xp + ' XP</span>' : '') +
         '</div>' +
         ((!readonly && ans.ms != null) ? paceMark(ans.ms) : '') +
-        (regradable ? PGRE.assess.html(settings().keyboard, { review: true }) : reviewAssessNote(ans));
-    if (q.missing) {
+        (readonly ? '' : (regradable ? PGRE.assess.html(settings().keyboard, { review: true }) : reviewAssessNote(ans)));
+    if (gone) {
+      html += missingBankNote(q, ans);
+    } else if (q.missing) {
       html += '<p class="muted" id="missing-q-note">This question is no longer in the bank. ' +
         'The original wording and solution are not stored.</p>';
     } else {
@@ -1433,19 +1488,19 @@ PGRE.views.practice = (function () {
                   pct >= 80 ? 'Strong work.' :
                   pct >= 60 ? 'Solid — review the misses below.' :
                   'Rough set — the reworking is where the learning happens.';
-    var heading = (readonly && s.sess && !s.sess.endedAt) ? 'Practice set' : 'Session complete';
+    var heading = readonly
+      ? recordKicker(s.sess, 'Practice', practiceRecordExtra(s))
+      : '<h1>Session complete</h1>';
 
     var html = '<div class="card practice-card">' +
-      '<h1>' + heading + '</h1>' +
-      (s.label ? '<p class="muted session-label-line">' + PGRE.ui.esc(s.label) + '</p>' : '') +
+      heading +
+      ((!readonly && s.label) ? '<p class="muted session-label-line">' + PGRE.ui.esc(s.label) + '</p>' : '') +
       (nQ
         ? '<div class="summary-score">' + s.correct + ' / ' + nQ +
             '<span class="summary-pct">' + pct + '%</span></div>' +
           '<p class="muted">' + verdict + ' You earned <strong>' + s.xpEarned + ' XP</strong> this session.</p>'
         : '<p class="muted">You did not answer anything this time — nothing was recorded for this set.</p>');
-    if (readonly) {
-      html += '<p class="muted">Stored record of this set — opening it does not change your progress.</p>';
-    } else {
+    if (!readonly) {
       if (planLine) html += '<p class="muted">' + planLine + '</p>';
       html += intensitySummaryHTML(isPack);
     }

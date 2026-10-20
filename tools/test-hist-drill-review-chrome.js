@@ -34,6 +34,7 @@ function staticChecks() {
   check(/js\/view-mistakes\.js\?v=\d{8}[a-z]/.test(index), 'index.html cache-busts view-mistakes.js');
   check(/js\/view-practice\.js\?v=\d{8}[a-z]/.test(index), 'index.html cache-busts view-practice.js');
   check(/js\/app\.js\?v=\d{8}[a-z]/.test(index), 'index.html cache-busts app.js');
+  check(/css\/style\.css\?v=\d{8}[a-z]/.test(index), 'index.html cache-busts style.css');
   var hist = fs.readFileSync(path.join(ROOT, 'js/view-history.js'), 'utf8');
   check(/hist-drill-open/.test(hist) && /#\/mistakes\/drill\//.test(hist),
     'History paints a Review this drill link to #/mistakes/drill/<sid>');
@@ -259,10 +260,11 @@ async function helpers(page) {
 
   h.screen = async function () {
     return JSON.parse(await page.eval(function () {
-      var title = document.querySelector('#mistakes-root h1, #practice-root h1');
+      var title = document.querySelector(
+        '#mistakes-root h1, #practice-root h1, #mistakes-root .record-kicker, #practice-root .record-kicker');
       var pal = document.querySelector('.exam-palette-title');
       var q = document.querySelector('.q-text');
-      var conf = document.querySelector('.conf-note');
+      var conf = document.querySelector('.conf-note, .record-assess');
       var sol = document.querySelector('.solution');
       var histLinks = [];
       document.querySelectorAll('.hist-drill-open').forEach(function (a) {
@@ -342,6 +344,10 @@ var STAGES = [
       var neu = await h.screen();
       h.assert(neu.palette.indexOf('How this drill went') !== -1,
         'finished drill from History shows How this drill went');
+      h.assert(neu.title.indexOf('Mistake drill') !== -1 && neu.title.indexOf('Past record') !== -1,
+        'past drill results name the record in an eyebrow, got ' + neu.title);
+      h.assert(neu.title.indexOf('Drill complete') === -1,
+        'past drill results do not say Drill complete, got ' + neu.title);
       h.assert(neu.reviewCells === 2, 'new drill palette has two review cells, got ' + neu.reviewCells);
       h.assert(neu.score.indexOf('1 / 2') !== -1, 'new drill score is 1 / 2, got ' + neu.score);
       h.assert(neu.backHistory, 'results offer Back to History');
@@ -431,15 +437,24 @@ var STAGES = [
       await h.go('#/mistakes/drill/s-gone-drill');
       await h.wait('!!document.querySelector("[data-review]")', 'gone-drill results');
       await h.click('[data-review="0"]');
-      await h.wait('!!document.getElementById("missing-q-note") || ' +
-        '(document.querySelector(".q-text") && /no longer in the bank/.test(document.querySelector(".q-text").textContent))',
+      await h.wait('!!document.getElementById("missing-q-note")',
         'missing-question fallback');
       var goneNote = await page.eval(function () {
         var n = document.getElementById('missing-q-note');
         var q = document.querySelector('.q-text');
-        return (n ? n.textContent : '') + ' ' + (q ? q.textContent : '');
+        var choices = document.querySelectorAll('.choices .choice').length;
+        return JSON.stringify({
+          note: n ? n.textContent : '',
+          q: q ? q.textContent : '',
+          choices: choices
+        });
       });
-      h.assert(/no longer in the bank/.test(goneNote), 'missing fallback copy is on screen: ' + goneNote);
+      var gone = JSON.parse(goneNote);
+      h.assert(/left the bank/.test(gone.note), 'missing fallback copy is on screen: ' + gone.note);
+      h.assert(/Your pick: D/.test(gone.note) && /Correct answer: B/.test(gone.note),
+        'missing note names the stored pick and answer, got ' + gone.note);
+      h.assert(!gone.q && gone.choices === 0,
+        'missing question shows no stem and no fake choice list, got ' + goneNote);
       var writes = await h.writes();
       h.assert(writes.recordAnswer === 0 && writes.gradeCard === 0 && writes.endSession === 0,
         'missing-question review called no recordAnswer / gradeCard / endSession, got ' + JSON.stringify(writes));
@@ -460,7 +475,8 @@ var STAGES = [
     run: async function (page, h) {
       await h.inject();
       await h.go('#/mistakes/drill/s-live-drill');
-      await h.wait('!!document.querySelector("#mistakes-root h1")', 'unfinished archive heading');
+      await h.wait('!!document.querySelector("#mistakes-root .record-kicker, #mistakes-root h1")',
+        'unfinished archive heading');
       var unfinished = await h.screen();
       h.assert(unfinished.title.indexOf('Mistake drill') !== -1 || unfinished.title.indexOf('Drill complete') !== -1,
         'an unfinished History drill opens the results screen, got ' + unfinished.title);
@@ -508,6 +524,10 @@ var STAGES = [
       var neu = await h.screen();
       h.assert(neu.palette.indexOf('How this set went') !== -1,
         'finished practice from History shows How this set went');
+      h.assert(neu.title.indexOf('Practice') !== -1 && neu.title.indexOf('Past record') !== -1,
+        'past practice results name the record in an eyebrow, got ' + neu.title);
+      h.assert(neu.title.indexOf('Session complete') === -1,
+        'past practice results do not say Session complete, got ' + neu.title);
       h.assert(neu.reviewCells === 2, 'new practice palette has two review cells, got ' + neu.reviewCells);
       h.assert(neu.score.indexOf('1 / 2') !== -1, 'new practice score is 1 / 2, got ' + neu.score);
       h.assert(neu.backHistory, 'practice results offer Back to History');
@@ -571,15 +591,24 @@ var STAGES = [
       await h.go('#/practice/session/s-prac-gone');
       await h.wait('!!document.querySelector("[data-review]")', 'gone-practice results');
       await h.click('[data-review="0"]');
-      await h.wait('!!document.getElementById("missing-q-note") || ' +
-        '(document.querySelector(".q-text") && /no longer in the bank/.test(document.querySelector(".q-text").textContent))',
+      await h.wait('!!document.getElementById("missing-q-note")',
         'missing practice-question fallback');
       var goneNote = await page.eval(function () {
         var n = document.getElementById('missing-q-note');
         var q = document.querySelector('.q-text');
-        return (n ? n.textContent : '') + ' ' + (q ? q.textContent : '');
+        var choices = document.querySelectorAll('.choices .choice').length;
+        return JSON.stringify({
+          note: n ? n.textContent : '',
+          q: q ? q.textContent : '',
+          choices: choices
+        });
       });
-      h.assert(/no longer in the bank/.test(goneNote), 'practice missing fallback copy is on screen: ' + goneNote);
+      var gone = JSON.parse(goneNote);
+      h.assert(/left the bank/.test(gone.note), 'practice missing fallback copy is on screen: ' + gone.note);
+      h.assert(/Your pick: D/.test(gone.note) && /Correct answer: B/.test(gone.note),
+        'practice missing note names the stored pick and answer, got ' + gone.note);
+      h.assert(!gone.q && gone.choices === 0,
+        'practice missing question shows no stem and no fake choice list, got ' + goneNote);
       var writes = await h.writes();
       h.assert(writes.recordAnswer === 0 && writes.gradeCard === 0 && writes.endSession === 0,
         'missing-question practice review called no recordAnswer / gradeCard / endSession, got ' + JSON.stringify(writes));
@@ -612,6 +641,34 @@ var STAGES = [
       var writes = await h.writes();
       h.assert(writes.recordAnswer === 0 && writes.gradeCard === 0 && writes.endSession === 0,
         'resuming the live practice set called no recordAnswer / gradeCard / endSession, got ' + JSON.stringify(writes));
+    } },
+  { name: 'History list in dark mode', shot: 'history-list-dark',
+    run: async function (page, h) {
+      await h.inject();
+      await h.go('#/history');
+      await h.wait('!!document.querySelector(".hist-drill-open")', 'History dark');
+      await page.eval(function () {
+        document.documentElement.dataset.theme = 'dark';
+      });
+      var theme = await page.eval(function () { return document.documentElement.dataset.theme; });
+      h.assert(theme === 'dark', 'History list is shown with data-theme=dark, got ' + theme);
+    } },
+  { name: 'Review button sheen mid-sweep', shot: 'history-shimmer',
+    run: async function (page, h) {
+      await h.inject();
+      await page.eval(function () {
+        document.documentElement.removeAttribute('data-theme');
+        var a = document.querySelector('.hist-drill-open');
+        if (a) a.classList.add('hist-review-sheen-mid');
+      });
+      await h.wait('!!document.querySelector(".hist-review-sheen-mid")', 'sheen mid class');
+      var mid = await page.eval(function () {
+        var a = document.querySelector('.hist-review-sheen-mid');
+        if (!a) return '';
+        var after = getComputedStyle(a, ':after');
+        return after.opacity + '|' + after.backgroundPosition;
+      });
+      h.assert(parseFloat(mid) > 0, 'sheen mid-sweep is visible on the Review button, got ' + mid);
     } }
 ];
 

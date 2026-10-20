@@ -802,8 +802,8 @@ function scriptToken(file) {
 }
 assert(scriptToken('js/srs.js') === '20261017a', 'srs.js cache token is 20261017a, got ' + scriptToken('js/srs.js'));
 assert(scriptToken('js/gamify.js') === '20261002b', 'gamify.js cache token is 20261002b, got ' + scriptToken('js/gamify.js'));
-assert(scriptToken('js/view-practice.js') === '20261020g', 'view-practice.js cache token is 20261020g, got ' + scriptToken('js/view-practice.js'));
-assert(scriptToken('js/view-mistakes.js') === '20261020e', 'view-mistakes.js cache token is 20261020e, got ' + scriptToken('js/view-mistakes.js'));
+assert(scriptToken('js/view-practice.js') === '20261020n', 'view-practice.js cache token is 20261020n, got ' + scriptToken('js/view-practice.js'));
+assert(scriptToken('js/view-mistakes.js') === '20261020m', 'view-mistakes.js cache token is 20261020m, got ' + scriptToken('js/view-mistakes.js'));
 assert(scriptToken('js/app.js') === '20261020j', 'app.js cache token is 20261020j, got ' + scriptToken('js/app.js'));
 assert(indexHtml.indexOf('js/srs.js?v=20261001j') < 0 &&
        indexHtml.indexOf('js/srs.js?v=20261002a') < 0 &&
