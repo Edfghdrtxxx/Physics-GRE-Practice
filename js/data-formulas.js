@@ -717,7 +717,7 @@ PGRE.FORMULAS = [
     name: "Spin-1/2 operator properties (supplemental)",
     front: "For a spin-$\\tfrac{1}{2}$ particle, what results can a measurement of any spin component give, what is the eigenvalue of $S^2$, and what is the square of each Pauli matrix?",
     back: "$$S_i = \\pm\\frac{\\hbar}{2}, \\qquad S^2 = \\tfrac{3}{4}\\hbar^2, \\qquad \\sigma_i^2 = I$$ With $\\hat{S}_i = \\tfrac{\\hbar}{2}\\sigma_i$, each $\\hat{S}_i^2 = \\tfrac{\\hbar^2}{4}I$, and the three add to $\\tfrac{3}{4}\\hbar^2$. The components obey $[\\hat{S}_x, \\hat{S}_y] = i\\hbar\\hat{S}_z$.",
-    note: "Supplemental — Kahn §5.5.1, p.108; the matrices are given on the exam, their properties are not."
+    note: "Supplemental — Kahn §5.5.1, pp.108–109: $\\hat{S}_i = \\tfrac{\\hbar}{2}\\sigma_i$ on p.108; the three matrices and their eigenvalues $\\pm 1$ on p.109, where the book advises remembering their properties rather than their entries. Some questions name the matrices without printing them (GR1777 question 71)."
   },
   {
     id: "supp-spin-measurement",
