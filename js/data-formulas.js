@@ -467,10 +467,32 @@ PGRE.FORMULAS = [
     eq: "supp",
     topic: "lb",
     tag: "Counting",
-    name: "Binomial mean and variance (supplemental list)",
-    front: "For $N$ independent Bernoulli trials with one success probability $p$, state the mean of the number of successes and its variance. (2)",
-    back: "<ul class=\"recall-list\"><li>$\\langle X\\rangle = Np$.</li><li>$\\mathrm{Var}\\,X = Np(1-p)$. Do not set the variance equal to the mean, and do not replace it by a Poisson $\\sigma \\approx \\sqrt{N}$.</li></ul>",
-    note: "Supplemental. The probability of $k$ successes is $\\binom{N}{k}p^k(1-p)^{N-k}$."
+    name: "Binomial distribution (supplemental list)",
+    front: "For $N$ independent trials, each a success with probability $p$, state the probability of $k$ successes, the mean and variance of $k$, and the two large-$N$ limits. (3)",
+    back: "<ul class=\"recall-list\"><li>$P(k) = \\binom{N}{k}p^k(1-p)^{N-k}$; the chance of at least one success is $1-(1-p)^N$.</li><li>$\\langle k\\rangle = Np$ and $\\sigma^2 = Np(1-p)$, which is smaller than the mean. A fair coin gives $\\sigma = \\sqrt{N}/2$, not $\\sqrt{N}$.</li><li>$N \\to \\infty$, $p \\to 0$ with $Np = \\lambda$ fixed: Poisson with mean $\\lambda$. $Np(1-p) \\gg 1$: Gaussian with $\\mu = Np$, $\\sigma^2 = Np(1-p)$.</li></ul>",
+    note: "Supplemental."
+  },
+  {
+    id: "supp-poisson-distribution",
+    kind: "list",
+    eq: "supp",
+    topic: "lb",
+    tag: "Poisson statistics",
+    name: "Poisson distribution (supplemental list)",
+    front: "Independent events arrive at a constant average rate $r$, and you count for a time $t$. State the probability of $n$ counts, its mean and spread, and its large-mean limit. (3)",
+    back: "<ul class=\"recall-list\"><li>$P(n) = \\lambda^n e^{-\\lambda}/n!$ with $\\lambda = rt$; no counts has probability $e^{-\\lambda}$.</li><li>Mean $=$ variance $= \\lambda$, so $\\sigma = \\sqrt{\\lambda}$ and the fractional spread is $1/\\sqrt{\\lambda}$; $4$ times the counting time halves it.</li><li>It is the binomial with $N \\to \\infty$, $p \\to 0$, $Np = \\lambda$; for large $\\lambda$ it becomes a Gaussian with $\\mu = \\lambda$, $\\sigma = \\sqrt{\\lambda}$.</li></ul>",
+    note: "Supplemental."
+  },
+  {
+    id: "supp-gaussian-distribution",
+    kind: "list",
+    eq: "supp",
+    topic: "lb",
+    tag: "Gaussian statistics",
+    name: "Gaussian distribution (supplemental list)",
+    front: "State the normalized Gaussian with mean $\\mu$ and standard deviation $\\sigma$, the probability within $1\\sigma$, $2\\sigma$ and $3\\sigma$, its full width at half maximum, and the uncertainty of the mean of $N$ measurements. (4)",
+    back: "<ul class=\"recall-list\"><li>$p(x) = \\dfrac{1}{\\sigma\\sqrt{2\\pi}}\\,e^{-(x-\\mu)^2/(2\\sigma^2)}$, normalized by $\\int_{-\\infty}^{\\infty} e^{-ax^2}dx = \\sqrt{\\pi/a}$.</li><li>Within $\\pm1\\sigma$, $\\pm2\\sigma$, $\\pm3\\sigma$: $68\\%$, $95\\%$, $99.7\\%$.</li><li>$\\mathrm{FWHM} = 2\\sqrt{2\\ln 2}\\,\\sigma \\approx 2.35\\,\\sigma$.</li><li>The mean of $N$ independent measurements has $\\sigma_{\\bar{x}} = \\sigma/\\sqrt{N}$; independent errors add in quadrature.</li></ul>",
+    note: "Supplemental."
   },
   {
     id: "supp-thin-film",

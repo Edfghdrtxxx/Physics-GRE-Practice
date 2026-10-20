@@ -748,7 +748,8 @@ PGRE.srs = {
     'supp-friction',
     'supp-gravity-orbits',
     'supp-image-plane',
-    'supp-heat-pump-cop'
+    'supp-heat-pump-cop',
+    'supp-binomial-counting'
   ],
   requeueCuratedCards: function () {
     var s = PGRE.store.state;
