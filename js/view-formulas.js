@@ -218,7 +218,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20261013a';
+      s.src = 'js/flashmodes.js?v=20261020a';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -2618,6 +2618,9 @@ PGRE.views.formulas = (function () {
     var row = committedReviewRow(c.id);
     var opId = row && row.op;
     if (!opId || typeof PGRE.srs.undoReview !== 'function') return;
+    var before = PGRE.store.checkpoint();
+    var undoBefore = study.undo.slice();
+    var queueBefore = study.queue.slice();
     var undone = PGRE.srs.undoReview(String(opId));
     if (undone == null) return;
     forgetUndoOp(String(opId));
@@ -2628,11 +2631,18 @@ PGRE.views.formulas = (function () {
       renderGradedCard(c);
       return;
     }
+    var gradeBefore = entry.grade;
     entry.grade = g;
     while (takeQueueCard(c.id)) { /* drop every queued copy */ }
     if (g === 'again') study.queue.push(c);
     persistStudy();
-    PGRE.store.save();
+    if (!PGRE.store.save()) {
+      // Not stored: the earlier grade stands in memory and on screen too.
+      PGRE.store.rollback(before);
+      study.undo = undoBefore;
+      study.queue = queueBefore;
+      entry.grade = gradeBefore;
+    }
     renderGradedCard(c);
   }
 
@@ -3085,6 +3095,7 @@ PGRE.views.formulas = (function () {
     var step = study.steps[id] || 0;
     var needsCommit = !stateless || g === 'easy' || (stateless && step !== 0 && g !== 'again');
     var opId = '';
+    var before = needsCommit ? PGRE.store.checkpoint() : null;
     if (needsCommit) {
       var committed = commitReview(id, g);
       if (committed === null) {
@@ -3135,7 +3146,16 @@ PGRE.views.formulas = (function () {
     study.xp += 2;                  // every press rewards effort (unchanged from before)
     study.history.push({ c: c, grade: g, day: PGRE.srs.today() });
     persistStudy();                 // ITEM 2: stage the resume snapshot into the same save
-    PGRE.store.save();
+    if (!PGRE.store.save() && before) {
+      // The grade did not reach storage. Take it back from memory too and
+      // keep this card on screen: moving on would leave a card that a
+      // reload brings back, graded only in this tab's memory.
+      PGRE.store.rollback(before);
+      restoreSession(study.undo.pop());
+      study.currentId = id;
+      clearChosenGrade();
+      return;
+    }
 
     // F8 + F11: queue overlays. When the round-closing press is an Again, the
     // scaffold shows first and the checkpoint after it.
@@ -3233,10 +3253,10 @@ PGRE.views.formulas = (function () {
 
   /* F1a: undo stack, max 10, dies with the session. Snapshot BEFORE the mutation
      so a pop restores the exact pre-press session + card state. */
-  function pushUndo(id, opId) {
+  function sessionSnapshot(id, opId) {
     var stepsCopy = {};
     for (var k in study.steps) stepsCopy[k] = study.steps[k];
-    study.undo.push({
+    return {
       id: id,
       day: PGRE.srs.today(),
       opId: opId ? String(opId) : '',
@@ -3245,21 +3265,15 @@ PGRE.views.formulas = (function () {
       historyLen: study.history.length,
       steps: stepsCopy,
       pressCount: study.pressCount
-    });
+    };
+  }
+
+  function pushUndo(id, opId) {
+    study.undo.push(sessionSnapshot(id, opId));
     if (study.undo.length > 10) study.undo.shift();
   }
 
-  /* Undo the named review, then the session. A null undoReview leaves the
-     screen where it is. This does not pop cardReviews or write a card snapshot. */
-  function undoGrade() {
-    if (!study || study.overlay || !study.undo.length) return;
-    var e = study.undo[study.undo.length - 1];
-    if (e.opId) {
-      if (typeof PGRE.srs.undoReview !== 'function') return;
-      var res = PGRE.srs.undoReview(String(e.opId));
-      if (res == null) return;
-    }
-    study.undo.pop();
+  function restoreSession(e) {
     study.queue = e.queueIds.slice();
     study.done = e.done;
     study.xp = e.xp;
@@ -3268,12 +3282,40 @@ PGRE.views.formulas = (function () {
     study.steps = {};
     for (var k in e.steps) study.steps[k] = e.steps[k];
     study.pressCount = e.pressCount;
+  }
+
+  /* Undo the named review, then the session. A null undoReview leaves the
+     screen where it is. This does not pop cardReviews or write a card snapshot. */
+  function undoGrade() {
+    if (!study || study.overlay || !study.undo.length) return;
+    var e = study.undo[study.undo.length - 1];
+    var before = PGRE.store.checkpoint();
+    var now = sessionSnapshot(study.currentId, '');
+    var historyNow = study.history.slice();
+    var wasReviewing = study.reviewing;
+    if (e.opId) {
+      if (typeof PGRE.srs.undoReview !== 'function') return;
+      var res = PGRE.srs.undoReview(String(e.opId));
+      if (res == null) return;
+    }
+    study.undo.pop();
+    restoreSession(e);
     study.overlay = null;
     study.pendingOverlays = [];
     study.reviewing = false;
     study.currentId = study.queue[0] && study.queue[0].id;
     persistStudy();
-    PGRE.store.save();
+    if (!PGRE.store.save() && e.opId) {
+      // The undo did not reach storage: the stored grade stands, so memory
+      // and the screen keep it too.
+      PGRE.store.rollback(before);
+      restoreSession(now);
+      study.history = historyNow;
+      study.undo.push(e);
+      study.reviewing = wasReviewing;
+      study.currentId = now.id;
+      return;
+    }
     renderCard();
   }
 

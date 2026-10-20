@@ -905,6 +905,7 @@ PGRE.store = {
     if (st.settings.examDate === '2026-10-28') st.settings.examDate = '2026-11-01';
   },
 
+  /* Returns true when the state reached localStorage. */
   save: function () {
     try {
       // Absorb a sibling tab's newer write before overwriting: without this
@@ -935,13 +936,37 @@ PGRE.store = {
         this._persistFailed = false;
         if (PGRE.persistWarning) PGRE.persistWarning(false);
       }
+      return true;
     } catch (e) {
       console.error('Could not persist state', e);
       if (!this._persistFailed) {
         this._persistFailed = true;
         if (PGRE.persistWarning) PGRE.persistWarning(true);
       }
+      return false;
     }
+  },
+
+  /* The live state as text, taken just before a durable change (a grade,
+     an undo) so that a save that fails can put it back with rollback(). */
+  checkpoint: function () {
+    try { return JSON.stringify(this.state); } catch (e) { return null; }
+  },
+
+  /* Put the live state back to a checkpoint after the save of a durable
+     change failed: the stored blob never got the change, and memory must
+     not keep it either, or the screen moves on and a reload takes it back.
+     Restores in place, so code holding store.state keeps the same object.
+     Returns true when the state was restored. */
+  rollback: function (blob) {
+    if (!blob || !this.state) return false;
+    var prev;
+    try { prev = JSON.parse(blob); } catch (e) { return false; }
+    if (!prev || typeof prev !== 'object' || Array.isArray(prev)) return false;
+    var st = this.state, k;
+    for (k in st) if (Object.prototype.hasOwnProperty.call(st, k)) delete st[k];
+    for (k in prev) if (Object.prototype.hasOwnProperty.call(prev, k)) st[k] = prev[k];
+    return true;
   },
 
   /* Highest epoch seen anywhere (live heap + disk). Deliberate wipes must beat

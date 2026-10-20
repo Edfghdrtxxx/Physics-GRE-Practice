@@ -123,6 +123,8 @@ async function helpers(page) {
         cards: s.cards || {},
         diskCards: disk.cards || {},
         canWrite: PGRE.store.canWrite(),
+        chosen: (document.querySelector('#fcard-actions [data-grade][aria-pressed="true"]') || { getAttribute: function () { return ''; } }).getAttribute('data-grade'),
+        toast: /Saving failed/.test(document.body.textContent),
         today: PGRE.srs.today()
       });
     }));
@@ -166,6 +168,22 @@ async function helpers(page) {
       'w.PGRE.FORMULAS = spec.map(function (c) { return { id: c.id, topic: c.topic, name: "Card " + c.id,' +
       '  front: "prompt " + c.id, back: "$" + c.id.replace(/[^a-z]/g, "") + "=1$", note: "" }; });' +
       'w.PGRE.BOOK_FORMULAS = []; w.PGRE.BOOK_LISTS = []; }');
+  };
+
+  h.FS_SPEC = [
+    { id: 'fs-a', topic: 'cm', learned: true }, { id: 'fs-b', topic: 'em', learned: true },
+    { id: 'fs-c', topic: 'qm', learned: true }
+  ];
+
+  /* One click while every write of the state blob throws, the way a full
+     browser storage does. Returns whether saving worked just before. */
+  h.clickWhileStorageFull = async function (selector) {
+    return page.eval('() => { var orig = Storage.prototype.setItem;' +
+      'Storage.prototype.setItem = function (k, v) { if (k === "pgre-state-v1") {' +
+      '  var e = new Error("quota"); e.name = "QuotaExceededError"; throw e; } return orig.apply(this, arguments); };' +
+      'var could = PGRE.store.canWrite();' +
+      'try { document.querySelector(' + JSON.stringify(selector) + ').click(); }' +
+      'finally { Storage.prototype.setItem = orig; } return could; }');
   };
 
   h.closeStaleTab = async function () {
@@ -236,6 +254,114 @@ var STAGES = [
       var regraded = await h.look();
       h.assert(regraded.cards[target].lastGrade === 'good' && regraded.queueIds.indexOf(target) === -1,
         'changing that Again to Good takes the card out of the queue');
+    } },
+
+  { name: 'a Study grade whose save fails stays on screen, unrecorded', shot: '02-failed-save-card-stays',
+    run: async function (page, h) {
+      await h.seedAndStudy(h.FS_SPEC);
+      var before = await h.flip();
+      var target = before.current;
+      var could = await h.clickWhileStorageFull('#fcard-actions [data-grade="good"]');
+      await h.sleep(200);
+      var failed = await h.look();
+      h.assert(could === true, 'saving worked until this press');
+      h.assert(failed.canWrite === false, 'the failed write is noticed (canWrite is false)');
+      h.assert(failed.diskCards[target].reviews === 2, 'the stored card still has 2 reviews');
+      h.assert(failed.current === target && failed.queueIds.indexOf(target) !== -1,
+        'the card stays on screen and in the queue (on screen: ' + failed.current + ')');
+      h.assert(/ 0 done /.test(failed.line), 'the count line still reads 0 done (' + failed.line + ')');
+      h.assert(failed.cards[target].reviews === 2 && failed.cards[target].due === failed.today,
+        'memory matches the store: the card was not graded (2 reviews, due today)');
+      h.assert(failed.flipped && failed.chosen === '', 'its answer stays open with no grade marked');
+      h.assert(failed.toast, 'the saving-failed warning is on screen');
+    } },
+
+  { name: 'once saving works the same Good goes through, and a reload keeps it',
+    run: async function (page, h) {
+      var before = await h.look();
+      var target = before.current;
+      await page.eval(function () { PGRE.store.save(); });
+      var healed = await h.flip();
+      h.assert(healed.canWrite === true && healed.current === target, 'saving works again with the same card on screen');
+      var graded = await h.press('good');
+      h.assert(graded.diskCards[target].reviews === 3 && graded.current !== target,
+        'Good now stores 3 reviews and moves on');
+      // Reload: the stored session does not bring the card back.
+      await page.open(h.URL);
+      await h.wait('#main');
+      await h.useDeck(h.FS_SPEC);
+      await page.eval(function () { location.hash = '#/formulas'; });
+      await h.wait('#resume-btn');
+      await h.click('#resume-btn');
+      await h.wait('.formula-palette .pal-cell.is-current');
+      var resumed = await h.look();
+      h.assert(resumed.queueIds.indexOf(target) === -1 && resumed.current !== target,
+        'after a reload and Resume the graded card is not in the queue');
+    } },
+
+  { name: 'a Study Undo whose save fails keeps the stored grade',
+    run: async function (page, h) {
+      await h.seedAndStudy(h.FS_SPEC);
+      var first = await h.flip();
+      var target = first.current;
+      var graded = await h.press('good');
+      h.assert(graded.diskCards[target].reviews === 3 && graded.queueIds.indexOf(target) === -1,
+        'Good stores 3 reviews and takes the card out');
+      await h.clickWhileStorageFull('#study-undo');
+      await h.sleep(200);
+      var failed = await h.look();
+      h.assert(failed.diskCards[target].reviews === 3 && failed.cards[target].reviews === 3,
+        'the undo did not reach storage, and memory keeps the grade too (3 reviews)');
+      h.assert(failed.queueIds.indexOf(target) === -1 && failed.current === graded.current,
+        'the screen stays on the next card, and the graded card stays out of the queue');
+      await h.click('.formula-palette .pal-cell[data-id="' + target + '"]');
+      await h.wait('.formula-study-live .peek-grade');
+      var peek = await h.look();
+      h.assert(peek.chosen === 'good' && peek.cells[target].grade === 'good',
+        'opening its box still shows the Good grade');
+      await page.eval(function () { PGRE.store.save(); });
+      await h.click('#study-undo');
+      await h.sleep(200);
+      var undone = await h.look();
+      h.assert(undone.diskCards[target].reviews === 2 && undone.cards[target].reviews === 2 && undone.current === target,
+        'once saving works, Undo restores the card (2 reviews) and shows it again');
+    } },
+
+  { name: 'a Type grade whose save fails stays on screen, unrecorded',
+    run: async function (page, h) {
+      await h.seed(h.FS_SPEC);
+      await page.eval(function () { location.hash = '#/formulas'; });
+      await h.wait('[data-mode="type"]');
+      await h.click('[data-mode="type"]');
+      await h.wait('#game-start');
+      await h.click('#game-start');
+      await h.wait('#flash-submit');
+      async function typeLook() {
+        return JSON.parse(await page.eval(function () {
+          var name = document.querySelector('.fcard-name');
+          var disk = JSON.parse(localStorage.getItem('pgre-state-v1') || '{}');
+          return JSON.stringify({
+            id: name ? name.textContent.replace(/^Card /, '') : '',
+            revealed: !!document.querySelector('#flash-reveal [data-grade="good"]'),
+            cards: PGRE.store.state.cards, diskCards: disk.cards || {}, canWrite: PGRE.store.canWrite()
+          });
+        }));
+      }
+      await h.click('#flash-submit');
+      await h.wait('#flash-reveal [data-grade="good"]');
+      var shown = await typeLook();
+      await h.clickWhileStorageFull('#flash-reveal [data-grade="good"]');
+      await h.sleep(200);
+      var failed = await typeLook();
+      h.assert(failed.canWrite === false && failed.diskCards[shown.id].reviews === 2 &&
+        failed.cards[shown.id].reviews === 2, 'Type: the failed save leaves the card ungraded in storage and in memory');
+      h.assert(failed.id === shown.id && failed.revealed, 'Type: the same card stays on screen with its grade buttons');
+      await page.eval(function () { PGRE.store.save(); });
+      await h.click('#flash-reveal [data-grade="good"]');
+      await h.sleep(200);
+      var graded = await typeLook();
+      h.assert(graded.diskCards[shown.id].reviews === 3 && graded.id !== shown.id,
+        'Type: once saving works, Good stores 3 reviews and moves on');
     } }
 ];
 

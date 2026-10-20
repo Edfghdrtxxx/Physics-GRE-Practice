@@ -604,7 +604,9 @@ function loadShipped(reduced, opts) {
         formulaStudyEnd: null,
         formulaCheckIn: { current: 0, best: 0, lastDay: null }
       },
-      save: function () {},
+      save: function () { return true; },
+      checkpoint: function () { return null; },
+      rollback: function () { return false; },
       load: function () {},
       rollDay: function () {},
       touchDay: function () {},
