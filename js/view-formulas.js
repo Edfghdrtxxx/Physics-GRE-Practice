@@ -23,7 +23,8 @@ PGRE.views.formulas = (function () {
   // Study session: { queue, total, done, again, xp, flipped, history, peek,
   //   overlay: null|'peek'|'scaffold'|'checkpoint', steps: {id->learningStep},
   //   undo: [snapshots], pressCount, pendingOverlays: [], settled,
-  //   roster: unique session cards in start order, currentId, reviewing }
+  //   roster: unique session cards in start order, currentId, reviewing,
+  //   liveId: the live card while a graded card is open for review }
   var study = null;
   var lastCompletedStudy = null;
   var activeGame = null; // Match/Type/Quiz controller { onKey, stop } or null
@@ -2604,11 +2605,12 @@ PGRE.views.formulas = (function () {
     study.undo = study.undo.filter(function (e) { return !e || e.opId !== opId; });
   }
 
-  /* Replace the last committed review for this card. Session counters,
-     XP and streaks stay put; the SRS row is undone and rewritten the way
-     practice review chips stamp an existing attempt. The queue follows the
-     new grade as a live press would: Again brings the card back once at
-     the end of this session, a passing grade takes it out. */
+  /* Replace the last committed review for this card. XP, streaks and the
+     done count stay put; the SRS row is undone and rewritten the way
+     practice review chips stamp an existing attempt. The queue and the
+     Again count follow the new grade as a live press would: Again brings
+     the card back once at the end of this session, a passing grade takes
+     it out. */
   function regrade(g) {
     if (!study || study.overlay) return;
     var c = shownCard();
@@ -2621,10 +2623,17 @@ PGRE.views.formulas = (function () {
     var before = PGRE.store.checkpoint();
     var undoBefore = study.undo.slice();
     var queueBefore = study.queue.slice();
+    var againBefore = study.again;
+    var hadStep = Object.prototype.hasOwnProperty.call(study.steps, c.id);
+    var stepBefore = study.steps[c.id];
     var undone = PGRE.srs.undoReview(String(opId));
     if (undone == null) return;
     forgetUndoOp(String(opId));
-    var committed = commitReview(c.id, g);
+    // The undone review created this card's schedule. Again on a card with
+    // no schedule is the live Again on a new card: nothing is committed and
+    // its learning steps start over.
+    var relearn = g === 'again' && !undone.card;
+    var committed = relearn ? '' : commitReview(c.id, g);
     if (committed === null) {
       persistStudy();
       PGRE.store.save();
@@ -2633,6 +2642,9 @@ PGRE.views.formulas = (function () {
     }
     var gradeBefore = entry.grade;
     entry.grade = g;
+    if (relearn) study.steps[c.id] = (c.kind === 'list') ? 1 : 0;
+    if (g === 'again' && gradeBefore !== 'again') study.again++;
+    if (g !== 'again' && gradeBefore === 'again') study.again = Math.max(0, study.again - 1);
     while (takeQueueCard(c.id)) { /* drop every queued copy */ }
     if (g === 'again') study.queue.push(c);
     persistStudy();
@@ -2641,6 +2653,9 @@ PGRE.views.formulas = (function () {
       PGRE.store.rollback(before);
       study.undo = undoBefore;
       study.queue = queueBefore;
+      study.again = againBefore;
+      if (hadStep) study.steps[c.id] = stepBefore;
+      else delete study.steps[c.id];
       entry.grade = gradeBefore;
     }
     renderGradedCard(c);
@@ -2652,7 +2667,11 @@ PGRE.views.formulas = (function () {
     if (window.PGRE && window.PGRE.teardownInlineVisualizer) {
       window.PGRE.teardownInlineVisualizer();
     }
+    // Leaving a graded card opened for review: back to the card that was
+    // live, not the reviewed one, even when an Again put it back in the queue.
+    if (study.reviewing && study.liveId) study.currentId = study.liveId;
     study.reviewing = false;
+    study.liveId = null;
     if (!study.currentId || !shownCard()) {
       study.currentId = study.queue[0] && study.queue[0].id;
     }
@@ -2760,6 +2779,7 @@ PGRE.views.formulas = (function () {
     if (window.PGRE && window.PGRE.teardownInlineVisualizer) {
       window.PGRE.teardownInlineVisualizer();
     }
+    if (!study.reviewing) study.liveId = study.currentId;
     study.reviewing = true;
     study.flipped = true;
     study.peek = null;

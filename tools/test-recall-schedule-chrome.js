@@ -126,6 +126,8 @@ async function helpers(page) {
         cards: s.cards || {},
         diskCards: disk.cards || {},
         canWrite: PGRE.store.canWrite(),
+        steps: fs.steps || {},
+        text: (document.getElementById('flash-body') || document.body).textContent,
         chosen: (document.querySelector('#fcard-actions [data-grade][aria-pressed="true"]') || { getAttribute: function () { return ''; } }).getAttribute('data-grade'),
         toast: /Saving failed/.test(document.body.textContent),
         today: PGRE.srs.today()
@@ -173,6 +175,22 @@ async function helpers(page) {
       'w.PGRE.BOOK_FORMULAS = []; w.PGRE.BOOK_LISTS = []; }');
   };
 
+  /* Open a graded card's box in the navigator and change its grade. */
+  h.regradeTo = async function (id, grade) {
+    await h.click('.formula-palette .pal-cell[data-id="' + id + '"]');
+    await wait('.formula-study-live .peek-grade');
+    await h.click('#fcard-actions [data-grade="' + grade + '"]');
+    await sleep(200);
+  };
+
+  /* From the regrade view back to the live card: Back, then Resume study. */
+  h.resumeLive = async function () {
+    await h.click('#session-back');
+    await wait('#peek-resume');
+    await h.click('#peek-resume');
+    await sleep(150);
+  };
+
   /* Grade Good on every card until the summary. note(look) may return a
      value to record per card shown. */
   h.finish = async function (note) {
@@ -186,6 +204,50 @@ async function helpers(page) {
       await h.press('good');
     }
     return { shown: shown, notes: notes, end: await h.look() };
+  };
+
+  /* One learned card graded live with first, then regraded through each of
+     grades in turn. back: how many more times the card must be shown
+     before the session ends (1 when the last regrade is Again). */
+  h.regradeTrial = async function (page, first, grades, back) {
+    await h.seedAndStudy([
+      { id: 'rg-a', topic: 'cm', learned: true }, { id: 'rg-b', topic: 'em', learned: true },
+      { id: 'rg-c', topic: 'qm', learned: true }
+    ]);
+    var start = await h.flip();
+    var target = start.current;
+    var graded = await h.press(first);
+    var copies = graded.queueIds.filter(function (id) { return id === target; }).length;
+    h.assert(copies === (first === 'again' ? 1 : 0),
+      'live ' + first + ' leaves ' + copies + ' copy of the card in the queue');
+    var now = graded;
+    for (var i = 0; i < grades.length; i++) {
+      await h.regradeTo(target, grades[i]);
+      now = await h.look();
+      var n = now.queueIds.filter(function (id) { return id === target; }).length;
+      if (grades[i] === 'again') {
+        h.assert(now.cards[target].lastGrade === 'again' && now.cards[target].due === now.today &&
+          now.diskCards[target].lastGrade === 'again',
+          'regrade to Again stores Again, due today');
+        h.assert(n === 1 && now.queueIds[now.queueIds.length - 1] === target,
+          'the card is in the queue once, at the end (queue: ' + now.queueIds.join(', ') + ')');
+        h.assert(now.cells[target].grade === 'again', 'its box shows Again');
+      } else {
+        h.assert(now.cards[target].lastGrade === grades[i] && now.cards[target].due > now.today && n === 0,
+          'regrade to ' + grades[i] + ' schedules a later day and takes the card out of the queue');
+      }
+    }
+    await h.resumeLive();
+    var run = await h.finish();
+    var seen = run.shown.filter(function (id) { return id === target; }).length;
+    h.assert(seen === back, 'the card is shown ' + back + ' more time(s) before the session ends (shown: ' +
+      run.shown.join(', ') + ')');
+    if (back) h.assert(run.shown[0] !== target && run.shown[run.shown.length - 1] === target,
+      'leaving the regrade view goes back to the live card, and the Again card comes last');
+    h.assert(run.end.summary, 'the session ends');
+    h.assert(run.end.cards[target].due > run.end.today, 'the card ends scheduled for a later day');
+    h.assert(back ? /1 came back for another pass/.test(run.end.text) : !/came back for another pass/.test(run.end.text),
+      'the summary counts ' + back + ' card that came back');
   };
 
   h.FS_SPEC = [
@@ -212,66 +274,76 @@ async function helpers(page) {
 }
 
 var STAGES = [
-  { name: 'regrade to Again puts the card back in the session', shot: '01-regrade-again-requeued', size: '1280x800',
+  { name: 'regrade Good to Again puts the card back in the session', size: '1280x800',
     run: async function (page, h) {
-      await h.seedAndStudy([
-        { id: 'rg-a', topic: 'cm', learned: true }, { id: 'rg-b', topic: 'em', learned: true },
-        { id: 'rg-c', topic: 'qm', learned: true }
-      ]);
-      var first = await h.look();
-      var target = first.current;
-      await h.flip();
-      var graded = await h.press('good');
-      h.assert(graded.queueIds.indexOf(target) === -1, 'Good on a learned card takes it out of the session');
-      await h.click('.formula-palette .pal-cell[data-id="' + target + '"]');
-      await h.wait('.formula-study-live .peek-grade');
-      await h.click('#fcard-actions [data-grade="again"]');
-      await h.sleep(200);
-      var regraded = await h.look();
-      h.assert(regraded.cards[target].lastGrade === 'again' && regraded.cards[target].due === regraded.today,
-        'the regrade stores Again, due today');
-      h.assert(regraded.queueIds.filter(function (id) { return id === target; }).length === 1 &&
-        regraded.queueIds[regraded.queueIds.length - 1] === target,
-        'the card regraded to Again is back in this session\'s queue once, at the end');
-      h.assert(regraded.cells[target].grade === 'again', 'its box shows Again');
-      // Finish the session: the card comes up once more, then leaves.
-      var shown = [];
-      await h.click('.formula-palette .pal-cell:not(.is-graded)');
-      await h.sleep(150);
-      for (var guard = 0; guard < 8; guard++) {
-        var now = await h.look();
-        if (now.summary || !now.current) break;
-        shown.push(now.current);
-        await h.flip();
-        await h.press('good');
-      }
-      h.assert(shown.filter(function (id) { return id === target; }).length === 1,
-        'the card regraded to Again is shown once more before the session ends');
-      var end = await h.look();
-      h.assert(end.summary, 'the session ends after the Again card is graded Good');
-      h.assert(end.cards[target].lastGrade === 'good' && end.cards[target].due > end.today,
-        'the second grade schedules it for a later day');
+      await h.regradeTrial(page, 'good', ['again'], 1);
+    } },
+
+  { name: 'regrade Hard to Again puts the card back in the session',
+    run: async function (page, h) {
+      await h.regradeTrial(page, 'hard', ['again'], 1);
+    } },
+
+  { name: 'regrade a requeued card: live Again, then Hard, then Again',
+    run: async function (page, h) {
+      await h.regradeTrial(page, 'again', ['hard', 'again'], 1);
     } },
 
   { name: 'regrade from Again to Good takes the repeat out of the session',
     run: async function (page, h) {
+      await h.regradeTrial(page, 'again', ['good'], 0);
+    } },
+
+  { name: 'regrade Good to Again: the card is back on screen later in the session', shot: '01-regrade-again-back-live',
+    run: async function (page, h) {
       await h.seedAndStudy([
-        { id: 'rp-a', topic: 'cm', learned: true }, { id: 'rp-b', topic: 'em', learned: true },
-        { id: 'rp-c', topic: 'qm', learned: true }
+        { id: 'rs-a', topic: 'cm', learned: true }, { id: 'rs-b', topic: 'em', learned: true },
+        { id: 'rs-c', topic: 'qm', learned: true }
       ]);
-      var first = await h.look();
+      var start = await h.flip();
+      var target = start.current;
+      await h.press('good');
+      await h.regradeTo(target, 'again');
+      await h.resumeLive();
+      var back = await h.look();
+      h.assert(back.current !== target, 'leaving the regrade view shows the live card (' + back.current + '), not the Again card');
+      for (var guard = 0; guard < 6; guard++) {
+        var now = await h.look();
+        if (now.current === target || now.summary) break;
+        await h.flip();
+        await h.press('good');
+      }
+      now = await h.look();
+      h.assert(now.current === target && !now.summary && now.cells[target].grade === 'again',
+        'the card regraded to Again is the live card again, its box still marked Again (' + now.line + ')');
+    } },
+
+  { name: 'regrade a new card from Easy to Again starts its learning over',
+    run: async function (page, h) {
+      await h.seedAndStudy([
+        { id: 'rn-a', topic: 'cm' }, { id: 'rn-b', topic: 'em' }, { id: 'rn-c', topic: 'qm' }
+      ]);
+      var first = await h.flip();
       var target = first.current;
-      await h.flip();
-      var missed = await h.press('again');
-      h.assert(missed.queueIds.filter(function (id) { return id === target; }).length === 1,
-        'a live Again queues the card once more');
-      await h.click('.formula-palette .pal-cell[data-id="' + target + '"]');
-      await h.wait('.formula-study-live .peek-grade');
-      await h.click('#fcard-actions [data-grade="good"]');
-      await h.sleep(200);
+      var graded = await h.press('easy');
+      h.assert(graded.cards[target] && graded.cards[target].interval === 4, 'Easy on a new card schedules it 4 days out');
+      await h.regradeTo(target, 'again');
       var regraded = await h.look();
-      h.assert(regraded.cards[target].lastGrade === 'good' && regraded.queueIds.indexOf(target) === -1,
-        'changing that Again to Good takes the card out of the queue');
+      h.assert(!regraded.cards[target] && regraded.diskCards[target] === undefined,
+        'the regrade to Again leaves the card with no schedule, as a live Again on a new card does');
+      h.assert(regraded.queueIds.filter(function (id) { return id === target; }).length === 1 &&
+        regraded.queueIds[regraded.queueIds.length - 1] === target && regraded.steps[target] === 0,
+        'the card is back once at the end of the queue, at learning step 0');
+      await h.resumeLive();
+      var run = await h.finish(function (now) {
+        if (now.current === target) return (now.cards[target] ? 'scheduled' : 'no schedule') + ' step ' + now.steps[target];
+      });
+      h.assert(run.shown.filter(function (id) { return id === target; }).length === 2,
+        'it comes back for its two learning passes (' + run.shown.join(', ') + ')');
+      h.assert(run.notes[0] === 'no schedule step 0' && run.notes[1] === 'no schedule step 1',
+        'it returns unscheduled at step 0, and after the first Good at step 1 (' + run.notes.join('; ') + ')');
+      h.assert(run.end.cards[target].interval === 1 && run.end.cards[target].lapses === 0,
+        'it ends with a 1-day interval and no lapse');
     } },
 
   { name: 'a Study grade whose save fails stays on screen, unrecorded', shot: '02-failed-save-card-stays',
