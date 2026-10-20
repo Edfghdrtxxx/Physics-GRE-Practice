@@ -3182,6 +3182,9 @@ PGRE.views.formulas = (function () {
       restoreSession(study.undo.pop());
       study.currentId = id;
       clearChosenGrade();
+      // Say so for this press: the saving-failed warning stays up unchanged,
+      // and a learning pass never reaches gradeCard's own message.
+      if (typeof PGRE.pressNotRecorded === 'function') PGRE.pressNotRecorded();
       return;
     }
 

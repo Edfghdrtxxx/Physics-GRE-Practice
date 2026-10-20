@@ -604,7 +604,7 @@ function loadShipped(reduced, opts) {
         formulaStudyEnd: null,
         formulaCheckIn: { current: 0, best: 0, lastDay: null }
       },
-      save: function () { return true; },
+      save: function () { return !pgre.store.state._persistFailed; },
       checkpoint: function () { return null; },
       rollback: function () { return false; },
       load: function () {},

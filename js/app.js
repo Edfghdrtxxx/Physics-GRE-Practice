@@ -917,6 +917,17 @@ PGRE.persistWarning = (function () {
   };
 })();
 
+/* A grade or undo press whose save failed even after one retry: the card
+   stays, and this says the press itself was not recorded. One at a time. */
+PGRE.pressNotRecorded = (function () {
+  var el = null;
+  return function () {
+    if (el && el.isConnected) el.remove();
+    el = PGRE.toast('That press was <b>not</b> recorded — saving failed. ' +
+      'Free up browser storage, then press again.', 'error');
+  };
+})();
+
 /* ——— Finder-style breadcrumb top bar (BUNDLE G) ———
    A slim bar at the top of #main on every route: ◀ ▶ history arrows (wired at
    boot to history.back()/forward(), always enabled) + a clickable breadcrumb

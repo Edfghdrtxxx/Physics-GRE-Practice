@@ -130,6 +130,7 @@ async function helpers(page) {
         text: (document.getElementById('flash-body') || document.body).textContent,
         chosen: (document.querySelector('#fcard-actions [data-grade][aria-pressed="true"]') || { getAttribute: function () { return ''; } }).getAttribute('data-grade'),
         toast: /Saving failed/.test(document.body.textContent),
+        notRecorded: /That press was not recorded/.test(document.body.textContent),
         today: PGRE.srs.today()
       });
     }));
@@ -266,6 +267,13 @@ async function helpers(page) {
       'finally { Storage.prototype.setItem = orig; } return could; }');
   };
 
+  /* Let the study-time tracker save now, as it does when a page is hidden.
+     It saves on a click at most once every 30 s, so for the next 30 s only
+     the presses themselves save. */
+  h.flushTracker = async function () {
+    await page.eval(function () { window.dispatchEvent(new Event('pagehide')); });
+  };
+
   h.closeStaleTab = async function () {
     await page.eval('() => { var f = document.getElementById("stale-tab"); if (f) f.remove(); }');
   };
@@ -351,7 +359,9 @@ var STAGES = [
       await h.seedAndStudy(h.FS_SPEC);
       var before = await h.flip();
       var target = before.current;
+      await h.flushTracker();
       var could = await h.clickWhileStorageFull('#fcard-actions [data-grade="good"]');
+      await page.eval(function () { window.__refusedAt = Date.now(); });
       await h.sleep(200);
       var failed = await h.look();
       h.assert(could === true, 'saving worked until this press');
@@ -366,16 +376,16 @@ var STAGES = [
       h.assert(failed.toast, 'the saving-failed warning is on screen');
     } },
 
-  { name: 'once saving works the same Good goes through, and a reload keeps it',
+  { name: 'once saving works the next Good retries the save and goes through, and a reload keeps it',
     run: async function (page, h) {
-      var before = await h.look();
+      var before = await h.flip();
       var target = before.current;
-      await page.eval(function () { PGRE.store.save(); });
-      var healed = await h.flip();
-      h.assert(healed.canWrite === true && healed.current === target, 'saving works again with the same card on screen');
+      var since = await page.eval('() => Date.now() - window.__refusedAt');
+      h.assert(before.canWrite === false && since < 30000,
+        'storage works again, but no save has worked since the refused one ' + since + ' ms ago (canWrite is false)');
       var graded = await h.press('good');
-      h.assert(graded.diskCards[target].reviews === 3 && graded.current !== target,
-        'Good now stores 3 reviews and moves on');
+      h.assert(graded.diskCards[target].reviews === 3 && graded.current !== target && graded.canWrite === true,
+        'the next Good retries the save, stores 3 reviews and moves on');
       // Reload: the stored session does not bring the card back.
       await page.open(h.URL);
       await h.wait('#main');
@@ -404,7 +414,7 @@ var STAGES = [
         'the new card stays on screen with its answer open and no grade marked (on screen: ' + failed.current + ')');
       h.assert(!failed.steps[target] && failed.cells[target].grade === '' && !failed.cards[target],
         'memory keeps it at learning step 0, unmarked and unscheduled');
-      h.assert(failed.toast, 'the saving-failed warning is on screen');
+      h.assert(failed.toast && failed.notRecorded, 'the saving-failed warning and the press-not-recorded message are on screen');
     } },
 
   { name: 'once saving works the same learning pass goes through',
@@ -426,6 +436,7 @@ var STAGES = [
       var graded = await h.press('good');
       h.assert(graded.diskCards[target].reviews === 3 && graded.queueIds.indexOf(target) === -1,
         'Good stores 3 reviews and takes the card out');
+      await h.flushTracker();
       await h.clickWhileStorageFull('#study-undo');
       await h.sleep(200);
       var failed = await h.look();
@@ -438,12 +449,33 @@ var STAGES = [
       var peek = await h.look();
       h.assert(peek.chosen === 'good' && peek.cells[target].grade === 'good',
         'opening its box still shows the Good grade');
-      await page.eval(function () { PGRE.store.save(); });
+      h.assert(peek.canWrite === false, 'no save has worked since the refused undo (canWrite is false)');
       await h.click('#study-undo');
       await h.sleep(200);
       var undone = await h.look();
       h.assert(undone.diskCards[target].reviews === 2 && undone.cards[target].reviews === 2 && undone.current === target,
-        'once saving works, Undo restores the card (2 reviews) and shows it again');
+        'once storage works, the next Undo retries the save, restores the card (2 reviews) and shows it again');
+    } },
+
+  { name: 'a press whose save fails again says it was not recorded', shot: '06-press-not-recorded',
+    run: async function (page, h) {
+      await h.seedAndStudy(h.FS_SPEC);
+      var before = await h.flip();
+      var target = before.current;
+      await h.flushTracker();
+      await h.clickWhileStorageFull('#fcard-actions [data-grade="good"]');
+      await h.sleep(5200);   // the first press's message fades
+      var first = await h.look();
+      h.assert(first.canWrite === false && first.current === target && !first.notRecorded,
+        'the first refused press keeps the card on screen');
+      await h.clickWhileStorageFull('#fcard-actions [data-grade="good"]');
+      await h.sleep(200);
+      var again = await h.look();
+      h.assert(again.canWrite === false && again.diskCards[target].reviews === 2 && again.cards[target].reviews === 2,
+        'storage still full: the retry fails and the press is not recorded (2 reviews in storage and in memory)');
+      h.assert(again.current === target && again.flipped && again.chosen === '' && / 0 done /.test(again.line),
+        'the card stays on screen with its answer open and no grade marked (' + again.line + ')');
+      h.assert(again.notRecorded && again.toast, 'the screen says that press was not recorded, under the saving-failed warning');
     } },
 
   { name: 'a regrade to Again whose save fails keeps the stored Good',

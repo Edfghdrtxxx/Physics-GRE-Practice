@@ -701,11 +701,11 @@ function scriptToken(file) {
   var m = indexHtml.match(new RegExp('<script src="' + file.replace(/\./g, '\\.') + '\\?v=([^"]+)"'));
   return m ? m[1] : '';
 }
-assert(scriptToken('js/srs.js') === '20261020b', 'srs.js cache token is 20261020b, got ' + scriptToken('js/srs.js'));
+assert(scriptToken('js/srs.js') === '20261020c', 'srs.js cache token is 20261020c, got ' + scriptToken('js/srs.js'));
 assert(scriptToken('js/gamify.js') === '20261002b', 'gamify.js cache token is 20261002b, got ' + scriptToken('js/gamify.js'));
 assert(scriptToken('js/view-practice.js') === '20261017a', 'view-practice.js cache token is 20261017a, got ' + scriptToken('js/view-practice.js'));
 assert(scriptToken('js/view-mistakes.js') === '20261019a', 'view-mistakes.js cache token is 20261019a, got ' + scriptToken('js/view-mistakes.js'));
-assert(scriptToken('js/app.js') === '20261011b', 'app.js cache token is 20261011b, got ' + scriptToken('js/app.js'));
+assert(scriptToken('js/app.js') === '20261020a', 'app.js cache token is 20261020a, got ' + scriptToken('js/app.js'));
 assert(indexHtml.indexOf('js/srs.js?v=20261001j') < 0 &&
        indexHtml.indexOf('js/srs.js?v=20261002a') < 0 &&
        indexHtml.indexOf('js/srs.js?v=20261009a') < 0 &&

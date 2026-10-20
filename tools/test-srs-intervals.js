@@ -340,12 +340,23 @@ var beforeCard = JSON.stringify(store.state.cards['toy-a']);
 var beforeLog = store.state.cardReviews.length;
 var beforeSoft = store.state.formulaDay.softIds.slice();
 store._persistFailed = true;
+// Storage still full: the retry save fails too, so the grade is refused.
+var realSetItem = localStorage.setItem, realError = console.error;
+localStorage.setItem = function () { var e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; };
+console.error = function () {};
 var refused = srs.gradeCard('toy-a', 'good');
+localStorage.setItem = realSetItem;
+console.error = realError;
 assert(refused === null, 'refused gradeCard returns null');
 assert(JSON.stringify(store.state.cards['toy-a']) === beforeCard, 'refused grade leaves the card unchanged');
 assert(store.state.cardReviews.length === beforeLog, 'refused grade appends no review row');
 assert(JSON.stringify(store.state.formulaDay.softIds) === JSON.stringify(beforeSoft),
   'refused grade leaves softIds unchanged');
+assert(store._persistFailed === true, 'the failed retry keeps writes refused');
+// Storage works again: the next grade retries the save first and goes through.
+var retried = srs.gradeCard('toy-a', 'good');
+assert(retried && retried.reviews === 6 && store._persistFailed === false,
+  'after a refused save, the next grade retries the save and is accepted when storage works');
 store._persistFailed = false;
 
 console.log('\nS11 a committed grade consumes the soft pin');

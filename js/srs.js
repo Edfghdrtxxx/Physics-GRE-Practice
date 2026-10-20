@@ -551,6 +551,19 @@ PGRE.srs = {
     this._recordPinFact(id, op, 'restored');
   },
 
+  /* May a grade or an undo write now? After a refused save, try one save
+     first: the refused press was taken back, so memory matches storage and
+     the retry stores nothing new. Without it grades stay refused until some
+     other save works (the study-time tracker saves at most every 30 s).
+     When the retry fails too, says the press was not recorded. */
+  _retrySave: function () {
+    if (typeof PGRE.store.canWrite !== 'function' || PGRE.store.canWrite()) return true;
+    if (PGRE.store.save()) return true;
+    if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
+    if (typeof PGRE.pressNotRecorded === 'function') PGRE.pressNotRecorded();
+    return false;
+  },
+
   /* Grade one formula card. Returns the updated card, or null when the
      write is refused. A null return leaves cards, cardReviews and softIds
      unchanged — callers must not advance a queue, counter or history.
@@ -558,10 +571,7 @@ PGRE.srs = {
      review, and that id is removed from formulaDay.softIds. scheme is
      'current' so the legacy easy10 migration will not stretch this card. */
   gradeCard: function (id, grade) {
-    if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
-      if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
-      return null;
-    }
+    if (!this._retrySave()) return null;
     // Grade on top of a sibling tab's latest review of this card, or the
     // merge keeps the sibling's record (more reviews) and drops this grade.
     if (typeof PGRE.store.adoptDisk === 'function') PGRE.store.adoptDisk();
@@ -626,10 +636,7 @@ PGRE.srs = {
      card is the restored record, or null when the grade had created the card. */
   undoReview: function (opId) {
     if (!opId) return null;
-    if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
-      if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
-      return null;
-    }
+    if (!this._retrySave()) return null;
     // A sibling's newer review of this card supersedes the op (checked below).
     if (typeof PGRE.store.adoptDisk === 'function') PGRE.store.adoptDisk();
     var s = PGRE.store.state;
