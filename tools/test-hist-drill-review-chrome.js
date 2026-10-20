@@ -334,6 +334,32 @@ var STAGES = [
         'History lists Review this set for the missing-question practice session');
       h.assert(hist.setLinks.indexOf('#/practice/session/s-prac-custom') !== -1,
         'History lists Review this set for a custom quiz');
+      var layout = JSON.parse(await page.eval(function () {
+        var a = document.querySelector('.hist-drill-open');
+        var sum = a && a.closest('summary');
+        if (!a || !sum) return JSON.stringify({ ok: false });
+        var ar = a.getBoundingClientRect();
+        var sr = sum.getBoundingClientRect();
+        var cs = getComputedStyle(a);
+        return JSON.stringify({
+          marginTop: cs.marginTop,
+          minHeight: cs.minHeight,
+          btnMid: ar.top + ar.height / 2,
+          sumMid: sr.top + sr.height / 2,
+          label: a.textContent,
+          row: { x: sr.x, y: sr.y, w: sr.width, h: sr.height, dpr: window.devicePixelRatio || 1 }
+        });
+      }));
+      h.assert(layout.marginTop === '0px',
+        'Review button has no extra top margin, got ' + layout.marginTop);
+      h.assert(layout.minHeight === '26px',
+        'Review button uses the small ghost height, got ' + layout.minHeight);
+      h.assert(Math.abs(layout.btnMid - layout.sumMid) <= 1.5,
+        'Review button is vertically centered in the row, mid delta ' +
+          (layout.btnMid - layout.sumMid));
+      h.assert(/Review/.test(layout.label) && /›/.test(layout.label),
+        'Review label includes a chevron, got ' + JSON.stringify(layout.label));
+      await page.eval('() => { window.__histRowBox = ' + JSON.stringify(layout.row) + '; }');
     } },
   { name: 'finished drill results from History', shot: 'new-drill-results',
     run: async function (page, h) {
@@ -669,6 +695,16 @@ var STAGES = [
         return after.opacity + '|' + after.backgroundPosition;
       });
       h.assert(parseFloat(mid) > 0, 'sheen mid-sweep is visible on the Review button, got ' + mid);
+      var sheen = JSON.parse(await page.eval(function () {
+        var a = document.querySelector('.hist-review-sheen-mid');
+        var after = getComputedStyle(a, ':after');
+        return JSON.stringify({
+          size: after.backgroundSize,
+          opacity: after.opacity
+        });
+      }));
+      h.assert(/40%/.test(sheen.size),
+        'sheen band is about 40% of the button width, got ' + sheen.size);
     } }
 ];
 
