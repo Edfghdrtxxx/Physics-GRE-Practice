@@ -728,6 +728,7 @@ PGRE.srs = {
     'cpgf-2.85',
     'cpgf-6.1',
     'cpgf-6.6',
+    'cpgf-6.18',
     'cpgf-5.27',
     'cpgf-4.10',
     'cpgl-1.03',
