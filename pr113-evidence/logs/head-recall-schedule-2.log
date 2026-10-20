@@ -1,0 +1,177 @@
+
+regrade Good to Again puts the card back in the session
+PASS: live good leaves 0 copy of the card in the queue
+PASS: regrade to Again stores Again, due today
+PASS: the card is in the queue once, at the end (queue: rg-a, rg-b, rg-c)
+PASS: its box shows Again
+PASS: the card is shown 1 more time(s) before the session ends (shown: rg-a, rg-b, rg-c)
+PASS: leaving the regrade view goes back to the live card, and the Again card comes last
+PASS: the session ends
+PASS: the card ends scheduled for a later day
+PASS: the summary counts 1 card that came back
+
+regrade Hard to Again puts the card back in the session
+PASS: live hard leaves 0 copy of the card in the queue
+PASS: regrade to Again stores Again, due today
+PASS: the card is in the queue once, at the end (queue: rg-b, rg-c, rg-a)
+PASS: its box shows Again
+PASS: the card is shown 1 more time(s) before the session ends (shown: rg-b, rg-c, rg-a)
+PASS: leaving the regrade view goes back to the live card, and the Again card comes last
+PASS: the session ends
+PASS: the card ends scheduled for a later day
+PASS: the summary counts 1 card that came back
+
+regrade a requeued card: live Again, then Hard, then Again
+PASS: live again leaves 1 copy of the card in the queue
+PASS: regrade to hard schedules a later day and takes the card out of the queue
+PASS: regrade to Again stores Again, due today
+PASS: the card is in the queue once, at the end (queue: rg-a, rg-b, rg-c)
+PASS: its box shows Again
+PASS: the card is shown 1 more time(s) before the session ends (shown: rg-a, rg-b, rg-c)
+PASS: leaving the regrade view goes back to the live card, and the Again card comes last
+PASS: the session ends
+PASS: the card ends scheduled for a later day
+PASS: the summary counts 1 card that came back
+
+regrade from Again to Good takes the repeat out of the session
+PASS: live again leaves 1 copy of the card in the queue
+PASS: regrade to good schedules a later day and takes the card out of the queue
+PASS: the card is shown 0 more time(s) before the session ends (shown: rg-b, rg-c)
+PASS: the session ends
+PASS: the card ends scheduled for a later day
+PASS: the summary counts 0 card that came back
+
+regrade Good to Again: the card is back on screen later in the session
+PASS: leaving the regrade view shows the live card (rs-b), not the Again card
+PASS: the card regraded to Again is the live card again, its box still marked Again (Card 1 of 3 · 3 done · 1 left)
+
+regrade a new card from Easy to Again starts its learning over
+PASS: Easy on a new card schedules it 4 days out
+PASS: the regrade to Again leaves the card with no schedule, as a live Again on a new card does
+PASS: the card is back once at the end of the queue, at learning step 0
+PASS: it comes back for its two learning passes (rn-a, rn-c, rn-b, rn-a, rn-c, rn-b)
+PASS: it returns unscheduled at step 0, and after the first Good at step 1 (no schedule step 0; no schedule step 1)
+PASS: it ends with a 1-day interval and no lapse
+
+a Study grade whose save fails stays on screen, unrecorded
+PASS: saving worked until this press
+PASS: the failed write is noticed (canWrite is false)
+PASS: the stored card still has 2 reviews
+PASS: the card stays on screen and in the queue (on screen: fs-c)
+PASS: the count line still reads 0 done (Card 1 of 3 · 0 done · 3 left)
+PASS: memory matches the store: the card was not graded (2 reviews, due today)
+PASS: its answer stays open with no grade marked
+PASS: the saving-failed warning is on screen
+
+once saving works the next Good retries the save and goes through, and a reload keeps it
+PASS: storage works again, but no save has worked since the refused one 1228 ms ago (canWrite is false)
+PASS: the next Good retries the save, stores 3 reviews and moves on
+PASS: after a reload and Resume the graded card is not in the queue
+
+a learning-pass press whose save fails stays on screen
+PASS: saving worked until this press, and the failed write is noticed
+PASS: the new card stays on screen with its answer open and no grade marked (on screen: lf-a)
+PASS: memory keeps it at learning step 0, unmarked and unscheduled
+PASS: the saving-failed warning and the press-not-recorded message are on screen
+
+once saving works the same learning pass goes through
+PASS: once saving works, the same Good moves on and stores learning step 1, with the card later in the queue
+
+a Study Undo whose save fails keeps the stored grade
+PASS: Good stores 3 reviews and takes the card out
+PASS: the undo did not reach storage, and memory keeps the grade too (3 reviews)
+PASS: the screen stays on the next card, and the graded card stays out of the queue
+PASS: opening its box still shows the Good grade
+PASS: no save has worked since the refused undo (canWrite is false)
+PASS: once storage works, the next Undo retries the save, restores the card (2 reviews) and shows it again
+
+a learning-pass Undo whose save fails keeps the stored pass
+PASS: the first Good is a learning pass, saved: step 1 and 1 history row in storage, lu-b on screen
+PASS: the undo did not reach storage, and memory keeps learning step 1 too
+PASS: memory and storage keep the same history (1 row) and queue (lu-b, lu-a)
+PASS: the screen stays on lu-b, lu-a keeps its learning-pass box, and Undo is still offered
+PASS: the saving-failed warning and the press-not-recorded message are on screen
+PASS: once storage works, the next Undo goes through: learning step 0 and no history row, in memory and in storage
+PASS: lu-a is back on screen with an unmarked box
+
+a press whose save fails again says it was not recorded
+PASS: the first refused press keeps the card on screen
+PASS: storage still full: the retry fails and the press is not recorded (2 reviews in storage and in memory)
+PASS: the card stays on screen with its answer open and no grade marked (Card 1 of 3 · 0 done · 3 left)
+PASS: the screen says that press was not recorded, under the saving-failed warning
+
+a regrade to Again whose save fails keeps the stored Good
+PASS: Good stores 3 reviews
+PASS: the regrade did not reach storage, and memory keeps Good too (3 reviews)
+PASS: the card stays out of the queue, and its view and its box still show Good
+PASS: the saving-failed warning is on screen
+PASS: once saving works, the regrade to Again is stored and the card is back once, at the end of the queue
+
+a Type grade whose save fails stays on screen, unrecorded
+PASS: Type: the failed save leaves the card ungraded in storage and in memory
+PASS: Type: the same card stays on screen with its grade buttons
+PASS: Type: once saving works, Good stores 3 reviews and moves on
+
+after midnight the open session and its Resume take in new-day cards, not a card it graded
+PASS: Good before midnight gives ro-a a 1-day interval and takes it out of the session; ro-d, due the same day, is not in the session
+PASS: on the new day ro-a and ro-d are both on today's remaining list
+PASS: the open session takes in ro-d but not ro-a, which it graded (queue: ro-c, ro-b, ro-d)
+PASS: Resume continues the same session (Card 2 of 4 · 1 done · 3 left)
+PASS: after Resume the session still holds ro-d and not ro-a (queue: ro-c, ro-b, ro-d)
+PASS: ro-a is not shown again before the session ends, and ro-d is (shown: ro-c, ro-b, ro-d)
+
+a stale tab adopts a sibling's Add before its own Add
+PASS: the stale tab had not seen the first Add
+PASS: today's stored list keeps both Adds (sa-first, sa-second)
+
+a stale tab's Add does not bring back a card a sibling removed
+PASS: the stale tab still listed the removed card
+PASS: today's stored list keeps the removal and the Add (sr-keep, sr-new)
+
+a stale tab's Again is kept over a sibling's earlier Good
+PASS: the sibling stored Again then Good (4 reviews)
+PASS: the stale tab still had 2 reviews when Again was pressed
+PASS: the stored card is the later Again, due today, on top of the sibling's 4 reviews (got again, 2026-10-20, 5)
+
+day start: a card graded Good at 23:55 is not due in a session at 00:30
+PASS: at 23:55 on November 10, Good gives ds-a and ds-b a 1-day interval, due November 11
+PASS: at 00:30 on November 11, ds-a, ds-b and ds-x, due November 11, are not due yet
+PASS: today's list has nothing left and Recall offers no session ("Today’s list is done")
+PASS: Reviewed today still counts the two cards graded at 23:55
+PASS: Recall's day is still November 10
+
+day start: after 03:00 the next day that card is due again
+PASS: at 03:05 on November 11 Recall counts November 11, and ds-a, ds-b and ds-x are due
+PASS: Reviewed today starts again at 0, and Recall offers a session
+PASS: the new session holds ds-a and ds-b (queue: ds-a, ds-b)
+
+day start: a session started at 01:00 counts as the day before for the list and studied-today
+PASS: at 01:00 on November 13, dn-x, due November 13, is not due yet
+PASS: today's list is still November 12's (left: dn-a, dn-b, dn-c)
+PASS: Recall's day is still November 12
+PASS: the session started at 01:00 is dated November 12
+PASS: Good at 01:00 is a November 12 review: its review day, its review-log row, and studied-today
+PASS: its 13-day interval counts from November 12: due November 25
+PASS: dn-x is not in the session
+PASS: on the Recall page: 1 reviewed today, 2 left on the list, and the session can be resumed
+
+day start: the exam cap changes at 03:00 on October 25, and no final pass begins
+PASS: at 02:30 on October 25 Recall counts October 24, and the exam cap is 7 days
+PASS: Good shows and stores 6 days, due October 30 (button: 6 d)
+PASS: at 03:05 October 25 begins, and the exam cap is 6 days
+PASS: today's list holds only fp-a, the card still due: no learned-card fill and no final-pass banner (left: fp-a)
+PASS: Good on fp-a shows and stores 5 days under the cap, due October 30, not 1 day (button: 5 d)
+
+exam week: five days before the exam, today's list is the due cards plus the new-card fill
+PASS: the exam cap is 4 days, and Recall offers a session
+PASS: today's list is fw-a and fw-b, which are due, plus 2 new cards (fw-a, fw-b, fw-n1, fw-n2)
+PASS: fw-z, learned and due October 29, is neither on the list nor in the session
+PASS: the Recall page showed no final-pass banner
+PASS: on learned card fw-b the Good button shows 3 days, the exam-capped interval (button: 3 d)
+
+exam week: Good on a learned card stores its exam-capped interval, not 1 day
+PASS: Good stores 3 days for fw-b, due October 30 (3 days, due 2026-10-30)
+
+PASS: the status bridge on port 4789 received nothing (Chrome refused the request on 5 page load(s))
+
+ALL OK

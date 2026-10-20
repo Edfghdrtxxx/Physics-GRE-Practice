@@ -1,6 +1,6 @@
 # PR 113 evidence
 
-Real page, isolated Chrome profile, throwaway `127.0.0.1` port, synthetic cards only. Every run refused the status bridge on port 4789 by a Content-Security-Policy header and printed `PASS: the status bridge on port 4789 received nothing`. "PR head" is `4d15e6b`, the last commit of this PR before `main` was merged in; the merge, `14f0d56`, has its own section below. "main" is `6844d4e`, the code before this PR, unless a row names `df115ec`, `main` after #114 and #115. Stages that need a date move the page's clock (`h.setClock` in `tools/test-recall-schedule-chrome.js`); the clock shown in the screenshots is the test's, not the run's.
+Real page, isolated Chrome profile, throwaway `127.0.0.1` port, synthetic cards only. Every run refused the status bridge on port 4789 by a Content-Security-Policy header and printed `PASS: the status bridge on port 4789 received nothing`. "PR head" in the screenshots and the first log tables is `4d15e6b`, the last commit of this PR before `main` was merged in; the merge `14f0d56` and the current head `5f7fc73` (fix for review finding B1) have their own sections below. "main" is `6844d4e`, the code before this PR, unless a row names `df115ec`, `main` after #114 and #115. Stages that need a date move the page's clock (`h.setClock` in `tools/test-recall-schedule-chrome.js`); the clock shown in the screenshots is the test's, not the run's.
 
 ## Screenshots (1280x800)
 
@@ -46,6 +46,16 @@ Real page, isolated Chrome profile, throwaway `127.0.0.1` port, synthetic cards 
 | per-commit-units.txt, last line | `14f0d56` | the 33 non-browser test files, local time and 01:xx: only `test-packs` fails, as on main |
 | suite-merge.tsv, suite-main-df115ec.tsv | `14f0d56`; `df115ec` | every `tools/test-*.js`, one run. 51 of 56 pass on the merge, 50 of 54 on `df115ec` (it lacks the two Recall real-page tests). The four that fail on `df115ec` fail on the merge with the same first error. The fifth, `test-drill-review-keys-chrome`, passed all 24 of its page checks and then failed while deleting its temporary Chrome profile (`ENOTEMPTY` from `fs.rmSync`, merge-suite-drill-review-keys.log) |
 | merge-drill-review-keys-rerun-1.log to -3.log | `14f0d56` | `test-drill-review-keys-chrome` again, 3 runs: ALL OK, 25 checks each |
+
+### Refused learning-pass Undo (review finding B1), PR head `5f7fc73`
+
+| File | Code | Result |
+| --- | --- | --- |
+| head-recall-schedule-1.log, -2.log | `5f7fc73` | ALL OK, 25 stages, 124 checks each, including the new stage "a learning-pass Undo whose save fails keeps the stored pass" |
+| head-learning-pass-1.log, -2.log | `5f7fc73` | ALL OK, 29 checks each |
+| before-learning-pass-undo-on-f7d38ab-1.log, -2.log | `f7d38ab`, the commit before the fix, with the new stage alone | the stage fails at "the undo did not reach storage, and memory keeps learning step 1 too", after its check that the first Good was saved passes |
+| per-commit-units.txt, last line | `5f7fc73` | the 33 non-browser test files, local time and 01:xx: only `test-packs` fails, as on main |
+| suite-head-5f7fc73.tsv | `5f7fc73` | every `tools/test-*.js`, one run: 52 of 56 pass; the four that fail are the four that fail on `df115ec` (suite-main-df115ec.tsv), with the same first error |
 
 ### Dropping one of the last four commits
 

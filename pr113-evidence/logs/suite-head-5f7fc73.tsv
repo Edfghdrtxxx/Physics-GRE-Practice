@@ -1,0 +1,57 @@
+name	exit code	seconds	last line (first error line when the exit code is not 0)
+test-agent-receipt	0	0	25 passed, 0 failed
+test-bank	0	0	124 passed, 0 failed
+test-card-diagram-radfield-chrome	0	89	ALL OK
+test-card-diagrams	0	0	47 passed, 0 failed
+test-curation-requeue	0	0	14 passed, 0 failed
+test-dashboard-qotd	0	0	11 passed, 0 failed
+test-drill-review-keys-chrome	0	41	ALL OK
+test-exam-dwell-chrome	0	4	28 passed, 0 failed
+test-exam-dwell	0	0	55 passed, 0 failed
+test-exam-engine	0	0	173 passed, 0 failed
+test-exam-flag-guess-chrome	0	24	ALL OK
+test-exam-pause-card	0	0	34 passed, 0 failed
+test-exam-pause-chrome	0	17	ALL OK
+test-exam-review-bands	0	0	20 passed, 0 failed
+test-exam-table-chrome	0	17	106 passed, 0 failed
+test-exam-table	0	0	101 passed, 0 failed
+test-file-structure	0	0	All canonical structure and placement checks passed successfully.
+test-focus-sound	0	0	ALL OK
+test-formula-checkin	0	0	ALL GREEN
+test-formula-consumers	0	0	13 passed, 0 failed
+test-formula-export	0	0	69 passed, 0 failed
+test-formula-picker	0	0	34 passed, 0 failed
+test-hist-drill-review-chrome	0	37	ALL OK
+test-intensity-chrome	0	25	282 passed, 0 failed
+test-intensity	0	0	62 passed, 0 failed
+test-keep-failing-confirm-chrome	0	40	status: stopped
+test-mem-history	0	0	ALL PASS
+test-mistakes-srs	0	0	102 passed, 0 failed
+test-next-mock-tile-chrome	0	29	ALL OK
+test-oscillator-chrome	0	5	Dynamic Chrome CDP testing completed successfully!
+test-pack-launch-chrome	1	5	Error during pack-launch chrome test: Error: pack 03 expected Question 1 of 8, got "Custom quiz\nC\nC\nu\nu\ns\ns\nt\nt\no\no\nm\nm\n \nq\nq\nu\nu\ni\ni\nz\nz\n
+test-pack-launch	0	0	45 passed, 0 failed
+test-packs	1	0	FAIL: missing content/bank/cpg-questions.js (needed to test shipped packs against the real pool)
+test-plan	0	0	All 37 assertions passed.
+test-practice-scroll-stem-chrome	0	1	the status bridge on port 4789 received nothing (1 request(s) blocked, 0 answered)
+test-public-formulas	0	0	1662 passed, 0 failed
+test-recall-boxes-chrome	0	14	ALL OK
+test-recall-count-chrome	0	17	ALL OK
+test-recall-learning-pass-chrome	0	60	ALL OK
+test-recall-lists	0	0	14 passed, 0 failed
+test-recall-schedule-chrome	0	238	ALL OK
+test-recall-timer-chrome	0	22	ALL OK
+test-review-regrade-chrome	0	76	ALL OK
+test-sat-exam-graduate-chrome	0	29	ALL OK
+test-search	0	0	9 passed, 0 failed
+test-session-park	0	1	123 passed, 0 failed
+test-sidebar-search-chrome	1	67	BROWSER_TEST_FAILED: Error: Timeout waiting for results for harmonic oscillator
+test-solid-threshold-chrome	0	16	ALL OK
+test-srs-anki-chrome	1	1	FAIL Error: real Physics GRE formula deck missing or too small: {"count":86,"first":["supp-coaxial","supp-pec-reflect","supp-em-triad"]}
+test-srs-intervals	0	0	233 passed, 0 failed
+test-status	0	0	59 passed, 0 failed
+test-store-persist	0	0	75 passed, 0 failed
+test-study-time	0	0	16 passed, 0 failed
+test-ux-interaction	0	1	ALL OK
+test-view-build	0	0	6 passed, 0 failed
+test-visualizer-aesthetics	0	0	ALL GREEN

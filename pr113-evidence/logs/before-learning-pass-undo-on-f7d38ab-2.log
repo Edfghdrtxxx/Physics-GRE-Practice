@@ -1,0 +1,9 @@
+
+a learning-pass Undo whose save fails keeps the stored pass
+PASS: the first Good is a learning pass, saved: step 1 and 1 history row in storage, lu-a on screen
+BROWSER_TEST_FAILED: Error: the undo did not reach storage, and memory keeps learning step 1 too
+    at h.assert (<temp dir>)
+    at <temp dir>
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async <temp dir>
+FAILED stages: a learning-pass Undo whose save fails keeps the stored pass

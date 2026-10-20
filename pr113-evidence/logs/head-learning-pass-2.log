@@ -1,0 +1,40 @@
+
+trial 1: first Good on a new card is a learning pass
+PASS: a new card is on screen with its grade buttons
+PASS: the new card's Hard and Good say "returns this session"
+
+trial 1: the graded card comes back
+OBSERVED trial 1: {"trial":1,"shown":["lp-z","lp-l","lp-y","lp-x","lp-w","lp-v","lp-z","lp-u"],"subject":"lp-z","firstLabels":{"again":"today","hard":"returns this session","good":"returns this session","easy":"4 d"},"afterFirst":{"inQueue":true,"step":1,"hasState":false,"rows":0,"cell":{"grade":"learning","tip":"Learning pass, returns this session","label":"Card 1, Learning pass, returns this session"},"legend":["Not yet graded","Learning pass","Again","Hard","Good","Easy"]},"back":{"position":7,"chip":true,"labels":{"again":"today","hard":"1 d","good":"1 d","easy":"4 d"},"between":5},"afterSecond":{"inQueue":false,"interval":1,"due":"2026-10-21","tomorrow":"2026-10-21","rows":1,"cell":{"grade":"good","tip":"Good, 1 day","label":"Card 1, Good, 1 day"}},"subjectShown":2,"controlEasy":"lp-y","controlEasyShown":1,"learnedShown":1}
+PASS: trial 1: the new card graded Good once is shown twice in one session
+PASS: trial 1: the first Good writes no schedule and no review row; the card stays queued at learning step 1
+PASS: trial 1: the card returns after at most five other cards, with the learning 1/2 chip
+PASS: trial 1: the second Good schedules the card for tomorrow and it leaves the session
+PASS: trial 1: a new card graded Easy is shown once
+PASS: trial 1: a learned card graded Good is shown once
+PASS: trial 1: Hard and Good on a new card say "returns this session"
+PASS: trial 1: Easy on a new card still says 4 d
+PASS: trial 1: after the first Good the box is a learning pass, not Good
+PASS: trial 1: the grid legend names the learning pass
+PASS: trial 1: on its return Good says 1 d
+PASS: trial 1: after the second Good the box shows Good, 1 day
+PASS: the screenshot state has a learning box on the grid
+
+trial 2: the graded card comes back
+OBSERVED trial 2: {"trial":2,"shown":["lp-z","lp-w","lp-y","lp-v","lp-z","lp-u","lp-l","lp-x"],"subject":"lp-z","firstLabels":{"again":"today","hard":"returns this session","good":"returns this session","easy":"4 d"},"afterFirst":{"inQueue":true,"step":1,"hasState":false,"rows":0,"cell":{"grade":"learning","tip":"Learning pass, returns this session","label":"Card 1, Learning pass, returns this session"},"legend":["Not yet graded","Learning pass","Again","Hard","Good","Easy"]},"back":{"position":5,"chip":true,"labels":{"again":"today","hard":"1 d","good":"1 d","easy":"4 d"},"between":3},"afterSecond":{"inQueue":false,"interval":1,"due":"2026-10-21","tomorrow":"2026-10-21","rows":1,"cell":{"grade":"good","tip":"Good, 1 day","label":"Card 1, Good, 1 day"}},"subjectShown":2,"controlEasy":"lp-w","controlEasyShown":1,"learnedShown":1}
+PASS: trial 2: the new card graded Good once is shown twice in one session
+PASS: trial 2: the first Good writes no schedule and no review row; the card stays queued at learning step 1
+PASS: trial 2: the card returns after at most five other cards, with the learning 1/2 chip
+PASS: trial 2: the second Good schedules the card for tomorrow and it leaves the session
+PASS: trial 2: a new card graded Easy is shown once
+PASS: trial 2: a learned card graded Good is shown once
+PASS: trial 2: Hard and Good on a new card say "returns this session"
+PASS: trial 2: Easy on a new card still says 4 d
+PASS: trial 2: after the first Good the box is a learning pass, not Good
+PASS: trial 2: the grid legend names the learning pass
+PASS: trial 2: on its return Good says 1 d
+PASS: trial 2: after the second Good the box shows Good, 1 day
+PASS: the returned card shows learning 1/2 and Good 1 d
+
+PASS: the status bridge on port 4789 received nothing (Chrome refused the request on 1 page load(s))
+
+ALL OK
