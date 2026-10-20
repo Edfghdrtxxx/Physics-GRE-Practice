@@ -1090,6 +1090,38 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 /* Danger zone — the only destructive control on the page gets its own card,
    set apart by a --bad hairline rather than a red fill. The inline confirm row
    swaps in for the button so the erase needs two deliberate clicks. */
+.backup-token-label {
+  display: block;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.backup-token-input {
+  display: block;
+  margin-top: 6px;
+  min-width: min(100%, 28rem);
+}
+.backup-warning {
+  margin-top: 10px;
+  color: var(--bad);
+  font-weight: 500;
+}
+.backup-snap-list {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 0;
+}
+.backup-snap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.backup-snap .btn { margin-top: 0; }
+#backup-restore-confirm { margin-top: 14px; }
 .danger-zone { border-color: var(--bad); margin-top: 28px; }
 .danger-zone h2 { color: var(--bad); }
 .btn-danger { background: var(--bad); color: var(--bg); border-color: var(--bad); }

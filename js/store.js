@@ -956,15 +956,15 @@ PGRE.store = {
         this.state._rev = nextRev - 1;
         throw we;
       }
-      if (this.state._rev % 20 === 0) {
-        try {
-          localStorage.setItem(this.KEY + '-backup', blob);
-        } catch (be) { /* backup is best-effort — do not flip _persistFailed */ }
-      }
       if (this._persistFailed) {
         this._persistFailed = false;
         if (PGRE.persistWarning) PGRE.persistWarning(false);
       }
+      try {
+        if (PGRE.backup && typeof PGRE.backup.noteCommitted === 'function') {
+          PGRE.backup.noteCommitted(blob);
+        }
+      } catch (snapErr) { /* disk backup is best-effort — do not flip _persistFailed */ }
       return true;
     } catch (e) {
       console.error('Could not persist state', e);

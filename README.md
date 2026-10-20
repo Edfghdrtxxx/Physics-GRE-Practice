@@ -28,7 +28,7 @@ on `file://` pages — the local server is the reliable way.)
 | **Formula recall** | Flip cards: recall, flip, self-grade Again/Hard/Good/Easy → SM-2 intervals and a daily due queue. 294 cards since the 2026-10-14 curation: 154 book formula cards, 80 supplemental, 60 book recall cards. One Study button on landing; Match/Type/Cloze/Quiz drills, the daily check-in, and interval settings sit behind Options; agent learning status export in-progress and at checkout |
 | **Study plan** | Sep 14 → Nov 1 · 7 live weeks · ~16 h/wk · generated from the vault syllabus via tools/build-plan.js · each timed set has a Start button and is ticked automatically when finished |
 | **Achievements** | 80 achievements across 10 categories, 7 secret |
-| **Library** | Import the *Conquering the Physics GRE* markdown (drag & drop), map its sections to topics, export/restore/reset all progress, restore the last automatic backup (written every 20th save) |
+| **Library** | Import the *Conquering the Physics GRE* markdown (drag & drop), map its sections to topics, export/restore/reset all progress, Back up now to versioned disk snapshots, restore a leftover browser safety copy |
 | **Mock exam** | Timed simulator: weighted 70-question/120-minute draw, or verbatim replay of the 5 released ETS exams (incl. the 70-question 2024 form) and the book's 3 sample exams. Official scale tables where published |
 | **Focus timer** | Pomodoro-style focus sessions with ambient sound, session log, and per-day study-time totals |
 | **Concept visualization** | Interactive teaching widgets (11 trio visualizer files + spherical harmonics) under `#/concepts`, plus a Formula Lab |
