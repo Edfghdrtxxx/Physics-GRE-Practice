@@ -469,6 +469,50 @@ PGRE.store.save = realSave;
 mistakes._test.dropLive();
 sessionStorage.removeItem(park.DRILL_KEY);
 
+console.log('\nhistory archive reconstructs a past practice set without touching the parked one');
+
+PGRE.store.state.sessions.push({
+  id: 's-hist-prac', mode: 'practice', topicId: 'all',
+  startedAt: '2026-09-03T12:00:00.000Z', endedAt: '2026-09-03T12:15:00.000Z',
+  planned: 2, answered: 2, correct: 1, xp: 17
+});
+PGRE.store.state.attempts.push(
+  { ts: '2026-09-03T12:01:00.000Z', qid: 'p1', topic: 'mech', picked: 1, answer: 1,
+    correct: true, ms: 2800, sid: 's-hist-prac', mode: 'practice', confidence: 'sure' },
+  { ts: '2026-09-03T12:02:00.000Z', qid: 'gone-prac', topic: 'mech', picked: 2, answer: 0,
+    correct: false, ms: 5100, sid: 's-hist-prac', mode: 'practice', tags: ['forgot'] }
+);
+var pracRecon = practice._test.reconstructArchive('s-hist-prac');
+assert(pracRecon && pracRecon.readonly && pracRecon.qs.length === 2,
+  'practice archive reconstructs two stored questions');
+assert(pracRecon.qs[1].missing && /no longer in the bank/.test(pracRecon.qs[1].q),
+  'a missing practice question becomes a stub');
+assert(practice._test.reconstructArchive('s-hist-old') === null,
+  'a mistake drill is not opened as a practice archive');
+put(park.PRACTICE_KEY, {
+  topicId: 'all', filter: null, label: null, custom: false, learnDrill: false,
+  sid: 's-live-prac', stage: 'question',
+  ids: ['p2'], i: 0, correct: 0, xpEarned: 0, answers: [null], savedAt: Date.now()
+});
+var parkedPrac = JSON.stringify(snap(park.PRACTICE_KEY));
+var pracSaveN = 0;
+var pracRealSave = PGRE.store.save;
+PGRE.store.save = function () { pracSaveN++; return pracRealSave.apply(this, arguments); };
+practice.mount({ id: 'session', sub2: 's-hist-prac' });
+assert(practice._test.archive && practice._test.archive.sid === 's-hist-prac',
+  'the practice archive object is the reconstructed set');
+assert(JSON.stringify(snap(park.PRACTICE_KEY)) === parkedPrac,
+  'opening a past practice set leaves the parked snapshot');
+assert(pracSaveN === 0, 'practice archive does not call store.save');
+assert(/How this set went/.test(elFor('practice-root').innerHTML),
+  'practice archive paints How this set went');
+assert(/Back to History/.test(elFor('practice-root').innerHTML),
+  'practice archive offers a way back to History');
+assert(!/id="assess-row"/.test(elFor('practice-root').innerHTML),
+  'practice archive results do not mount grading chips');
+PGRE.store.save = pracRealSave;
+sessionStorage.removeItem(park.PRACTICE_KEY);
+
 /* ================= Practice corrections ================= */
 
 console.log('\npractice: a feedback-stage snapshot restores the read solution');
@@ -758,9 +802,9 @@ function scriptToken(file) {
 }
 assert(scriptToken('js/srs.js') === '20261017a', 'srs.js cache token is 20261017a, got ' + scriptToken('js/srs.js'));
 assert(scriptToken('js/gamify.js') === '20261002b', 'gamify.js cache token is 20261002b, got ' + scriptToken('js/gamify.js'));
-assert(scriptToken('js/view-practice.js') === '20261017a', 'view-practice.js cache token is 20261017a, got ' + scriptToken('js/view-practice.js'));
+assert(scriptToken('js/view-practice.js') === '20261020g', 'view-practice.js cache token is 20261020g, got ' + scriptToken('js/view-practice.js'));
 assert(scriptToken('js/view-mistakes.js') === '20261020e', 'view-mistakes.js cache token is 20261020e, got ' + scriptToken('js/view-mistakes.js'));
-assert(scriptToken('js/app.js') === '20261020f', 'app.js cache token is 20261020f, got ' + scriptToken('js/app.js'));
+assert(scriptToken('js/app.js') === '20261020j', 'app.js cache token is 20261020j, got ' + scriptToken('js/app.js'));
 assert(indexHtml.indexOf('js/srs.js?v=20261001j') < 0 &&
        indexHtml.indexOf('js/srs.js?v=20261002a') < 0 &&
        indexHtml.indexOf('js/srs.js?v=20261009a') < 0 &&

@@ -62,6 +62,9 @@ PGRE.views.history = (function () {
     var review = sess.mode === 'mistakes'
       ? '<a class="btn btn-ghost btn-sm hist-drill-open" href="#/mistakes/drill/' +
         encodeURIComponent(sess.id) + '">Review this drill</a>'
+      : sess.mode === 'practice'
+      ? '<a class="btn btn-ghost btn-sm hist-set-open" href="#/practice/session/' +
+        encodeURIComponent(sess.id) + '">Review this set</a>'
       : '';
     // attempt rows are filled lazily on first open (renderSessions) so a long
     // history doesn't render + typeset every answer ever given up front
@@ -104,7 +107,7 @@ PGRE.views.history = (function () {
         PGRE.typesetMath(rows);
       });
     });
-    box.querySelectorAll('.hist-drill-open').forEach(function (a) {
+    box.querySelectorAll('.hist-drill-open, .hist-set-open').forEach(function (a) {
       a.addEventListener('click', function (e) { e.stopPropagation(); });
     });
     var more = document.getElementById('hist-sess-more');

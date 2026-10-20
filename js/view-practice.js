@@ -23,6 +23,7 @@ PGRE.views.practice = (function () {
   // { topicId, qs, i, correct, xpEarned, answers[], qStart, sid, label, custom,
   //   criteria, stage: 'question'|'feedback'|'summary', tagged }
   var session = null;
+  var archive = null; // read-only History reconstruction; never replaces `session`
   var autoResume = false;   // parked-session drawer armed a one-shot direct resume
   var paceTimer = null;   // module-scoped so it survives a session reset
   var keyBound = false;   // the document keydown listener is installed once
@@ -222,18 +223,27 @@ PGRE.views.practice = (function () {
     return n;
   }
 
+  function currentSession() { return archive || session; }
+
+  function fmtAttemptMs(ms) {
+    if (ms == null) return '';
+    var s = ms / 1000;
+    return (s < 10 ? s.toFixed(1) : Math.round(s)) + ' s';
+  }
+
   function paletteHTML(results, current) {
-    if (!session || !session.qs || !session.qs.length) return '';
+    var s = currentSession();
+    if (!s || !s.qs || !s.qs.length) return '';
     var cells = '';
-    session.qs.forEach(function (q, n) {
-      var ans = answerAt(n);
+    s.qs.forEach(function (q, n) {
+      var ans = answerAt(n, s);
       var cls = 'pal-cell';
       if (ans) cls += results ? (ans.correct ? ' is-correct' : ' is-wrong') : ' is-answered';
-      if (current != null ? n === current : (!results && n === session.i)) cls += ' is-current';
+      if (current != null ? n === current : (!results && n === s.i)) cls += ' is-current';
       var label = 'Question ' + (n + 1);
       if (ans) label += results ? (ans.correct ? ', correct' : ', missed') : ', answered';
       else label += results ? ', not answered' : ', unanswered';
-      if (current != null ? n === current : (!results && n === session.i)) label += ', current';
+      if (current != null ? n === current : (!results && n === s.i)) label += ', current';
       var attrs;
       if (results) {
         if (ans) {
@@ -278,9 +288,10 @@ PGRE.views.practice = (function () {
   }
 
   function neighborAnswered(from, dir) {
-    if (!session || !session.answers) return -1;
-    for (var i = from + dir; i >= 0 && i < session.qs.length; i += dir) {
-      if (answerAt(i)) return i;
+    var s = currentSession();
+    if (!s || !s.answers) return -1;
+    for (var i = from + dir; i >= 0 && i < s.qs.length; i += dir) {
+      if (answerAt(i, s)) return i;
     }
     return -1;
   }
@@ -479,6 +490,81 @@ PGRE.views.practice = (function () {
   function clearSaved() {
     try { sessionStorage.removeItem(SAVE_KEY); } catch (e) { /* storage blocked */ }
     paintPark();
+  }
+
+  /* History: rebuild a finished or unfinished practice set from the stored
+     session and its attempts. Read-only — never writes, never touches
+     `session` or the parked snapshot. A question that left the bank is a
+     stub that names the missing id instead of throwing. */
+  function questionForAttempt(row) {
+    var q = PGRE.questionById(row.qid);
+    if (q) return q;
+    var choices = LETTERS.slice();
+    var ans = typeof row.answer === 'number' ? row.answer : 0;
+    var pick = typeof row.picked === 'number' ? row.picked : -1;
+    var need = Math.max(choices.length, ans + 1, pick + 1);
+    while (choices.length < need) choices.push(String(choices.length + 1));
+    return {
+      id: row.qid,
+      topic: row.topic,
+      difficulty: 1,
+      q: '<p>Question ' + PGRE.ui.esc(row.qid) + ' is no longer in the bank.</p>',
+      choices: choices,
+      answer: ans,
+      sol: '',
+      missing: true
+    };
+  }
+
+  function reconstructArchive(sid) {
+    if (!sid || !PGRE.gamify || typeof PGRE.gamify._session !== 'function') return null;
+    var sess = PGRE.gamify._session(sid);
+    if (!sess || sess.mode !== 'practice') return null;
+    var arr = (PGRE.store.state && PGRE.store.state.attempts) || [];
+    var lastByQid = {};
+    var order = [];
+    arr.forEach(function (a) {
+      if (!a || a.sid !== sid) return;
+      if (!lastByQid[a.qid]) order.push(a.qid);
+      lastByQid[a.qid] = a;
+    });
+    var qs = [];
+    var answers = [];
+    var correct = 0;
+    order.forEach(function (qid) {
+      var row = lastByQid[qid];
+      var q = questionForAttempt(row);
+      qs.push(q);
+      answers.push({
+        q: q, picked: row.picked, correct: !!row.correct,
+        xp: null, ms: row.ms, row: row
+      });
+      if (row.correct) correct++;
+    });
+    return {
+      topicId: sess.topicId || 'all',
+      qs: qs, answers: answers, i: 0,
+      correct: sess.correct != null ? sess.correct : correct,
+      xpEarned: sess.xp || 0,
+      sid: sid,
+      label: sess.label || null,
+      custom: sess.topicId === 'custom',
+      stage: 'summary', reviewing: false, done: true,
+      readonly: true, sess: sess
+    };
+  }
+
+  function openArchive(sid) {
+    try { sid = decodeURIComponent(sid); } catch (e) { /* keep raw */ }
+    archive = reconstructArchive(sid);
+    if (!el()) return;
+    if (!archive) {
+      el().innerHTML = '<div class="card practice-card"><h1>Set not found</h1>' +
+        '<p class="muted">This History entry has no stored practice session.</p>' +
+        '<div class="btn-row"><a class="btn btn-primary" href="#/history">Back to History</a></div></div>';
+      return;
+    }
+    renderSummary();
   }
 
   /* A snapshot stays parked until the summary is painted — even when every
@@ -1169,33 +1255,39 @@ PGRE.views.practice = (function () {
      review window (PGRE.assess review row — regrades, never a new attempt),
      solution, distractors, notes, and the palette grid for free jumping. Reuses .drill-navrow geometry from mistakes. */
   function renderReview(idx) {
-    if (!session || idx < 0 || idx >= session.qs.length) return;
-    var ans = answerAt(idx);
+    var s = currentSession();
+    if (!s || idx < 0 || idx >= s.qs.length) return;
+    var ans = answerAt(idx, s);
     if (!ans) return;
-    if (session.reviewing && session.i === idx) return;
+    if (s.reviewing && s.i === idx) return;
     clearPace();
-    session.i = idx;
-    session.stage = 'review';
-    session.reviewing = true;
+    s.i = idx;
+    s.stage = 'review';
+    s.reviewing = true;
     lastRenderAt = Date.now();
     if (PGRE.nav) PGRE.nav.setTrail(['Review']);
-    var q = session.qs[idx];
+    var q = s.qs[idx];
     var t = PGRE.topicById(q.topic) || { id: 'xx', short: '?', name: 'Unknown topic' };
     var prev = neighborAnswered(idx, -1);
     var next = neighborAnswered(idx, 1);
+    var readonly = !!s.readonly;
     // The chips regrade the row this answer recorded. When that row is gone,
     // or the question was answered again since, the line stays read only.
-    var liveRow = PGRE.assess.regradeRow(q.id, ans.row);
+    var liveRow = (!readonly && PGRE.assess) ? PGRE.assess.regradeRow(q.id, ans.row) : null;
     var regradable = !!liveRow;
     if (liveRow) ans.row = liveRow;
-    session.assess = null;
+    s.assess = null;
+    var title = ans.correct
+      ? (readonly ? 'Correct' : correctTitle(q))
+      : 'Incorrect — the answer is ' + LETTERS[q.answer];
     var html = '<div class="card practice-card">' +
       '<div class="practice-meta">' +
-        '<span>Review — ' + (idx + 1) + ' of ' + session.qs.length + '</span>' +
-        (session.label ? '<span class="chip chip-session">' + PGRE.ui.esc(session.label) + '</span>' : '') +
+        '<span>Review — ' + (idx + 1) + ' of ' + s.qs.length + '</span>' +
+        (s.label ? '<span class="chip chip-session">' + PGRE.ui.esc(s.label) + '</span>' : '') +
         '<span class="chip">' + t.name + '</span>' +
         '<span class="chip chip-diff">' + PGRE.ui.diffDots(q.difficulty) + '</span>' +
         '<span class="chip">' + (ans.correct ? 'Correct' : 'Missed') + '</span>' +
+        (ans.ms != null ? '<span class="chip">' + fmtAttemptMs(ans.ms) + '</span>' : '') +
       '</div>' +
       '<div class="q-text">' + q.q + '</div>' +
       '<div class="choices">';
@@ -1212,15 +1304,20 @@ PGRE.views.practice = (function () {
       '<div id="feedback">' +
         '<div class="feedback reveal-in ' + (ans.correct ? 'feedback-good' : 'feedback-bad') + '">' +
           '<span class="fb-icon">' + (ans.correct ? '✓' : '✗') + '</span>' +
-          '<strong>' + (ans.correct ? correctTitle(q) : 'Incorrect — the answer is ' + LETTERS[q.answer]) + '</strong>' +
+          '<strong>' + title + '</strong>' +
           (ans.xp != null ? '<span class="fb-xp">+' + ans.xp + ' XP</span>' : '') +
         '</div>' +
-        (ans.ms != null ? paceMark(ans.ms) : '') +
-        (regradable ? PGRE.assess.html(settings().keyboard, { review: true }) : reviewAssessNote(ans)) +
-        '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
+        ((!readonly && ans.ms != null) ? paceMark(ans.ms) : '') +
+        (regradable ? PGRE.assess.html(settings().keyboard, { review: true }) : reviewAssessNote(ans));
+    if (q.missing) {
+      html += '<p class="muted" id="missing-q-note">This question is no longer in the bank. ' +
+        'The original wording and solution are not stored.</p>';
+    } else {
+      html += '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
         distractorBlock(q) +
-        notesBlock(q) +
-      '</div>' +
+        (readonly ? '' : notesBlock(q));
+    }
+    html += '</div>' +
       '<div class="btn-row drill-navrow">' +
         '<button class="btn btn-ghost" id="review-prev" title="Previous question (Left arrow)"' +
           (prev < 0 ? ' disabled' : '') + '>← Back</button>' +
@@ -1234,7 +1331,7 @@ PGRE.views.practice = (function () {
     PGRE.typesetMath(el());
     window.scrollTo(0, 0);
     var fb = document.getElementById('feedback');
-    if (fb) {
+    if (fb && !readonly) {
       if (regradable) bindSessionAssess(fb, q, ans);
       bindNotes(fb, q);
     }
@@ -1282,66 +1379,79 @@ PGRE.views.practice = (function () {
 
   /* ——— Summary ——— */
   function renderSummary() {
+    var s = currentSession();
+    if (!s) return;
     clearPace();
     if (PGRE.nav) PGRE.nav.setTrail([]);
-    session.stage = 'summary';
-    session.reviewing = false;
-    session.assess = null;
-    clearSaved();
+    s.stage = 'summary';
+    s.reviewing = false;
+    s.assess = null;
+    var readonly = !!s.readonly;
     lastRenderAt = Date.now();
-    var firstClose = !session.done;
-    session.done = true;
-    var receipt = buildAgentReceipt();
-    persistAgentReceipt(receipt);
-    var pack = receipt.pack;
-    var isPack = pack != null && /^\d{2}$/.test(String(pack));
-    var isLearnDrill = !!session.learnDrill;
-    var planLine = '';
-    if (firstClose) {
-      PGRE.gamify.endSession(session.sid);
-      PGRE.gamify.recordSession(session.qs.length, session.correct);
-      if (isPack) {
-        var taskId = 'set-' + pack;
-        var already = PGRE.gamify.taskDone(taskId);
-        if (!already) {
-          var xpKind = 'timed';
-          var cw = PGRE.currentWeek();
-          var weekTasks = PGRE.weekTasks(cw && cw.week);
-          for (var wi = 0; wi < weekTasks.length; wi++) {
-            if (weekTasks[wi].id === taskId && weekTasks[wi].kind === 'extra-set') {
-              xpKind = 'extra-set';
-              break;
+    var receipt = null, pack = null, isPack = false, isLearnDrill = false, planLine = '';
+    if (!readonly) {
+      clearSaved();
+      var firstClose = !s.done;
+      s.done = true;
+      receipt = buildAgentReceipt();
+      persistAgentReceipt(receipt);
+      pack = receipt.pack;
+      isPack = pack != null && /^\d{2}$/.test(String(pack));
+      isLearnDrill = !!s.learnDrill;
+      if (firstClose) {
+        PGRE.gamify.endSession(s.sid);
+        PGRE.gamify.recordSession(s.qs.length, s.correct);
+        if (isPack) {
+          var taskId = 'set-' + pack;
+          var already = PGRE.gamify.taskDone(taskId);
+          if (!already) {
+            var xpKind = 'timed';
+            var cw = PGRE.currentWeek();
+            var weekTasks = PGRE.weekTasks(cw && cw.week);
+            for (var wi = 0; wi < weekTasks.length; wi++) {
+              if (weekTasks[wi].id === taskId && weekTasks[wi].kind === 'extra-set') {
+                xpKind = 'extra-set';
+                break;
+              }
             }
+            PGRE.gamify.toggleTask(taskId, PGRE.planSetXp(xpKind));
           }
-          PGRE.gamify.toggleTask(taskId, PGRE.planSetXp(xpKind));
+          s.alreadyPlan = already;
         }
-        session.alreadyPlan = already;
+      }
+      if (isPack || isLearnDrill) {
+        planLine = isPack
+          ? (s.alreadyPlan
+            ? 'Set ' + pack + ' was already done in your plan.'
+            : 'Set ' + pack + ' marked done in your plan.')
+          : 'Learn transfer complete; timed-pack progress was not changed.';
       }
     }
-    if (isPack || isLearnDrill) {
-      planLine = isPack
-        ? (session.alreadyPlan
-          ? 'Set ' + pack + ' was already done in your plan.'
-          : 'Set ' + pack + ' marked done in your plan.')
-        : 'Learn transfer complete; timed-pack progress was not changed.';
-    }
-    var pct = Math.round(100 * session.correct / session.qs.length);
+    var nQ = s.qs.length;
+    var pct = nQ ? Math.round(100 * s.correct / nQ) : 0;
     var verdict = pct === 100 ? 'Flawless.' :
                   pct >= 80 ? 'Strong work.' :
                   pct >= 60 ? 'Solid — review the misses below.' :
                   'Rough set — the reworking is where the learning happens.';
+    var heading = (readonly && s.sess && !s.sess.endedAt) ? 'Practice set' : 'Session complete';
 
     var html = '<div class="card practice-card">' +
-      '<h1>Session complete</h1>' +
-      (session.label ? '<p class="muted session-label-line">' + PGRE.ui.esc(session.label) + '</p>' : '') +
-      '<div class="summary-score">' + session.correct + ' / ' + session.qs.length +
-        '<span class="summary-pct">' + pct + '%</span></div>' +
-      '<p class="muted">' + verdict + ' You earned <strong>' + session.xpEarned + ' XP</strong> this session.</p>';
-    if (planLine) html += '<p class="muted">' + planLine + '</p>';
-    html += intensitySummaryHTML(isPack);
+      '<h1>' + heading + '</h1>' +
+      (s.label ? '<p class="muted session-label-line">' + PGRE.ui.esc(s.label) + '</p>' : '') +
+      (nQ
+        ? '<div class="summary-score">' + s.correct + ' / ' + nQ +
+            '<span class="summary-pct">' + pct + '%</span></div>' +
+          '<p class="muted">' + verdict + ' You earned <strong>' + s.xpEarned + ' XP</strong> this session.</p>'
+        : '<p class="muted">You did not answer anything this time — nothing was recorded for this set.</p>');
+    if (readonly) {
+      html += '<p class="muted">Stored record of this set — opening it does not change your progress.</p>';
+    } else {
+      if (planLine) html += '<p class="muted">' + planLine + '</p>';
+      html += intensitySummaryHTML(isPack);
+    }
     html += paletteHTML(true);
 
-    var misses = session.answers.filter(function (a) { return !a.correct; });
+    var misses = (s.answers || []).filter(function (a) { return a && !a.correct; });
     if (misses.length) {
       html += '<h2>Review your misses</h2>';
       misses.forEach(function (a) {
@@ -1351,22 +1461,26 @@ PGRE.views.practice = (function () {
           '<div class="solution"><div class="solution-label">Solution</div>' + a.q.sol + '</div></details>';
       });
     }
-    var custom = session.custom;
-    var backLink = custom ? '#/build' : (session.topicId === 'all' ? '#/' : '#/topic/' + session.topicId);
+    var custom = s.custom;
+    var backLink = custom ? '#/build' : (s.topicId === 'all' ? '#/' : '#/topic/' + s.topicId);
     if (isPack) backLink = '#/plan';
-    html += '<div class="btn-row">' +
-      '<button class="btn btn-primary" id="again-btn">' +
-        (custom ? (session.criteria ? 'Draw a fresh set' : 'Run this set again') : 'Practice again') + '</button>';
-    if (isPack || isLearnDrill) {
-      html +=
-        '<button class="btn btn-ghost" type="button" id="agent-receipt-btn" title="Copy JSON for the Learn session or OrbitOS agent log">' +
-          'Copy agent receipt</button>' +
-        '<button class="btn btn-ghost" type="button" id="agent-receipt-download-btn" title="Download JSON receipt">' +
-          'Download .json</button>';
+    html += '<div class="btn-row">';
+    if (readonly) {
+      html += '<a class="btn btn-primary" id="back-history" href="#/history">Back to History</a>';
+    } else {
+      html += '<button class="btn btn-primary" id="again-btn">' +
+        (custom ? (s.criteria ? 'Draw a fresh set' : 'Run this set again') : 'Practice again') + '</button>';
+      if (isPack || isLearnDrill) {
+        html +=
+          '<button class="btn btn-ghost" type="button" id="agent-receipt-btn" title="Copy JSON for the Learn session or OrbitOS agent log">' +
+            'Copy agent receipt</button>' +
+          '<button class="btn btn-ghost" type="button" id="agent-receipt-download-btn" title="Download JSON receipt">' +
+            'Download .json</button>';
+      }
+      html += '<a class="btn btn-ghost" href="' + backLink + '">Done</a>';
     }
-    html += '<a class="btn btn-ghost" href="' + backLink + '">Done</a>' +
-    '</div>';
-    if (isPack || isLearnDrill) {
+    html += '</div>';
+    if (!readonly && (isPack || isLearnDrill)) {
       html += '<p class="muted agent-receipt-hint">' +
         (isPack
           ? 'Your plan task here is already ticked. To log this set in the OrbitOS vault too (daily note and misses log), copy or download the receipt and say you are done in chat, or paste the JSON.'
@@ -1374,14 +1488,15 @@ PGRE.views.practice = (function () {
         '</p>';
     }
     html += '</div>';
-    var topicId = session.topicId, filter = session.filter;
+    var topicId = s.topicId, filter = s.filter;
     el().innerHTML = html;
     PGRE.typesetMath(el());
     if (window.PGRE && PGRE.motion && PGRE.motion.countUp) {
       var pctEl = el().querySelector('.summary-pct');
       if (pctEl) PGRE.motion.countUp(pctEl, pct, { duration: 900, format: function (n) { return Math.round(n) + '%'; } });
     }
-    document.getElementById('again-btn').addEventListener('click', function () {
+    var againBtn = document.getElementById('again-btn');
+    if (againBtn) againBtn.addEventListener('click', function () {
       if (Date.now() - lastRenderAt < 300) return; // Finish double-click guard
       if (custom) startCustom(true);
       else renderConfig(topicId, filter);
@@ -1409,13 +1524,35 @@ PGRE.views.practice = (function () {
   var REVIEW_ASSESS_KEYS = { k: 'sure', g: 'guess', t: 'slow', f: 'forgot', r: 'stuck' };
   function onKey(e) {
     if (!settings().keyboard) return;
-    if (!session) return;
+    var s = currentSession();
+    if (!s) return;
     if (!document.getElementById('practice-root')) return; // not on the practice view
     var tg = (e.target && e.target.tagName) || '';
     if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' ||
         (e.target && e.target.isContentEditable)) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     var k = e.key;
+
+    if (s.readonly) {
+      if (s.stage === 'review') {
+        if (k === 'ArrowLeft') {
+          var prevR = neighborAnswered(s.i, -1);
+          if (prevR >= 0) { e.preventDefault(); renderReview(prevR); }
+        } else if (k === 'ArrowRight') {
+          var nextR = neighborAnswered(s.i, 1);
+          if (nextR >= 0) { e.preventDefault(); renderReview(nextR); }
+        } else if (k === 'Enter' && !PGRE.enterPressesControl()) {
+          e.preventDefault();
+          var afterR = neighborAnswered(s.i, 1);
+          if (afterR >= 0) renderReview(afterR);
+        } else if (k === 'Escape') {
+          e.preventDefault();
+          renderSummary();
+        }
+      }
+      return;
+    }
+    if (!session) return;
 
     if (session.stage === 'question') {
       if (k === 'ArrowLeft' || k === 'ArrowRight') {
@@ -1483,6 +1620,13 @@ PGRE.views.practice = (function () {
     render: function () { return '<div id="practice-root"></div>'; },
     mount: function (params) {
       clearPace();
+      if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
+      if (params && params.id === 'session' && params.sub2) {
+        // History reconstruction: leave the live / parked set exactly as it is.
+        openArchive(params.sub2);
+        return;
+      }
+      archive = null;
       session = null;
       // one-shot flag the parked-session drawer sets before navigating here
       try {
@@ -1491,7 +1635,6 @@ PGRE.views.practice = (function () {
         sessionStorage.removeItem(
           (PGRE.sessionPark && PGRE.sessionPark.RESUME_KEY) || 'pgre-practice-resume');
       } catch (e) { autoResume = false; }
-      if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
       var id = params.id || 'all';
       if (id === 'custom') startCustom();
       else if (id === 'pack') {
@@ -1502,6 +1645,11 @@ PGRE.views.practice = (function () {
     },
     persistAgentReceipt: persistAgentReceipt,
     inferPackId: inferPackId,
-    sittingComplete: sittingComplete
+    sittingComplete: sittingComplete,
+    _test: {
+      reconstructArchive: reconstructArchive,
+      get session() { return session; },
+      get archive() { return archive; }
+    }
   };
 })();
