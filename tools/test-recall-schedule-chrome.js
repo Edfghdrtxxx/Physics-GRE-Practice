@@ -484,7 +484,7 @@ var STAGES = [
         'Type: once saving works, Good stores 3 reviews and moves on');
     } },
 
-  { name: 'after midnight the open session takes in new-day cards, not a card it graded',
+  { name: 'after midnight the open session and its Resume take in new-day cards, not a card it graded',
     run: async function (page, h) {
       // ro-a..ro-c are relearning cards: Good gives a 1-day interval. ro-d is
       // a learned card due tomorrow and not on today's list.
@@ -507,21 +507,38 @@ var STAGES = [
         graded.queueIds.indexOf(target) === -1 && graded.queueIds.indexOf('ro-d') === -1,
         'Good before midnight gives ' + target + ' a 1-day interval and takes it out of the session; ' +
         'ro-d, due the same day, is not in the session');
-      // Midnight passes with the session open: the scheduler's day moves to
-      // the due day for the rest of this stage, and the tab becomes visible.
-      await page.eval('() => { var due = ' + JSON.stringify(due) + '; window.__realToday = PGRE.srs.today;' +
-        'PGRE.srs.today = function () { return due; }; document.dispatchEvent(new Event("visibilitychange")); }');
+      // Midnight passes with the session open: the scheduler's day (today and
+      // addDays) moves to the due day for the rest of this stage, and the tab
+      // becomes visible.
+      await page.eval('() => { var due = ' + JSON.stringify(due) + ';' +
+        'window.__realClock = { today: PGRE.srs.today, addDays: PGRE.srs.addDays };' +
+        'PGRE.srs.today = function () { return due; };' +
+        'PGRE.srs.addDays = function (n) { return PGRE.srs.addDaysTo(due, n); };' +
+        'document.dispatchEvent(new Event("visibilitychange")); }');
       var after = await h.look();
       h.assert(after.today === due && after.remaining.indexOf(target) !== -1 && after.remaining.indexOf('ro-d') !== -1,
         'on the new day ' + target + ' and ro-d are both on today\'s remaining list');
       h.assert(after.queueIds.indexOf('ro-d') !== -1 && after.queueIds.indexOf(target) === -1,
         'the open session takes in ro-d but not ' + target + ', which it graded (queue: ' + after.queueIds.join(', ') + ')');
+      // Leave Recall and come back: Resume rebuilds the session from its
+      // saved snapshot instead of the open page.
+      await page.eval(function () { location.hash = '#/'; });
+      await h.sleep(250);
+      await page.eval(function () { location.hash = '#/formulas'; });
+      await h.wait('#resume-btn');
+      await h.click('#resume-btn');
+      await h.wait('.formula-palette .pal-cell.is-current');
+      var resumed = await h.look();
+      h.assert(/ 1 done /.test(resumed.line), 'Resume continues the same session (' + resumed.line + ')');
+      h.assert(resumed.queueIds.indexOf('ro-d') !== -1 && resumed.queueIds.indexOf(target) === -1,
+        'after Resume the session still holds ro-d and not ' + target + ' (queue: ' + resumed.queueIds.join(', ') + ')');
       var run = await h.finish();
       h.assert(run.end.summary && run.shown.indexOf(target) === -1 && run.shown.indexOf('ro-d') !== -1,
         target + ' is not shown again before the session ends, and ro-d is (shown: ' + run.shown.join(', ') + ')');
       await page.eval(function () {
-        PGRE.srs.today = window.__realToday;
-        delete window.__realToday;
+        PGRE.srs.today = window.__realClock.today;
+        PGRE.srs.addDays = window.__realClock.addDays;
+        delete window.__realClock;
         PGRE.store.state.formulaStudy = null;
         PGRE.store.save();
         location.hash = '#/';

@@ -2357,8 +2357,15 @@ PGRE.views.formulas = (function () {
       });
       // Learning-step requeues are real duplicates: a kept id keeps every
       // queue entry. New list members append once each, in batch order.
+      // A card this session already graded and let go stays out, as it does
+      // while the page stays open (knownIds): after midnight it is due again,
+      // and it comes back in the next session.
+      var graded = Object.create(null);
+      (Array.isArray(saved.history) ? saved.history : []).forEach(function (h) {
+        if (h && h.id) graded[h.id] = 1;
+      });
       remaining.forEach(function (c) {
-        if (!kept[c.id]) { kept[c.id] = 1; keptIds.push(c.id); }
+        if (!kept[c.id] && !graded[c.id]) { kept[c.id] = 1; keptIds.push(c.id); }
       });
       if (keptIds.join('') !== queueIds.join('')) {
         queueIds = keptIds;
