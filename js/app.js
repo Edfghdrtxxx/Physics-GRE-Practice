@@ -1017,6 +1017,9 @@ PGRE.nav = (function () {
       } else if (view === 'topic') {
         var t = PGRE.topicById(params.id);
         trail.push({ label: t ? t.name : 'Topic' });
+      } else if (view === 'practice' && params.id === 'session' && params.sub2) {
+        trail.push({ label: 'History', href: '#/history' });
+        trail.push({ label: 'Practice' });
       } else if (view === 'practice') {
         var pt = params.id && params.id !== 'all' ? PGRE.topicById(params.id) : null;
         trail.push(pt ? { label: pt.name, href: '#/topic/' + pt.id }
@@ -1025,6 +1028,9 @@ PGRE.nav = (function () {
         trail.push({ label: params.sub2 === 'new' ? 'Practice · not yet done'
                           : params.sub2 === 'done' ? 'Practice · done before'
                           : 'Practice' });
+      } else if (view === 'mistakes' && params.sub === 'drill' && params.sub2) {
+        trail.push({ label: 'History', href: '#/history' });
+        trail.push({ label: 'Drill' });
       } else if (LABELS[view]) {
         trail.push({ label: LABELS[view], href: HREF[view] });
         if (view === 'exam' && params.sub === 'run') trail.push({ label: 'Run' });

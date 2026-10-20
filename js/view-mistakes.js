@@ -8,6 +8,7 @@ PGRE.views = PGRE.views || {};
 PGRE.views.mistakes = (function () {
   var LETTERS = ['A', 'B', 'C', 'D', 'E'];
   var drill = null; // { qs, st, i, skipped, done, reviewing, sid, qStart, assess } — see startDrill
+  var archive = null; // read-only History reconstruction; never replaces `drill`
   var lastRenderAt = 0; // stamps each drill render so a double-click can't click through
   var keyBound = false; // the document keydown listener is installed once
   var paceTimer = null; // live per-question chip; same contract as view-practice.js
@@ -715,6 +716,113 @@ PGRE.views.mistakes = (function () {
     return true;
   }
 
+  /* History: rebuild a finished or unfinished mistake drill from the stored
+     session and its attempts. Read-only — never writes, never touches `drill`
+     or the parked snapshot. A question that left the bank is a stub that
+     names the missing id instead of throwing. */
+  function questionForAttempt(row) {
+    var q = PGRE.questionById(row.qid);
+    if (q) return q;
+    var choices = LETTERS.slice();
+    var ans = typeof row.answer === 'number' ? row.answer : 0;
+    var pick = typeof row.picked === 'number' ? row.picked : -1;
+    var need = Math.max(choices.length, ans + 1, pick + 1);
+    while (choices.length < need) choices.push(String(choices.length + 1));
+    return {
+      id: row.qid,
+      topic: row.topic,
+      q: '<p>Question ' + PGRE.ui.esc(row.qid) + ' is no longer in the bank.</p>',
+      choices: choices,
+      answer: ans,
+      sol: '',
+      missing: true
+    };
+  }
+
+  function recordKicker(sess, kind, extra) {
+    var when = '';
+    if (sess && sess.startedAt) {
+      var d = new Date(sess.startedAt);
+      when = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' +
+             d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    }
+    var parts = [kind];
+    if (extra) parts.push(extra);
+    if (when) parts.push(when);
+    return '<div class="record-kicker">' +
+      '<span class="record-kicker-line">' + PGRE.ui.esc(parts.join(' · ')) + '</span>' +
+      '<span class="chip record-past">Past record</span></div>';
+  }
+
+  function assessBits(row) {
+    var bits = [];
+    if (!row) return bits;
+    if (row.confidence) bits.push(row.confidence === 'guess' ? 'Guessed' : 'Knew it');
+    (row.tags || []).forEach(function (tg) {
+      bits.push((PGRE.assess && PGRE.assess.LABELS && PGRE.assess.LABELS[tg]) || tg);
+    });
+    return bits;
+  }
+
+  function assessChipHTML(row) {
+    var bits = assessBits(row);
+    if (!bits.length) return '';
+    return '<span class="chip record-assess">Self-assessment: ' +
+      PGRE.ui.esc(bits.join(' · ')) + '</span>';
+  }
+
+  function letterOf(i) {
+    return (typeof i === 'number' && i >= 0 && LETTERS[i]) ? LETTERS[i] : '—';
+  }
+
+  function missingBankNote(q, st) {
+    return '<div class="record-missing" id="missing-q-note">' +
+      'This question has left the bank. Your pick: ' + letterOf(st && st.picked) +
+      ' · Correct answer: ' + letterOf(q && q.answer) +
+      '. Its wording and solution were not stored.</div>';
+  }
+
+  function reconstructArchive(sid) {
+    if (!sid || !PGRE.gamify || typeof PGRE.gamify._session !== 'function') return null;
+    var sess = PGRE.gamify._session(sid);
+    if (!sess || sess.mode !== 'mistakes') return null;
+    var arr = (PGRE.store.state && PGRE.store.state.attempts) || [];
+    var lastByQid = {};
+    var order = [];
+    arr.forEach(function (a) {
+      if (!a || a.sid !== sid) return;
+      if (!lastByQid[a.qid]) order.push(a.qid);
+      lastByQid[a.qid] = a;
+    });
+    var qs = [];
+    var st = [];
+    order.forEach(function (qid) {
+      var row = lastByQid[qid];
+      var q = questionForAttempt(row);
+      qs.push(q);
+      st.push({
+        q: q, picked: row.picked, correct: !!row.correct,
+        xp: null, ms: row.ms, row: row, sid: sid
+      });
+    });
+    return {
+      qs: qs, st: st, i: 0, skipped: 0, done: true, reviewing: false,
+      sid: sid, readonly: true, sess: sess
+    };
+  }
+
+  function openArchive(sid) {
+    try { sid = decodeURIComponent(sid); } catch (e) { /* keep raw */ }
+    archive = reconstructArchive(sid);
+    if (!archive) {
+      root().innerHTML = '<div class="card practice-card"><h1>Drill not found</h1>' +
+        '<p class="muted">This History entry has no stored mistake-drill session.</p>' +
+        '<div class="btn-row"><a class="btn btn-primary" href="#/history">Back to History</a></div></div>';
+      return;
+    }
+    renderDrillSummary();
+  }
+
   /* Discard ends ONLY the session row this drill owns — older abandoned rows
      have no queue and stay untouched. */
   function discardParkedDrill() {
@@ -754,22 +862,35 @@ PGRE.views.mistakes = (function () {
     else location.hash = '#/mistakes/drill';
   }
 
+  /* Live drill, or the History reconstruction when that route is up.
+     Archive takes priority so a parked live drill stays in `drill` untouched. */
+  function currentDrill() { return archive || drill; }
+
   function answeredCount() {
-    var n = 0;
-    drill.st.forEach(function (s) { if (s) n++; });
+    var d = currentDrill(), n = 0;
+    if (!d) return 0;
+    d.st.forEach(function (s) { if (s) n++; });
     return n;
   }
 
   function correctCount() {
-    var n = 0;
-    drill.st.forEach(function (s) { if (s && s.correct) n++; });
+    var d = currentDrill(), n = 0;
+    if (!d) return 0;
+    d.st.forEach(function (s) { if (s && s.correct) n++; });
     return n;
   }
 
   function earnedXP() {
-    var n = 0;
-    drill.st.forEach(function (s) { if (s) n += s.xp; });
+    var d = currentDrill(), n = 0;
+    if (!d) return 0;
+    d.st.forEach(function (s) { if (s) n += s.xp; });
     return n;
+  }
+
+  function fmtAttemptMs(ms) {
+    if (ms == null) return '';
+    var s = ms / 1000;
+    return (s < 10 ? s.toFixed(1) : Math.round(s)) + ' s';
   }
 
   /* Numbered jump grid — reuses the exam room's .pal-cell look.
@@ -780,10 +901,12 @@ PGRE.views.mistakes = (function () {
      the tints) belongs to the summary. Answered cells open a read-only review
      of that question; unanswered stay inert. Nothing is re-recorded. */
   function paletteHTML(results, current) {
-    if (!results && current == null) current = drill.i;
+    var d = currentDrill();
+    if (!d) return '';
+    if (!results && current == null) current = d.i;
     var cells = '';
-    drill.qs.forEach(function (q, n) {
-      var st = drill.st[n];
+    d.qs.forEach(function (q, n) {
+      var st = d.st[n];
       var cls = 'pal-cell';
       if (st) cls += results ? (st.correct ? ' is-correct' : ' is-wrong') : ' is-answered';
       if (current != null && n === current) cls += ' is-current';
@@ -820,9 +943,10 @@ PGRE.views.mistakes = (function () {
   }
 
   function neighborAnswered(from, dir) {
-    if (!drill) return -1;
-    for (var i = from + dir; i >= 0 && i < drill.qs.length; i += dir) {
-      if (drill.st[i]) return i;
+    var d = currentDrill();
+    if (!d) return -1;
+    for (var i = from + dir; i >= 0 && i < d.qs.length; i += dir) {
+      if (d.st[i]) return i;
     }
     return -1;
   }
@@ -870,36 +994,44 @@ PGRE.views.mistakes = (function () {
   }
 
   function feedbackHTML(q, st, fresh, locked) {
+    var readonly = !!(currentDrill() && currentDrill().readonly);
+    var title = st.correct
+      ? (readonly ? 'Correct' : correctTitle(q))
+      : 'Incorrect — the answer is ' + LETTERS[q.answer] +
+        (readonly ? '' : '; back to the bottom of the ladder');
     var html = '<div class="feedback reveal-in ' + (st.correct ? 'feedback-good' : 'feedback-bad') + '">' +
       '<span class="fb-icon">' + (st.correct ? '✓' : '✗') + '</span>' +
-      '<strong>' + (st.correct ? correctTitle(q)
-                               : 'Incorrect — the answer is ' + LETTERS[q.answer] +
-                                 '; back to the bottom of the ladder') + '</strong>' +
-      '<span class="fb-xp">+' + st.xp + ' XP</span>' +
+      '<strong>' + title + '</strong>' +
+      (st.xp != null ? '<span class="fb-xp">+' + st.xp + ' XP</span>' : '') +
     '</div>';
-    html += paceMark(st.ms != null ? st.ms : (st.row && st.row.ms));
-    if (fresh) {
+    if (!readonly) html += paceMark(st.ms != null ? st.ms : (st.row && st.row.ms));
+    if (fresh && !readonly) {
       html += PGRE.assess.html(PGRE.store.state.settings.keyboard);
-    } else if (regradeRow(q, st)) {
+    } else if (!readonly && regradeRow(q, st)) {
       // the same chips, painted from this drill's own row, plus the review
       // window; a tap regrades that row and never records a new attempt
       html += PGRE.assess.html(PGRE.store.state.settings.keyboard, { review: true });
       if (!locked) html += reanswerHint();
-    } else {
+    } else if (!readonly) {
       // read the assessment off THIS drill's own attempt row (st.row, which
       // PGRE.assess stamps in place) — lastAssess() would happily surface a
       // tag from some practice session weeks ago as if it belonged here
-      var bits = [];
-      if (st.row && st.row.confidence) bits.push(st.row.confidence === 'guess' ? 'Guessed' : 'Knew it');
-      ((st.row && st.row.tags) || []).forEach(function (tg) { bits.push(PGRE.assess.LABELS[tg] || tg); });
+      var bits = assessBits(st.row);
       if (bits.length) {
         html += '<div class="conf-note muted">Your self-assessment: <strong>' +
           bits.join(' · ') + '</strong></div>';
       }
       if (!locked) html += reanswerHint();
     }
-    html += '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
-      distractorBlock(q);
+    if (q.missing) {
+      if (!readonly) {
+        html += '<p class="muted" id="missing-q-note">This question is no longer in the bank. ' +
+          'The original wording and solution are not stored.</p>';
+      }
+    } else {
+      html += '<div class="solution"><div class="solution-label">Solution</div>' + q.sol + '</div>' +
+        distractorBlock(q);
+    }
     return html;
   }
 
@@ -1084,39 +1216,47 @@ PGRE.views.mistakes = (function () {
   }
 
   function renderDrillReview(idx) {
-    if (!drill || idx < 0 || idx >= drill.qs.length) return;
-    var st = drill.st[idx];
+    var d = currentDrill();
+    if (!d || idx < 0 || idx >= d.qs.length) return;
+    var st = d.st[idx];
     if (!st) return;
-    if (drill.reviewing && drill.i === idx) return;
+    if (d.reviewing && d.i === idx) return;
     clearPace();
-    drill.i = idx;
-    drill.reviewing = true;
-    drill.choiceCommit = null;
+    d.i = idx;
+    d.reviewing = true;
+    d.choiceCommit = null;
     lastRenderAt = Date.now();
     if (PGRE.nav) PGRE.nav.setTrail(['Review']);
-    var q = drill.qs[idx];
+    var q = d.qs[idx];
     var t = PGRE.topicById(q.topic) || { id: 'xx', short: '?', name: 'Unknown topic' };
     var prev = neighborAnswered(idx, -1);
     var next = neighborAnswered(idx, 1);
+    var readonly = !!d.readonly;
+    var gone = readonly && q.missing;
     var html = '<div class="card practice-card">' +
       '<div class="practice-meta">' +
-        '<span>Review — ' + (idx + 1) + ' of ' + drill.qs.length + '</span>' +
+        '<span>Review — ' + (idx + 1) + ' of ' + d.qs.length + '</span>' +
         '<span class="chip">' + t.name + '</span>' +
         '<span class="chip">' + (st.correct ? 'Correct' : 'Missed') + '</span>' +
-      '</div>' +
-      '<div class="q-text">' + q.q + '</div>' +
-      '<div class="choices">';
-    q.choices.forEach(function (c, cidx) {
-      var cls = 'choice';
-      if (cidx === q.answer) cls += ' is-answer';
-      if (cidx === st.picked && !st.correct) cls += ' is-wrong';
-      html += '<button class="' + cls + '" disabled aria-pressed="' +
-        (cidx === st.picked ? 'true' : 'false') + '">' +
-        '<span class="choice-letter">' + LETTERS[cidx] + '</span>' +
-        '<span class="choice-body">' + c + '</span></button>';
-    });
-    html += '</div>' +
-      '<div id="feedback">' + feedbackHTML(q, st, false, true) + '</div>' +
+        (st.ms != null ? '<span class="chip">' + fmtAttemptMs(st.ms) + '</span>' : '') +
+        (readonly ? assessChipHTML(st.row) : '') +
+      '</div>';
+    if (!gone) {
+      html += '<div class="q-text">' + q.q + '</div>' +
+        '<div class="choices">';
+      q.choices.forEach(function (c, cidx) {
+        var cls = 'choice';
+        if (cidx === q.answer) cls += ' is-answer';
+        if (cidx === st.picked && !st.correct) cls += ' is-wrong';
+        html += '<button class="' + cls + '" disabled aria-pressed="' +
+          (cidx === st.picked ? 'true' : 'false') + '">' +
+          '<span class="choice-letter">' + LETTERS[cidx] + '</span>' +
+          '<span class="choice-body">' + c + '</span></button>';
+      });
+      html += '</div>';
+    }
+    html += '<div id="feedback">' + feedbackHTML(q, st, false, true) +
+      (gone ? missingBankNote(q, st) : '') + '</div>' +
       '<div class="btn-row drill-navrow">' +
         '<button class="btn btn-ghost" id="review-prev" title="Previous question (Left arrow)"' +
           (prev < 0 ? ' disabled' : '') + '>← Back</button>' +
@@ -1137,35 +1277,44 @@ PGRE.views.mistakes = (function () {
       if (next >= 0) renderDrillReview(next);
     });
     document.getElementById('review-summary').addEventListener('click', renderDrillSummary);
-    drill.assess = bindAssess(q, st, false);
+    d.assess = d.readonly ? null : bindAssess(q, st, false);
     bindReviewJumps();
-    saveDrill();
+    if (!d.readonly) saveDrill();
   }
 
   function renderDrillSummary() {
+    var d = currentDrill();
+    if (!d) return;
     clearPace();
+    var readonly = !!d.readonly;
     if (PGRE.nav) PGRE.nav.setTrail([]);   // BUNDLE G: drill over — back to base
-    clearDrillSaved();                     // the parked slot ends with the drill
     lastRenderAt = Date.now();
-    var firstClose = !drill.done;
-    drill.done = true;                     // the keys stop answering from here on
-    drill.reviewing = false;
-    drill.assess = null;
-    var done = answeredCount(), correct = correctCount(), xp = earnedXP();
-    var left = drill.qs.length - done;
-    if (firstClose) {
-      PGRE.gamify.endSession(drill.sid);
-      PGRE.store.log('mistake', 'Mistake drill: ' + correct + '/' + done + ' correct' +
-        (drill.skipped ? ' · ' + drill.skipped + ' skipped' : ''), 0);
-      PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
-      PGRE.store.save();
+    d.reviewing = false;
+    d.assess = null;
+    if (!readonly) {
+      clearDrillSaved();                   // the parked slot ends with the drill
+      var firstClose = !d.done;
+      d.done = true;                       // the keys stop answering from here on
+      if (firstClose) {
+        PGRE.gamify.endSession(d.sid);
+        PGRE.store.log('mistake', 'Mistake drill: ' + correctCount() + '/' + answeredCount() + ' correct' +
+          (d.skipped ? ' · ' + d.skipped + ' skipped' : ''), 0);
+        PGRE.gamify.checkAchievements(); // before save() so a just-unlocked badge persists now
+        PGRE.store.save();
+      }
     }
-    var stillDue = filterByConcern(filterByTopic(PGRE.srs.dueMistakes())).length;
+    var done = answeredCount(), correct = correctCount();
+    var xp = readonly && d.sess ? (d.sess.xp || 0) : earnedXP();
+    var left = d.qs.length - done;
+    var stillDue = readonly ? 0 : filterByConcern(filterByTopic(PGRE.srs.dueMistakes())).length;
     var untouched = [];
-    if (drill.skipped) untouched.push(drill.skipped + ' skipped');
+    if (d.skipped) untouched.push(d.skipped + ' skipped');
     if (left) untouched.push(left + ' left unanswered');
+    var heading = readonly
+      ? recordKicker(d.sess, 'Mistake drill')
+      : '<h1>Drill complete</h1>';
     root().innerHTML = '<div class="card practice-card">' +
-      '<h1>Drill complete</h1>' +
+      heading +
       // every question skipped or left behind: a score of 0 / 0 would read as a
       // wipeout rather than as "nothing was answered, so nothing changed"
       (done ? '<div class="summary-score">' + correct + ' / ' + done +
@@ -1176,17 +1325,21 @@ PGRE.views.mistakes = (function () {
         ? '<p class="muted">' + untouched.join(' · ') + ' — those kept their place in the book ' +
           'and their existing review date.</p>'
         : '') +
-      (done ? '<p class="muted">Solved mistakes stay in the book — their next review just moved ' +
-              'further out. ' +
-              (stillDue ? stillDue + ' still due now.' : 'Nothing else is due right now.') + '</p>'
-            : '') +
+      (!readonly && done
+        ? '<p class="muted">Solved mistakes stay in the book — their next review just moved ' +
+          'further out. ' +
+          (stillDue ? stillDue + ' still due now.' : 'Nothing else is due right now.') + '</p>'
+        : '') +
       // tinted map: answered cells open read-only review; nothing is re-recorded
-      (drill.qs.length ? paletteHTML(true) : '') +
+      (d.qs.length ? paletteHTML(true) : '') +
       '<div class="btn-row">' +
-        '<button class="btn btn-primary" id="back-book">Back to the book</button>' +
+        (readonly
+          ? '<a class="btn btn-primary" id="back-history" href="#/history">Back to History</a>'
+          : '<button class="btn btn-primary" id="back-book">Back to the book</button>') +
         '<a class="btn btn-ghost" href="#/">Dashboard</a>' +
       '</div></div>';
-    document.getElementById('back-book').addEventListener('click', function () {
+    var backBook = document.getElementById('back-book');
+    if (backBook) backBook.addEventListener('click', function () {
       // a real route change: the drill finished on #/mistakes/drill, the book
       // lives at #/mistakes
       if (location.hash === '#/mistakes') renderBook();
@@ -1202,8 +1355,9 @@ PGRE.views.mistakes = (function () {
      (while a result's chip row is on screen, the review page included). The
      review page: ← / → / Enter browse the results, Esc back to them. */
   function onKey(e) {
-    if (!drill) return;
-    if (drill.done && !drill.reviewing) return;             // the summary is up
+    var d = currentDrill();
+    if (!d) return;
+    if (d.done && !d.reviewing) return;                     // the summary is up
     if (!document.getElementById('mistakes-root')) return;  // not on the mistake-book view
     if (!PGRE.store.state.settings.keyboard) return;
     var tg = (e.target && e.target.tagName) || '';
@@ -1214,7 +1368,8 @@ PGRE.views.mistakes = (function () {
 
     // Review page: questions are not re-answerable; the nav takes the practice
     // review's keys and the grading chips keep the answer page's letters.
-    if (drill.reviewing) { reviewKey(e, k); return; }
+    if (d.reviewing) { reviewKey(e, k); return; }
+    if (d.readonly) return;
 
     if (/^[a-eA-E]$/.test(k) || /^[1-5]$/.test(k)) {
       var idx = /^[1-5]$/.test(k) ? parseInt(k, 10) - 1 : k.toUpperCase().charCodeAt(0) - 65;
@@ -1252,13 +1407,15 @@ PGRE.views.mistakes = (function () {
      ← / → the previous / next answered question, Enter the next one (unless a
      Tab-focused control owns it), Esc back to the results. */
   function reviewKey(e, k) {
+    var d = currentDrill();
+    if (!d) return;
     if (k === 'ArrowLeft' || k === 'ArrowRight') {
-      var to = neighborAnswered(drill.i, k === 'ArrowLeft' ? -1 : 1);
+      var to = neighborAnswered(d.i, k === 'ArrowLeft' ? -1 : 1);
       if (to >= 0) { e.preventDefault(); renderDrillReview(to); }
     } else if (k === 'Enter' && !PGRE.enterPressesControl()) {
       // on the last question too: Enter must not press a chip a click left focused
       e.preventDefault();
-      var after = neighborAnswered(drill.i, 1);
+      var after = neighborAnswered(d.i, 1);
       if (after >= 0) renderDrillReview(after);
     } else if (k === 'Escape') {
       e.preventDefault();
@@ -1273,10 +1430,11 @@ PGRE.views.mistakes = (function () {
      the chip row this controller was bound to is still on screen. */
   var ASSESS_KEYS = { k: 'sure', g: 'guess', t: 'slow', f: 'forgot', r: 'stuck' };
   function assessKey(e, k) {
+    var d = currentDrill();
     var key = ASSESS_KEYS[String(k).toLowerCase()];
-    if (!key || !drill.assess || !document.getElementById('assess-row')) return;
+    if (!key || !d || !d.assess || !document.getElementById('assess-row')) return;
     e.preventDefault();
-    drill.assess.requestToggle(key);
+    d.assess.requestToggle(key);
   }
 
   return {
@@ -1288,6 +1446,12 @@ PGRE.views.mistakes = (function () {
       concernFilter = 'all';
       bookShown = BOOK_PAGE;
       if (!keyBound) { document.addEventListener('keydown', onKey); keyBound = true; }
+      if (params && params.sub === 'drill' && params.sub2) {
+        // History reconstruction: leave the live / parked drill exactly as it is.
+        openArchive(params.sub2);
+        return;
+      }
+      archive = null;
       if (params && params.sub === 'drill') {
         // Same-tab resume keeps the LIVE drill (its st rows still reference the
         // real attempt objects); only a reload rebuilds from the snapshot.
@@ -1306,6 +1470,9 @@ PGRE.views.mistakes = (function () {
              discardParkedDrill: discardParkedDrill, drillAnswer: drillAnswer,
              startDrill: startDrill, skipCurrent: skipCurrent,
              dropLive: function () { drill = null; },
-             get drill() { return drill; }, saveDrill: saveDrill }
+             get drill() { return drill; },
+             get archive() { return archive; },
+             reconstructArchive: reconstructArchive,
+             saveDrill: saveDrill }
   };
 })();

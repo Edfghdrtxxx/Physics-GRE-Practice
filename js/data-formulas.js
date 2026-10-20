@@ -333,6 +333,17 @@ PGRE.FORMULAS = [
     note: "Supplemental — Kahn §5.3.5, p.103, treats steps and barriers only qualitatively."
   },
   {
+    id: "supp-well-scattering",
+    kind: "list",
+    eq: "supp",
+    topic: "qm",
+    tag: "Scattering states",
+    name: "Scattering over a finite square well (supplemental list)",
+    front: "A particle of energy $E \\gt 0$ comes from the left onto a finite square well: $V = -V_0$ for $0 \\lt x \\lt L$ and $V = 0$ outside. What form does $\\psi$ take left of the well, inside it, and right of it, and when does the particle pass with no reflection? (4)",
+    back: "<ul class=\"recall-list\"><li>Left: $Ae^{ikx} + Be^{-ikx}$ with $k = \\sqrt{2mE}/\\hbar$, the incident wave plus the reflected wave.</li><li>Inside: oscillating, with $k' = \\sqrt{2m(E + V_0)}/\\hbar \\gt k$, so the wavelength is shorter.</li><li>Right: only $Ce^{ikx}$, with the same $k$ as on the left. Nothing comes back from $+\\infty$, so there is no $e^{-ikx}$ term and no standing wave such as $\\sin kx$ or $\\cos kx$.</li><li>$R = 0$ and $T = 1$ only when $k'L = n\\pi$, with $n$ a positive integer. At any other energy $R \\gt 0$, although a classical particle never reflects off a drop in potential.</li></ul>",
+    note: "Supplemental — Kahn §5.3.5, pp.103–104, gives the incident, reflected and transmitted forms $Ae^{ikx} + Be^{-ikx}$ and $Ce^{ikx}$. The no-reflection condition is not in Kahn."
+  },
+  {
     id: "supp-dipole-selection-extra",
     kind: "list",
     eq: "supp",
@@ -471,6 +482,16 @@ PGRE.FORMULAS = [
     front: "At normal incidence on a film of index $n$ and thickness $t$, state the extra optical path and phase rule, the one-flip bright and dark conditions, and the thinnest anti-reflection coating on glass. (3)",
     back: "<ul class=\"recall-list\"><li>Extra optical path $2nt$; a reflection off a higher-index medium adds a phase $\\pi$.</li><li>One flip (soap film in air): bright when $2nt = \\left(m + \\tfrac12\\right)\\lambda$, dark when $2nt = m\\lambda$; a film much thinner than $\\lambda$ looks dark.</li><li>Two flips (coating with $n_{\\mathrm{air}} \\lt n \\lt n_{\\mathrm{glass}}$): dark when $2nt = \\left(m + \\tfrac12\\right)\\lambda$, so the thinnest anti-reflection coating is $t = \\lambda/(4n)$.</li></ul>",
     note: "Supplemental — Kahn §3.2.4, p.69. $\\lambda$ is the vacuum wavelength."
+  },
+  {
+    id: "supp-fresnel-normal",
+    eq: "supp",
+    topic: "ow",
+    tag: "Thin films",
+    name: "Normal-incidence reflectance (supplemental)",
+    front: "Light at normal incidence goes from index $n_1$ toward index $n_2$. What fraction of the intensity is reflected, and what does the sign of the reflected amplitude say about its phase?",
+    back: "$$r = \\frac{n_1 - n_2}{n_1 + n_2}, \\qquad R = r^2 = \\left(\\frac{n_1 - n_2}{n_1 + n_2}\\right)^2, \\qquad T = 1 - R$$ $r \\lt 0$ when $n_2 \\gt n_1$: the reflected wave is flipped by $\\pi$ only when it reflects off the higher-index side. Air to glass ($n = 1.5$): $R = 0.04$, about $4\\%$ per surface. Equal indices give $R = 0$, and a very large mismatch drives $R$ toward $1$. A quantum step from wavenumber $k_1$ to $k_2$ obeys the same form with $k_1, k_2$ in place of $n_1, n_2$.",
+    note: "Supplemental — Kahn §3.2.4, p.69, gives only the phase rule, equations (3.19)–(3.20). The reflectance formula is not in Kahn."
   },
   {
     id: "supp-radiation-pressure",
