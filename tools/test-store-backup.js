@@ -133,6 +133,18 @@ function main() {
     assert(!('pgre-state-v1-backup' in disk),
       'the leftover browser copy is removed only after the ack');
     assert(!!disk['pgre-state-v1'], 'the primary key remains');
+
+    console.log('\na later save is copied within the five-minute window');
+    ackSandbox.PGRE.backup.INTERVAL_MS = 40;
+    var firstSha = ackSandbox.PGRE.backup.lastAck.sha256;
+    ackSandbox.PGRE.store.state.xp = 9;
+    ackSandbox.PGRE.store.save();
+    assert(ackSandbox.PGRE.backup.lastAck.sha256 === firstSha,
+      'the later save does not wait for a second ack on the same turn');
+    return new Promise(function (r) { setTimeout(r, 120); }).then(function () {
+      assert(ackSandbox.PGRE.backup.lastAck.sha256 !== firstSha,
+        'a changed save is copied after the backup interval');
+    });
   });
 }
 
