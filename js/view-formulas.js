@@ -219,7 +219,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20261020a';
+      s.src = 'js/flashmodes.js?v=20261020b';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -275,8 +275,7 @@ PGRE.views.formulas = (function () {
     var capOn = PGRE.store.state.settings.formulaExamCap !== false;
     html += '<div class="direction-row"><span class="exam-day-label">Intervals</span>' +
       '<button class="btn btn-ghost btn-sm" id="exam-cap-toggle">' +
-      (capOn ? 'Capped to exam day' : 'Uncapped outside final pass') + '</button></div>' +
-      '<p class="muted">Final-pass week still uses 1-day intervals.</p>';
+      (capOn ? 'Capped to exam day' : 'Uncapped') + '</button></div>';
     // F5: Study direction. false = Prompt → Formula (recall the equation);
     // true = Formula → Prompt (name it / say when it applies).
     var reverse = !!PGRE.store.state.settings.formulaReverse;
@@ -840,11 +839,11 @@ PGRE.views.formulas = (function () {
     if (!unseen) return note;
     var exam = PGRE.store.state.settings && PGRE.store.state.settings.examDate;
     var days = exam ? srs.daysUntil(exam) : null;
-    var introDays = (typeof days === 'number' && days > 7) ? (days - 7) : 0;
+    var examDays = (typeof days === 'number' && days > 0) ? days : 0;
     var target = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
     var postponed = typeof srs.formulaDayPostponed === 'function' ? srs.formulaDayPostponed(list) : 0;
     var line = unseen + ' not yet introduced · ' +
-      introDays + ' day' + (introDays === 1 ? '' : 's') + ' before the final week · ' +
+      examDays + ' day' + (examDays === 1 ? '' : 's') + ' to the exam · ' +
       target + ' a day · ' +
       postponed + ' due review' + (postponed === 1 ? '' : 's') + ' waiting. ' +
       'To cover more, add cards yourself.';
@@ -912,9 +911,7 @@ PGRE.views.formulas = (function () {
     } else {
       title = 'All caught up';
       buttons = edit + exp;
-      line = (t.unseen && PGRE.srs.finalPassActive())
-        ? 'Nothing is due. In the final week new cards stay manual — choose any you still want.'
-        : 'Nothing is due and every card has been introduced.';
+      line = 'Nothing is due and every card has been introduced.';
     }
     return '<div class="card fm-landing"><h2 class="fm-today-title">' + title + '</h2>' +
       '<p class="muted fm-today-line">' + line + '</p>' +
@@ -991,7 +988,6 @@ PGRE.views.formulas = (function () {
       PGRE.refreshNavBadges();
       return;
     }
-    if (srs.fillFormulaDayFinalPass) srs.fillFormulaDayFinalPass(deck);
     var today = todayState();
     // The read-only pacing note rides in the Today card as its footnote, so
     // the landing has one place that says what to study.
@@ -1019,19 +1015,6 @@ PGRE.views.formulas = (function () {
       ui.statTile('Reviewed today', ui.fmt(reviewedToday)) +
       ui.statTile('In the deck', ui.fmt(deck.length)) +
     '</div>';
-
-    // ——— Final-pass banner (F3) — active in the last week before the exam ———
-    if (srs.finalPassActive()) {
-      var days = srs.daysUntil(PGRE.store.state.settings.examDate);
-      var learnedN = deck.filter(function (c) {
-        return srs.cardState(c.id) && !srs.isSuspended(c.id);
-      }).length;
-      html += '<div class="card final-pass-banner"><strong>Final pass</strong> — ' +
-        learnedN + ' learned formula' + (learnedN === 1 ? '' : 's') + ', ' +
-        days + ' day' + (days === 1 ? '' : 's') + ' left. ' +
-        '<span class="muted">Every learned, unsuspended formula is in today’s ' +
-        'review pool; new cards remain manual.</span></div>';
-    }
 
     // ——— Leech nudge (F2) — cards that keep slipping despite reviews ———
     var leeches = deck.filter(function (c) {
@@ -1986,8 +1969,7 @@ PGRE.views.formulas = (function () {
         var sug = suggestion(more ? T : room);
         fill.textContent = more ? 'Add ' + T + ' more' : 'Fill to ' + T;
         fill.disabled = !(sug.reviewIds.length + sug.newIds.length);
-        fill.title = fill.disabled ? 'Nothing left to add — no due reviews' +
-          (srs.finalPassActive() ? '; new cards stay manual in the final week' : ' or new cards') : '';
+        fill.title = fill.disabled ? 'Nothing left to add — no due reviews or new cards' : '';
       }
       var clr = document.getElementById('picker-clear');
       if (clr) clr.disabled = !list.length;
@@ -2315,8 +2297,7 @@ PGRE.views.formulas = (function () {
      schedule — it only reads the deck.
      For a day-list session (dayBound, the default) the queue is reconciled
      against the batch first: ids the list dropped (unpicked, suspended) leave
-     the queue and ids added mid-session (Fill after Study, search Add, the
-     final-pass allocator) join it — in batch order, after the queued ones —
+     the queue and ids added mid-session (Fill after Study, search Add) join it — in batch order, after the queued ones —
      so "Resume session — N left" counts the same work "Today's list" does.
      Ad-hoc sessions (dayBound === false: leech drill, search "Study these N")
      keep their frozen queue — their cards may never have been on the list. */
@@ -3051,10 +3032,7 @@ PGRE.views.formulas = (function () {
     var rolled = study.sessionDate !== today;
     if (rolled) {
       study.sessionDate = today;
-      if (study.dayBound !== false) {
-        if (PGRE.srs.fillFormulaDayFinalPass) PGRE.srs.fillFormulaDayFinalPass(deck);
-        if (PGRE.srs.autoFillFormulaDay) PGRE.srs.autoFillFormulaDay(deck);
-      }
+      if (study.dayBound !== false && PGRE.srs.autoFillFormulaDay) PGRE.srs.autoFillFormulaDay(deck);
     }
     var before = study.queue.map(function (c) { return c && c.id; }).join('\n');
     reconcileLiveQueue(!!joinNew);
@@ -4967,7 +4945,6 @@ PGRE.views.formulas = (function () {
         PGRE.getFormulaCard = deckById;
         lastDeckStatus = (PGRE.formulaDeckStatus && typeof PGRE.formulaDeckStatus === 'object')
           ? PGRE.formulaDeckStatus : null;
-        if (PGRE.srs.fillFormulaDayFinalPass) PGRE.srs.fillFormulaDayFinalPass(deck);
         if (root()) { renderShell(); }
         if (window.PGRE && PGRE.motion && PGRE.motion.loader) PGRE.motion.loader.done();
       });

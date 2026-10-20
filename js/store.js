@@ -79,7 +79,7 @@ PGRE.store = {
       // user preferences; theme is applied at boot (PGRE.setTheme persists it)
       settings: { theme: 'light', paceTrainer: true, paceTargetSec: 103,
                   keyboard: true, qotdTopicRotate: true, formulaDailyTarget: 10,
-                  // exam date (F3) — drives the interval cap + final pass; literal
+                  // exam date (F3) — drives the interval cap; literal
                   // mirrors PGRE.EXAM_DATE (js/data-topics.js)
                   examDate: '2026-11-01',
                   // F3 — when true (default), nextIntervals clamps Hard/Good/Easy

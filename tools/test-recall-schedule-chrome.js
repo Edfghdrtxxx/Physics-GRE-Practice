@@ -316,7 +316,6 @@ async function helpers(page) {
         tiles: tiles, due: due, studied: studied,
         remaining: srs.formulaDayRemaining(deck).map(function (c) { return c.id; }),
         batchDate: (s.formulaDay || {}).date || '',
-        finalPass: srs.finalPassActive(),
         cap: srs.examCap(),
         text: document.getElementById('main').textContent
       });
@@ -824,7 +823,7 @@ var STAGES = [
       await h.sleep(5000);   // let the XP message fade before the screenshot
     } },
 
-  { name: 'day start: the final pass and the exam cap change at 03:00 on October 25', shot: '10-exam-week-0305',
+  { name: 'day start: the exam cap changes at 03:00 on October 25, and no final pass begins', shot: '10-exam-week-0305',
     run: async function (page, h) {
       // Exam on November 1. fp-a and fp-b are learned cards due today;
       // fp-z is a learned card due October 28.
@@ -841,10 +840,8 @@ var STAGES = [
         PGRE.store.save();
       });
       var early = await h.home();
-      h.assert(early.remaining.indexOf('fp-z') === -1 && !/Final pass/.test(early.text),
-        'at 02:30 on October 25, fp-z is not on the list, and there is no final-pass banner');
-      h.assert(early.finalPass === false && early.cap === 7 && early.today === '2026-10-24',
-        'Recall counts October 24: no final pass, and the exam cap is 7 days');
+      h.assert(early.cap === 7 && early.today === '2026-10-24',
+        'at 02:30 on October 25 Recall counts October 24, and the exam cap is 7 days');
       await h.click('#study-btn');
       await h.wait('.formula-palette .pal-cell.is-current');
       var first = await h.flip();
@@ -854,23 +851,80 @@ var STAGES = [
       h.assert(label === '6 d' && graded.diskCards[target].interval === 6 &&
         graded.diskCards[target].due === '2026-10-30',
         'Good shows and stores 6 days, due October 30 (button: ' + label + ')');
+      var other = target === 'fp-a' ? 'fp-b' : 'fp-a';
       await h.setClock(2026, 10, 25, 3, 5);
       var late = await h.home();
-      h.assert(late.today === '2026-10-25' && late.finalPass === true && late.cap === 6,
-        'at 03:05 October 25 begins: the final pass is on, and the exam cap is 6 days');
-      h.assert(late.remaining.indexOf('fp-z') !== -1 && late.remaining.indexOf(target) !== -1 &&
-        /Final pass/.test(late.text),
-        'every learned card is on the list, fp-z and ' + target + ' included, and the final-pass banner shows');
+      h.assert(late.today === '2026-10-25' && late.cap === 6,
+        'at 03:05 October 25 begins, and the exam cap is 6 days');
+      h.assert(late.remaining.join(',') === other && !/Final pass/.test(late.text),
+        'today\'s list holds only ' + other + ', the card still due: no learned-card fill and no final-pass banner (left: ' +
+        late.remaining.join(', ') + ')');
       await h.click('#study-btn');
       await h.wait('.formula-palette .pal-cell.is-current');
       var next = await h.flip();
       var label2 = await h.goodLabel();
       var graded2 = await h.press('good');
-      h.assert(label2 === '1 d' && graded2.diskCards[next.current].interval === 1 &&
-        graded2.diskCards[next.current].due === '2026-10-26',
-        'Good shows and stores 1 day, due October 26 (button: ' + label2 + ')');
+      h.assert(next.current === other && label2 === '5 d' && graded2.diskCards[other].interval === 5 &&
+        graded2.diskCards[other].due === '2026-10-30',
+        'Good on ' + other + ' shows and stores 5 days under the cap, due October 30, not 1 day (button: ' + label2 + ')');
       await h.home();
       await h.sleep(5000);   // let the XP message fade before the screenshot
+    } },
+
+  { name: 'exam week: five days before the exam, today\'s list is the due cards plus the new-card fill',
+    shot: '11-exam-in-5-days', size: '1280x800',
+    run: async function (page, h) {
+      // Exam on November 1, five days after October 27. fw-a and fw-b are
+      // learned cards due today, fw-z is learned and due October 29, and
+      // fw-n1..fw-n3 are new. The daily target is 4 and today's list starts
+      // empty, so Study takes the auto-pick.
+      await h.setClock(2026, 10, 27, 12, 0);
+      await h.seed([
+        { id: 'fw-a', topic: 'cm', learned: true }, { id: 'fw-b', topic: 'em', learned: true },
+        { id: 'fw-z', topic: 'qm', learned: true }, { id: 'fw-n1', topic: 'cm' },
+        { id: 'fw-n2', topic: 'em' }, { id: 'fw-n3', topic: 'qm' }
+      ]);
+      await page.eval(function () {
+        var s = PGRE.store.state;
+        s.settings.examDate = '2026-11-01';
+        s.settings.formulaDailyTarget = 4;
+        s.cards['fw-z'].due = '2026-10-29';
+        s.formulaDay = { date: PGRE.srs.today(), reviewIds: [], newIds: [] };
+        PGRE.store.save();
+      });
+      var home = await h.home();
+      h.assert(home.cap === 4 && home.study, 'the exam cap is 4 days, and Recall offers a session');
+      await h.click('#study-btn');
+      await h.wait('.formula-palette .pal-cell.is-current');
+      var list = JSON.parse(await page.eval(function () { return JSON.stringify(PGRE.store.state.formulaDay); }));
+      var now = await h.look();
+      h.assert(list.reviewIds.slice().sort().join(',') === 'fw-a,fw-b' && list.newIds.length === 2 &&
+        list.newIds.every(function (id) { return /^fw-n/.test(id); }),
+        'today\'s list is fw-a and fw-b, which are due, plus 2 new cards (' +
+        list.reviewIds.concat(list.newIds).join(', ') + ')');
+      h.assert(now.queueIds.indexOf('fw-z') === -1 && list.reviewIds.indexOf('fw-z') === -1,
+        'fw-z, learned and due October 29, is neither on the list nor in the session');
+      h.assert(!/Final pass/.test(home.text), 'the Recall page showed no final-pass banner');
+      // Good on new cards until a learned card is on screen; a new card's
+      // first Good is a learning pass and does not schedule it.
+      for (var i = 0; i < 6; i++) {
+        now = await h.flip();
+        if (now.current === 'fw-a' || now.current === 'fw-b') break;
+        await h.press('good');
+      }
+      var label = await h.goodLabel();
+      h.assert((now.current === 'fw-a' || now.current === 'fw-b') && label === '3 d',
+        'on learned card ' + now.current + ' the Good button shows 3 days, the exam-capped interval (button: ' + label + ')');
+    } },
+
+  { name: 'exam week: Good on a learned card stores its exam-capped interval, not 1 day',
+    run: async function (page, h) {
+      var now = await h.look();
+      var target = now.current;
+      var graded = await h.press('good');
+      h.assert(graded.diskCards[target].interval === 3 && graded.diskCards[target].due === '2026-10-30',
+        'Good stores 3 days for ' + target + ', due October 30 (' + graded.diskCards[target].interval + ' days, due ' +
+        graded.diskCards[target].due + ')');
     } }
 ];
 

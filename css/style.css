@@ -3711,7 +3711,7 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
 .browse-peek .viz-nav-btn,
 .practice-card > .viz-nav-btn { margin-top: 10px; }
 
-/* ——— Exam day + final pass (F3) ——— */
+/* ——— Exam day (F3) ——— */
 .exam-day-row {
   display: flex;
   align-items: center;
@@ -3731,11 +3731,6 @@ body.exam-fullscreen { overflow: hidden; height: 100%; }
   padding: 5px 10px;
   color-scheme: light dark;
 }
-.final-pass-banner {
-  background: var(--accent-tint);
-  font-size: 14.5px;
-}
-.final-pass-banner strong { color: var(--ink); }
 
 /* ——— Formula daily check-in (签到) — portal strip + post-session celebrate ——— */
 .formula-checkin-card {

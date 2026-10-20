@@ -640,7 +640,6 @@ function loadShipped(reduced, opts) {
       clampTarget: function (t) { return t || 20; },
       formulaDayRemaining: function (deck) { return (deck || cards).slice(); },
       formulaDayPostponed: function () { return 0; },
-      finalPassActive: function () { return false; },
       isLeech: function () { return false; },
       isSuspended: function () { return false; },
       cardState: function (id) { return cardStates[id] || null; },
@@ -2567,10 +2566,10 @@ function consumerCases() {
     var toggle = introduced.env.document.getElementById('exam-cap-toggle');
     toggle.click();
     toggle = introduced.env.document.getElementById('exam-cap-toggle');
-    assert(toggle && toggle.textContent === 'Uncapped outside final pass',
+    assert(toggle && toggle.textContent === 'Uncapped',
       'cap-off label, got: ' + (toggle && toggle.textContent));
-    assert(introduced.env.document.body.textContent.indexOf('1-day intervals') !== -1,
-      'final-pass week still describes 1-day intervals');
+    assert(introduced.env.document.body.textContent.indexOf('1-day intervals') === -1,
+      'the options no longer mention 1-day intervals');
 
     console.log('\nformulas: session stamps, refused grade, duplicate queue');
     var sess = autoPickEnv();
@@ -2681,7 +2680,8 @@ function consumerCases() {
           var ldoc = late.env.document;
           var ready = ldoc.getElementById('formula-readiness');
           assert(ready && ready.textContent.indexOf('not yet introduced') !== -1 &&
-            ready.textContent.indexOf('before the final week') !== -1,
+            ready.textContent.indexOf('to the exam') !== -1 &&
+            ready.textContent.indexOf('final week') === -1,
             'home shows a read-only unseen-card warning, got: ' + (ready && ready.textContent));
           ldoc.getElementById('readiness-choose').click();
           assert(!!ldoc.getElementById('picker-study'), 'the warning opens the picker');
@@ -2746,6 +2746,8 @@ function consumerCases() {
         assert(day === '2026-10-24', '02:59 counts as the day before, got ' + day);
         night.P.store.state.settings.examDate = '2026-11-01';
         night.P.store.state.formulaDay = { date: day, reviewIds: [], newIds: ['f0'] };
+        // A learned card due October 28, three days after the day change.
+        night.env.cardStates['cpgf-2.4'].due = '2026-10-28';
         return mountFormulas(night).then(function () {
           var ndoc = night.env.document;
           ndoc.getElementById('study-btn').click();
@@ -2754,10 +2756,10 @@ function consumerCases() {
           ndoc.querySelector('#fcard-actions [data-grade="easy"]').click();
           var batch = night.P.store.state.formulaDay;
           var queued = (night.P.store.state.formulaStudy && night.P.store.state.formulaStudy.queueIds) || [];
-          assert(batch.reviewIds.indexOf('cpgf-2.4') !== -1,
-            'crossing into the final pass adds the learned card to the batch');
-          assert(queued.indexOf('cpgf-2.4') !== -1,
-            'the open session picks up that card, got ' + queued.join(','));
+          assert(batch.reviewIds.indexOf('cpgf-2.4') === -1,
+            'a week before the exam the day change does not add a learned card that is not due');
+          assert(queued.indexOf('cpgf-2.4') === -1,
+            'the open session does not take that card in, got ' + queued.join(','));
           var seen = [];
           var ck = autoPickEnv();
           pinDate(ck, 2026, 10, 24, 12, 0);

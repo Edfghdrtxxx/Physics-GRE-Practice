@@ -347,7 +347,6 @@ PGRE.flashmodes = (function () {
     if (!st.sessionDate) { st.sessionDate = today; return; }
     if (st.sessionDate === today) return;
     st.sessionDate = today;
-    if (PGRE.srs.fillFormulaDayFinalPass) PGRE.srs.fillFormulaDayFinalPass(deck || []);
     if (PGRE.srs.autoFillFormulaDay) PGRE.srs.autoFillFormulaDay(deck || []);
   }
 
