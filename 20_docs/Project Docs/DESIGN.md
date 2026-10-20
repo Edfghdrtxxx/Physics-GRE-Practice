@@ -34,7 +34,7 @@ Everything runs from static files; all data stays on this machine (localStorage 
 | Correct answer | +10 (+5 extra the first time a question is solved) |
 | Incorrect answer | +2 |
 | Formula card reviewed | +2 (any grade; awarded quietly at session end) |
-| Formula daily check-in | +15 (once per local day on first Study / Match / Type / Quiz / Cloze settle; formula-specific streak) |
+| Formula daily check-in | +15 (once per Recall day, which starts at 03:00 local, on first Study / Match / Type / Quiz / Cloze settle; formula-specific streak) |
 | Plan task | +5 to +50 (task-specific; granted once, survives un-checking) |
 | Daily challenge | +10 to +30 |
 | Achievement | Bronze +25 · Silver +50 · Gold +100 · Platinum +200 |
@@ -210,15 +210,17 @@ wrong pick, miss/solve counts, and a review schedule. Rules (user-chosen):
 Vocabulary-app flip cards: prompt → flip → self-grade **Again / Hard / Good / Easy**.
 Anki SM-2 scheduling (`js/srs.js` `nextIntervals`) per card in
 `state.cards` (`ease` 1.3–3.0 starting 2.5; Again resets reps and repeats within
-the session). New cards: Hard/Good = 1d, Easy = 4d (during final pass, passing
-grades are 1d — see below). Reviews add `daysLate`. Floors:
-Hard $\ge$ ivl+1, Good $\ge$ Hard+1, Easy $\ge$ Good+1 (collapsed during final pass). Button labels preview the
+the session). New cards: Hard/Good = 1d, Easy = 4d. Reviews add `daysLate`. Floors:
+Hard $\ge$ ivl+1, Good $\ge$ Hard+1, Easy $\ge$ Good+1 (an exam cap under 3 days can bring them
+together; see the exam-date cap below). Button labels preview the
 exact next interval. `gradeCard` also stamps
-`lastReviewedDay` (LOCAL date) — the `studiedToday` source of truth (never compare a
-UTC ISO prefix to a local date string).
+`lastReviewedDay` (the LOCAL scheduling day, `srs.today()`) — the `studiedToday` source of truth (never compare a
+UTC ISO prefix to a local date string). Recall's day starts at 03:00 local, like the
+study-time day (`srs.dayOf`): a grade at 01:00 counts for the day before, and a card due on a
+date is due from 03:00 that date. Stored due dates stay plain calendar days.
 
 **User-curated daily batch** (`srs.formulaDay()` is prune-only — it never auto-fills;
-automatic inclusion is the separate mount-time allocator `fillFormulaDayFinalPass`).
+cards are added only by the auto-pick and the explicit actions below).
 The daily target is a **soft
 suggestion** (clamp **1–100**, default **10**; every read routes the raw value through
 `srs.clampTarget`, so an imported/corrupt value can't poison the UI). `state.formulaDay`
@@ -233,7 +235,7 @@ nav-badge path that runs before IndexedDB resolves):
   due reviews first (most overdue, then most lapses, then lowest ease), then never-studied
   cards in book order (chapter from `cpgf-<ch>.`, then deck order; supplements last), up to
   the target minus the list's remaining cards. Skips suspended cards, cards already in the
-  list and cards graded today; new cards stay manual in the final-pass week. It only ever
+  list and cards graded today. It only ever
   appends — active, completed-today and deliberate picks are never replaced.
 - **Formula Recall home** shows one Today card: a line naming the mix ("3 due reviews + 7
   new cards — picked for you …") and one Study button. With cards remaining it studies them;
@@ -243,8 +245,7 @@ nav-badge path that runs before IndexedDB resolves):
   Formula Recall home.
 - **Reconcile (prune-only):** drop ids no longer in the deck or suspended; drop soft pins
   that left the deck, are suspended, or were studied today; retire completed picks (graded
-  on an earlier day, due now in the future). During final pass, learned picks that have
-  not been studied today are kept even if due in the future. Never adds, never trims to
+  on an earlier day, due now in the future). Never adds, never trims to
   the target.
 - **List composer** ("Choose cards" / "Edit today's list", `srs.setFormulaDayPicks`): left,
   every card in collapsible groups (Due now, then book chapters; rows paint only when a group
@@ -262,16 +263,13 @@ nav-badge path that runs before IndexedDB resolves):
   until the user clicks Add (`isInFormulaDay` / status:today never call `formulaDay()`).
 - **Remaining** = batch cards where **(no state) OR (`due ≤ today`) OR (soft-pinned AND not
   studied today)** — an Again-graded card (due today) stays remaining across reloads; a
-  Good/Hard/Easy card (future due) is done and reconcile prunes it, except during final
-  pass (see below).
+  Good/Hard/Easy card (future due) is done and reconcile prunes it.
 - **Overflow line:** due reviews not picked are counted as "due but not picked" (advisory).
-- **Final-pass exception:** when a resolved Today or Formula Recall deck is mounted and
-  `0 < daysUntil(examDate) ≤ 7`, `fillFormulaDayFinalPass` appends every unsuspended
-  learned card to `reviewIds`, preserving all existing deliberate IDs and order. It is
-  idempotent, ignores the advisory target, excludes new/suspended/removed cards, and
-  persists the result. During this window `formulaDayRemaining` treats appended future-due
-  learned cards as eligible until they are reviewed today; new cards remain manual-only.
-- Outside final pass, Study/Match/Type/Quiz/Cloze draw only from the picked batch's
+- **No final pass:** the owner turned it off on 2026-10-20 (PR #113, commit `be51232`). In
+  the last seven days before the exam the list fills as on any other day, cards keep their
+  graded intervals under the exam cap, and a learned card that is not due is not added
+  automatically.
+- Study/Match/Type/Quiz/Cloze draw only from the picked batch's
   remaining cards (`formulaDayRemaining`); an empty batch means an empty round with a
   "choose cards" prompt.
 
@@ -287,9 +285,8 @@ cards (older/newer/Resume).
   date input). `srs.examCap()` = $\max(1,\ \text{days}-1)$ when $\text{days}>1$ and
   `settings.formulaExamCap !== false`; off when $\text{days}\le 1$ or `formulaExamCap === false`
   (also off if the date is invalid/past). `nextIntervals` clamps hard/good/easy to the cap (Again
-  stays 0), so grade-button previews match reality. **Final pass** (`srs.finalPassActive()`,
-  active `0 < days ≤ 7`): passing grades use a one-day interval, while the
-  automatic pool allocator surfaces every unsuspended learned card; new cards remain manual.
+  stays 0), so grade-button previews match reality. The cap is on by default; the owner turns it
+  off with the Recall Options toggle ("Capped to exam day" / "Uncapped").
 - **Learning steps (F7):** stateless cards graduate on Easy (commit) or on a 2nd Hard/Good; a 1st
   Hard/Good bumps to step 1 (chip "learning 1/2", +2 XP, reinsert 3–5 back, no commit); Again
   resets to step 0 (reinsert, no lapse). `study.done` counts only commits; every press is +2 XP.
