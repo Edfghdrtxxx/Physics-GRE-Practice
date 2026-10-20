@@ -1531,6 +1531,10 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 .formula-palette .pal-cell.is-easy {
   background: var(--accent-tint); border-color: var(--accent); color: var(--accent-deep);
 }
+/* A new card's first Hard/Good: not scheduled yet, it comes back this session. */
+.formula-palette .pal-cell.is-learning {
+  border-style: dashed; border-color: var(--good); color: var(--good);
+}
 /* Hover / keyboard-focus label: session grade and stored SRS interval.
    Native title is mouse-only and delayed, so the facts live on ::after. */
 .formula-palette .exam-palette-grid {
@@ -1568,6 +1572,7 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 .formula-palette .pal-cell:hover,
 .formula-palette .pal-cell:focus,
 .formula-palette .pal-cell:focus-visible { z-index: 3; }
+.pal-swatch.sw-learning { border-style: dashed; border-color: var(--good); }
 .pal-swatch.sw-again { background: var(--bad-tint); border-color: var(--bad); }
 .pal-swatch.sw-hard { background: var(--amber-tint); border-color: var(--amber); }
 .pal-swatch.sw-good { background: var(--good-tint); border-color: var(--good); }

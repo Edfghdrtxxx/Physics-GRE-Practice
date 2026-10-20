@@ -2510,7 +2510,15 @@ PGRE.views.formulas = (function () {
     return st.interval === 1 ? '1 day' : st.interval + ' days';
   }
 
+  /* Hard or Good on a card with no schedule is the first of its two passes
+     (F7): it writes no schedule, and the card comes back in this session. */
+  var LEARNING_PASS_TEXT = 'Learning pass, returns this session';
+  function isLearningPass(id, g) {
+    return (g === 'hard' || g === 'good') && !PGRE.srs.cardState(id);
+  }
+
   function boxHoverText(id, g) {
+    if (isLearningPass(id, g)) return LEARNING_PASS_TEXT;
     var grade = (g && GRADE_LABEL[g]) ? GRADE_LABEL[g] : 'not graded yet';
     return grade + ', ' + boxIntervalText(id);
   }
@@ -2526,7 +2534,8 @@ PGRE.views.formulas = (function () {
       var entry = lastHistoryEntry(c.id);
       var g = entry && entry.grade;
       var cls = 'pal-cell';
-      if (g && GRADE_LABEL[g]) cls += ' is-graded is-' + g;
+      if (isLearningPass(c.id, g)) cls += ' is-learning';
+      else if (g && GRADE_LABEL[g]) cls += ' is-graded is-' + g;
       if (c.id === currentId) cls += ' is-current';
       var facts = boxHoverText(c.id, g);
       var label = 'Card ' + (n + 1) + ', ' + facts;
@@ -2541,6 +2550,7 @@ PGRE.views.formulas = (function () {
       '<div class="exam-palette-grid">' + cells + '</div>' +
       '<div class="exam-legend drill-legend">' +
         '<span class="exam-legend-item"><span class="pal-swatch"></span>Not yet graded</span>' +
+        '<span class="exam-legend-item"><span class="pal-swatch sw-learning"></span>Learning pass</span>' +
         '<span class="exam-legend-item"><span class="pal-swatch sw-again"></span>Again</span>' +
         '<span class="exam-legend-item"><span class="pal-swatch sw-hard"></span>Hard</span>' +
         '<span class="exam-legend-item"><span class="pal-swatch sw-good"></span>Good</span>' +
@@ -2961,10 +2971,10 @@ PGRE.views.formulas = (function () {
     var html = '';
     GRADES.forEach(function (g) {
       // F7: a stateless card at step 0 requeues in-session on Hard/Good (a learning
-      // step, not a scheduled interval) — show "soon"; Easy commits its real
-      // interval, and a step-1 card shows real committed intervals for all grades.
+      // step, not a scheduled interval) — say it returns this session; Easy commits
+      // its real interval, and a step-1 card shows real committed intervals for all grades.
       var lbl;
-      if (stateless && step === 0 && (g.key === 'hard' || g.key === 'good')) lbl = 'soon';
+      if (stateless && step === 0 && (g.key === 'hard' || g.key === 'good')) lbl = 'returns this session';
       else lbl = PGRE.srs.ivlLabel(ivls[g.key]);
       html += '<button class="btn grade-btn grade-' + g.key + '" data-grade="' + g.key +
         '" aria-pressed="false">' +

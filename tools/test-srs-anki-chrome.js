@@ -432,8 +432,8 @@ async function main() {
   })()`);
   var fby = {};
   fresh.forEach(function (g) { fby[g.grade] = g.ivl; });
-  if (fby.hard !== 'soon' || fby.good !== 'soon') {
-    throw new Error('new-card Hard/Good should be soon, got ' + JSON.stringify(fby));
+  if (fby.hard !== 'returns this session' || fby.good !== 'returns this session') {
+    throw new Error('new-card Hard/Good should say returns this session, got ' + JSON.stringify(fby));
   }
   if (fby.easy !== '4 d') {
     throw new Error('new-card Easy should be 4 d, got ' + JSON.stringify(fby));
