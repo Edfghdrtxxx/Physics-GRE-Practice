@@ -319,6 +319,7 @@ PGRE.views.library = (function () {
 
       var rbBtn = document.getElementById('restore-backup-btn');
       if (rbBtn) rbBtn.addEventListener('click', function () {
+        if (!confirm('Replace the current progress with the last browser safety copy? Progress saved after that copy will be lost.')) return;
         var ok = typeof PGRE.store.restoreBackup === 'function' && PGRE.store.restoreBackup();
         if (ok && PGRE.store._persistFailed) {
           PGRE.toast('Backup loaded into this tab, but saving still fails — it is not on disk yet.', 'error', true);
