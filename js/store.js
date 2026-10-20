@@ -206,7 +206,19 @@ PGRE.store = {
     if (Array.isArray(disk.sessions)) st.sessions = unionArr(st.sessions || [], disk.sessions, function (s) { return s.id || J(s); });
     if (Array.isArray(disk.exams)) st.exams = unionArr(st.exams || [], disk.exams, function (e) { return e.id || J(e); });
     if (Array.isArray(disk.focusSessions)) st.focusSessions = unionArr(st.focusSessions || [], disk.focusSessions, function (s) { return s.startedAt + '|' + s.endedAt; }, 300);
-    if (Array.isArray(disk.cardReviews)) st.cardReviews = unionArr(st.cardReviews || [], disk.cardReviews, J);
+    if (Array.isArray(disk.cardReviews)) {
+      st.cardReviews = unionArr(st.cardReviews || [], disk.cardReviews, J);
+      // The same 8000-row cap srs.gradeCard keeps. The union puts the
+      // sibling's rows after this tab's, so order by day (stable) before
+      // keeping the newest.
+      if (st.cardReviews.length > 8000) {
+        st.cardReviews.sort(function (a, b) {
+          var da = (a && a.d) || '', db = (b && b.d) || '';
+          return da < db ? -1 : (da > db ? 1 : 0);
+        });
+        st.cardReviews = st.cardReviews.slice(st.cardReviews.length - 8000);
+      }
+    }
     if (Array.isArray(disk.daysActive)) st.daysActive = unionArr(st.daysActive || [], disk.daysActive, function (d) { return d; }).sort();
     if (Array.isArray(disk.contentMeta)) st.contentMeta = unionArr(st.contentMeta || [], disk.contentMeta, function (m) { return m.id || J(m); });
     // activity log is newest-first; union then re-sort by ts desc, cap 60

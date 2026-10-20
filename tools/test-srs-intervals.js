@@ -1094,5 +1094,15 @@ store.state.formulaDay.softIds = ['stay'];
 tRow('reconcile does not consume a restored id the batch already omitted', deckU, 'pin', '0 0 0 restored 0');
 tRow('the pin that stayed in that batch is unchanged', deckU, 'stay', '1 1 1 - 1');
 
+console.log('\nreview log cap');
+resetStore();
+for (var lr = 0; lr < 8005; lr++) storeState.cardReviews.push({ d: '2026-09-01', id: 'old-' + lr, g: 'good' });
+storeState.cards.capped = { reps: 2, lapses: 0, interval: 5, ease: 2.5, due: srs.today(), reviews: 2 };
+srs.gradeCard('capped', 'good');
+assert(storeState.cardReviews.length === 8000, 'a grade on a log already over 8000 rows trims it to 8000, got ' +
+  storeState.cardReviews.length);
+assert(storeState.cardReviews[7999].id === 'capped' && storeState.cardReviews[0].id === 'old-6',
+  'the trim drops the oldest rows and keeps the new one last');
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

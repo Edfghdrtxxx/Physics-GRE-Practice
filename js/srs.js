@@ -614,7 +614,7 @@ PGRE.srs = {
                 m: prevIvl >= this.matureDays() ? 1 : 0, n: hadState ? 1 : 0, op: op, prev: prev };
     if (consumedSoft) row.soft = 1;
     log.push(row);
-    if (log.length > 8000) log.shift();
+    if (log.length > 8000) log.splice(0, log.length - 8000);
     return st;
   },
 

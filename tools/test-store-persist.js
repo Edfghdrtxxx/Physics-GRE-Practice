@@ -417,6 +417,22 @@ assert(!(d.cardReviews || []).some(function (r) { return r && r.op === 'op-good'
   'the undone review row stays out of the merged log');
 deliverEvents = true;
 
+console.log('\nreview log: a merge keeps it at 8000 rows, newest days last');
+deliverEvents = false;
+var logRows = [];
+for (var lr = 0; lr < 8000; lr++) logRows.push({ d: '2026-09-01', id: 'log-' + lr, g: 'good', op: 'lop-' + lr });
+tab1.store.state.cardReviews = logRows.slice();
+tab1.store.save();
+var newRows = [];
+for (lr = 0; lr < 10; lr++) newRows.push({ d: '2026-09-02', id: 'new-' + lr, g: 'good', op: 'lnew-' + lr });
+tab2.store.state.cardReviews = logRows.slice(5).concat(newRows);
+tab2.store.save();
+d = diskState();
+assert(d.cardReviews.length === 8000, 'the merged log holds 8000 rows, got ' + d.cardReviews.length);
+assert(d.cardReviews.slice(-10).map(function (r) { return r.id; }).join() ===
+  newRows.map(function (r) { return r.id; }).join(), 'the newest day\'s rows are kept, last');
+deliverEvents = true;
+
 console.log('\nsubscribeStateAdopted runs beside onStateAdopted');
 var hookN = 0, subN = 0;
 tab2.PGRE.onStateAdopted = function () { hookN++; };
