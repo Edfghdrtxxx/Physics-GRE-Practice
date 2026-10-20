@@ -908,5 +908,16 @@ PGRE.FORMULAS = [
     front: "A projectile of charge $ze$ and kinetic energy $E_k$ (for example an $\\alpha$ particle, $z = 2$) scatters off a nucleus of charge $Ze$. How does $d\\sigma/d\\Omega$ depend on $E_k$ and the scattering angle $\\theta$, and what did the gold-foil results reveal?",
     back: "$$\\frac{d\\sigma}{d\\Omega} \\propto \\frac{(zZe^2)^2}{E_k^2\\sin^4(\\theta/2)}$$ Most $\\alpha$ particles pass nearly undeflected, but a rare few scatter through large angles, some almost straight back. Only a small, massive, positive nucleus holding nearly all the atom's mass can do that; a spread-out charge cannot. At fixed $\\theta$, doubling $E_k$ cuts the rate by $4$.",
     note: "Supplemental — Kahn §7.4.1, p.139, mentions Rutherford's gold-foil experiment as the discovery of the nucleus but gives no cross-section."
+  },
+  {
+    id: "supp-magnetic-materials",
+    kind: "list",
+    eq: "supp",
+    topic: "em",
+    tag: "Magnetic materials",
+    name: "Diamagnetic, paramagnetic, ferromagnetic cores (supplemental list)",
+    front: "A solenoid core gives $B = \\mu_r\\mu_0 nI$ with $\\mu_r = 1 + \\chi_m$. Give the sign and size of $\\chi_m$ for diamagnetic, paramagnetic and ferromagnetic cores, and say whether any core can reverse $B$. (4)",
+    back: "<ul class=\"recall-list\"><li>Diamagnetic: $\\chi_m \\lt 0$, tiny, so $\\mu_r$ is just below $1$ and $B$ drops slightly. The applied field changes the electron orbits, which induce a moment against it (Lenz's law); every material has this.</li><li>Paramagnetic: $\\chi_m \\gt 0$, tiny, so $\\mu_r$ is just above $1$ and $B$ rises slightly. Permanent moments from unpaired electrons partly align with the field; thermal motion limits the alignment.</li><li>Ferromagnetic: $\\chi_m \\gg 1$, so $B$ rises many times. Exchange coupling aligns spins inside domains, and the domains turn toward the applied field.</li><li>$\\mu_r$ cannot fall below $0$ (a superconductor reaches $0$), so no core reverses $B$; an answer with $B$ opposite to the coil's own field is wrong.</li></ul>",
+    note: "Supplemental."
   }
 ];
