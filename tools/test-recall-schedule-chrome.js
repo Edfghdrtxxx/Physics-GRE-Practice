@@ -506,6 +506,53 @@ var STAGES = [
         'once storage works, the next Undo retries the save, restores the card (2 reviews) and shows it again');
     } },
 
+  { name: 'a learning-pass Undo whose save fails keeps the stored pass',
+    run: async function (page, h) {
+      // Two new cards: the first Good on either is a learning pass, which
+      // stores only the session (step 1 and a history row), no schedule.
+      await h.seedAndStudy([{ id: 'lu-a', topic: 'cm' }, { id: 'lu-b', topic: 'em' }]);
+      var first = await h.flip();
+      var target = first.current;
+      var other = target === 'lu-a' ? 'lu-b' : 'lu-a';
+      var passed = await h.press('good');
+      var session = async function () {
+        return JSON.parse(await page.eval(function () {
+          var live = PGRE.store.state.formulaStudy || {};
+          var disk = (JSON.parse(localStorage.getItem('pgre-state-v1') || '{}').formulaStudy) || {};
+          return JSON.stringify({
+            liveHistory: (live.history || []).length, diskHistory: (disk.history || []).length,
+            diskSteps: disk.steps || {}, undo: !!document.getElementById('study-undo')
+          });
+        }));
+      };
+      var stored = await session();
+      h.assert(passed.current === other && passed.steps[target] === 1 && stored.diskSteps[target] === 1 &&
+        stored.diskHistory === 1 && passed.diskQueueIds.join(',') === other + ',' + target,
+        'the first Good is a learning pass, saved: step 1 and 1 history row in storage, ' + other + ' on screen');
+      await h.flushTracker();
+      await h.clickWhileStorageFull('#study-undo');
+      await h.sleep(200);
+      var failed = await h.look();
+      var kept = await session();
+      h.assert(failed.canWrite === false && failed.steps[target] === 1 && kept.diskSteps[target] === 1,
+        'the undo did not reach storage, and memory keeps learning step 1 too');
+      h.assert(kept.liveHistory === 1 && kept.diskHistory === 1 &&
+        failed.queueIds.join(',') === failed.diskQueueIds.join(','),
+        'memory and storage keep the same history (1 row) and queue (' + failed.queueIds.join(', ') + ')');
+      h.assert(failed.current === other && failed.cells[target].grade === 'learning' && kept.undo,
+        'the screen stays on ' + other + ', ' + target + ' keeps its learning-pass box, and Undo is still offered');
+      h.assert(failed.toast && failed.notRecorded, 'the saving-failed warning and the press-not-recorded message are on screen');
+      await h.click('#study-undo');
+      await h.sleep(200);
+      var undone = await h.look();
+      var after = await session();
+      h.assert(undone.canWrite === true && !undone.steps[target] && !after.diskSteps[target] &&
+        after.liveHistory === 0 && after.diskHistory === 0,
+        'once storage works, the next Undo goes through: learning step 0 and no history row, in memory and in storage');
+      h.assert(undone.current === target && undone.cells[target].grade === '',
+        target + ' is back on screen with an unmarked box');
+    } },
+
   { name: 'a press whose save fails again says it was not recorded', shot: '06-press-not-recorded',
     run: async function (page, h) {
       await h.seedAndStudy(h.FS_SPEC);
@@ -625,35 +672,42 @@ var STAGES = [
         'PGRE.srs.today = function () { return due; };' +
         'PGRE.srs.addDays = function (n) { return PGRE.srs.addDaysTo(due, n); };' +
         'document.dispatchEvent(new Event("visibilitychange")); }');
-      var after = await h.look();
-      h.assert(after.today === due && after.remaining.indexOf(target) !== -1 && after.remaining.indexOf('ro-d') !== -1,
-        'on the new day ' + target + ' and ro-d are both on today\'s remaining list');
-      h.assert(after.queueIds.indexOf('ro-d') !== -1 && after.queueIds.indexOf(target) === -1,
-        'the open session takes in ro-d but not ' + target + ', which it graded (queue: ' + after.queueIds.join(', ') + ')');
-      // Leave Recall and come back: Resume rebuilds the session from its
-      // saved snapshot instead of the open page.
-      await page.eval(function () { location.hash = '#/'; });
-      await h.sleep(250);
-      await page.eval(function () { location.hash = '#/formulas'; });
-      await h.wait('#resume-btn');
-      await h.click('#resume-btn');
-      await h.wait('.formula-palette .pal-cell.is-current');
-      var resumed = await h.look();
-      h.assert(/ 1 done /.test(resumed.line), 'Resume continues the same session (' + resumed.line + ')');
-      h.assert(resumed.queueIds.indexOf('ro-d') !== -1 && resumed.queueIds.indexOf(target) === -1,
-        'after Resume the session still holds ro-d and not ' + target + ' (queue: ' + resumed.queueIds.join(', ') + ')');
-      var run = await h.finish();
-      h.assert(run.end.summary && run.shown.indexOf(target) === -1 && run.shown.indexOf('ro-d') !== -1,
-        target + ' is not shown again before the session ends, and ro-d is (shown: ' + run.shown.join(', ') + ')');
-      await page.eval(function () {
-        PGRE.srs.today = window.__realClock.today;
-        PGRE.srs.addDays = window.__realClock.addDays;
-        delete window.__realClock;
-        PGRE.store.state.formulaStudy = null;
-        PGRE.store.save();
-        location.hash = '#/';
-      });
-      await h.sleep(250);
+      try {
+        var after = await h.look();
+        h.assert(after.today === due && after.remaining.indexOf(target) !== -1 && after.remaining.indexOf('ro-d') !== -1,
+          'on the new day ' + target + ' and ro-d are both on today\'s remaining list');
+        h.assert(after.queueIds.indexOf('ro-d') !== -1 && after.queueIds.indexOf(target) === -1,
+          'the open session takes in ro-d but not ' + target + ', which it graded (queue: ' + after.queueIds.join(', ') + ')');
+        // Leave Recall and come back: Resume rebuilds the session from its
+        // saved snapshot instead of the open page.
+        await page.eval(function () { location.hash = '#/'; });
+        await h.sleep(250);
+        await page.eval(function () { location.hash = '#/formulas'; });
+        await h.wait('#resume-btn');
+        await h.click('#resume-btn');
+        await h.wait('.formula-palette .pal-cell.is-current');
+        var resumed = await h.look();
+        h.assert(/ 1 done /.test(resumed.line), 'Resume continues the same session (' + resumed.line + ')');
+        h.assert(resumed.queueIds.indexOf('ro-d') !== -1 && resumed.queueIds.indexOf(target) === -1,
+          'after Resume the session still holds ro-d and not ' + target + ' (queue: ' + resumed.queueIds.join(', ') + ')');
+        var run = await h.finish();
+        h.assert(run.end.summary && run.shown.indexOf(target) === -1 && run.shown.indexOf('ro-d') !== -1,
+          target + ' is not shown again before the session ends, and ro-d is (shown: ' + run.shown.join(', ') + ')');
+      } finally {
+        // Put the clock back even when a check above fails, so the stages
+        // after this one count from the real day.
+        await page.eval(function () {
+          if (window.__realClock) {
+            PGRE.srs.today = window.__realClock.today;
+            PGRE.srs.addDays = window.__realClock.addDays;
+            delete window.__realClock;
+          }
+          PGRE.store.state.formulaStudy = null;
+          PGRE.store.save();
+          location.hash = '#/';
+        });
+        await h.sleep(250);
+      }
     } },
 
   { name: 'a stale tab adopts a sibling\'s Add before its own Add',

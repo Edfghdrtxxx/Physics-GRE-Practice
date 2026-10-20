@@ -3324,15 +3324,18 @@ PGRE.views.formulas = (function () {
     study.reviewing = false;
     study.currentId = study.queue[0] && study.queue[0].id;
     persistStudy();
-    if (!PGRE.store.save() && e.opId) {
-      // The undo did not reach storage: the stored grade stands, so memory
-      // and the screen keep it too.
+    if (!PGRE.store.save()) {
+      // The undo did not reach storage: the stored grade or learning pass
+      // stands, so memory and the screen keep it too, and the Undo entry
+      // stays for the next try. A learning pass has no op id, but its step
+      // and history live in the saved session all the same.
       PGRE.store.rollback(before);
       restoreSession(now);
       study.history = historyNow;
       study.undo.push(e);
       study.reviewing = wasReviewing;
       study.currentId = now.id;
+      if (typeof PGRE.pressNotRecorded === 'function') PGRE.pressNotRecorded();
       return;
     }
     renderCard();
