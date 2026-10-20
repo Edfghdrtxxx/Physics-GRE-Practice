@@ -941,12 +941,14 @@ PGRE.store = {
         try { disk = JSON.parse(raw); } catch (e) { disk = null; }
         this._adopt(disk);
       }
-      // _rev counts successful writes only: roll it back if setItem throws so
-      // a recovering tab still sees a sibling's newer disk _rev and merges it.
+      // _rev counts successful writes only: roll it back if serializing or
+      // setItem throws so a recovering tab still sees a sibling's newer disk
+      // _rev and merges it.
       var nextRev = (this.state._rev || 0) + 1;
       this.state._rev = nextRev;
-      var blob = JSON.stringify(this.state);
+      var blob;
       try {
+        blob = JSON.stringify(this.state);
         localStorage.setItem(this.KEY, blob);
       } catch (we) {
         this.state._rev = nextRev - 1;
