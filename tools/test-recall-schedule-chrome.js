@@ -417,6 +417,36 @@ var STAGES = [
         'once saving works, Undo restores the card (2 reviews) and shows it again');
     } },
 
+  { name: 'a regrade to Again whose save fails keeps the stored Good',
+    run: async function (page, h) {
+      await h.seedAndStudy(h.FS_SPEC);
+      var first = await h.flip();
+      var target = first.current;
+      var graded = await h.press('good');
+      h.assert(graded.diskCards[target].reviews === 3 && graded.diskCards[target].lastGrade === 'good',
+        'Good stores 3 reviews');
+      await h.click('.formula-palette .pal-cell[data-id="' + target + '"]');
+      await h.wait('.formula-study-live .peek-grade');
+      await h.clickWhileStorageFull('#fcard-actions [data-grade="again"]');
+      await h.sleep(200);
+      var failed = await h.look();
+      h.assert(failed.canWrite === false && failed.diskCards[target].lastGrade === 'good' &&
+        failed.cards[target].lastGrade === 'good' && failed.cards[target].reviews === 3,
+        'the regrade did not reach storage, and memory keeps Good too (3 reviews)');
+      h.assert(failed.queueIds.indexOf(target) === -1 && failed.chosen === 'good' &&
+        failed.cells[target].grade === 'good',
+        'the card stays out of the queue, and its view and its box still show Good');
+      h.assert(failed.toast, 'the saving-failed warning is on screen');
+      await page.eval(function () { PGRE.store.save(); });
+      await h.click('#fcard-actions [data-grade="again"]');
+      await h.sleep(200);
+      var regraded = await h.look();
+      h.assert(regraded.diskCards[target].lastGrade === 'again' &&
+        regraded.queueIds.filter(function (id) { return id === target; }).length === 1 &&
+        regraded.queueIds[regraded.queueIds.length - 1] === target,
+        'once saving works, the regrade to Again is stored and the card is back once, at the end of the queue');
+    } },
+
   { name: 'a Type grade whose save fails stays on screen, unrecorded',
     run: async function (page, h) {
       await h.seed(h.FS_SPEC);
