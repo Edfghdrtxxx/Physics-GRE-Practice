@@ -60,8 +60,9 @@ async function helpers(page) {
       'PGRE.BOOK_FORMULAS = []; PGRE.BOOK_LISTS = []; }');
   };
 
-  /* Seed a synthetic deck and today's list. cards: [{ id, topic, learned }].
-     A learned card is a review due today with a 5-day interval. */
+  /* Seed a synthetic deck and today's list. cards: [{ id, topic, learned,
+     lapsed }]. A learned card is a review due today with a 5-day interval;
+     a lapsed card was missed yesterday and is relearning (interval 0). */
   h.seed = async function (cards) {
     if (!(await page.eval('!!document.getElementById("main")'))) {
       await page.open(URL);
@@ -74,10 +75,12 @@ async function helpers(page) {
       'var s = PGRE.store.state, today = PGRE.srs.today(); s.cards = {}; s.cardReviews = []; s.reviewUndos = {};' +
       's.formulaPinFacts = {}; s.formulaSuspended = {}; s.formulaStudy = null; s.formulaStudyEnd = null;' +
       'spec.forEach(function (c) { if (c.learned) s.cards[c.id] = { reps: 2, lapses: 0, interval: 5,' +
-      '  ease: 2.5, due: today, reviews: 2, lastGrade: "good", lastReviewedDay: PGRE.srs.addDaysTo(today, -5) }; });' +
+      '  ease: 2.5, due: today, reviews: 2, lastGrade: "good", lastReviewedDay: PGRE.srs.addDaysTo(today, -5) };' +
+      '  if (c.lapsed) s.cards[c.id] = { reps: 0, lapses: 1, interval: 0, ease: 2.3, due: today, reviews: 3,' +
+      '  lastGrade: "again", lastReviewedDay: PGRE.srs.addDaysTo(today, -1) }; });' +
       's.formulaDay = { date: today,' +
-      '  reviewIds: spec.filter(function (c) { return c.learned; }).map(function (c) { return c.id; }),' +
-      '  newIds: spec.filter(function (c) { return !c.learned; }).map(function (c) { return c.id; }) };' +
+      '  reviewIds: spec.filter(function (c) { return c.learned || c.lapsed; }).map(function (c) { return c.id; }),' +
+      '  newIds: spec.filter(function (c) { return !c.learned && !c.lapsed; }).map(function (c) { return c.id; }) };' +
       's.settings.formulaDailyTarget = spec.length; s.settings.examDate = ""; s.settings.formulaReverse = false;' +
       'PGRE.store.save(); return PGRE.contentDB.put({ id: "formula-deck", kind: "formula-deck", cards: [] }); }');
   };
@@ -168,6 +171,21 @@ async function helpers(page) {
       'w.PGRE.FORMULAS = spec.map(function (c) { return { id: c.id, topic: c.topic, name: "Card " + c.id,' +
       '  front: "prompt " + c.id, back: "$" + c.id.replace(/[^a-z]/g, "") + "=1$", note: "" }; });' +
       'w.PGRE.BOOK_FORMULAS = []; w.PGRE.BOOK_LISTS = []; }');
+  };
+
+  /* Grade Good on every card until the summary. note(look) may return a
+     value to record per card shown. */
+  h.finish = async function (note) {
+    var shown = [], notes = [];
+    for (var guard = 0; guard < 14; guard++) {
+      var now = await h.look();
+      if (now.summary || !now.current) break;
+      shown.push(now.current);
+      now = await h.flip();
+      if (note) { var v = note(now); if (v !== undefined) notes.push(v); }
+      await h.press('good');
+    }
+    return { shown: shown, notes: notes, end: await h.look() };
   };
 
   h.FS_SPEC = [
@@ -362,6 +380,51 @@ var STAGES = [
       var graded = await typeLook();
       h.assert(graded.diskCards[shown.id].reviews === 3 && graded.id !== shown.id,
         'Type: once saving works, Good stores 3 reviews and moves on');
+    } },
+
+  { name: 'after midnight the open session takes in new-day cards, not a card it graded',
+    run: async function (page, h) {
+      // ro-a..ro-c are relearning cards: Good gives a 1-day interval. ro-d is
+      // a learned card due tomorrow and not on today's list.
+      await h.seed([
+        { id: 'ro-a', topic: 'cm', lapsed: true }, { id: 'ro-b', topic: 'em', lapsed: true },
+        { id: 'ro-c', topic: 'qm', lapsed: true }, { id: 'ro-d', topic: 'cm', learned: true }
+      ]);
+      await page.eval(function () {
+        var s = PGRE.store.state;
+        s.formulaDay.reviewIds = s.formulaDay.reviewIds.filter(function (id) { return id !== 'ro-d'; });
+        s.cards['ro-d'].due = PGRE.srs.addDays(1);
+        PGRE.store.save();
+      });
+      await h.study();
+      var first = await h.flip();
+      var target = first.current;
+      var graded = await h.press('good');
+      var due = graded.cards[target].due;
+      h.assert(graded.cards[target].interval === 1 && due === graded.cards['ro-d'].due &&
+        graded.queueIds.indexOf(target) === -1 && graded.queueIds.indexOf('ro-d') === -1,
+        'Good before midnight gives ' + target + ' a 1-day interval and takes it out of the session; ' +
+        'ro-d, due the same day, is not in the session');
+      // Midnight passes with the session open: the scheduler's day moves to
+      // the due day for the rest of this stage, and the tab becomes visible.
+      await page.eval('() => { var due = ' + JSON.stringify(due) + '; window.__realToday = PGRE.srs.today;' +
+        'PGRE.srs.today = function () { return due; }; document.dispatchEvent(new Event("visibilitychange")); }');
+      var after = await h.look();
+      h.assert(after.today === due && after.remaining.indexOf(target) !== -1 && after.remaining.indexOf('ro-d') !== -1,
+        'on the new day ' + target + ' and ro-d are both on today\'s remaining list');
+      h.assert(after.queueIds.indexOf('ro-d') !== -1 && after.queueIds.indexOf(target) === -1,
+        'the open session takes in ro-d but not ' + target + ', which it graded (queue: ' + after.queueIds.join(', ') + ')');
+      var run = await h.finish();
+      h.assert(run.end.summary && run.shown.indexOf(target) === -1 && run.shown.indexOf('ro-d') !== -1,
+        target + ' is not shown again before the session ends, and ro-d is (shown: ' + run.shown.join(', ') + ')');
+      await page.eval(function () {
+        PGRE.srs.today = window.__realToday;
+        delete window.__realToday;
+        PGRE.store.state.formulaStudy = null;
+        PGRE.store.save();
+        location.hash = '#/';
+      });
+      await h.sleep(250);
     } }
 ];
 
