@@ -59,6 +59,10 @@ PGRE.views.history = (function () {
     var dur = sess.endedAt
       ? Math.max(1, Math.round((new Date(sess.endedAt) - new Date(sess.startedAt)) / 60000)) + ' min'
       : 'unfinished';
+    var review = sess.mode === 'mistakes'
+      ? '<a class="btn btn-ghost btn-sm hist-drill-open" href="#/mistakes/drill/' +
+        encodeURIComponent(sess.id) + '">Review this drill</a>'
+      : '';
     // attempt rows are filled lazily on first open (renderSessions) so a long
     // history doesn't render + typeset every answer ever given up front
     return '<details class="hist-session" data-sid="' + ui.esc(sess.id) + '">' +
@@ -66,6 +70,7 @@ PGRE.views.history = (function () {
         '<span>' + ui.esc(MODE_LABEL[sess.mode] || sess.mode) + ' · ' + ui.esc(scope) + '</span>' +
         '<span class="hist-sess-score">' + sess.correct + '/' + sess.answered +
           (open ? ' of ' + sess.planned : '') + '</span>' +
+        review +
         '<span class="hist-sess-meta">' + dur + ' · +' + sess.xp + ' XP</span>' +
       '</summary><div class="hist-rows"></div></details>';
   }
@@ -98,6 +103,9 @@ PGRE.views.history = (function () {
         rows.innerHTML = rh || '<p class="muted">No answers recorded in this session.</p>';
         PGRE.typesetMath(rows);
       });
+    });
+    box.querySelectorAll('.hist-drill-open').forEach(function (a) {
+      a.addEventListener('click', function (e) { e.stopPropagation(); });
     });
     var more = document.getElementById('hist-sess-more');
     if (more) more.addEventListener('click', function () {

@@ -1014,6 +1014,9 @@ PGRE.nav = (function () {
         trail.push({ label: params.sub2 === 'new' ? 'Practice · not yet done'
                           : params.sub2 === 'done' ? 'Practice · done before'
                           : 'Practice' });
+      } else if (view === 'mistakes' && params.sub === 'drill' && params.sub2) {
+        trail.push({ label: 'History', href: '#/history' });
+        trail.push({ label: 'Drill' });
       } else if (LABELS[view]) {
         trail.push({ label: LABELS[view], href: HREF[view] });
         if (view === 'exam' && params.sub === 'run') trail.push({ label: 'Run' });

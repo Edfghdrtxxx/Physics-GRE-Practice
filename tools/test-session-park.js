@@ -414,6 +414,61 @@ assert(JSON.stringify(PGRE.store.state.mistakes) === mistakesFrozen, 'resume pai
 assert(JSON.stringify(PGRE.store.state.sessions) === sessionsFrozen, 'resume paints left session rows unchanged');
 mistakes._test.dropLive();
 
+console.log('\nhistory archive reconstructs a past drill without touching the live one');
+
+PGRE.store.state.sessions.push({
+  id: 's-hist-old', mode: 'mistakes', topicId: 'mistakes',
+  startedAt: '2026-09-01T12:00:00.000Z', endedAt: '2026-09-01T12:20:00.000Z',
+  planned: 2, answered: 2, correct: 1, xp: 12
+});
+PGRE.store.state.attempts.push(
+  { ts: '2026-09-01T12:01:00.000Z', qid: 'm1', topic: 'mech', picked: 0, answer: 1,
+    correct: false, ms: 4000, sid: 's-hist-old', mode: 'mistakes',
+    confidence: 'guess', tags: ['slow'] },
+  { ts: '2026-09-01T12:02:00.000Z', qid: 'gone-q', topic: 'mech', picked: 2, answer: 3,
+    correct: false, ms: 5000, sid: 's-hist-old', mode: 'mistakes' }
+);
+var recon = mistakes._test.reconstructArchive('s-hist-old');
+assert(recon && recon.readonly && recon.qs.length === 2, 'archive reconstructs two stored questions');
+assert(recon.qs[1].missing && /no longer in the bank/.test(recon.qs[1].q),
+  'a question missing from the bank becomes a stub');
+assert(recon.st[0].picked === 0 && recon.st[0].row.confidence === 'guess',
+  'stored pick and self-assessment stay on the attempt row');
+assert(mistakes._test.reconstructArchive('no-such-sid') === null, 'unknown sid is not a drill');
+PGRE.store.state.sessions.push({
+  id: 's-prac-hist', mode: 'practice', topicId: 'all',
+  startedAt: '2026-09-02T12:00:00.000Z', endedAt: '2026-09-02T12:10:00.000Z',
+  planned: 1, answered: 1, correct: 1, xp: 15
+});
+assert(mistakes._test.reconstructArchive('s-prac-hist') === null,
+  'a practice session is not opened as a mistake-drill archive');
+
+mistakes._test.startDrill([BANK.m2]);
+var liveObj = mistakes._test.drill;
+var parkedBefore = JSON.stringify(snap(park.DRILL_KEY));
+var attemptsN = PGRE.store.state.attempts.length;
+var xpN = PGRE.store.state.xp;
+var saveN = 0;
+var realSave = PGRE.store.save;
+PGRE.store.save = function () { saveN++; return realSave.apply(this, arguments); };
+mistakes.mount({ sub: 'drill', sub2: 's-hist-old' });
+assert(mistakes._test.drill === liveObj, 'opening a past drill leaves the live drill object');
+assert(mistakes._test.archive && mistakes._test.archive.sid === 's-hist-old',
+  'the archive object is the reconstructed drill');
+assert(JSON.stringify(snap(park.DRILL_KEY)) === parkedBefore, 'opening a past drill leaves the parked snapshot');
+assert(PGRE.store.state.attempts.length === attemptsN, 'archive does not record answers');
+assert(PGRE.store.state.xp === xpN, 'archive does not change XP');
+assert(saveN === 0, 'archive does not call store.save');
+assert(/How this drill went/.test(elFor('mistakes-root').innerHTML),
+  'archive paints the results palette');
+assert(/Back to History/.test(elFor('mistakes-root').innerHTML),
+  'archive offers a way back to History');
+assert(!/id="assess-row"/.test(elFor('mistakes-root').innerHTML),
+  'archive results do not mount grading chips');
+PGRE.store.save = realSave;
+mistakes._test.dropLive();
+sessionStorage.removeItem(park.DRILL_KEY);
+
 /* ================= Practice corrections ================= */
 
 console.log('\npractice: a feedback-stage snapshot restores the read solution');
@@ -704,8 +759,8 @@ function scriptToken(file) {
 assert(scriptToken('js/srs.js') === '20261017a', 'srs.js cache token is 20261017a, got ' + scriptToken('js/srs.js'));
 assert(scriptToken('js/gamify.js') === '20261002b', 'gamify.js cache token is 20261002b, got ' + scriptToken('js/gamify.js'));
 assert(scriptToken('js/view-practice.js') === '20261017a', 'view-practice.js cache token is 20261017a, got ' + scriptToken('js/view-practice.js'));
-assert(scriptToken('js/view-mistakes.js') === '20261019a', 'view-mistakes.js cache token is 20261019a, got ' + scriptToken('js/view-mistakes.js'));
-assert(scriptToken('js/app.js') === '20261011b', 'app.js cache token is 20261011b, got ' + scriptToken('js/app.js'));
+assert(scriptToken('js/view-mistakes.js') === '20261020e', 'view-mistakes.js cache token is 20261020e, got ' + scriptToken('js/view-mistakes.js'));
+assert(scriptToken('js/app.js') === '20261020f', 'app.js cache token is 20261020f, got ' + scriptToken('js/app.js'));
 assert(indexHtml.indexOf('js/srs.js?v=20261001j') < 0 &&
        indexHtml.indexOf('js/srs.js?v=20261002a') < 0 &&
        indexHtml.indexOf('js/srs.js?v=20261009a') < 0 &&
