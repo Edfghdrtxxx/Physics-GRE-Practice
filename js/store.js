@@ -683,7 +683,9 @@ PGRE.store = {
       if (!Array.isArray(st.formulaQuarantine)) st.formulaQuarantine = [];
       st.formulaQuarantine.push({ id: id, reason: reason, at: new Date().toISOString() });
     }
-    var today = this.today();
+    // Recall's scheduling day (03:00 start) when srs is loaded.
+    var srsDay = PGRE.srs && typeof PGRE.srs.dayOf === 'function';
+    var today = srsDay ? PGRE.srs.today() : this.today();
     for (var id in st.cards) {
       if (!Object.prototype.hasOwnProperty.call(st.cards, id)) continue;
       var rec = st.cards[id];
@@ -703,7 +705,7 @@ PGRE.store = {
         day = rec.lastReviewedDay;
       } else if (typeof rec.lastReviewedAt === 'string' && PGRE.srs && typeof PGRE.srs.dayStr === 'function') {
         var parsed = new Date(rec.lastReviewedAt);
-        if (!isNaN(parsed.getTime())) day = PGRE.srs.dayStr(parsed);
+        if (!isNaN(parsed.getTime())) day = srsDay ? PGRE.srs.dayOf(parsed) : PGRE.srs.dayStr(parsed);
       }
       var ivl = Number(rec.interval);
       if (day && isFinite(ivl) && PGRE.srs && typeof PGRE.srs.addDaysTo === 'function') {

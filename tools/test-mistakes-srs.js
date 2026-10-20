@@ -82,10 +82,9 @@ function resetState() {
   return store.state;
 }
 
+// The scheduling day (it starts at 03:00), as srs.daysUntil counts it.
 function daysFromNow(n) {
-  var d = new Date();
-  d.setDate(d.getDate() + n);
-  return srs.dayStr(d);
+  return srs.addDays(n);
 }
 
 function mkEntry(qid, extra) {
@@ -251,6 +250,23 @@ assert(srs.daysUntil(daysFromNow(0)) === 0, 'daysUntil today is 0');
 assert(srs.daysUntil(daysFromNow(9)) === 9, 'daysUntil counts forward whole days');
 assert(srs.daysUntil(daysFromNow(-3)) === -3, 'daysUntil is negative for past dates');
 assert(srs.addDaysTo('2026-01-28', 10) === '2026-02-07', 'addDaysTo crosses month boundaries');
+assert(srs.dayOf(new Date(2026, 9, 21, 2, 59)) === '2026-10-20',
+  'the scheduling day still reads the day before at 02:59');
+assert(srs.dayOf(new Date(2026, 9, 21, 3, 0)) === '2026-10-21',
+  'the scheduling day changes at 03:00');
+assert(srs.dayOf(new Date(2026, 9, 20, 23, 55)) === '2026-10-20',
+  'late evening stays on its calendar day');
+assert(srs.dayOf(new Date(2026, 0, 1, 1, 0)) === '2025-12-31',
+  'the scheduling day crosses a year boundary backward');
+sandbox.Date = function () {
+  if (!arguments.length) return new Date(2026, 9, 21, 0, 30);
+  return new (Function.prototype.bind.apply(Date, [null].concat([].slice.call(arguments))))();
+};
+assert(srs.today() === '2026-10-20' && srs.addDays(1) === '2026-10-21',
+  'today and addDays count from the scheduling day at 00:30');
+assert(srs.daysUntil('2026-10-21') === 1,
+  'at 00:30 a card due on the calendar date is still a day away');
+sandbox.Date = Date;
 assert(srs.ivlLabel(0) === 'today' && srs.ivlLabel(1) === '1 d' && srs.ivlLabel(7) === '7 d',
   'ivlLabel renders days');
 assert(srs.ivlLabel(30) === '1 mo' && srs.ivlLabel(60) === '2 mo',

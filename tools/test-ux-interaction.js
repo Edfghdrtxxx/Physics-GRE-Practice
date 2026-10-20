@@ -2740,14 +2740,16 @@ function consumerCases() {
         assert(hold.env.document.body.textContent.indexOf('incomplete') !== -1,
           'a partial deck shows a waiting note');
         var night = autoPickEnv();
-        pinDate(night, 2026, 10, 24, 23, 59);
+        // 02:59 is still October 24: the scheduling day starts at 03:00.
+        pinDate(night, 2026, 10, 25, 2, 59);
         var day = night.P.srs.today();
+        assert(day === '2026-10-24', '02:59 counts as the day before, got ' + day);
         night.P.store.state.settings.examDate = '2026-11-01';
         night.P.store.state.formulaDay = { date: day, reviewIds: [], newIds: ['f0'] };
         return mountFormulas(night).then(function () {
           var ndoc = night.env.document;
           ndoc.getElementById('study-btn').click();
-          pinDate(night, 2026, 10, 25, 0, 1);
+          pinDate(night, 2026, 10, 25, 3, 1);
           ndoc.getElementById('flip-btn').click();
           ndoc.querySelector('#fcard-actions [data-grade="easy"]').click();
           var batch = night.P.store.state.formulaDay;

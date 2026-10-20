@@ -278,6 +278,56 @@ async function helpers(page) {
     await page.eval('() => { var f = document.getElementById("stale-tab"); if (f) f.remove(); }');
   };
 
+  /* Set this page's clock to a local date and time (month 1-12); it keeps
+     running from there. Every Date the app makes reads it. Returns the
+     scheduling day Recall then reports. */
+  h.setClock = async function (y, mo, d, hh, mm) {
+    return page.eval('() => { var Real = window.__realDate || Date; window.__realDate = Real;' +
+      'var offset = new Real(' + [y, mo - 1, d, hh, mm].join(', ') + ').getTime() - Real.now();' +
+      'function D() { if (!(this instanceof D)) return Real();' +
+      '  if (!arguments.length) return new Real(Real.now() + offset);' +
+      '  return new (Function.prototype.bind.apply(Real, [null].concat([].slice.call(arguments))))(); }' +
+      'D.now = function () { return Real.now() + offset; }; D.parse = Real.parse; D.UTC = Real.UTC;' +
+      'D.prototype = Real.prototype; window.Date = D; return PGRE.srs.today(); }');
+  };
+
+  /* Leave Recall and open it again, then read its landing page. */
+  h.home = async function () {
+    await page.eval(function () { location.hash = '#/'; });
+    await sleep(250);
+    await page.eval(function () { location.hash = '#/formulas'; });
+    await wait('.fm-landing');
+    return JSON.parse(await page.eval(function () {
+      var s = PGRE.store.state, srs = PGRE.srs, deck = PGRE.views.formulas.getDeck();
+      var tiles = {}, due = {}, studied = {};
+      document.querySelectorAll('.fm-stats .stat-tile').forEach(function (t) {
+        tiles[t.querySelector('.stat-label').textContent] = t.querySelector('.stat-value').textContent.trim();
+      });
+      deck.forEach(function (c) {
+        due[c.id] = srs.cardDue(c.id);
+        studied[c.id] = srs.studiedToday(srs.cardState(c.id));
+      });
+      var title = document.querySelector('.fm-today-title');
+      return JSON.stringify({
+        today: srs.today(),
+        title: title ? title.textContent : '',
+        study: !!document.getElementById('study-btn'),
+        resume: !!document.getElementById('resume-btn'),
+        tiles: tiles, due: due, studied: studied,
+        remaining: srs.formulaDayRemaining(deck).map(function (c) { return c.id; }),
+        batchDate: (s.formulaDay || {}).date || '',
+        finalPass: srs.finalPassActive(),
+        cap: srs.examCap(),
+        text: document.getElementById('main').textContent
+      });
+    }));
+  };
+
+  h.goodLabel = async function () {
+    return page.eval('() => { var b = document.querySelector(\'#fcard-actions [data-grade="good"] .grade-ivl\');' +
+      'return b ? b.textContent : ""; }');
+  };
+
   return h;
 }
 
@@ -682,6 +732,145 @@ var STAGES = [
         'the stored card is the later Again, due today, on top of the sibling\'s 4 reviews (got ' +
         res.disk.lastGrade + ', ' + res.disk.due + ', ' + res.disk.reviews + ')');
       await h.closeStaleTab();
+    } },
+
+  { name: 'day start: a card graded Good at 23:55 is not due in a session at 00:30', shot: '07-day-start-0030', size: '1280x800',
+    run: async function (page, h) {
+      // ds-a and ds-b are relearning cards: Good gives a 1-day interval.
+      // ds-x is a learned card due November 11, not on November 10's list.
+      await h.setClock(2026, 11, 10, 23, 55);
+      await h.seed([
+        { id: 'ds-a', topic: 'cm', lapsed: true }, { id: 'ds-b', topic: 'em', lapsed: true },
+        { id: 'ds-x', topic: 'qm', learned: true }
+      ]);
+      await page.eval(function () {
+        var s = PGRE.store.state;
+        s.formulaDay.reviewIds = s.formulaDay.reviewIds.filter(function (id) { return id !== 'ds-x'; });
+        s.cards['ds-x'].due = '2026-11-11';
+        PGRE.store.save();
+      });
+      await h.study();
+      var run = await h.finish();
+      h.assert(run.end.summary && run.end.today === '2026-11-10' &&
+        run.end.diskCards['ds-a'].interval === 1 && run.end.diskCards['ds-a'].due === '2026-11-11' &&
+        run.end.diskCards['ds-b'].interval === 1 && run.end.diskCards['ds-b'].due === '2026-11-11',
+        'at 23:55 on November 10, Good gives ds-a and ds-b a 1-day interval, due November 11');
+      await h.setClock(2026, 11, 11, 0, 30);
+      var night = await h.home();
+      h.assert(!night.due['ds-a'] && !night.due['ds-b'] && !night.due['ds-x'],
+        'at 00:30 on November 11, ds-a, ds-b and ds-x, due November 11, are not due yet');
+      h.assert(!night.remaining.length && !night.study && !night.resume,
+        'today\'s list has nothing left and Recall offers no session ("' + night.title + '")');
+      h.assert(night.tiles['Reviewed today'] === '2', 'Reviewed today still counts the two cards graded at 23:55');
+      h.assert(night.today === '2026-11-10', 'Recall\'s day is still November 10');
+      await h.sleep(5000);   // let the XP and check-in messages fade before the screenshot
+    } },
+
+  { name: 'day start: after 03:00 the next day that card is due again', shot: '08-day-start-0305',
+    run: async function (page, h) {
+      await h.setClock(2026, 11, 11, 3, 5);
+      var morning = await h.home();
+      h.assert(morning.today === '2026-11-11' && morning.due['ds-a'] && morning.due['ds-b'] && morning.due['ds-x'],
+        'at 03:05 on November 11 Recall counts November 11, and ds-a, ds-b and ds-x are due');
+      h.assert(morning.tiles['Reviewed today'] === '0' && morning.study,
+        'Reviewed today starts again at 0, and Recall offers a session');
+      await h.click('#study-btn');
+      await h.wait('.formula-palette .pal-cell.is-current');
+      var now = await h.look();
+      h.assert(now.queueIds.indexOf('ds-a') !== -1 && now.queueIds.indexOf('ds-b') !== -1,
+        'the new session holds ds-a and ds-b (queue: ' + now.queueIds.join(', ') + ')');
+    } },
+
+  { name: 'day start: a session started at 01:00 counts as the day before for the list and studied-today',
+    shot: '09-day-start-0100',
+    run: async function (page, h) {
+      // dn-a..dn-c are learned cards due November 12 and on its list; dn-x is
+      // due November 13.
+      await h.setClock(2026, 11, 12, 21, 0);
+      await h.seed([
+        { id: 'dn-a', topic: 'cm', learned: true }, { id: 'dn-b', topic: 'em', learned: true },
+        { id: 'dn-c', topic: 'qm', learned: true }, { id: 'dn-x', topic: 'cm', learned: true }
+      ]);
+      await page.eval(function () {
+        var s = PGRE.store.state;
+        s.formulaDay.reviewIds = s.formulaDay.reviewIds.filter(function (id) { return id !== 'dn-x'; });
+        s.cards['dn-x'].due = '2026-11-13';
+        PGRE.store.save();
+      });
+      await h.setClock(2026, 11, 13, 1, 0);
+      var home = await h.home();
+      h.assert(!home.due['dn-x'], 'at 01:00 on November 13, dn-x, due November 13, is not due yet');
+      h.assert(home.batchDate === '2026-11-12' && home.remaining.slice().sort().join(',') === 'dn-a,dn-b,dn-c',
+        'today\'s list is still November 12\'s (left: ' + home.remaining.join(', ') + ')');
+      h.assert(home.today === '2026-11-12', 'Recall\'s day is still November 12');
+      await h.click('#study-btn');
+      await h.wait('.formula-palette .pal-cell.is-current');
+      var first = await h.flip();
+      var target = first.current;
+      var graded = await h.press('good');
+      var info = JSON.parse(await page.eval('() => { var id = ' + JSON.stringify(target) + '; var s = PGRE.store.state;' +
+        'var rows = s.cardReviews.filter(function (r) { return r.id === id; });' +
+        'return JSON.stringify({ session: s.formulaStudy.date, day: s.cards[id].lastReviewedDay,' +
+        '  row: rows.length ? rows[rows.length - 1].d : "", studied: PGRE.srs.studiedToday(s.cards[id]) }); }'));
+      h.assert(info.session === '2026-11-12', 'the session started at 01:00 is dated November 12');
+      h.assert(info.day === '2026-11-12' && info.row === '2026-11-12' && info.studied,
+        'Good at 01:00 is a November 12 review: its review day, its review-log row, and studied-today');
+      h.assert(graded.diskCards[target].interval === 13 && graded.diskCards[target].due === '2026-11-25',
+        'its 13-day interval counts from November 12: due November 25');
+      h.assert(graded.queueIds.indexOf('dn-x') === -1, 'dn-x is not in the session');
+      var after = await h.home();
+      h.assert(after.tiles['Reviewed today'] === '1' && after.remaining.length === 2 && after.resume,
+        'on the Recall page: 1 reviewed today, 2 left on the list, and the session can be resumed');
+      await h.sleep(5000);   // let the XP message fade before the screenshot
+    } },
+
+  { name: 'day start: the final pass and the exam cap change at 03:00 on October 25', shot: '10-exam-week-0305',
+    run: async function (page, h) {
+      // Exam on November 1. fp-a and fp-b are learned cards due today;
+      // fp-z is a learned card due October 28.
+      await h.setClock(2026, 10, 25, 2, 30);
+      await h.seed([
+        { id: 'fp-a', topic: 'cm', learned: true }, { id: 'fp-b', topic: 'em', learned: true },
+        { id: 'fp-z', topic: 'qm', learned: true }
+      ]);
+      await page.eval(function () {
+        var s = PGRE.store.state;
+        s.settings.examDate = '2026-11-01';
+        s.formulaDay.reviewIds = s.formulaDay.reviewIds.filter(function (id) { return id !== 'fp-z'; });
+        s.cards['fp-z'].due = '2026-10-28';
+        PGRE.store.save();
+      });
+      var early = await h.home();
+      h.assert(early.remaining.indexOf('fp-z') === -1 && !/Final pass/.test(early.text),
+        'at 02:30 on October 25, fp-z is not on the list, and there is no final-pass banner');
+      h.assert(early.finalPass === false && early.cap === 7 && early.today === '2026-10-24',
+        'Recall counts October 24: no final pass, and the exam cap is 7 days');
+      await h.click('#study-btn');
+      await h.wait('.formula-palette .pal-cell.is-current');
+      var first = await h.flip();
+      var target = first.current;
+      var label = await h.goodLabel();
+      var graded = await h.press('good');
+      h.assert(label === '6 d' && graded.diskCards[target].interval === 6 &&
+        graded.diskCards[target].due === '2026-10-30',
+        'Good shows and stores 6 days, due October 30 (button: ' + label + ')');
+      await h.setClock(2026, 10, 25, 3, 5);
+      var late = await h.home();
+      h.assert(late.today === '2026-10-25' && late.finalPass === true && late.cap === 6,
+        'at 03:05 October 25 begins: the final pass is on, and the exam cap is 6 days');
+      h.assert(late.remaining.indexOf('fp-z') !== -1 && late.remaining.indexOf(target) !== -1 &&
+        /Final pass/.test(late.text),
+        'every learned card is on the list, fp-z and ' + target + ' included, and the final-pass banner shows');
+      await h.click('#study-btn');
+      await h.wait('.formula-palette .pal-cell.is-current');
+      var next = await h.flip();
+      var label2 = await h.goodLabel();
+      var graded2 = await h.press('good');
+      h.assert(label2 === '1 d' && graded2.diskCards[next.current].interval === 1 &&
+        graded2.diskCards[next.current].due === '2026-10-26',
+        'Good shows and stores 1 day, due October 26 (button: ' + label2 + ')');
+      await h.home();
+      await h.sleep(5000);   // let the XP message fade before the screenshot
     } }
 ];
 

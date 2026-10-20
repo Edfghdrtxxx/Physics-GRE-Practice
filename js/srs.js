@@ -21,13 +21,22 @@ PGRE.srs = {
       String(d.getDate()).padStart(2, '0');
   },
 
-  today: function () { return this.dayStr(new Date()); },
-
-  addDays: function (n) {
-    var d = new Date();
-    d.setDate(d.getDate() + n);
-    return this.dayStr(d);
+  /* The scheduling day starts at 03:00 local, like the study-time day
+     (study-time.js studyDayStart): a grade at 01:00 counts for the day
+     before, and a card due on a date is due from 03:00 that date. Stored
+     due dates stay plain calendar days. setHours, not a fixed 3 h offset,
+     so a DST change still lands on civil 03:00. */
+  DAY_START_HOUR: 3,
+  dayOf: function (d) {
+    var start = new Date(d.getTime());
+    start.setHours(this.DAY_START_HOUR, 0, 0, 0);
+    if (d.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
+    return this.dayStr(start);
   },
+
+  today: function () { return this.dayOf(new Date()); },
+
+  addDays: function (n) { return this.addDaysTo(this.today(), n); },
 
   /* Local-date arithmetic anchored on an arbitrary base 'YYYY-MM-DD' (addDays
      anchors on today). Same local-midday-free construction as store.dayBefore.
@@ -782,15 +791,15 @@ PGRE.srs = {
     return moved;
   },
 
-  /* Was this card graded today (local date)? Prefer the local lastReviewedDay
-     stamp; fall back to a local re-derivation of the ISO lastReviewedAt for
+  /* Was this card graded today (scheduling day)? Prefer the lastReviewedDay
+     stamp; fall back to the scheduling day of the ISO lastReviewedAt for
      cards graded before the stamp existed. NEVER compares a UTC ISO prefix to a
      local date string (that off-by-a-day bug is exactly what this guards). */
   studiedToday: function (st) {
     if (!st) return false;
     if (st.lastReviewedDay) return st.lastReviewedDay === this.today();
     return !!(st.lastReviewedAt &&
-      this.dayStr(new Date(st.lastReviewedAt)) === this.today());
+      this.dayOf(new Date(st.lastReviewedAt)) === this.today());
   },
 
   /* New cards (never graded) count as due — they enter the daily queue. */

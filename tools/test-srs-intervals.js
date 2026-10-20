@@ -79,10 +79,9 @@ function resetStore(opts) {
   storeState.cardReviews = [];
 }
 
+// The scheduling day (it starts at 03:00), as srs.daysUntil counts it.
 function daysFromNow(n) {
-  var d = new Date();
-  d.setDate(d.getDate() + n);
-  return srs.dayStr(d);
+  return srs.addDays(n);
 }
 
 console.log('new cards');

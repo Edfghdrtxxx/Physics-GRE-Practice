@@ -701,7 +701,7 @@ function scriptToken(file) {
   var m = indexHtml.match(new RegExp('<script src="' + file.replace(/\./g, '\\.') + '\\?v=([^"]+)"'));
   return m ? m[1] : '';
 }
-assert(scriptToken('js/srs.js') === '20261020c', 'srs.js cache token is 20261020c, got ' + scriptToken('js/srs.js'));
+assert(scriptToken('js/srs.js') === '20261020d', 'srs.js cache token is 20261020d, got ' + scriptToken('js/srs.js'));
 assert(scriptToken('js/gamify.js') === '20261002b', 'gamify.js cache token is 20261002b, got ' + scriptToken('js/gamify.js'));
 assert(scriptToken('js/view-practice.js') === '20261017a', 'view-practice.js cache token is 20261017a, got ' + scriptToken('js/view-practice.js'));
 assert(scriptToken('js/view-mistakes.js') === '20261019a', 'view-mistakes.js cache token is 20261019a, got ' + scriptToken('js/view-mistakes.js'));

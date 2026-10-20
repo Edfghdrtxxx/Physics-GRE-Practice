@@ -1231,7 +1231,7 @@ PGRE.views.formulas = (function () {
     var max = 1;
     for (i = 0; i < 14; i++) if (days[i] > max) max = days[i];
     var bars = '';
-    var today = new Date();
+    var today = new Date(srs.today() + 'T12:00:00');   // the scheduling day, not the clock's
     for (i = 0; i < 14; i++) {
       var n = days[i];
       var pctH = Math.round(100 * n / max);
@@ -2358,8 +2358,8 @@ PGRE.views.formulas = (function () {
       // Learning-step requeues are real duplicates: a kept id keeps every
       // queue entry. New list members append once each, in batch order.
       // A card this session already graded and let go stays out, as it does
-      // while the page stays open (knownIds): after midnight it is due again,
-      // and it comes back in the next session.
+      // while the page stays open (knownIds): after the day changes it is due
+      // again, and it comes back in the next session.
       var graded = Object.create(null);
       (Array.isArray(saved.history) ? saved.history : []).forEach(function (h) {
         if (h && h.id) graded[h.id] = 1;
@@ -3041,9 +3041,9 @@ PGRE.views.formulas = (function () {
     rememberRoster(next);
   }
 
-  /* Midnight while a session is open: run the same allocator home would,
-     then let newly eligible cards join. A learning requeue that is still
-     remaining stays. */
+  /* The day changes (03:00) while a session is open: run the same allocator
+     home would, then let newly eligible cards join. A learning requeue that
+     is still remaining stays. */
   function onLiveClock(joinNew) {
     if (!study) return false;
     var today = PGRE.srs.today();

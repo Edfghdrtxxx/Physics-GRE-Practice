@@ -340,8 +340,8 @@ PGRE.flashmodes = (function () {
     return false;
   }
 
-  /* A round that stays open across midnight runs the same allocator home
-     would, then the next grade sees the new day. */
+  /* A round that stays open across the day change (03:00) runs the same
+     allocator home would, then the next grade sees the new day. */
   function noteGameDay(st, deck) {
     var today = PGRE.srs.today();
     if (!st.sessionDate) { st.sessionDate = today; return; }

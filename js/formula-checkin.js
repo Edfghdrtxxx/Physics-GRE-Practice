@@ -1,8 +1,9 @@
-/* Formula-recall daily check-in (签到) — once per local calendar day after a
-   qualifying Study / Match / Type / Quiz / Cloze settle. Pure day/streak/best
-   transitions live here so Node can drive them without the DOM; DOM paint and
-   XP live in the view + gamify hooks. Distinct from the global study streak
-   (touchDay) and from F11 in-session round checkpoints. */
+/* Formula-recall daily check-in (签到) — once per scheduling day (it starts
+   at 03:00, PGRE.srs.today) after a qualifying Study / Match / Type / Quiz /
+   Cloze settle. Pure day/streak/best transitions live here so Node can drive
+   them without the DOM; DOM paint and XP live in the view + gamify hooks.
+   Distinct from the global study streak (touchDay) and from F11 in-session
+   round checkpoints. */
 window.PGRE = window.PGRE || {};
 
 PGRE.formulaCheckIn = (function () {
@@ -132,6 +133,8 @@ PGRE.formulaCheckIn = (function () {
 
   function todayStr() {
     try {
+      // The scheduling day the settle paths record under (study / game press days).
+      if (window.PGRE && PGRE.srs && typeof PGRE.srs.today === 'function') return PGRE.srs.today();
       if (window.PGRE && PGRE.store && typeof PGRE.store.today === 'function') {
         return PGRE.store.today();
       }
