@@ -389,6 +389,35 @@ var STAGES = [
         'after a reload and Resume the graded card is not in the queue');
     } },
 
+  { name: 'a learning-pass press whose save fails stays on screen', shot: '04-learning-pass-failed-save-stays',
+    run: async function (page, h) {
+      await h.seedAndStudy([
+        { id: 'lf-a', topic: 'cm' }, { id: 'lf-b', topic: 'em' }, { id: 'lf-c', topic: 'qm' }
+      ]);
+      var before = await h.flip();
+      var target = before.current;
+      var could = await h.clickWhileStorageFull('#fcard-actions [data-grade="good"]');
+      await h.sleep(200);
+      var failed = await h.look();
+      h.assert(could === true && failed.canWrite === false, 'saving worked until this press, and the failed write is noticed');
+      h.assert(failed.current === target && failed.queueIds[0] === target && failed.flipped && failed.chosen === '',
+        'the new card stays on screen with its answer open and no grade marked (on screen: ' + failed.current + ')');
+      h.assert(!failed.steps[target] && failed.cells[target].grade === '' && !failed.cards[target],
+        'memory keeps it at learning step 0, unmarked and unscheduled');
+      h.assert(failed.toast, 'the saving-failed warning is on screen');
+    } },
+
+  { name: 'once saving works the same learning pass goes through',
+    run: async function (page, h) {
+      var before = await h.look();
+      var target = before.current;
+      await page.eval(function () { PGRE.store.save(); });
+      await h.flip();
+      var passed = await h.press('good');
+      h.assert(passed.current !== target && passed.steps[target] === 1 && passed.diskQueueIds.indexOf(target) > 0,
+        'once saving works, the same Good moves on and stores learning step 1, with the card later in the queue');
+    } },
+
   { name: 'a Study Undo whose save fails keeps the stored grade',
     run: async function (page, h) {
       await h.seedAndStudy(h.FS_SPEC);

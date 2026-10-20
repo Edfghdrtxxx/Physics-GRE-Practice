@@ -3122,7 +3122,8 @@ PGRE.views.formulas = (function () {
     var step = study.steps[id] || 0;
     var needsCommit = !stateless || g === 'easy' || (stateless && step !== 0 && g !== 'again');
     var opId = '';
-    var before = needsCommit ? PGRE.store.checkpoint() : null;
+    // Every press, a learning pass too: its step lives only in the saved session.
+    var before = PGRE.store.checkpoint();
     if (needsCommit) {
       var committed = commitReview(id, g);
       if (committed === null) {
@@ -3174,7 +3175,7 @@ PGRE.views.formulas = (function () {
     study.history.push({ c: c, grade: g, day: PGRE.srs.today() });
     persistStudy();                 // ITEM 2: stage the resume snapshot into the same save
     if (!PGRE.store.save() && before) {
-      // The grade did not reach storage. Take it back from memory too and
+      // The press did not reach storage. Take it back from memory too and
       // keep this card on screen: moving on would leave a card that a
       // reload brings back, graded only in this tab's memory.
       PGRE.store.rollback(before);
