@@ -225,10 +225,23 @@ PGRE.views.library = (function () {
         '<div class="btn-row">' +
           '<button class="btn btn-ghost" id="export-btn">Export progress</button>' +
           '<button class="btn btn-ghost" id="import-progress-btn">Restore from backup…</button>' +
-          '<button class="btn btn-ghost" id="restore-backup-btn">Restore last automatic backup</button>' +
+          '<button class="btn btn-ghost" id="restore-backup-btn">Restore last browser safety copy</button>' +
           '<input type="file" id="progress-input" accept=".json" hidden>' +
           '<button class="btn btn-ghost" id="reset-formulas-btn">Reset formula cards</button>' +
         '</div>' +
+      '</div>' +
+      '<div class="card" id="disk-backup-card"><h2>Disk backup</h2>' +
+        '<p class="muted">Copies committed progress to versioned files on this Mac, outside the browser. A failed copy never undoes a grade.</p>' +
+        '<p id="backup-status" class="muted"></p>' +
+        '<p id="backup-warning" class="backup-warning" hidden></p>' +
+        '<label class="backup-token-label" for="backup-token-input">Backup token</label>' +
+        '<input type="password" id="backup-token-input" class="exam-date-input backup-token-input" autocomplete="off">' +
+        '<div class="btn-row">' +
+          '<button class="btn btn-ghost" id="backup-now-btn" type="button">Back up now</button>' +
+          '<button class="btn btn-ghost" id="backup-refresh-btn" type="button">Refresh list</button>' +
+        '</div>' +
+        '<div id="backup-list"></div>' +
+        '<div class="danger-confirm" id="backup-restore-confirm" hidden></div>' +
       '</div>' +
       '<div class="card danger-zone"><h2>Danger zone</h2>' +
         '<p class="muted">Erases every bit of progress on this machine: XP, achievements, streaks, ' +
@@ -283,6 +296,16 @@ PGRE.views.library = (function () {
         r.onload = function () {
           try {
             PGRE.store.importJSON(String(r.result));
+            if (PGRE.store._persistFailed) {
+              PGRE.toast('Backup loaded into this tab, but saving still fails — it is not on disk yet.', 'error', true);
+              return;
+            }
+            var raw = null;
+            try { raw = localStorage.getItem(PGRE.store.KEY); } catch (eRead) { raw = null; }
+            if (!raw) {
+              PGRE.toast('Restore failed: saved progress could not be read back.', 'error');
+              return;
+            }
             PGRE.applyTheme(PGRE.store.state.settings.theme);
             PGRE.toast('Progress restored.', 'info');
             PGRE.route();
@@ -307,6 +330,10 @@ PGRE.views.library = (function () {
           PGRE.toast('No automatic backup found.');
         }
       });
+
+      if (PGRE.backup && typeof PGRE.backup.wireLibrary === 'function') {
+        PGRE.backup.wireLibrary(document.getElementById('disk-backup-card'));
+      }
 
       var rfBtn = document.getElementById('reset-formulas-btn');
       if (rfBtn) rfBtn.addEventListener('click', function () {
