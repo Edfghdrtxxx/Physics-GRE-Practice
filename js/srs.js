@@ -7,9 +7,7 @@
    - Formula cards: classic Anki SM-2 with Again/Hard/Good/Easy grades, an
      ease factor per card, and day-granularity due dates. An optional
      exam-date cap (settings.formulaExamCap, default on) squeezes long
-     intervals toward exam day without inverting grade order. In the last
-     seven days before the exam, passing grades are held to one day
-     (see finalPassActive). */
+     intervals toward exam day without inverting grade order. */
 window.PGRE = window.PGRE || {};
 
 PGRE.srs = {
@@ -21,13 +19,22 @@ PGRE.srs = {
       String(d.getDate()).padStart(2, '0');
   },
 
-  today: function () { return this.dayStr(new Date()); },
-
-  addDays: function (n) {
-    var d = new Date();
-    d.setDate(d.getDate() + n);
-    return this.dayStr(d);
+  /* The scheduling day starts at 03:00 local, like the study-time day
+     (study-time.js studyDayStart): a grade at 01:00 counts for the day
+     before, and a card due on a date is due from 03:00 that date. Stored
+     due dates stay plain calendar days. setHours, not a fixed 3 h offset,
+     so a DST change still lands on civil 03:00. */
+  DAY_START_HOUR: 3,
+  dayOf: function (d) {
+    var start = new Date(d.getTime());
+    start.setHours(this.DAY_START_HOUR, 0, 0, 0);
+    if (d.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
+    return this.dayStr(start);
   },
+
+  today: function () { return this.dayOf(new Date()); },
+
+  addDays: function (n) { return this.addDaysTo(this.today(), n); },
 
   /* Local-date arithmetic anchored on an arbitrary base 'YYYY-MM-DD' (addDays
      anchors on today). Same local-midday-free construction as store.dayBefore.
@@ -357,16 +364,6 @@ PGRE.srs = {
     if (isFinite(days) && days === 1) return 1;
     return 21;
   },
-  /* F3 — final pass: the last week before the exam. The resolved Today and
-     Formula Recall views call fillFormulaDayFinalPass(), which appends every
-     unsuspended learned card to the persisted batch. New cards remain manual.
-     Passing grades use a one-day interval while the final pass is active, so
-     retention checks repeat daily without growing beyond the exam horizon. */
-  finalPassActive: function () {
-    var days = this.daysUntil(PGRE.store.state.settings.examDate);
-    return isFinite(days) && days > 0 && days <= 7;
-  },
-
   /* Candidate next intervals (days) for each grade — used both to schedule
      and to preview on the grade buttons, so what you see is what you get.
      Classic Anki SM-2 (day granularity, no fuzz), matching Anki's
@@ -400,13 +397,6 @@ PGRE.srs = {
       if (easy < good + 1) easy = good + 1;
       out = { again: 0, hard: hard, good: good, easy: easy };
     }
-    // F3 final pass: passing grades are held to one day rather than allowed
-    // to grow through the normal SM-2 intervals. Applied here before the cap
-    // so a later post-cascade override can restore 1/1/1 if H>=3 would have
-    // differentiated Good down to 0.
-    if (this.finalPassActive()) {
-      out = { again: 0, hard: 1, good: 1, easy: 1 };
-    }
     // F3: clamp each non-Again interval to the exam cap so the grade-button
     // previews match what gradeCard schedules automatically (Again stays 0).
     // Backward cascade clamping preserves strict monotonicity (Hard < Good < Easy)
@@ -424,11 +414,6 @@ PGRE.srs = {
         out.easy = Math.min(out.easy, cap);
       }
     }
-    // The final-pass override is deliberately applied after horizon
-    // differentiation: a one-day pool must not be cascaded into Good=0.
-    if (this.finalPassActive()) {
-      out.hard = 1; out.good = 1; out.easy = 1;
-    }
     return out;
   },
 
@@ -443,7 +428,6 @@ PGRE.srs = {
      yields the stateless Easy floor and the plain 20-day value as before. */
   MASTERED_DAYS: 20,
   masteredInterval: function (st) {
-    if (st && this.finalPassActive()) return 1;
     var cap = this.examCap();
     var raw = Math.max(this.MASTERED_DAYS, this.nextIntervals(st).easy);
     return cap != null ? Math.min(raw, cap) : raw;
@@ -551,6 +535,19 @@ PGRE.srs = {
     this._recordPinFact(id, op, 'restored');
   },
 
+  /* May a grade or an undo write now? After a refused save, try one save
+     first: the refused press was taken back, so memory matches storage and
+     the retry stores nothing new. Without it grades stay refused until some
+     other save works (the study-time tracker saves at most every 30 s).
+     When the retry fails too, says the press was not recorded. */
+  _retrySave: function () {
+    if (typeof PGRE.store.canWrite !== 'function' || PGRE.store.canWrite()) return true;
+    if (PGRE.store.save()) return true;
+    if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
+    if (typeof PGRE.pressNotRecorded === 'function') PGRE.pressNotRecorded();
+    return false;
+  },
+
   /* Grade one formula card. Returns the updated card, or null when the
      write is refused. A null return leaves cards, cardReviews and softIds
      unchanged — callers must not advance a queue, counter or history.
@@ -558,10 +555,10 @@ PGRE.srs = {
      review, and that id is removed from formulaDay.softIds. scheme is
      'current' so the legacy easy10 migration will not stretch this card. */
   gradeCard: function (id, grade) {
-    if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
-      if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
-      return null;
-    }
+    if (!this._retrySave()) return null;
+    // Grade on top of a sibling tab's latest review of this card, or the
+    // merge keeps the sibling's record (more reviews) and drops this grade.
+    if (typeof PGRE.store.adoptDisk === 'function') PGRE.store.adoptDisk();
     var s = PGRE.store.state;
     // Review-log capture (bundle 2) — read BEFORE the default-object creation:
     // hadState (n) separates a real review from a card's first-ever grade;
@@ -611,7 +608,7 @@ PGRE.srs = {
                 m: prevIvl >= this.matureDays() ? 1 : 0, n: hadState ? 1 : 0, op: op, prev: prev };
     if (consumedSoft) row.soft = 1;
     log.push(row);
-    if (log.length > 8000) log.shift();
+    if (log.length > 8000) log.splice(0, log.length - 8000);
     return st;
   },
 
@@ -623,10 +620,9 @@ PGRE.srs = {
      card is the restored record, or null when the grade had created the card. */
   undoReview: function (opId) {
     if (!opId) return null;
-    if (!(typeof PGRE.store.canWrite === 'function' ? PGRE.store.canWrite() : true)) {
-      if (typeof PGRE.persistWarning === 'function') PGRE.persistWarning(true);
-      return null;
-    }
+    if (!this._retrySave()) return null;
+    // A sibling's newer review of this card supersedes the op (checked below).
+    if (typeof PGRE.store.adoptDisk === 'function') PGRE.store.adoptDisk();
     var s = PGRE.store.state;
     if (s.reviewUndos && Object.prototype.hasOwnProperty.call(s.reviewUndos, opId)) return null;
     var log = s.cardReviews || [];
@@ -677,7 +673,7 @@ PGRE.srs = {
     for (var id in cards) {
       var st = cards[id];
       // scheme 'current' is written by gradeCard. Those intervals already
-      // follow the 4-day / final-pass rules and must not be stretched to 10.
+      // follow the 4-day rule and must not be stretched to 10.
       if (!st || st.scheme === 'current' || st.lastGrade !== 'easy' || (st.interval || 0) >= 10) continue;
       // b7f1d7b (2026-09-07) is the current scheduler: new Easy is 4 days
       // and the review Easy floor is gone. A card reviewed on or after
@@ -771,15 +767,15 @@ PGRE.srs = {
     return moved;
   },
 
-  /* Was this card graded today (local date)? Prefer the local lastReviewedDay
-     stamp; fall back to a local re-derivation of the ISO lastReviewedAt for
+  /* Was this card graded today (scheduling day)? Prefer the lastReviewedDay
+     stamp; fall back to the scheduling day of the ISO lastReviewedAt for
      cards graded before the stamp existed. NEVER compares a UTC ISO prefix to a
      local date string (that off-by-a-day bug is exactly what this guards). */
   studiedToday: function (st) {
     if (!st) return false;
     if (st.lastReviewedDay) return st.lastReviewedDay === this.today();
     return !!(st.lastReviewedAt &&
-      this.dayStr(new Date(st.lastReviewedAt)) === this.today());
+      this.dayOf(new Date(st.lastReviewedAt)) === this.today());
   },
 
   /* New cards (never graded) count as due — they enter the daily queue. */
@@ -800,12 +796,10 @@ PGRE.srs = {
 
   /* ——— Daily formula batch ———
      formulaDay() itself is prune-only. The picker, browse/search Add, and the
-     explicit auto-pick (autoFillFormulaDay) grow the batch. In the last seven
-     days before the exam, fillFormulaDayFinalPass appends every unsuspended
-     learned card.
+     explicit auto-pick (autoFillFormulaDay) grow the batch.
      The batch PERSISTS across day rolls: un-studied picks carry over,
      completed ones are pruned by reconcile. The daily target (clampTarget)
-     is a soft suggestion — never a cap, and ignored by the final-pass allocator. */
+     is a soft suggestion — never a cap. */
 
   /* Integer clamp of the daily target to [1, 100]; 10 when it isn't a finite
      number. Every batch read routes the raw setting through here so a corrupt
@@ -902,10 +896,6 @@ PGRE.srs = {
       if (!inDeck(id)) return !partial;
       if (isSusp(id)) return true;
       var st = self.cardState(id);
-      // During final pass, future-due learned picks are intentionally eligible
-      // today; do not prune a deliberate pick before the allocator can merge in
-      // the rest of the learned pool.
-      if (self.finalPassActive() && st && !self.studiedToday(st)) return false;
       // A soft hold is the pin the shipped Undo snapshot still carries.
       return !!st && st.due > t && !softSet[id] && !held(id) && !self.studiedToday(st);
     }
@@ -939,8 +929,8 @@ PGRE.srs = {
     batch.newIds.forEach(putHoldBack);
 
     // A newer batch can drop an id without clearing the hold on this tab's
-    // card. The hold must not survive that, or final pass pins the card
-    // again after the week. Do not stamp the batch for this clear.
+    // card. The hold must not survive that, or it pins the card again when
+    // the card rejoins the list. Do not stamp the batch for this clear.
     var stillHeld = Object.create(null);
     batch.reviewIds.concat(batch.newIds, batch.softIds || []).forEach(function (id) {
       stillHeld[id] = 1;
@@ -1008,8 +998,8 @@ PGRE.srs = {
      picker's Fill button and the Today dashboard: due reviews first (most
      overdue, then most lapses, then lowest ease), then never-studied cards in
      book order (chapter, then deck order), up to the daily target. Skips
-     suspended cards, cards already chosen, and cards graded today. New cards
-     stay manual in the final-pass week. Adds nothing to the batch itself.
+     suspended cards, cards already chosen, and cards graded today. Adds
+     nothing to the batch itself.
      opts.have — { id: 1 } already chosen (default: the saved batch);
      opts.room — how many to return (default: target minus remaining picks);
      opts.fresh === false — due reviews only, no new cards.
@@ -1056,10 +1046,17 @@ PGRE.srs = {
     function ids(list) { return list.map(function (x) { return x.id; }); }
     out.reviewIds = ids(due.slice(0, room));
     room -= out.reviewIds.length;
-    if (room > 0 && opts.fresh !== false && !this.finalPassActive()) {
+    if (room > 0 && opts.fresh !== false) {
       out.newIds = ids(fresh.slice(0, room));
     }
     return out;
+  },
+
+  /* An edit of today's list is merged whole (the newest _opAt wins), so it
+     must start from a sibling tab's latest list, or it drops that tab's
+     Add or Remove. */
+  _adoptBeforeListEdit: function () {
+    if (typeof PGRE.store.adoptDisk === 'function') PGRE.store.adoptDisk();
   },
 
   /* Append the auto-pick to the saved batch and persist. Existing picks —
@@ -1069,37 +1066,13 @@ PGRE.srs = {
      suggestFormulaDay. The caller owns the Study transition. */
   autoFillFormulaDay: function (deck, opts) {
     deck = deck || [];
+    this._adoptBeforeListEdit();
     var batch = this.formulaDay(deck);
     if (!deck.length) return batch;
     var pick = this.suggestFormulaDay(deck, opts);
     if (!pick.reviewIds.length && !pick.newIds.length) return batch;
     batch.reviewIds = batch.reviewIds.concat(pick.reviewIds);
     batch.newIds = batch.newIds.concat(pick.newIds);
-    batch.date = this.today();
-    this._markFormulaDayMutation(batch, 'add');
-    PGRE.store.state.formulaDay = batch;
-    PGRE.store.save();
-    return batch;
-  },
-
-  /* Automatic final-pass inclusion. This runs only after a resolved deck is
-     available (Today or Formula Recall mount), never from formulaDay() itself.
-     Every unsuspended learned card is appended once, regardless of due date or
-     the advisory daily target. Existing deliberate IDs and their order remain
-     untouched; new/unlearned cards stay manual-only. */
-  fillFormulaDayFinalPass: function (deck) {
-    deck = deck || [];
-    if (!deck.length || !this.finalPassActive()) return this.formulaDay(deck);
-    var batch = this.formulaDay(deck), self = this, inBatch = Object.create(null);
-    batch.reviewIds.concat(batch.newIds).forEach(function (id) { inBatch[id] = 1; });
-    var ids = [];
-    deck.forEach(function (c) {
-      if (!c || !c.id || inBatch[c.id] || self.isSuspended(c.id) || !self.cardState(c.id)) return;
-      ids.push(c.id);
-      inBatch[c.id] = 1;
-    });
-    if (!ids.length) return batch;
-    batch.reviewIds = batch.reviewIds.concat(ids);
     batch.date = this.today();
     this._markFormulaDayMutation(batch, 'add');
     PGRE.store.state.formulaDay = batch;
@@ -1131,6 +1104,7 @@ PGRE.srs = {
       return { batch: { date: this.today(), reviewIds: [], newIds: [] },
         added: added, already: already, skipped: skipped };
     }
+    this._adoptBeforeListEdit();
     var batch = this.formulaDay(deck);
     var byId = Object.create(null);
     deck.forEach(function (c) {
@@ -1191,6 +1165,7 @@ PGRE.srs = {
     if (!deck.length || !ids.length) {
       return this.formulaDay(deck);
     }
+    this._adoptBeforeListEdit();
     var batch = this.formulaDay(deck);
     var drop = Object.create(null);
     var changed = false;
@@ -1216,14 +1191,14 @@ PGRE.srs = {
       return self.studiedToday(self.cardState(id));
     });
     changed = changed || batch.reviewIds.length !== beforeReview || batch.newIds.length !== beforeNew;
-    // A hold left on a removed card survives final pass and puts the card
-    // back after the week. Leave the hold when the id stays in the batch.
+    // A hold left on a removed card pins it again when it rejoins the list.
+    // Leave the hold when the id stays in the batch.
     ids.forEach(function (id) {
       if (!id || !drop[id]) return;
       if (batch.reviewIds.indexOf(id) !== -1 || batch.newIds.indexOf(id) !== -1) return;
       if (batch.softIds && batch.softIds.indexOf(id) !== -1) return;
-      // A restored fact would soft-pin this id again once final pass puts
-      // it back in the batch. Consume only when the id actually leaves.
+      // A restored fact would soft-pin this id again once it rejoins the
+      // batch. Consume only when the id actually leaves.
       self._noteLeftToday(id, !!wasIn[id]);
     });
     if (changed) self._markFormulaDayMutation(batch, 'remove');
@@ -1251,7 +1226,6 @@ PGRE.srs = {
       if (!c) return;
       var st = self.cardState(id);
       if (!st || st.due <= t ||
-          (self.finalPassActive() && !self.studiedToday(st)) ||
           ((softSet[id] || st.softHold) && !self.studiedToday(st))) out.push(c);
     });
     return out;
@@ -1289,6 +1263,7 @@ PGRE.srs = {
      @returns the updated batch */
   setFormulaDayPicks: function (deck, ids) {
     var self = this;
+    this._adoptBeforeListEdit();
     var batch = this.formulaDay(deck);
     var byId = Object.create(null);
     (deck || []).forEach(function (c) {

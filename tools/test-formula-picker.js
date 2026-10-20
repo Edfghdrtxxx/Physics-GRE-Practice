@@ -137,10 +137,13 @@ sug = srs.suggestFormulaDay(bookDeck, { have: { late: 1, 'cpgf-1.2': 1 }, room: 
 assert(ids(sug.reviewIds) + '|' + ids(sug.newIds) === 'lapsed,plain|cpgf-1.1',
   'have/room let the picker top up a draft (got ' + ids(sug.reviewIds) + '|' + ids(sug.newIds) + ')');
 
-var d = new Date(); d.setDate(d.getDate() + 5);
-storeState.settings.examDate = srs.dayStr(d);
+var noExam = srs.suggestFormulaDay(bookDeck, { have: {}, room: 10 });
+storeState.settings.examDate = srs.addDays(5);
 sug = srs.suggestFormulaDay(bookDeck, { have: {}, room: 10 });
-assert(!sug.newIds.length, 'final-pass week: new cards stay manual');
+assert(sug.newIds.length && ids(sug.newIds) === ids(noExam.newIds) &&
+  ids(sug.reviewIds) === ids(noExam.reviewIds),
+  'five days before the exam the auto-pick is the same as on any day (got ' +
+    ids(sug.reviewIds) + '|' + ids(sug.newIds) + ')');
 storeState.settings.examDate = '';
 
 console.log('\nautoFillFormulaDay — appends, never replaces');

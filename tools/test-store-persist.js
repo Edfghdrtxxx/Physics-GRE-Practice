@@ -417,6 +417,54 @@ assert(!(d.cardReviews || []).some(function (r) { return r && r.op === 'op-good'
   'the undone review row stays out of the merged log');
 deliverEvents = true;
 
+console.log('\nreview log: a merge keeps it at 8000 rows, newest days last');
+deliverEvents = false;
+var logRows = [];
+for (var lr = 0; lr < 8000; lr++) logRows.push({ d: '2026-09-01', id: 'log-' + lr, g: 'good', op: 'lop-' + lr });
+tab1.store.state.cardReviews = logRows.slice();
+tab1.store.save();
+var newRows = [];
+for (lr = 0; lr < 10; lr++) newRows.push({ d: '2026-09-02', id: 'new-' + lr, g: 'good', op: 'lnew-' + lr });
+tab2.store.state.cardReviews = logRows.slice(5).concat(newRows);
+tab2.store.save();
+d = diskState();
+assert(d.cardReviews.length === 8000, 'the merged log holds 8000 rows, got ' + d.cardReviews.length);
+assert(d.cardReviews.slice(-10).map(function (r) { return r.id; }).join() ===
+  newRows.map(function (r) { return r.id; }).join(), 'the newest day\'s rows are kept, last');
+deliverEvents = true;
+
+[false, true].forEach(function (events) {
+  console.log('\na save that fails to serialize leaves _rev alone (storage event ' +
+    (events ? 'delivered' : 'missed') + ')');
+  tab1.store.save();                     // both tabs in step with the disk
+  tab2.store.adoptDisk();
+  var revSynced = tab1.store.state._rev;
+  var diskBefore = disk[tab1.store.KEY];
+  var cardId = 'sib-only-' + (events ? 'event' : 'missed');
+  tab1.store.state.cycle = tab1.store.state;
+  var quiet = console.error;
+  console.error = function () {};
+  var wrote = tab1.store.save();
+  console.error = quiet;
+  delete tab1.store.state.cycle;
+  assert(wrote === false && !tab1.store.canWrite(), 'the save reports the failure');
+  assert(disk[tab1.store.KEY] === diskBefore, 'nothing was written');
+  assert(tab1.store.state._rev === revSynced, '_rev is not counted for the failed save, got ' +
+    tab1.store.state._rev + ', want ' + revSynced);
+  deliverEvents = events;
+  tab2.store.state.cards[cardId] = {
+    reviews: 1, due: '2026-10-21', lastReviewedAt: '2026-10-20T08:00:00Z',
+    interval: 1, ease: 2.5, lastGrade: 'good'
+  };
+  tab2.store.save();                     // the sibling writes at the revision tab1 skipped
+  tab1.store.save();                     // tab1 recovers
+  d = diskState();
+  assert(tab1.store.canWrite(), 'the next save works');
+  assert(!!d.cards[cardId] && d.cards[cardId].due === '2026-10-21',
+    'the sibling\'s card survives the recovering save');
+  deliverEvents = true;
+});
+
 console.log('\nsubscribeStateAdopted runs beside onStateAdopted');
 var hookN = 0, subN = 0;
 tab2.PGRE.onStateAdopted = function () { hookN++; };

@@ -627,8 +627,8 @@ PGRE.gamify = {
   },
 
   daysToExam: function () {
-    // same noon-anchored calendar-day math the formulas final-pass banner uses,
-    // so the two countdowns can never disagree (js/srs.js loads first)
+    // srs.daysUntil's noon-anchored day math, so this countdown never
+    // disagrees with the exam cap (js/srs.js loads first)
     var settings = PGRE.store && PGRE.store.state && PGRE.store.state.settings;
     var date = (settings && settings.examDate) || PGRE.EXAM_DATE;
     return Math.max(0, PGRE.srs.daysUntil(date));

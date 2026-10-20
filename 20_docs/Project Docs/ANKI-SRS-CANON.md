@@ -176,7 +176,7 @@ I_{\text{good}} &\ge I_{\text{hard}} + 1\text{ d} \\
 I_{\text{easy}} &\ge I_{\text{good}} + 1\text{ d}
 \end{aligned}$$
 
-Final Pass (§4.4) is the exception: while $0 < d \le 7$, passing grades share $I = 1\text{ d}$.
+The exam cap is the only exception: when $H < 3$ (§4.3, Horizon Capacity Constraint), passing grades can share an interval.
 
 ### 3.2 Cognitive Science and Pedagogical Basis
 1. **Exponential Retrieval Strength Scaling:**
@@ -217,16 +217,14 @@ I_{\text{hard}} &= \min\left(I_{\text{hard}}^{\text{raw}}, I_{\text{good}} - 1\r
 \end{aligned}$$
 
 #### Horizon Capacity Constraint:
-If $H < 3$, strict day-level differentiation ($I_{\text{hard}} \ge 1, I_{\text{good}} \ge 2, I_{\text{easy}} \ge 3$) is geometrically impossible within the remaining days. The Final Pass protocol (§4.4) activates on its own window ($0 < d \le 7$) and holds passing grades at one day, which also covers this $H < 3$ regime.
+If $H < 3$, strict day-level differentiation ($I_{\text{hard}} \ge 1, I_{\text{good}} \ge 2, I_{\text{easy}} \ge 3$) is geometrically impossible within the remaining days. In this regime `nextIntervals` clamps Hard, Good and Easy to $H$ independently, so they can share an interval. When $d \le 1$, `examCap()` returns `null` and passing grades keep their uncapped SM-2 intervals.
 
-### 4.4 Final Pass Protocol
-When the remaining time until the exam satisfies $0 < d \le 7\text{ d}$ (exam day itself is outside the window):
-1. Standard spaced-repetition growth is suspended. `nextIntervals` returns Hard $=$ Good $=$ Easy $= 1\text{ d}$ for every card while the window is active, including a stateless preview. Mastered is $1\text{ d}$ when a record exists. Among passing grades this is a deliberate exception to §3.1: the four-button UI remains, but the next calendar day is the only remaining horizon that does not grow past $T_{\text{exam}}$.
-2. The one-day override is applied after horizon cascade so $I_{\text{good}}$ is not differentiated down to $0$.
-3. Every unsuspended learned card (an active `state.cards` record) is eligible for the daily review pool, regardless of its ordinary due date and regardless of the advisory daily target. New/stateless cards stay out of automatic inclusion. Suspended cards stay out.
-4. Successful reviews confirm retention without scheduling beyond the exam horizon.
+### 4.4 Final Pass (removed)
+There is no final pass. The owner turned it off on 2026-10-20 ("No need of this, let the algorithm push the cards normally with its graded interval."; PR #113, commit `be51232`). In the last seven days before the exam:
+1. Passing grades keep their SM-2 intervals under the exam cap (§4.2, §4.3); they are not held to $1\text{ d}$.
+2. The daily list fills as on any other day: due reviews first, then new cards up to the daily target. A learned card that is not due is not added automatically.
 
-The product-side batch allocator, remaining-count eligibility, and reconcile exceptions are owned by `20_docs/Project Docs/DESIGN.md` §4b.
+The exam cap stays on by default; the owner can turn it off with the Recall Options toggle (`settings.formulaExamCap`). The product-side batch rules are owned by `20_docs/Project Docs/DESIGN.md` §4b.
 
 ---
 
@@ -372,5 +370,4 @@ assert(strictlyOrdered(capped), 'Strict ordering preserved under exam horizon');
 | Minimum Good Advance | $\delta_{\text{good}}$ | $I_{\text{hard}} + 1\text{ d}$ |
 | Minimum Easy Advance | $\delta_{\text{easy}}$ | $I_{\text{good}} + 1\text{ d}$ |
 | Exam Horizon Bound | $H$ | $\text{daysUntil}(T_{\text{exam}}) - 1\text{ d}$ |
-| Final Pass window | $d_{\text{fp}}$ | $0 < \text{daysUntil}(T_{\text{exam}}) \le 7\text{ d}$ |
-| Final Pass passing interval | $I_{\text{fp}}$ | $1\text{ d}$ (`nextIntervals`; Mastered when a record exists) |
+| Final Pass | — | removed 2026-10-20 (§4.4) |

@@ -117,7 +117,7 @@ window.PGRE = window.PGRE || {};
 
   /* Mistake book: open (not archived) and due counts, plus every entry whose
      record changed today (missed, solved, flagged, or rescheduled). */
-  function mistakeBookSummary(state, date) {
+  function mistakeBookSummary(state, date, dueDay) {
     var mistakes = state.mistakes || {};
     var out = { active: 0, due: 0, today: [] };
     Object.keys(mistakes).forEach(function (qid) {
@@ -126,7 +126,7 @@ window.PGRE = window.PGRE || {};
       var due = (mk.srs && mk.srs.due) || null;
       if (!mk.archivedAt) {
         out.active++;
-        if (due && due <= date) out.due++;
+        if (due && due <= dueDay) out.due++;
       }
       var touched = ['firstMissedAt', 'lastMissedAt', 'lastSolvedAt', 'lastLuckyAt',
         'lastStuckAt', 'lastTouchedAt'].some(function (field) {
@@ -200,8 +200,11 @@ window.PGRE = window.PGRE || {};
         return row;
       });
 
+    // Due dates and review rows follow the Recall scheduling day, which starts
+    // at 03:00 (PGRE.srs.today); everything else here is the calendar day.
+    var dueDay = (PGRE.srs && typeof PGRE.srs.today === 'function') ? PGRE.srs.today() : date;
     var reviewed = (Array.isArray(state.cardReviews) ? state.cardReviews : [])
-      .filter(function (review) { return review && review.d === date; }).length;
+      .filter(function (review) { return review && review.d === dueDay; }).length;
 
     var mistakesAdded = 0;
     var mistakes = state.mistakes || {};
@@ -232,7 +235,7 @@ window.PGRE = window.PGRE || {};
       sessions: sessions,
       exams: exams,
       formulaCards: (function () {
-        var counts = formulaCardCounts(state, date);
+        var counts = formulaCardCounts(state, dueDay);
         counts.reviewed = reviewed;
         return counts;
       })(),
@@ -240,7 +243,7 @@ window.PGRE = window.PGRE || {};
       recentLog: recentLog,
       attempts: attempts,
       questions: questionTexts,
-      mistakeBook: mistakeBookSummary(state, date),
+      mistakeBook: mistakeBookSummary(state, date, dueDay),
       // Banded study-intensity readout (js/intensity.js) — the same numbers
       // the dashboard Intensity card and the practice summary show.
       intensity: (PGRE.intensity && typeof PGRE.intensity.compute === 'function')

@@ -232,6 +232,20 @@ assert(book.today[0].added === true && book.today[0].keepFailing === true &&
   'a new miss reports its counts, picks, due date, and keep-failing flag');
 assert(book.today[1].added === false && book.today[1].luckyGuess === true,
   'a lucky-guess filing on an older entry is an update, not an addition');
+console.log('\nRecall scheduling day');
+// Before 03:00 PGRE.srs.today() is still the day before: cards and mistakes
+// due on the calendar date are not due yet, and the review rows counted are
+// the ones stamped with that scheduling day.
+sandbox.PGRE.srs = { today: function () { return yesterday; } };
+var early = sandbox.PGRE.buildStatusSummary();
+delete sandbox.PGRE.srs;
+assert(early.date === today, 'the summary date stays the calendar day');
+assert(early.formulaCards.due === 0 && early.formulaCards.scheduled === 3,
+  'formula due counts follow PGRE.srs.today()');
+assert(early.formulaCards.reviewed === 1,
+  'reviewed counts review rows stamped with the scheduling day');
+assert(early.mistakeBook.due === 0 && early.mistakeBook.active === 3,
+  'mistake due counts follow PGRE.srs.today()');
 console.log('\nintensity');
 var it = summary.intensity;
 var lastTarget = localDay(10);

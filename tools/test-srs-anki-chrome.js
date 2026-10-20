@@ -213,19 +213,18 @@ async function main() {
     throw new Error('real formula deck did not render in Formula Recall: ' + JSON.stringify(realUi));
   }
 
-  /* Real-deck pickup: run the final-pass allocator against actual cpgf-* cards
-     and traverse the user path Dashboard → Today → Formula Recall → Study. */
+  /* Real-deck pickup: three due cpgf-* cards a week before the exam go
+     through the user path Dashboard → Today → Formula Recall → Study. */
   var realIds = realDeck.slice(0, 3).map(function (c) { return c.id; });
   var realPickup = await evaluate(`(function () {
-    var s = PGRE.store.state, today = PGRE.srs.today(), d = new Date();
-    d.setDate(d.getDate() + 7);
-    s.settings.examDate = PGRE.srs.dayStr(d);
-    s.settings.formulaDailyTarget = 1;
+    var s = PGRE.store.state, today = PGRE.srs.today();
+    s.settings.examDate = PGRE.srs.addDays(7);
+    s.settings.formulaDailyTarget = 3;
     s.cards = {};
     ${JSON.stringify(realIds)}.forEach(function (id, i) {
       s.cards[id] = { reps: 2, lapses: 0, interval: 10 + i, ease: 2.5,
-        due: PGRE.srs.addDaysTo(today, 2 + i), reviews: 2,
-        lastReviewedDay: PGRE.srs.addDaysTo(today, -1) };
+        due: today, reviews: 2,
+        lastReviewedDay: PGRE.srs.addDaysTo(today, -10 - i) };
     });
     s.formulaSuspended = {};
     s.formulaDay = { date: today, reviewIds: [], newIds: [] };
@@ -243,17 +242,18 @@ async function main() {
     text: (document.getElementById('today-formulas') || {}).textContent || '',
     batch: PGRE.store.state.formulaDay
   })`);
-  if (realPickupUi.text !== '3 left today' ||
-      realPickupUi.batch.reviewIds.join(',') !== realIds.join(',')) {
-    throw new Error('real formula pickup did not allocate the real cards: ' + JSON.stringify(realPickupUi));
+  if (realPickupUi.text !== '3 due now') {
+    throw new Error('real formula pickup did not offer the real cards: ' + JSON.stringify(realPickupUi));
   }
   await evaluate("document.getElementById('today-formulas-btn').click()");
   await sleep(500);
   var realStudy = await evaluate(`({
     hash: location.hash,
+    batch: PGRE.store.state.formulaDay,
     queue: (PGRE.store.state.formulaStudy || {}).queueIds || []
   })`);
-  if (realStudy.hash !== '#/formulas' || realStudy.queue.slice().sort().join(',') !== realIds.slice().sort().join(',')) {
+  if (realStudy.hash !== '#/formulas' || realStudy.batch.reviewIds.join(',') !== realIds.join(',') ||
+      realStudy.queue.slice().sort().join(',') !== realIds.slice().sort().join(',')) {
     throw new Error('real formula cards did not reach Study: ' + JSON.stringify(realStudy));
   }
   await evaluate("PGRE.store.state.cards = {}; PGRE.store.state.formulaDay = null; PGRE.store.state.formulaStudy = null; PGRE.store.save(); location.hash = '#/'; PGRE.route();");
@@ -325,7 +325,7 @@ async function main() {
     capOn: PGRE.store.state.settings.formulaExamCap
   })`);
   if (toggled.capOn !== false) throw new Error('toggle did not turn cap off');
-  if (toggled.toggle !== 'Uncapped outside final pass') {
+  if (toggled.toggle !== 'Uncapped') {
     throw new Error('toggle off text: ' + JSON.stringify(toggled.toggle));
   }
   await evaluate("document.getElementById('exam-cap-toggle').click()");
@@ -432,8 +432,8 @@ async function main() {
   })()`);
   var fby = {};
   fresh.forEach(function (g) { fby[g.grade] = g.ivl; });
-  if (fby.hard !== 'soon' || fby.good !== 'soon') {
-    throw new Error('new-card Hard/Good should be soon, got ' + JSON.stringify(fby));
+  if (fby.hard !== 'returns this session' || fby.good !== 'returns this session') {
+    throw new Error('new-card Hard/Good should say returns this session, got ' + JSON.stringify(fby));
   }
   if (fby.easy !== '4 d') {
     throw new Error('new-card Easy should be 4 d, got ' + JSON.stringify(fby));
@@ -781,14 +781,13 @@ async function main() {
   await send('Target.closeTarget', { targetId: secondTargetId });
   secondTargetId = null;
 
-  /* Final-pass policy: once the exam is within seven days, a resolved deck
-     automatically persists every unsuspended learned card, including cards
-     whose ordinary due date is still in the future. The daily target is only
-     advisory; new and suspended cards stay out, deliberate IDs/order survive,
-     repeat mounts are idempotent, and passing grades are held to one day. */
-  var finalPass = await evaluate(`(async function () {
+  /* Exam week, no final pass: seven days before the exam today's list fills
+     the usual way, due cards first and then new cards up to the daily
+     target, and learned cards that are not due stay off it. Passing grades
+     keep their SM-2 intervals under the exam cap, and the day before the
+     exam (no cap then) they are not held to one day either. */
+  await evaluate(`(async function () {
     var today = PGRE.srs.today();
-    var tomorrow = PGRE.srs.addDaysTo(today, 1);
     await PGRE.contentDB.put({
       id: 'formula-deck', kind: 'formula-deck',
       cards: [
@@ -803,120 +802,59 @@ async function main() {
         { id: 'fp-new-c', topic: 'cm', name: 'FP new C', front: 'nc', back: '$nc$', note: '' }
       ]
     });
-    var s = PGRE.store.state, d = new Date(); d.setDate(d.getDate() + 7);
-    s.settings.formulaDailyTarget = 2;
+    var s = PGRE.store.state;
+    s.settings.formulaDailyTarget = 3;
     s.settings.formulaExamCap = true;
-    s.settings.examDate = PGRE.srs.dayStr(d);
+    s.settings.examDate = PGRE.srs.addDays(7);
     s.cards = {};
+    // fp-a is a day overdue, fp-b is due today, fp-c..fp-e and fp-s later.
     ['fp-a', 'fp-b', 'fp-c', 'fp-d', 'fp-e', 'fp-s'].forEach(function (id, i) {
       s.cards[id] = { reps: 3, lapses: 0, interval: 20 + i,
-        ease: 2.5, due: PGRE.srs.addDaysTo(today, 3 + i), reviews: 3,
-        lastReviewedDay: PGRE.srs.addDaysTo(today, -1) };
+        ease: 2.5, due: PGRE.srs.addDaysTo(today, i - 1), reviews: 3,
+        lastReviewedDay: PGRE.srs.addDaysTo(today, -21 - i) };
     });
     s.formulaSuspended = { 'fp-s': today };
     s.formulaDay = { date: today, reviewIds: [], newIds: [] };
     s.formulaStudy = null;
     PGRE.store.save();
     location.hash = '#/'; PGRE.route();
-    return { today: today, exam: s.settings.examDate };
-  })()`);
-  await sleep(500);
-  for (var fpWait = 0; fpWait < 30; fpWait++) {
-    if (await evaluate(TODAY_FORMULAS_READY)) break;
-    await sleep(150);
-  }
-  var fpUi = await evaluate(`({
-    text: (document.getElementById('today-formulas') || {}).textContent || '',
-    batch: PGRE.store.state.formulaDay,
-    due: PGRE.srs.nextIntervals(PGRE.store.state.cards['fp-a'])
-  })`);
-  if (fpUi.batch.reviewIds.join(',') !== 'fp-a,fp-b,fp-c,fp-d,fp-e' || fpUi.batch.newIds.length ||
-      fpUi.batch.reviewIds.indexOf('fp-s') !== -1 || fpUi.batch.reviewIds.indexOf('fp-new-a') !== -1) {
-    throw new Error('final-pass allocator mismatch: ' + JSON.stringify(fpUi));
-  }
-  if (fpUi.text !== '5 left today') throw new Error('final-pass dashboard count mismatch: ' + fpUi.text);
-  if (fpUi.due.hard !== 1 || fpUi.due.good !== 1 || fpUi.due.easy !== 1) {
-    throw new Error('final-pass intervals did not suspend growth: ' + JSON.stringify(fpUi.due));
-  }
-  await evaluate("document.getElementById('today-formulas-btn').click()");
-  await sleep(500);
-  var fpStudy = await evaluate(`(async function () { return {
-    hash: location.hash,
-    picker: document.querySelectorAll('.picker-row').length,
-    queue: (PGRE.store.state.formulaStudy || {}).queueIds || [],
-    remaining: PGRE.srs.formulaDayRemaining((await PGRE.formulaDeck())).map(function (c) { return c.id; })
-  }; })()`);
-  var fpQueue = fpStudy.queue.slice().sort().join(',');
-  if (fpStudy.hash !== '#/formulas' || fpStudy.picker !== 0 || fpQueue !== 'fp-a,fp-b,fp-c,fp-d,fp-e' ||
-      fpStudy.remaining.join(',') !== 'fp-a,fp-b,fp-c,fp-d,fp-e') {
-    throw new Error('final-pass Study pool mismatch: ' + JSON.stringify(fpStudy));
-  }
-  var fpRepeat = await evaluate(`(async function () {
-    var d = await PGRE.formulaDeck();
-    PGRE.srs.fillFormulaDayFinalPass(d);
-    PGRE.srs.fillFormulaDayFinalPass(d);
-    return PGRE.store.state.formulaDay;
-  })()`);
-  if (fpRepeat.reviewIds.join(',') !== 'fp-a,fp-b,fp-c,fp-d,fp-e') {
-    throw new Error('final-pass repeat was not idempotent: ' + JSON.stringify(fpRepeat));
-  }
-  var fpDeliberate = await evaluate(`(async function () {
-    var s = PGRE.store.state, d = await PGRE.formulaDeck();
-    s.formulaStudy = null;
-    s.formulaDay = { date: PGRE.srs.today(), reviewIds: ['fp-a'], newIds: ['fp-new-a'] };
-    PGRE.store.save();
-    PGRE.srs.fillFormulaDayFinalPass(d);
-    return s.formulaDay;
-  })()`);
-  if (fpDeliberate.reviewIds.join(',') !== 'fp-a,fp-b,fp-c,fp-d,fp-e' ||
-      fpDeliberate.newIds.join(',') !== 'fp-new-a') {
-    throw new Error('final-pass did not preserve deliberate picks: ' + JSON.stringify(fpDeliberate));
-  }
-  var fpBoundaries = await evaluate(`(async function () {
-    var s = PGRE.store.state, today = PGRE.srs.today(), d = new Date();
-    d.setDate(d.getDate() + 8); s.settings.examDate = PGRE.srs.dayStr(d);
-    s.formulaDay = { date: today, reviewIds: [], newIds: [] }; PGRE.store.save();
-    var deck = await PGRE.formulaDeck();
-    var filled = PGRE.srs.fillFormulaDayFinalPass(deck);
-    return { off: PGRE.srs.finalPassActive(), empty: !filled.reviewIds.length };
-  })()`);
-  if (fpBoundaries.off !== false || !fpBoundaries.empty) {
-    throw new Error('final-pass day-8 boundary mismatch: ' + JSON.stringify(fpBoundaries));
-  }
-  var fpNewOnly = await evaluate(`(function () {
-    var s = PGRE.store.state, keep = s.cards, d = new Date(); d.setDate(d.getDate() + 7);
-    s.cards = {}; s.settings.examDate = PGRE.srs.dayStr(d);
-    s.formulaDay = { date: PGRE.srs.today(), reviewIds: [], newIds: [] };
-    PGRE.store.save(); location.hash = '#/'; PGRE.route();
-    s.__finalPassCards = keep;
     return true;
   })()`);
   await sleep(500);
-  for (var fpNewWait = 0; fpNewWait < 30; fpNewWait++) {
+  for (var weekWait = 0; weekWait < 30; weekWait++) {
     if (await evaluate(TODAY_FORMULAS_READY)) break;
     await sleep(150);
   }
-  var fpNewOnlyUi = await evaluate(`({
+  var weekUi = await evaluate(`({
     text: (document.getElementById('today-formulas') || {}).textContent || '',
-    button: (document.getElementById('today-formulas-btn') || {}).textContent || ''
+    next: PGRE.srs.nextIntervals(PGRE.store.state.cards['fp-a']),
+    mastered: PGRE.srs.masteredInterval(PGRE.store.state.cards['fp-a'])
   })`);
-  if (fpNewOnlyUi.text !== '9 not yet introduced' || fpNewOnlyUi.button !== 'Open →') {
-    throw new Error('final-pass new-only UI mismatch: ' + JSON.stringify(fpNewOnlyUi));
+  if (weekUi.text !== '2 due now · +1 new') throw new Error('exam-week dashboard offer mismatch: ' + weekUi.text);
+  if (weekUi.next.hard !== 4 || weekUi.next.good !== 5 || weekUi.next.easy !== 6 || weekUi.mastered !== 6) {
+    throw new Error('exam-week intervals are not the exam-capped 4/5/6 (mastered 6): ' + JSON.stringify(weekUi));
   }
-  await evaluate(`(function () {
+  await evaluate("document.getElementById('today-formulas-btn').click()");
+  await sleep(500);
+  var weekStudy = await evaluate(`({
+    hash: location.hash,
+    batch: PGRE.store.state.formulaDay,
+    queue: (PGRE.store.state.formulaStudy || {}).queueIds || []
+  })`);
+  if (weekStudy.hash !== '#/formulas' || weekStudy.batch.reviewIds.join(',') !== 'fp-a,fp-b' ||
+      weekStudy.batch.newIds.length !== 1 || !/^fp-new-/.test(weekStudy.batch.newIds[0]) ||
+      weekStudy.queue.slice().sort().join(',') !== ['fp-a', 'fp-b', weekStudy.batch.newIds[0]].sort().join(',')) {
+    throw new Error('exam-week list is not due cards plus the new-card fill: ' + JSON.stringify(weekStudy));
+  }
+  var weekEve = await evaluate(`(function () {
     var s = PGRE.store.state;
-    s.cards = s.__finalPassCards; delete s.__finalPassCards;
-    PGRE.store.save();
-  })()`);
-  var fpDayOne = await evaluate(`(function () {
-    var s = PGRE.store.state, d = new Date(); d.setDate(d.getDate() + 1);
-    s.settings.examDate = PGRE.srs.dayStr(d);
+    s.settings.examDate = PGRE.srs.addDays(1);
     var st = s.cards['fp-a'];
-    return { active: PGRE.srs.finalPassActive(), next: PGRE.srs.nextIntervals(st), mastered: PGRE.srs.masteredInterval(st) };
+    return { cap: PGRE.srs.examCap(), next: PGRE.srs.nextIntervals(st), mastered: PGRE.srs.masteredInterval(st) };
   })()`);
-  if (!fpDayOne.active || fpDayOne.next.hard !== 1 || fpDayOne.next.good !== 1 ||
-      fpDayOne.next.easy !== 1 || fpDayOne.mastered !== 1) {
-    throw new Error('final-pass day-one boundary mismatch: ' + JSON.stringify(fpDayOne));
+  if (weekEve.cap !== null || weekEve.next.hard !== 24 || weekEve.next.good !== 51 ||
+      weekEve.next.easy !== 68 || weekEve.mastered !== 68) {
+    throw new Error('the day before the exam, intervals are not the plain SM-2 24/51/68: ' + JSON.stringify(weekEve));
   }
 
   if (bridge.answered !== 0) {
@@ -926,7 +864,7 @@ async function main() {
     ' request(s) blocked, ' + bridge.answered + ' answered)');
 
   await evaluate("PGRE.contentDB.del('formula-deck')");
-  console.log('PASS — Anki grades + end-to-end Today due pickup, backlog cap, mixed due+new auto-pick, repeat-click safety, persistence, deliberate-batch preservation, rollover, date stamping, overflow copy, cross-tab conflict safety, and automatic final-pass inclusion');
+  console.log('PASS — Anki grades + end-to-end Today due pickup, backlog cap, mixed due+new auto-pick, repeat-click safety, persistence, deliberate-batch preservation, rollover, date stamping, overflow copy, cross-tab conflict safety, and an ordinary exam week');
   console.log('  review (cap 13):', by);
   console.log('  young review (uncapped):', youngBtns);
   console.log('  new card:', fby);

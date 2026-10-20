@@ -79,7 +79,7 @@ PGRE.store = {
       // user preferences; theme is applied at boot (PGRE.setTheme persists it)
       settings: { theme: 'light', paceTrainer: true, paceTargetSec: 103,
                   keyboard: true, qotdTopicRotate: true, formulaDailyTarget: 10,
-                  // exam date (F3) — drives the interval cap + final pass; literal
+                  // exam date (F3) — drives the interval cap; literal
                   // mirrors PGRE.EXAM_DATE (js/data-topics.js)
                   examDate: '2026-11-01',
                   // F3 — when true (default), nextIntervals clamps Hard/Good/Easy
@@ -206,7 +206,19 @@ PGRE.store = {
     if (Array.isArray(disk.sessions)) st.sessions = unionArr(st.sessions || [], disk.sessions, function (s) { return s.id || J(s); });
     if (Array.isArray(disk.exams)) st.exams = unionArr(st.exams || [], disk.exams, function (e) { return e.id || J(e); });
     if (Array.isArray(disk.focusSessions)) st.focusSessions = unionArr(st.focusSessions || [], disk.focusSessions, function (s) { return s.startedAt + '|' + s.endedAt; }, 300);
-    if (Array.isArray(disk.cardReviews)) st.cardReviews = unionArr(st.cardReviews || [], disk.cardReviews, J);
+    if (Array.isArray(disk.cardReviews)) {
+      st.cardReviews = unionArr(st.cardReviews || [], disk.cardReviews, J);
+      // The same 8000-row cap srs.gradeCard keeps. The union puts the
+      // sibling's rows after this tab's, so order by day (stable) before
+      // keeping the newest.
+      if (st.cardReviews.length > 8000) {
+        st.cardReviews.sort(function (a, b) {
+          var da = (a && a.d) || '', db = (b && b.d) || '';
+          return da < db ? -1 : (da > db ? 1 : 0);
+        });
+        st.cardReviews = st.cardReviews.slice(st.cardReviews.length - 8000);
+      }
+    }
     if (Array.isArray(disk.daysActive)) st.daysActive = unionArr(st.daysActive || [], disk.daysActive, function (d) { return d; }).sort();
     if (Array.isArray(disk.contentMeta)) st.contentMeta = unionArr(st.contentMeta || [], disk.contentMeta, function (m) { return m.id || J(m); });
     // activity log is newest-first; union then re-sort by ts desc, cap 60
@@ -671,7 +683,9 @@ PGRE.store = {
       if (!Array.isArray(st.formulaQuarantine)) st.formulaQuarantine = [];
       st.formulaQuarantine.push({ id: id, reason: reason, at: new Date().toISOString() });
     }
-    var today = this.today();
+    // Recall's scheduling day (03:00 start) when srs is loaded.
+    var srsDay = PGRE.srs && typeof PGRE.srs.dayOf === 'function';
+    var today = srsDay ? PGRE.srs.today() : this.today();
     for (var id in st.cards) {
       if (!Object.prototype.hasOwnProperty.call(st.cards, id)) continue;
       var rec = st.cards[id];
@@ -691,7 +705,7 @@ PGRE.store = {
         day = rec.lastReviewedDay;
       } else if (typeof rec.lastReviewedAt === 'string' && PGRE.srs && typeof PGRE.srs.dayStr === 'function') {
         var parsed = new Date(rec.lastReviewedAt);
-        if (!isNaN(parsed.getTime())) day = PGRE.srs.dayStr(parsed);
+        if (!isNaN(parsed.getTime())) day = srsDay ? PGRE.srs.dayOf(parsed) : PGRE.srs.dayStr(parsed);
       }
       var ivl = Number(rec.interval);
       if (day && isFinite(ivl) && PGRE.srs && typeof PGRE.srs.addDaysTo === 'function') {
@@ -808,6 +822,19 @@ PGRE.store = {
     });
   },
 
+  /* Absorb a sibling tab's newer write now, before building a change on the
+     live heap (a grade, an undo, an edit of today's list). save() adopts
+     too, but only after the change is made, and the merge then keeps
+     whichever whole record looks newer: a grade or a list edit built on a
+     stale heap can replace the sibling's. The storage event that normally
+     adopts first can arrive late or not at all. */
+  adoptDisk: function () {
+    var raw = null;
+    try { raw = localStorage.getItem(this.KEY); } catch (e) { return; }
+    if (!raw) return;
+    try { this._adopt(JSON.parse(raw)); } catch (err) { /* disk unreadable: save() reports it */ }
+  },
+
   load: function () {
     this._bindAdoptHook();
     var raw = null;
@@ -905,6 +932,7 @@ PGRE.store = {
     if (st.settings.examDate === '2026-10-28') st.settings.examDate = '2026-11-01';
   },
 
+  /* Returns true when the state reached localStorage. */
   save: function () {
     try {
       // Absorb a sibling tab's newer write before overwriting: without this
@@ -915,12 +943,14 @@ PGRE.store = {
         try { disk = JSON.parse(raw); } catch (e) { disk = null; }
         this._adopt(disk);
       }
-      // _rev counts successful writes only: roll it back if setItem throws so
-      // a recovering tab still sees a sibling's newer disk _rev and merges it.
+      // _rev counts successful writes only: roll it back if serializing or
+      // setItem throws so a recovering tab still sees a sibling's newer disk
+      // _rev and merges it.
       var nextRev = (this.state._rev || 0) + 1;
       this.state._rev = nextRev;
-      var blob = JSON.stringify(this.state);
+      var blob;
       try {
+        blob = JSON.stringify(this.state);
         localStorage.setItem(this.KEY, blob);
       } catch (we) {
         this.state._rev = nextRev - 1;
@@ -935,13 +965,37 @@ PGRE.store = {
         this._persistFailed = false;
         if (PGRE.persistWarning) PGRE.persistWarning(false);
       }
+      return true;
     } catch (e) {
       console.error('Could not persist state', e);
       if (!this._persistFailed) {
         this._persistFailed = true;
         if (PGRE.persistWarning) PGRE.persistWarning(true);
       }
+      return false;
     }
+  },
+
+  /* The live state as text, taken just before a durable change (a grade,
+     an undo) so that a save that fails can put it back with rollback(). */
+  checkpoint: function () {
+    try { return JSON.stringify(this.state); } catch (e) { return null; }
+  },
+
+  /* Put the live state back to a checkpoint after the save of a durable
+     change failed: the stored blob never got the change, and memory must
+     not keep it either, or the screen moves on and a reload takes it back.
+     Restores in place, so code holding store.state keeps the same object.
+     Returns true when the state was restored. */
+  rollback: function (blob) {
+    if (!blob || !this.state) return false;
+    var prev;
+    try { prev = JSON.parse(blob); } catch (e) { return false; }
+    if (!prev || typeof prev !== 'object' || Array.isArray(prev)) return false;
+    var st = this.state, k;
+    for (k in st) if (Object.prototype.hasOwnProperty.call(st, k)) delete st[k];
+    for (k in prev) if (Object.prototype.hasOwnProperty.call(prev, k)) st[k] = prev[k];
+    return true;
   },
 
   /* Highest epoch seen anywhere (live heap + disk). Deliberate wipes must beat

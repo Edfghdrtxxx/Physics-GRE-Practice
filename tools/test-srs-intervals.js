@@ -79,10 +79,9 @@ function resetStore(opts) {
   storeState.cardReviews = [];
 }
 
+// The scheduling day (it starts at 03:00), as srs.daysUntil counts it.
 function daysFromNow(n) {
-  var d = new Date();
-  d.setDate(d.getDate() + n);
-  return srs.dayStr(d);
+  return srs.addDays(n);
 }
 
 console.log('new cards');
@@ -211,7 +210,7 @@ function expectMature(daysOut, want, msg) {
 }
 expectMature(19, 18, '19 days left → min(21, examCap 18) = 18');
 expectMature(8, 7, '8 days left → min(21, examCap 7) = 7');
-expectMature(7, 6, '7 days left (final-pass start) → min(21, examCap 6) = 6');
+expectMature(7, 6, '7 days left → min(21, examCap 6) = 6');
 expectMature(2, 1, '2 days left → examCap 1, threshold 1');
 expectMature(1, 1, 'exam eve (days=1, examCap null) → 1');
 resetStore({ examDate: daysFromNow(0) });
@@ -237,7 +236,7 @@ storeState.cards.wk = { reps: 2, lapses: 0, interval: 1, ease: 2.5,
 srs.gradeCard('wk', 'good');
 assert(srs.matureDays() === 1 &&
   storeState.cardReviews[storeState.cardReviews.length - 1].m === 1,
-  'final week with cap 1: interval 1 stores m=1');
+  'exam in 2 days, cap 1: interval 1 stores m=1');
 
 resetStore({ examDate: daysFromNow(19) });
 storeState.cards.hi = { reps: 4, lapses: 0, interval: 18, ease: 2.5,
@@ -256,13 +255,16 @@ resetStore({ examDate: daysFromNow(3) }); // cap = 2
 var cap2 = srs.nextIntervals({ reps: 2, interval: 5, ease: 2.5 });
 assert(cap2.hard <= 2 && cap2.good <= 2 && cap2.easy <= 2, 'cap 2 clamps all to at most 2');
 
-resetStore({ examDate: daysFromNow(8) }); // cap = 7, outside the ≤7-day final pass
+resetStore({ examDate: daysFromNow(8) }); // cap = 7
 var cap3 = srs.nextIntervals({ reps: 2, interval: 5, ease: 2.5 });
 assert(cap3.easy === 7 && cap3.good === 6 && cap3.hard === 5, 'cap 7 cascades to easy=7, good=6, hard=5');
 
-resetStore({ examDate: daysFromNow(4) }); // cap = 3, also inside final pass
+resetStore({ examDate: daysFromNow(4) }); // cap = 3
 var cap3b = srs.nextIntervals({ reps: 2, interval: 5, ease: 2.5 });
-assert(cap3b.easy === 1 && cap3b.good === 1 && cap3b.hard === 1, 'final pass holds all grades at 1 day');
+assert(cap3b.easy === 3 && cap3b.good === 2 && cap3b.hard === 1,
+  'cap 3 cascades to easy=3, good=2, hard=1, not one day for every grade');
+assert(srs.masteredInterval({ reps: 2, interval: 5, ease: 2.5 }) === 3,
+  'cap 3: Mastered is the cap, not one day');
 
 console.log('\nstore.resetFormulaCards');
 resetStore();
@@ -340,12 +342,23 @@ var beforeCard = JSON.stringify(store.state.cards['toy-a']);
 var beforeLog = store.state.cardReviews.length;
 var beforeSoft = store.state.formulaDay.softIds.slice();
 store._persistFailed = true;
+// Storage still full: the retry save fails too, so the grade is refused.
+var realSetItem = localStorage.setItem, realError = console.error;
+localStorage.setItem = function () { var e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; };
+console.error = function () {};
 var refused = srs.gradeCard('toy-a', 'good');
+localStorage.setItem = realSetItem;
+console.error = realError;
 assert(refused === null, 'refused gradeCard returns null');
 assert(JSON.stringify(store.state.cards['toy-a']) === beforeCard, 'refused grade leaves the card unchanged');
 assert(store.state.cardReviews.length === beforeLog, 'refused grade appends no review row');
 assert(JSON.stringify(store.state.formulaDay.softIds) === JSON.stringify(beforeSoft),
   'refused grade leaves softIds unchanged');
+assert(store._persistFailed === true, 'the failed retry keeps writes refused');
+// Storage works again: the next grade retries the save first and goes through.
+var retried = srs.gradeCard('toy-a', 'good');
+assert(retried && retried.reviews === 6 && store._persistFailed === false,
+  'after a refused save, the next grade retries the save and is accepted when storage works');
 store._persistFailed = false;
 
 console.log('\nS11 a committed grade consumes the soft pin');
@@ -406,7 +419,7 @@ store.resetFormulaCards();
 assert(store.state.migrations.easy10 === '2026-09-01T00:00:00.000Z',
   'resetFormulaCards keeps an existing easy10 stamp');
 var easy = srs.gradeCard('fresh', 'easy');
-assert(easy.interval === 4, 'a new Easy outside final pass is 4 days');
+assert(easy.interval === 4, 'a new Easy is 4 days');
 assert(easy.scheme === 'current', 'gradeCard marks the card as the current scheme');
 var due4 = easy.due;
 store.state.migrations.ankiReset2026 = 'x';
@@ -443,16 +456,16 @@ assert(store.state.cards.currentNoScheme.interval === 4 &&
   'an Easy reviewed on 2026-10-01 is not stretched when scheme is missing');
 assert(store.state.cards.finalNoScheme.interval === 1 &&
   store.state.cards.finalNoScheme.due === '2026-09-08',
-  'a final-pass Easy reviewed on 2026-09-07 is not stretched when scheme is missing');
+  'a 1-day Easy reviewed on 2026-09-07 is not stretched when scheme is missing');
 resetStore({ examDate: daysFromNow(1) });
 stampMigrations();
-var finalEasy = srs.gradeCard('final-easy', 'easy');
-assert(finalEasy.interval === 1, 'final-pass Easy is 1 day');
-var dueFinal = finalEasy.due;
+var eveEasy = srs.gradeCard('eve-easy', 'easy');
+assert(eveEasy.interval === 4, 'a new Easy the day before the exam is 4 days, not 1');
+var dueEve = eveEasy.due;
 store.save();
 store.load();
-assert(store.state.cards['final-easy'].interval === 1, 'reload does not stretch a final-pass Easy to 10');
-assert(store.state.cards['final-easy'].due === dueFinal, 'reload keeps the final-pass due date');
+assert(store.state.cards['eve-easy'].interval === 4, 'reload does not stretch that Easy to 10');
+assert(store.state.cards['eve-easy'].due === dueEve, 'reload keeps its due date');
 
 console.log('\nS8 import repairs a missing due and a malformed batch without throwing');
 resetStore();
@@ -623,8 +636,8 @@ assert(store.state.cards.chain && store.state.cards.chain.reviews === 5,
 assert(store.state.cards.chain.due === '2026-10-11',
   'the sibling copy keeps the pre-grade due');
 
-console.log('\nA5 final pass keeps a prototype-name id');
-resetStore({ examDate: daysFromNow(3) });
+console.log('\nA5 the auto-pick keeps a prototype-name id');
+resetStore();
 stampMigrations();
 store.state.cards['constructor'] = {
   reps: 1, lapses: 0, interval: 4, ease: 2.5, due: srs.today(), reviews: 1, lastGrade: 'good'
@@ -637,10 +650,10 @@ sandbox.PGRE.formulaDeckStatus = {
   partial: false, complete: true, missing: [],
   sources: { bookFormulas: 'present', formulas: 'present', bookLists: 'present', indexedDB: 'empty' }
 };
-var finalBatch = srs.fillFormulaDayFinalPass([{ id: 'constructor' }, { id: 'keep' }]);
-assert(finalBatch.reviewIds.indexOf('keep') !== -1, 'final pass still appends an ordinary learned card');
-assert(finalBatch.reviewIds.indexOf('constructor') !== -1,
-  'final pass appends a learned card whose id is constructor');
+var pickBatch = srs.autoFillFormulaDay([{ id: 'constructor' }, { id: 'keep' }]);
+assert(pickBatch.reviewIds.indexOf('keep') !== -1, 'the auto-pick appends an ordinary due card');
+assert(pickBatch.reviewIds.indexOf('constructor') !== -1,
+  'the auto-pick appends a due card whose id is constructor');
 
 function completeDeck() {
   sandbox.PGRE.formulaDeckStatus = {
@@ -717,8 +730,13 @@ assert(owedPick.indexOf('pin') !== -1,
   'a merge of the pre-pick snapshot still owes the re-pinned card');
 
 console.log('\nB2 taking a card off today clears its soft hold');
+// An older list from another tab can still hold a card this tab took off.
+function rejoin(id) {
+  var batch = store.state.formulaDay;
+  if (batch.reviewIds.indexOf(id) === -1) batch.reviewIds.push(id);
+}
 function b2Pin() {
-  resetStore({ examDate: daysFromNow(3) });
+  resetStore();
   stampMigrations();
   completeDeck();
   store.state.cards.pin = {
@@ -741,23 +759,19 @@ deckHold = b2Pin();
 srs.addFormulaDaySoft(deckHold, ['pin']);
 srs.setFormulaDayPicks(deckHold, ['other']);
 assert(!store.state.cards.pin.softHold, 'unchecking the pin clears its hold');
-assert(srs.finalPassActive(), 'an exam three days out is the final pass');
-srs.fillFormulaDayFinalPass(deckHold);
-store.state.settings.examDate = '2027-06-01';
-assert(!srs.finalPassActive(), 'a far exam turns the final pass off');
+rejoin('pin');
 var owedUnchecked = srs.formulaDayRemaining(deckHold).map(function (c) { return c.id; });
 assert(owedUnchecked.indexOf('pin') === -1,
-  'after the final pass ends the unchecked pin is not owed');
+  'the unchecked pin is not owed when an older list still holds it');
 
 deckHold = b2Pin();
 srs.addFormulaDaySoft(deckHold, ['pin']);
 srs.removeFormulaDaySoft(deckHold, ['pin']);
 assert(!store.state.cards.pin.softHold, 'removeFormulaDaySoft clears the hold on the id it drops');
-srs.fillFormulaDayFinalPass(deckHold);
-store.state.settings.examDate = '2027-06-01';
+rejoin('pin');
 var owedRemoved = srs.formulaDayRemaining(deckHold).map(function (c) { return c.id; });
 assert(owedRemoved.indexOf('pin') === -1,
-  'after the final pass ends a removed pin is not owed');
+  'a removed pin is not owed when an older list still holds it');
 
 function latestPin(id) {
   var consumedAt = pinFactAt(id, 'consumed');
@@ -786,17 +800,14 @@ function futureCard(id, due) {
 
 console.log('\nC unchecking a re-pinned card consumes the pin across a merge');
 function cMerge(deck) {
+  rejoin('pin');
   var copy = JSON.parse(JSON.stringify(store.state));
   copy._rev = (store.state._rev || 0) + 1;
   store._mergeFromDisk(copy);
   assert(!softListed(store.state.formulaDay, 'pin'),
-    'the merge does not soft-pin the removed card during the final week');
-  assert(owedHas(deck, 'pin'), 'final pass still owes the removed card while the week is on');
-  store.state.settings.examDate = '2027-06-01';
-  assert(!srs.finalPassActive(), 'moving the exam to 2027-06-01 ends the final pass');
-  assert(!owedHas(deck, 'pin'), 'after the week the removed card is not owed');
-  assert(!softListed(store.state.formulaDay, 'pin'),
-    'after the week the removed card is not soft-pinned');
+    'the merge does not soft-pin the removed card an older list still holds');
+  assert(!owedHas(deck, 'pin'), 'the removed card is not owed');
+  assert(!softListed(store.state.formulaDay, 'pin'), 'the removed card is still not soft-pinned');
 }
 resetStore();
 stampMigrations();
@@ -826,9 +837,6 @@ assert(latestPin('keep') === null, 'a pin that stays is not given a consumed fac
 assert(store.state.cards.keep.softHold === true, 'a pin that stays keeps its hold');
 assert(!store.state.cards.pin.softHold, 'unchecking the restored pin clears its hold');
 assert(!listed(store.state.formulaDay, 'pin'), 'the unchecked pin leaves the batch');
-store.state.settings.examDate = daysFromNow(3);
-assert(srs.finalPassActive(), 'the merge sequence starts with final pass on');
-srs.fillFormulaDayFinalPass(deckC);
 cMerge(deckC);
 
 resetStore();
@@ -847,8 +855,6 @@ srs.removeFormulaDaySoft(deckRemove, ['pin']);
 assert(latestPin('pin') === 'consumed', 'removeFormulaDaySoft records consumed for a restored pin');
 assert(!store.state.cards.pin.softHold, 'removeFormulaDaySoft still clears the hold');
 assert(!listed(store.state.formulaDay, 'pin'), 'removeFormulaDaySoft takes the restored pin off the batch');
-store.state.settings.examDate = daysFromNow(3);
-srs.fillFormulaDayFinalPass(deckRemove);
 cMerge(deckRemove);
 
 console.log('\nT soft pin, pin fact, and hold transitions');
@@ -926,9 +932,8 @@ var transitions = [
     tRow('picker uncheck does not consume the pin that stays', deckT, 'stay', '1 1 1 - 1');
   },
   function () {
-    store.state.settings.examDate = daysFromNow(3);
-    srs.fillFormulaDayFinalPass(deckT);
-    tRow('final pass appends the consumed card without soft-pinning it', deckT, 'pin', '1 0 0 consumed 1');
+    rejoin('pin');
+    tRow('an older list that still holds the consumed card does not make it owed', deckT, 'pin', '0 0 0 consumed 0');
   },
   function () {
     var stale = JSON.parse(JSON.stringify(store.state));
@@ -944,11 +949,7 @@ var transitions = [
     stale._rev = (store.state._rev || 0) + 1;
     store._mergeFromDisk(stale);
     assert(listed(store.state.formulaDay, 'later'), 'a newer stale batch keeps its extra id');
-    tRow('a newer stale batch does not restore a consumed pin', deckT, 'pin', '1 0 0 consumed 1');
-  },
-  function () {
-    store.state.settings.examDate = '2027-06-01';
-    tRow('after the week the consumed card is not owed', deckT, 'pin', '0 0 0 consumed 0');
+    tRow('a newer stale batch does not restore a consumed pin', deckT, 'pin', '0 0 0 consumed 0');
     tRow('a newer batch that dropped the other pin cleared its hold', deckT, 'stay', '0 0 0 - 0');
   }
 ];
@@ -987,9 +988,6 @@ srs.unsuspendCard('pin');
 assert(!srs.isSuspended('pin'), 'unsuspendCard clears the suspended flag');
 assert(latestPin('pin') === 'consumed', 'unsuspend does not restore the pin fact');
 assert(!listed(store.state.formulaDay, 'pin'), 'unsuspend does not put the card back on today');
-store.state.settings.examDate = daysFromNow(3);
-assert(srs.finalPassActive(), 'the suspend merge starts with final pass on');
-srs.fillFormulaDayFinalPass(deckS);
 cMerge(deckS);
 
 resetStore();
@@ -1003,17 +1001,13 @@ srs.suspendCard('pin');
 assert(latestPin('pin') === null, 'suspend of a first pin records no fact');
 assert(!store.state.cards.pin.softHold, 'suspend of a first pin still clears the hold');
 srs.unsuspendCard('pin');
-store.state.settings.examDate = daysFromNow(3);
-srs.fillFormulaDayFinalPass(deckFirst);
-assert(owedHas(deckFirst, 'pin'), 'final pass still owes the unsuspended first pin while the week is on');
-assert(!softListed(store.state.formulaDay, 'pin'), 'a first pin is not soft-pinned by final pass');
+rejoin('pin');
 var firstCopy = JSON.parse(JSON.stringify(store.state));
 firstCopy._rev = (store.state._rev || 0) + 1;
 store._mergeFromDisk(firstCopy);
-assert(!softListed(store.state.formulaDay, 'pin'), 'a merge does not soft-pin a first pin');
-store.state.settings.examDate = '2027-06-01';
-assert(!owedHas(deckFirst, 'pin'), 'after the week a suspended first pin is not owed');
-assert(!softListed(store.state.formulaDay, 'pin'), 'after the week a suspended first pin is not soft-pinned');
+assert(!softListed(store.state.formulaDay, 'pin'), 'a merge does not soft-pin a first pin an older list still holds');
+assert(!owedHas(deckFirst, 'pin'), 'a suspended first pin is not owed');
+assert(!softListed(store.state.formulaDay, 'pin'), 'a suspended first pin is still not soft-pinned');
 assert(latestPin('pin') === null, 'the first pin still has no fact after the merge');
 
 resetStore();
@@ -1093,6 +1087,16 @@ store.state.formulaDay.newIds = [];
 store.state.formulaDay.softIds = ['stay'];
 tRow('reconcile does not consume a restored id the batch already omitted', deckU, 'pin', '0 0 0 restored 0');
 tRow('the pin that stayed in that batch is unchanged', deckU, 'stay', '1 1 1 - 1');
+
+console.log('\nreview log cap');
+resetStore();
+for (var lr = 0; lr < 8005; lr++) storeState.cardReviews.push({ d: '2026-09-01', id: 'old-' + lr, g: 'good' });
+storeState.cards.capped = { reps: 2, lapses: 0, interval: 5, ease: 2.5, due: srs.today(), reviews: 2 };
+srs.gradeCard('capped', 'good');
+assert(storeState.cardReviews.length === 8000, 'a grade on a log already over 8000 rows trims it to 8000, got ' +
+  storeState.cardReviews.length);
+assert(storeState.cardReviews[7999].id === 'capped' && storeState.cardReviews[0].id === 'old-6',
+  'the trim drops the oldest rows and keeps the new one last');
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

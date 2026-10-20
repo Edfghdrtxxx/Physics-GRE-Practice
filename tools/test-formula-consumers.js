@@ -159,8 +159,6 @@ dw.PGRE.srs = {
   formulaDayRemaining: function () { return []; },
   formulaDayPostponed: function () { return 0; },
   newInDeck: function () { return []; },
-  fillFormulaDayFinalPass: function () { return batch; },
-  finalPassActive: function () { return false; },
   dueMistakes: function () { return []; },
   suggestFormulaDay: function () {
     alloc.suggest++;

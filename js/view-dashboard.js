@@ -1056,7 +1056,6 @@ PGRE.views.dashboard = (function () {
       return { text: 'deck empty — awaits the book', remaining: 0,
         unlearned: 0, picked: 0, target: T };
     }
-    if (srs.fillFormulaDayFinalPass) srs.fillFormulaDayFinalPass(deck);
     var remaining = srs.formulaDayRemaining(deck).length;
     var batch = srs.formulaDay(deck);
     var picked = batch.reviewIds.length + batch.newIds.length;
@@ -1116,13 +1115,13 @@ PGRE.views.dashboard = (function () {
     var settings = PGRE.store.state.settings || {};
     var exam = settings.examDate || '';
     var days = exam && srs.daysUntil ? srs.daysUntil(exam) : null;
-    var introDays = (typeof days === 'number' && days > 7) ? (days - 7) : 0;
+    var examDays = (typeof days === 'number' && days > 0) ? days : 0;
     var target = srs.clampTarget(settings.formulaDailyTarget);
     var postponed = typeof srs.formulaDayPostponed === 'function' ? srs.formulaDayPostponed(deck) : 0;
     // Pieces are joined with ' · ' so the mount can drop the leading count
     // when the tile's status line already shows the same words.
     var line = unseen + ' not yet introduced · ' +
-      introDays + ' day' + (introDays === 1 ? '' : 's') + ' before the final week · ' +
+      examDays + ' day' + (examDays === 1 ? '' : 's') + ' to the exam · ' +
       target + ' a day · ' +
       postponed + ' due review' + (postponed === 1 ? '' : 's') + ' waiting. ' +
       'To cover more, add cards in Recall.';
@@ -1135,8 +1134,7 @@ PGRE.views.dashboard = (function () {
     var todayBtn = document.getElementById('today-formulas-btn');
     if (todayBtn) todayBtn.disabled = true;
     PGRE.formulaDeck().then(function (deck) {
-      // formulaStatus runs the final-pass allocator first; the click then
-      // takes exactly the auto-pick the button promised.
+      // The click takes exactly the auto-pick the button promised.
       var st = formulaStatus(deck);
       if (st.fill) PGRE.srs.autoFillFormulaDay(deck, st.fillOpts);
       if (PGRE.views.formulas && PGRE.views.formulas.armStudyFromFill) {

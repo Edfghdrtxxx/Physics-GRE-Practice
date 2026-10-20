@@ -23,7 +23,8 @@ PGRE.views.formulas = (function () {
   // Study session: { queue, total, done, again, xp, flipped, history, peek,
   //   overlay: null|'peek'|'scaffold'|'checkpoint', steps: {id->learningStep},
   //   undo: [snapshots], pressCount, pendingOverlays: [], settled,
-  //   roster: unique session cards in start order, currentId, reviewing }
+  //   roster: unique session cards in start order, currentId, reviewing,
+  //   liveId: the live card while a graded card is open for review }
   var study = null;
   var lastCompletedStudy = null;
   var activeGame = null; // Match/Type/Quiz controller { onKey, stop } or null
@@ -218,7 +219,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20261013a';
+      s.src = 'js/flashmodes.js?v=20261020b';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -274,8 +275,7 @@ PGRE.views.formulas = (function () {
     var capOn = PGRE.store.state.settings.formulaExamCap !== false;
     html += '<div class="direction-row"><span class="exam-day-label">Intervals</span>' +
       '<button class="btn btn-ghost btn-sm" id="exam-cap-toggle">' +
-      (capOn ? 'Capped to exam day' : 'Uncapped outside final pass') + '</button></div>' +
-      '<p class="muted">Final-pass week still uses 1-day intervals.</p>';
+      (capOn ? 'Capped to exam day' : 'Uncapped') + '</button></div>';
     // F5: Study direction. false = Prompt → Formula (recall the equation);
     // true = Formula → Prompt (name it / say when it applies).
     var reverse = !!PGRE.store.state.settings.formulaReverse;
@@ -839,11 +839,11 @@ PGRE.views.formulas = (function () {
     if (!unseen) return note;
     var exam = PGRE.store.state.settings && PGRE.store.state.settings.examDate;
     var days = exam ? srs.daysUntil(exam) : null;
-    var introDays = (typeof days === 'number' && days > 7) ? (days - 7) : 0;
+    var examDays = (typeof days === 'number' && days > 0) ? days : 0;
     var target = srs.clampTarget(PGRE.store.state.settings.formulaDailyTarget);
     var postponed = typeof srs.formulaDayPostponed === 'function' ? srs.formulaDayPostponed(list) : 0;
     var line = unseen + ' not yet introduced · ' +
-      introDays + ' day' + (introDays === 1 ? '' : 's') + ' before the final week · ' +
+      examDays + ' day' + (examDays === 1 ? '' : 's') + ' to the exam · ' +
       target + ' a day · ' +
       postponed + ' due review' + (postponed === 1 ? '' : 's') + ' waiting. ' +
       'To cover more, add cards yourself.';
@@ -911,9 +911,7 @@ PGRE.views.formulas = (function () {
     } else {
       title = 'All caught up';
       buttons = edit + exp;
-      line = (t.unseen && PGRE.srs.finalPassActive())
-        ? 'Nothing is due. In the final week new cards stay manual — choose any you still want.'
-        : 'Nothing is due and every card has been introduced.';
+      line = 'Nothing is due and every card has been introduced.';
     }
     return '<div class="card fm-landing"><h2 class="fm-today-title">' + title + '</h2>' +
       '<p class="muted fm-today-line">' + line + '</p>' +
@@ -990,7 +988,6 @@ PGRE.views.formulas = (function () {
       PGRE.refreshNavBadges();
       return;
     }
-    if (srs.fillFormulaDayFinalPass) srs.fillFormulaDayFinalPass(deck);
     var today = todayState();
     // The read-only pacing note rides in the Today card as its footnote, so
     // the landing has one place that says what to study.
@@ -1018,19 +1015,6 @@ PGRE.views.formulas = (function () {
       ui.statTile('Reviewed today', ui.fmt(reviewedToday)) +
       ui.statTile('In the deck', ui.fmt(deck.length)) +
     '</div>';
-
-    // ——— Final-pass banner (F3) — active in the last week before the exam ———
-    if (srs.finalPassActive()) {
-      var days = srs.daysUntil(PGRE.store.state.settings.examDate);
-      var learnedN = deck.filter(function (c) {
-        return srs.cardState(c.id) && !srs.isSuspended(c.id);
-      }).length;
-      html += '<div class="card final-pass-banner"><strong>Final pass</strong> — ' +
-        learnedN + ' learned formula' + (learnedN === 1 ? '' : 's') + ', ' +
-        days + ' day' + (days === 1 ? '' : 's') + ' left. ' +
-        '<span class="muted">Every learned, unsuspended formula is in today’s ' +
-        'review pool; new cards remain manual.</span></div>';
-    }
 
     // ——— Leech nudge (F2) — cards that keep slipping despite reviews ———
     var leeches = deck.filter(function (c) {
@@ -1230,7 +1214,7 @@ PGRE.views.formulas = (function () {
     var max = 1;
     for (i = 0; i < 14; i++) if (days[i] > max) max = days[i];
     var bars = '';
-    var today = new Date();
+    var today = new Date(srs.today() + 'T12:00:00');   // the scheduling day, not the clock's
     for (i = 0; i < 14; i++) {
       var n = days[i];
       var pctH = Math.round(100 * n / max);
@@ -1985,8 +1969,7 @@ PGRE.views.formulas = (function () {
         var sug = suggestion(more ? T : room);
         fill.textContent = more ? 'Add ' + T + ' more' : 'Fill to ' + T;
         fill.disabled = !(sug.reviewIds.length + sug.newIds.length);
-        fill.title = fill.disabled ? 'Nothing left to add — no due reviews' +
-          (srs.finalPassActive() ? '; new cards stay manual in the final week' : ' or new cards') : '';
+        fill.title = fill.disabled ? 'Nothing left to add — no due reviews or new cards' : '';
       }
       var clr = document.getElementById('picker-clear');
       if (clr) clr.disabled = !list.length;
@@ -2314,8 +2297,7 @@ PGRE.views.formulas = (function () {
      schedule — it only reads the deck.
      For a day-list session (dayBound, the default) the queue is reconciled
      against the batch first: ids the list dropped (unpicked, suspended) leave
-     the queue and ids added mid-session (Fill after Study, search Add, the
-     final-pass allocator) join it — in batch order, after the queued ones —
+     the queue and ids added mid-session (Fill after Study, search Add) join it — in batch order, after the queued ones —
      so "Resume session — N left" counts the same work "Today's list" does.
      Ad-hoc sessions (dayBound === false: leech drill, search "Study these N")
      keep their frozen queue — their cards may never have been on the list. */
@@ -2356,8 +2338,15 @@ PGRE.views.formulas = (function () {
       });
       // Learning-step requeues are real duplicates: a kept id keeps every
       // queue entry. New list members append once each, in batch order.
+      // A card this session already graded and let go stays out, as it does
+      // while the page stays open (knownIds): after the day changes it is due
+      // again, and it comes back in the next session.
+      var graded = Object.create(null);
+      (Array.isArray(saved.history) ? saved.history : []).forEach(function (h) {
+        if (h && h.id) graded[h.id] = 1;
+      });
       remaining.forEach(function (c) {
-        if (!kept[c.id]) { kept[c.id] = 1; keptIds.push(c.id); }
+        if (!kept[c.id] && !graded[c.id]) { kept[c.id] = 1; keptIds.push(c.id); }
       });
       if (keptIds.join('') !== queueIds.join('')) {
         queueIds = keptIds;
@@ -2521,7 +2510,15 @@ PGRE.views.formulas = (function () {
     return st.interval === 1 ? '1 day' : st.interval + ' days';
   }
 
+  /* Hard or Good on a card with no schedule is the first of its two passes
+     (F7): it writes no schedule, and the card comes back in this session. */
+  var LEARNING_PASS_TEXT = 'Learning pass, returns this session';
+  function isLearningPass(id, g) {
+    return (g === 'hard' || g === 'good') && !PGRE.srs.cardState(id);
+  }
+
   function boxHoverText(id, g) {
+    if (isLearningPass(id, g)) return LEARNING_PASS_TEXT;
     var grade = (g && GRADE_LABEL[g]) ? GRADE_LABEL[g] : 'not graded yet';
     return grade + ', ' + boxIntervalText(id);
   }
@@ -2537,7 +2534,8 @@ PGRE.views.formulas = (function () {
       var entry = lastHistoryEntry(c.id);
       var g = entry && entry.grade;
       var cls = 'pal-cell';
-      if (g && GRADE_LABEL[g]) cls += ' is-graded is-' + g;
+      if (isLearningPass(c.id, g)) cls += ' is-learning';
+      else if (g && GRADE_LABEL[g]) cls += ' is-graded is-' + g;
       if (c.id === currentId) cls += ' is-current';
       var facts = boxHoverText(c.id, g);
       var label = 'Card ' + (n + 1) + ', ' + facts;
@@ -2552,6 +2550,7 @@ PGRE.views.formulas = (function () {
       '<div class="exam-palette-grid">' + cells + '</div>' +
       '<div class="exam-legend drill-legend">' +
         '<span class="exam-legend-item"><span class="pal-swatch"></span>Not yet graded</span>' +
+        '<span class="exam-legend-item"><span class="pal-swatch sw-learning"></span>Learning pass</span>' +
         '<span class="exam-legend-item"><span class="pal-swatch sw-again"></span>Again</span>' +
         '<span class="exam-legend-item"><span class="pal-swatch sw-hard"></span>Hard</span>' +
         '<span class="exam-legend-item"><span class="pal-swatch sw-good"></span>Good</span>' +
@@ -2604,10 +2603,12 @@ PGRE.views.formulas = (function () {
     study.undo = study.undo.filter(function (e) { return !e || e.opId !== opId; });
   }
 
-  /* Replace the last committed review for this card. Session counters,
-     XP, streaks and the remaining queue's live grade path stay put; the
-     SRS row is undone and rewritten the way practice review chips stamp
-     an existing attempt. */
+  /* Replace the last committed review for this card. XP, streaks and the
+     done count stay put; the SRS row is undone and rewritten the way
+     practice review chips stamp an existing attempt. The queue and the
+     Again count follow the new grade as a live press would: Again brings
+     the card back once at the end of this session, a passing grade takes
+     it out. */
   function regrade(g) {
     if (!study || study.overlay) return;
     var c = shownCard();
@@ -2617,20 +2618,44 @@ PGRE.views.formulas = (function () {
     var row = committedReviewRow(c.id);
     var opId = row && row.op;
     if (!opId || typeof PGRE.srs.undoReview !== 'function') return;
+    var before = PGRE.store.checkpoint();
+    var undoBefore = study.undo.slice();
+    var queueBefore = study.queue.slice();
+    var againBefore = study.again;
+    var hadStep = Object.prototype.hasOwnProperty.call(study.steps, c.id);
+    var stepBefore = study.steps[c.id];
     var undone = PGRE.srs.undoReview(String(opId));
     if (undone == null) return;
     forgetUndoOp(String(opId));
-    var committed = commitReview(c.id, g);
+    // The undone review created this card's schedule. Again on a card with
+    // no schedule is the live Again on a new card: nothing is committed and
+    // its learning steps start over.
+    var relearn = g === 'again' && !undone.card;
+    var committed = relearn ? '' : commitReview(c.id, g);
     if (committed === null) {
       persistStudy();
       PGRE.store.save();
       renderGradedCard(c);
       return;
     }
+    var gradeBefore = entry.grade;
     entry.grade = g;
-    takeQueueCard(c.id);
+    if (relearn) study.steps[c.id] = (c.kind === 'list') ? 1 : 0;
+    if (g === 'again' && gradeBefore !== 'again') study.again++;
+    if (g !== 'again' && gradeBefore === 'again') study.again = Math.max(0, study.again - 1);
+    while (takeQueueCard(c.id)) { /* drop every queued copy */ }
+    if (g === 'again') study.queue.push(c);
     persistStudy();
-    PGRE.store.save();
+    if (!PGRE.store.save()) {
+      // Not stored: the earlier grade stands in memory and on screen too.
+      PGRE.store.rollback(before);
+      study.undo = undoBefore;
+      study.queue = queueBefore;
+      study.again = againBefore;
+      if (hadStep) study.steps[c.id] = stepBefore;
+      else delete study.steps[c.id];
+      entry.grade = gradeBefore;
+    }
     renderGradedCard(c);
   }
 
@@ -2640,7 +2665,11 @@ PGRE.views.formulas = (function () {
     if (window.PGRE && window.PGRE.teardownInlineVisualizer) {
       window.PGRE.teardownInlineVisualizer();
     }
+    // Leaving a graded card opened for review: back to the card that was
+    // live, not the reviewed one, even when an Again put it back in the queue.
+    if (study.reviewing && study.liveId) study.currentId = study.liveId;
     study.reviewing = false;
+    study.liveId = null;
     if (!study.currentId || !shownCard()) {
       study.currentId = study.queue[0] && study.queue[0].id;
     }
@@ -2748,6 +2777,7 @@ PGRE.views.formulas = (function () {
     if (window.PGRE && window.PGRE.teardownInlineVisualizer) {
       window.PGRE.teardownInlineVisualizer();
     }
+    if (!study.reviewing) study.liveId = study.currentId;
     study.reviewing = true;
     study.flipped = true;
     study.peek = null;
@@ -2941,10 +2971,10 @@ PGRE.views.formulas = (function () {
     var html = '';
     GRADES.forEach(function (g) {
       // F7: a stateless card at step 0 requeues in-session on Hard/Good (a learning
-      // step, not a scheduled interval) — show "soon"; Easy commits its real
-      // interval, and a step-1 card shows real committed intervals for all grades.
+      // step, not a scheduled interval) — say it returns this session; Easy commits
+      // its real interval, and a step-1 card shows real committed intervals for all grades.
       var lbl;
-      if (stateless && step === 0 && (g.key === 'hard' || g.key === 'good')) lbl = 'soon';
+      if (stateless && step === 0 && (g.key === 'hard' || g.key === 'good')) lbl = 'returns this session';
       else lbl = PGRE.srs.ivlLabel(ivls[g.key]);
       html += '<button class="btn grade-btn grade-' + g.key + '" data-grade="' + g.key +
         '" aria-pressed="false">' +
@@ -3002,9 +3032,9 @@ PGRE.views.formulas = (function () {
     rememberRoster(next);
   }
 
-  /* Midnight while a session is open: run the same allocator home would,
-     then let newly eligible cards join. A learning requeue that is still
-     remaining stays. */
+  /* The day changes (03:00) while a session is open: run the same allocator
+     home would, then let newly eligible cards join. A learning requeue that
+     is still remaining stays. */
   function onLiveClock(joinNew) {
     if (!study) return false;
     var today = PGRE.srs.today();
@@ -3012,10 +3042,7 @@ PGRE.views.formulas = (function () {
     var rolled = study.sessionDate !== today;
     if (rolled) {
       study.sessionDate = today;
-      if (study.dayBound !== false) {
-        if (PGRE.srs.fillFormulaDayFinalPass) PGRE.srs.fillFormulaDayFinalPass(deck);
-        if (PGRE.srs.autoFillFormulaDay) PGRE.srs.autoFillFormulaDay(deck);
-      }
+      if (study.dayBound !== false && PGRE.srs.autoFillFormulaDay) PGRE.srs.autoFillFormulaDay(deck);
     }
     var before = study.queue.map(function (c) { return c && c.id; }).join('\n');
     reconcileLiveQueue(!!joinNew);
@@ -3083,6 +3110,8 @@ PGRE.views.formulas = (function () {
     var step = study.steps[id] || 0;
     var needsCommit = !stateless || g === 'easy' || (stateless && step !== 0 && g !== 'again');
     var opId = '';
+    // Every press, a learning pass too: its step lives only in the saved session.
+    var before = PGRE.store.checkpoint();
     if (needsCommit) {
       var committed = commitReview(id, g);
       if (committed === null) {
@@ -3133,7 +3162,19 @@ PGRE.views.formulas = (function () {
     study.xp += 2;                  // every press rewards effort (unchanged from before)
     study.history.push({ c: c, grade: g, day: PGRE.srs.today() });
     persistStudy();                 // ITEM 2: stage the resume snapshot into the same save
-    PGRE.store.save();
+    if (!PGRE.store.save() && before) {
+      // The press did not reach storage. Take it back from memory too and
+      // keep this card on screen: moving on would leave a card that a
+      // reload brings back, graded only in this tab's memory.
+      PGRE.store.rollback(before);
+      restoreSession(study.undo.pop());
+      study.currentId = id;
+      clearChosenGrade();
+      // Say so for this press: the saving-failed warning stays up unchanged,
+      // and a learning pass never reaches gradeCard's own message.
+      if (typeof PGRE.pressNotRecorded === 'function') PGRE.pressNotRecorded();
+      return;
+    }
 
     // F8 + F11: queue overlays. When the round-closing press is an Again, the
     // scaffold shows first and the checkpoint after it.
@@ -3231,10 +3272,10 @@ PGRE.views.formulas = (function () {
 
   /* F1a: undo stack, max 10, dies with the session. Snapshot BEFORE the mutation
      so a pop restores the exact pre-press session + card state. */
-  function pushUndo(id, opId) {
+  function sessionSnapshot(id, opId) {
     var stepsCopy = {};
     for (var k in study.steps) stepsCopy[k] = study.steps[k];
-    study.undo.push({
+    return {
       id: id,
       day: PGRE.srs.today(),
       opId: opId ? String(opId) : '',
@@ -3243,21 +3284,15 @@ PGRE.views.formulas = (function () {
       historyLen: study.history.length,
       steps: stepsCopy,
       pressCount: study.pressCount
-    });
+    };
+  }
+
+  function pushUndo(id, opId) {
+    study.undo.push(sessionSnapshot(id, opId));
     if (study.undo.length > 10) study.undo.shift();
   }
 
-  /* Undo the named review, then the session. A null undoReview leaves the
-     screen where it is. This does not pop cardReviews or write a card snapshot. */
-  function undoGrade() {
-    if (!study || study.overlay || !study.undo.length) return;
-    var e = study.undo[study.undo.length - 1];
-    if (e.opId) {
-      if (typeof PGRE.srs.undoReview !== 'function') return;
-      var res = PGRE.srs.undoReview(String(e.opId));
-      if (res == null) return;
-    }
-    study.undo.pop();
+  function restoreSession(e) {
     study.queue = e.queueIds.slice();
     study.done = e.done;
     study.xp = e.xp;
@@ -3266,12 +3301,43 @@ PGRE.views.formulas = (function () {
     study.steps = {};
     for (var k in e.steps) study.steps[k] = e.steps[k];
     study.pressCount = e.pressCount;
+  }
+
+  /* Undo the named review, then the session. A null undoReview leaves the
+     screen where it is. This does not pop cardReviews or write a card snapshot. */
+  function undoGrade() {
+    if (!study || study.overlay || !study.undo.length) return;
+    var e = study.undo[study.undo.length - 1];
+    var before = PGRE.store.checkpoint();
+    var now = sessionSnapshot(study.currentId, '');
+    var historyNow = study.history.slice();
+    var wasReviewing = study.reviewing;
+    if (e.opId) {
+      if (typeof PGRE.srs.undoReview !== 'function') return;
+      var res = PGRE.srs.undoReview(String(e.opId));
+      if (res == null) return;
+    }
+    study.undo.pop();
+    restoreSession(e);
     study.overlay = null;
     study.pendingOverlays = [];
     study.reviewing = false;
     study.currentId = study.queue[0] && study.queue[0].id;
     persistStudy();
-    PGRE.store.save();
+    if (!PGRE.store.save()) {
+      // The undo did not reach storage: the stored grade or learning pass
+      // stands, so memory and the screen keep it too, and the Undo entry
+      // stays for the next try. A learning pass has no op id, but its step
+      // and history live in the saved session all the same.
+      PGRE.store.rollback(before);
+      restoreSession(now);
+      study.history = historyNow;
+      study.undo.push(e);
+      study.reviewing = wasReviewing;
+      study.currentId = now.id;
+      if (typeof PGRE.pressNotRecorded === 'function') PGRE.pressNotRecorded();
+      return;
+    }
     renderCard();
   }
 
@@ -4892,7 +4958,6 @@ PGRE.views.formulas = (function () {
         PGRE.getFormulaCard = deckById;
         lastDeckStatus = (PGRE.formulaDeckStatus && typeof PGRE.formulaDeckStatus === 'object')
           ? PGRE.formulaDeckStatus : null;
-        if (PGRE.srs.fillFormulaDayFinalPass) PGRE.srs.fillFormulaDayFinalPass(deck);
         if (root()) { renderShell(); }
         if (window.PGRE && PGRE.motion && PGRE.motion.loader) PGRE.motion.loader.done();
       });

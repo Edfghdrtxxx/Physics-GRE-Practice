@@ -308,15 +308,20 @@ PGRE.flashmodes = (function () {
   /* ——— Shared card/XP hooks (mirror the flip mode) ——— */
 
   /* One graded review → the same SM-2 scheduler the flip mode calls, plus the
-     study-day/streak touch. Save is left to the caller's flow.
-     Returns null when gradeCard refuses the write. Callers must not advance
-     a queue, a done count, or history on null. On success returns the
-     operation id copied now — undo names that string, not a later read. */
+     study-day/streak touch, then a save.
+     Returns null when gradeCard refuses the write or the save fails; a
+     failed save takes the grade back out of memory too. Callers must not
+     advance a queue, a done count, or history on null. On success returns
+     the operation id copied now — undo names that string, not a later read. */
   function reviewCard(id, grade) {
+    var before = PGRE.store.checkpoint();
     var card = PGRE.srs.gradeCard(id, grade);
     if (card === null) return null;
     PGRE.store.touchDay();
-    PGRE.store.save();
+    if (!PGRE.store.save()) {
+      PGRE.store.rollback(before);
+      return null;
+    }
     var opId = (card && card.lastReviewOpId != null && card.lastReviewOpId !== '')
       ? String(card.lastReviewOpId) : '';
     return { opId: opId };
@@ -335,14 +340,13 @@ PGRE.flashmodes = (function () {
     return false;
   }
 
-  /* A round that stays open across midnight runs the same allocator home
-     would, then the next grade sees the new day. */
+  /* A round that stays open across the day change (03:00) runs the same
+     allocator home would, then the next grade sees the new day. */
   function noteGameDay(st, deck) {
     var today = PGRE.srs.today();
     if (!st.sessionDate) { st.sessionDate = today; return; }
     if (st.sessionDate === today) return;
     st.sessionDate = today;
-    if (PGRE.srs.fillFormulaDayFinalPass) PGRE.srs.fillFormulaDayFinalPass(deck || []);
     if (PGRE.srs.autoFillFormulaDay) PGRE.srs.autoFillFormulaDay(deck || []);
   }
 
@@ -743,12 +747,14 @@ PGRE.flashmodes = (function () {
       var u = st.undo;
       if (!u) return;
       if (!u.opId || typeof PGRE.srs.undoReview !== 'function') return;
+      var before = PGRE.store.checkpoint();
       var res = PGRE.srs.undoReview(String(u.opId));
       if (!res) return;
+      // An undo that did not reach storage leaves the stored grade standing.
+      if (!PGRE.store.save()) { PGRE.store.rollback(before); return; }
       st.done = u.prevDone;
       st.again = u.prevAgain;
       st.undo = null;
-      PGRE.store.save();
       var link = document.getElementById('flash-undo');
       if (link && link.parentNode) link.parentNode.removeChild(link);
     }
@@ -949,14 +955,16 @@ PGRE.flashmodes = (function () {
     function undoLast() {
       var u = st.undo;
       if (!u || !u.opId || typeof PGRE.srs.undoReview !== 'function') return;
+      var before = PGRE.store.checkpoint();
       var res = PGRE.srs.undoReview(String(u.opId));
       if (!res) return;
+      // An undo that did not reach storage leaves the stored grade standing.
+      if (!PGRE.store.save()) { PGRE.store.rollback(before); return; }
       st.correct = u.prevCorrect;
       st.done = u.prevDone;
       st.streak = u.prevStreak;
       st.best = u.prevBest;
       st.undo = null;
-      PGRE.store.save();
       var link = document.getElementById('flash-undo');
       if (link && link.parentNode) link.parentNode.removeChild(link);
     }
