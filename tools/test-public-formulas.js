@@ -72,7 +72,11 @@ var REMOVED = [
   'supp-hamilton-principle',
   'supp-magnetic-dipole-far-field',
   'supp-loop-axis-field',
-  'supp-parallel-plate-field'
+  'supp-parallel-plate-field',
+  /* 2026-10-21: merged into supp-counting-distributions. */
+  'supp-binomial-counting',
+  'supp-poisson-distribution',
+  'supp-gaussian-distribution'
 ];
 /* Added in the 2026-10-14 curation. */
 var ADDED = [
@@ -105,7 +109,9 @@ var ADDED = [
   'supp-battery-internal-resistance',
   'supp-kirchhoff-rules',
   'supp-impulse-power',
-  'supp-rutherford-scattering'
+  'supp-rutherford-scattering',
+  /* 2026-10-21 merge of the three counting distributions. */
+  'supp-counting-distributions'
 ];
 
 var byId = {};

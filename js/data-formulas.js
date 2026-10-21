@@ -462,37 +462,15 @@ PGRE.FORMULAS = [
     note: "Supplemental — useful for normal modes and spin matrices."
   },
   {
-    id: "supp-binomial-counting",
+    id: "supp-counting-distributions",
     kind: "list",
     eq: "supp",
     topic: "lb",
-    tag: "Counting",
-    name: "Binomial distribution (supplemental list)",
-    front: "For $N$ independent trials, each a success with probability $p$, state the probability of $k$ successes, the mean and variance of $k$, and the two large-$N$ limits. (3)",
-    back: "<ul class=\"recall-list\"><li>$P(k) = \\binom{N}{k}p^k(1-p)^{N-k}$; the chance of at least one success is $1-(1-p)^N$.</li><li>$\\langle k\\rangle = Np$ and $\\sigma^2 = Np(1-p)$, which is smaller than the mean. A fair coin gives $\\sigma = \\sqrt{N}/2$, not $\\sqrt{N}$.</li><li>$N \\to \\infty$, $p \\to 0$ with $Np = \\lambda$ fixed: Poisson with mean $\\lambda$. $Np(1-p) \\gg 1$: Gaussian with $\\mu = Np$, $\\sigma^2 = Np(1-p)$.</li></ul>",
-    note: "Supplemental."
-  },
-  {
-    id: "supp-poisson-distribution",
-    kind: "list",
-    eq: "supp",
-    topic: "lb",
-    tag: "Poisson statistics",
-    name: "Poisson distribution (supplemental list)",
-    front: "Independent events arrive at a constant average rate $r$, and you count for a time $t$. State the probability of $n$ counts, its mean and spread, and its large-mean limit. (3)",
-    back: "<ul class=\"recall-list\"><li>$P(n) = \\lambda^n e^{-\\lambda}/n!$ with $\\lambda = rt$; no counts has probability $e^{-\\lambda}$.</li><li>Mean $=$ variance $= \\lambda$, so $\\sigma = \\sqrt{\\lambda}$ and the fractional spread is $1/\\sqrt{\\lambda}$; $4$ times the counting time halves it.</li><li>It is the binomial with $N \\to \\infty$, $p \\to 0$, $Np = \\lambda$; for large $\\lambda$ it becomes a Gaussian with $\\mu = \\lambda$, $\\sigma = \\sqrt{\\lambda}$.</li></ul>",
-    note: "Supplemental."
-  },
-  {
-    id: "supp-gaussian-distribution",
-    kind: "list",
-    eq: "supp",
-    topic: "lb",
-    tag: "Gaussian statistics",
-    name: "Gaussian distribution (supplemental list)",
-    front: "State the normalized Gaussian with mean $\\mu$ and standard deviation $\\sigma$, the probability within $1\\sigma$, $2\\sigma$ and $3\\sigma$, its full width at half maximum, and the uncertainty of the mean of $N$ measurements. (4)",
-    back: "<ul class=\"recall-list\"><li>$p(x) = \\dfrac{1}{\\sigma\\sqrt{2\\pi}}\\,e^{-(x-\\mu)^2/(2\\sigma^2)}$, normalized by $\\int_{-\\infty}^{\\infty} e^{-ax^2}dx = \\sqrt{\\pi/a}$.</li><li>Within $\\pm1\\sigma$, $\\pm2\\sigma$, $\\pm3\\sigma$: $68\\%$, $95\\%$, $99.7\\%$.</li><li>$\\mathrm{FWHM} = 2\\sqrt{2\\ln 2}\\,\\sigma \\approx 2.35\\,\\sigma$.</li><li>The mean of $N$ independent measurements has $\\sigma_{\\bar{x}} = \\sigma/\\sqrt{N}$; independent errors add in quadrature.</li></ul>",
-    note: "Supplemental."
+    tag: "Counting statistics",
+    name: "Binomial, Poisson, and Gaussian: one family (supplemental list)",
+    front: "Binomial, Poisson, Gaussian: give the picture each one counts, its formula with mean and spread, and how one turns into the next. (4)",
+    back: "<ul class=\"recall-list\"><li><strong>Binomial: the coin-toss tally.</strong> A fixed number $N$ of yes/no tries, each a yes with chance $p$; count the yeses. $P(k) = \\binom{N}{k}p^k(1-p)^{N-k}$, $\\langle k\\rangle = Np$, $\\sigma^2 = Np(1-p)$. The hard ceiling $k \\le N$ squeezes the spread below the mean: a fair coin gives $\\sigma = \\sqrt{N}/2$, not $\\sqrt{N}$. At least one yes: $1-(1-p)^N$.</li><li><strong>Poisson: raindrops on a paving stone.</strong> No list of tries, only a steady rate $r$ of rare, independent clicks; count them for a time $t$. $P(n) = \\lambda^n e^{-\\lambda}/n!$ with $\\lambda = rt$; a silent window has $P(0) = e^{-\\lambda}$. Mean $=$ variance $= \\lambda$, so $\\sigma = \\sqrt{\\lambda}$ and the fractional error is $1/\\sqrt{\\lambda}$: count $4$ times longer to halve it.</li><li><strong>Gaussian: the bell that every big pile becomes.</strong> Add many small independent nudges and the histogram melts into $p(x) = \\tfrac{1}{\\sigma\\sqrt{2\\pi}}\\,e^{-(x-\\mu)^2/(2\\sigma^2)}$, where $\\mu$ and $\\sigma$ are free knobs. Within $\\pm1\\sigma$, $\\pm2\\sigma$, $\\pm3\\sigma$: $68\\%$, $95\\%$, $99.7\\%$; $\\mathrm{FWHM} \\approx 2.35\\,\\sigma$; the mean of $N$ readings has $\\sigma_{\\bar{x}} = \\sigma/\\sqrt{N}$.</li><li><strong>One family, three ages.</strong> Binomial with $N \\to \\infty$, $p \\to 0$, $Np = \\lambda$ fixed is Poisson; Poisson with large $\\lambda$ is a Gaussian with $\\mu = \\lambda$, $\\sigma = \\sqrt{\\lambda}$; binomial with $Np(1-p) \\gg 1$ is a Gaussian with $\\mu = Np$, $\\sigma^2 = Np(1-p)$. Spread fingerprint: binomial $\\sigma^2 \\lt$ mean, Poisson $\\sigma^2 =$ mean, Gaussian $\\sigma$ set by hand.</li></ul>",
+    note: "Supplemental. Which one to reach for: the problem hands you $N$ and $p$, use binomial; it hands you only a rate or an average count, use Poisson; it hands you $\\mu$ and $\\sigma$, or the count is large, use the Gaussian."
   },
   {
     id: "supp-thin-film",
