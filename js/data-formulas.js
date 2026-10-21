@@ -919,5 +919,15 @@ PGRE.FORMULAS = [
     front: "A solenoid core gives $B = \\mu_r\\mu_0 nI$ with $\\mu_r = 1 + \\chi_m$. Give the sign and size of $\\chi_m$ for diamagnetic, paramagnetic and ferromagnetic cores, and say whether any core can reverse $B$. (4)",
     back: "<ul class=\"recall-list\"><li>Diamagnetic: $\\chi_m \\lt 0$, tiny, so $\\mu_r$ is just below $1$ and $B$ drops slightly. The applied field changes the electron orbits, which induce a moment against it (Lenz's law); every material has this.</li><li>Paramagnetic: $\\chi_m \\gt 0$, tiny, so $\\mu_r$ is just above $1$ and $B$ rises slightly. Permanent moments from unpaired electrons partly align with the field; thermal motion limits the alignment.</li><li>Ferromagnetic: $\\chi_m \\gg 1$, so $B$ rises many times. Exchange coupling aligns spins inside domains, and the domains turn toward the applied field.</li><li>$\\mu_r$ cannot fall below $0$ (a superconductor reaches $0$), so no core reverses $B$; an answer with $B$ opposite to the coil's own field is wrong.</li></ul>",
     note: "Supplemental."
+  },
+  {
+    id: "supp-charge-integral-origin",
+    eq: "supp",
+    topic: "em",
+    tag: "Electrostatics",
+    name: "Where to put the origin in a charge-distribution integral (supplemental)",
+    front: "You integrate $dE$ or $dV$ over a charged body. Where do you put the origin (a) for a straight rod with the field point on the rod's extension line, and (b) for a ring, cylinder or sphere, or when you need $E(\\mathbf{r})$ at an arbitrary point $\\mathbf{r}$?",
+    back: "(a) Put the origin at the field point. The distance to each element $dq = \\lambda\\,dx$ is then just $x$, and the limits are the near and far distances: $$E = \\int_{d}^{d+L} \\frac{k\\lambda\\,dx}{x^2} = k\\lambda\\left(\\frac{1}{d} - \\frac{1}{d+L}\\right)$$ (b) Put the origin at the body's center of symmetry, so the field point $\\mathbf{r}$ stays a variable and symmetry cancels the transverse components; on a ring's axis, $E_z = \\dfrac{kQz}{(z^2+R^2)^{3/2}}$.",
+    note: "Supplemental."
   }
 ];
