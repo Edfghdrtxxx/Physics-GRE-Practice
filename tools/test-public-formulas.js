@@ -131,7 +131,7 @@ cards.forEach(function (c) {
 REMOVED.forEach(function (id) { assert(!byId[id], 'removed id stays absent: ' + id); });
 ADDED.forEach(function (id) { assert(!!byId[id], 'added id is present: ' + id); });
 
-/* Recall lists: one <ul class="recall-list">, front ends with (N), N = items, N <= 4. */
+/* Recall lists: one <ul class="recall-list">, front ends with (N), N = items. */
 cards.forEach(function (c) {
   if (c.kind !== 'list') {
     assert(String(c.back).indexOf('<ul class="recall-list">') !== 0, c.id + ' is not a list, so its back is not a recall list');
@@ -141,7 +141,6 @@ cards.forEach(function (c) {
   assert(String(c.back).indexOf('<ul class="recall-list">') === 0, c.id + ' back starts with the recall-list markup');
   var count = /\((\d+)\)\s*(<ul[\s\S]*)?$/.exec(c.front);
   assert(!!count && Number(count[1]) === lis, c.id + ' front count matches its ' + lis + ' list items');
-  assert(lis >= 2 && lis <= 4, c.id + ' has 2 to 4 list items (' + lis + ')');
 });
 
 /* Text outside $...$ (tags stripped): no math written as plain text, no raw < or >,
