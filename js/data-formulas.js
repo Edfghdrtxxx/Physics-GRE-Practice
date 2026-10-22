@@ -138,8 +138,8 @@ PGRE.FORMULAS = [
     topic: "cm",
     tag: "Momentum",
     name: "Collisions with a target at rest (supplemental)",
-    front: "Mass $m_1$ moving at $v$ hits mass $m_2$ at rest, head-on. Final velocities if the collision is elastic? Fraction of kinetic energy lost if they stick together?",
-    back: "$$v_1' = \\frac{m_1 - m_2}{m_1 + m_2}\\,v, \\qquad v_2' = \\frac{2m_1}{m_1 + m_2}\\,v$$ Perfectly inelastic: the fraction of kinetic energy lost is $m_2/(m_1 + m_2)$. Equal masses, elastic: head-on, the velocities swap; glancing, the final velocities are perpendicular.",
+    front: "Mass $m_1$ moving at $v$ hits mass $m_2$ at rest, head-on. If the collision is elastic, what happens to the relative velocity, and what are the final velocities? Fraction of kinetic energy lost if they stick together?",
+    back: "Elastic, head-on: the relative velocity reverses, $v_2' - v_1' = -(v_2 - v_1)$, here $v_2' - v_1' = v$. With momentum $m_1 v = m_1 v_1' + m_2 v_2'$ these are two linear equations, with no squared velocities to expand: $$v_1' = \\frac{m_1 - m_2}{m_1 + m_2}\\,v, \\qquad v_2' = \\frac{2m_1}{m_1 + m_2}\\,v$$ Limits: $m_2 \\gg m_1$ gives $v_1' \\to -v$, $v_2' \\to 0$; $m_2 \\ll m_1$ gives $v_2' \\to 2v$. Perfectly inelastic: the fraction of kinetic energy lost is $m_2/(m_1 + m_2)$. Equal masses, elastic: head-on, the velocities swap; glancing, the final velocities are perpendicular.",
     note: "Supplemental. Kahn §1.4.1, p.12."
   },
   {
@@ -210,8 +210,8 @@ PGRE.FORMULAS = [
     topic: "em",
     tag: "Method of images",
     name: "Image charge for a grounded conducting plane (supplemental)",
-    front: "A point charge $q$ sits a distance $d$ from a grounded infinite conducting plane. Where is the image charge, and what force does the plane exert on $q$?",
-    back: "$$F = \\frac{q^2}{4\\pi\\epsilon_0 (2d)^2} = \\frac{q^2}{16\\pi\\epsilon_0 d^2} \\quad \\text{(attractive)}$$ The image is $-q$ at the mirror point, a distance $d$ behind the plane. It reproduces the field only on the real charge's side. The induced surface charge totals $-q$.",
+    front: "A point charge $q$ sits a distance $d$ from a grounded infinite conducting plane. Where is the image charge, what force does the plane exert on $q$, and how much work brings $q$ in from infinity?",
+    back: "$$F = \\frac{q^2}{4\\pi\\epsilon_0 (2d)^2} = \\frac{q^2}{16\\pi\\epsilon_0 d^2} \\quad \\text{(attractive)}, \\qquad W = -\\frac{q^2}{16\\pi\\epsilon_0 d}$$ The image is $-q$ at the mirror point, a distance $d$ behind the plane. It reproduces the field only on the real charge's side. The induced surface charge totals $-q$. The work is half the energy $-\\frac{q^2}{4\\pi\\epsilon_0 (2d)}$ of a real pair of charges: the image moves with $q$, so the separation $2z$ changes twice as fast as $q$ moves, and the field exists only on the real charge's side. Use the full image force, but only half the pair energy.",
     note: "Supplemental. Kahn §2.1.7, p.40 and §2.8, Electrostatics solution 1, p.59."
   },
   {
@@ -245,6 +245,17 @@ PGRE.FORMULAS = [
     front: "State the transverse magnification of a thin lens and what its sign and size mean, and the angular magnification of a two-lens astronomical telescope. (2)",
     back: "<ul class=\"recall-list\"><li>$M = -s'/s$: $M \\lt 0$ means an inverted image, $|M| \\gt 1$ an enlarged one.</li><li>Two converging lenses a distance $f_o + f_e$ apart: $|M_\\theta| = f_o/f_e$, with an inverted image.</li></ul>",
     note: "Supplemental — uses the real-is-positive convention of Kahn §3.3.2, p.71."
+  },
+  {
+    id: "supp-converging-lens-image",
+    kind: "list",
+    eq: "supp",
+    topic: "ow",
+    tag: "Geometric optics",
+    name: "Converging lens: real or virtual image (supplemental list)",
+    front: "A converging lens ($f \\gt 0$) images a real object ($s \\gt 0$). How does comparing the object distance $s$ with $f$ decide whether the image is real or virtual, and upright or inverted? (2)",
+    back: "<ul class=\"recall-list\"><li>$s \\gt f$: the rays leaving the lens converge and meet, so the image is real ($s' \\gt 0$) and inverted.</li><li>$s \\lt f$: the rays leaving the lens diverge and meet only when extended backward, so the image is virtual ($s' \\lt 0$), upright and enlarged; the lens acts as a magnifying glass.</li></ul>",
+    note: "Supplemental — follows from $1/s + 1/s' = 1/f$ in the real-is-positive convention of Kahn §3.3.2, p.71."
   },
   {
     id: "supp-acoustic-modes",
@@ -394,8 +405,8 @@ PGRE.FORMULAS = [
     tag: "Molecular rotation",
     name: "Rigid rotor levels and pure-rotation selection (supplemental list)",
     front: "State the rigid-rotor energies and degeneracy, the diatomic moment of inertia, the pure-rotation selection rule, and the spacing of the rotational lines. (4)",
-    back: "<ul class=\"recall-list\"><li>$E_J = \\hbar^2J(J+1)/(2I)$ for $J = 0, 1, 2, \\ldots$, with degeneracy $2J+1$.</li><li>Diatomic: $I = \\mu r_e^2$, with reduced mass $\\mu$ and bond length $r_e$.</li><li>Pure rotational absorption needs a permanent electric dipole (none for $\\mathrm{H}_2$ or $\\mathrm{N}_2$); then $\\Delta J = \\pm 1$.</li><li>$J \\to J+1$ absorbs $2B(J+1)$ with $B = \\hbar^2/(2I)$, so neighboring lines are spaced by $2B$.</li></ul>",
-    note: "Supplemental."
+    back: "<ul class=\"recall-list\"><li>$E_J = \\hbar^2J(J+1)/(2I)$ for $J = 0, 1, 2, \\ldots$, with degeneracy $2J+1$: classical $T = L^2/(2I)$ with the quantum eigenvalue $L^2 = \\hbar^2J(J+1)$ (not $J$, not $J+1$).</li><li>Diatomic: $I = \\mu r_e^2$, with reduced mass $\\mu = m_1m_2/(m_1+m_2)$ and bond length $r_e$. The rotor turns about its center of mass, not the midpoint: two masses $m$ give $I = 2m(r_e/2)^2 = \\tfrac{1}{2}mr_e^2$, so a rod of length $a$ has $E_J = \\hbar^2J(J+1)/(ma^2)$; $m$ and $3m$ give $\\tfrac{3}{4}mr_e^2$, not $mr_e^2$.</li><li>Pure rotational absorption needs a permanent electric dipole (none for $\\mathrm{H}_2$ or $\\mathrm{N}_2$); then $\\Delta J = \\pm 1$.</li><li>$J \\to J+1$ absorbs $2B(J+1)$ with $B = \\hbar^2/(2I)$, so neighboring lines are spaced by $2B$.</li></ul>",
+    note: "Supplemental — dumbbell example from Kahn Sample Exam 1 #100."
   },
   {
     id: "supp-hall",
@@ -468,8 +479,8 @@ PGRE.FORMULAS = [
     topic: "lb",
     tag: "Counting statistics",
     name: "Binomial, Poisson, and Gaussian: one family (supplemental list)",
-    front: "Binomial, Poisson, Gaussian: give the picture each one counts, its formula with mean and spread, and how one turns into the next. (4)",
-    back: "<ul class=\"recall-list\"><li><strong>Binomial: the coin-toss tally.</strong> A fixed number $N$ of yes/no tries, each a yes with chance $p$; count the yeses. $P(k) = \\binom{N}{k}p^k(1-p)^{N-k}$, $\\langle k\\rangle = Np$, $\\sigma^2 = Np(1-p)$. The hard ceiling $k \\le N$ squeezes the spread below the mean: a fair coin gives $\\sigma = \\sqrt{N}/2$, not $\\sqrt{N}$. At least one yes: $1-(1-p)^N$.</li><li><strong>Poisson: raindrops on a paving stone.</strong> No list of tries, only a steady rate $r$ of rare, independent clicks; count them for a time $t$. $P(n) = \\lambda^n e^{-\\lambda}/n!$ with $\\lambda = rt$; a silent window has $P(0) = e^{-\\lambda}$. Mean $=$ variance $= \\lambda$, so $\\sigma = \\sqrt{\\lambda}$ and the fractional error is $1/\\sqrt{\\lambda}$: count $4$ times longer to halve it.</li><li><strong>Gaussian: the bell that every big pile becomes.</strong> Add many small independent nudges and the histogram melts into $p(x) = \\tfrac{1}{\\sigma\\sqrt{2\\pi}}\\,e^{-(x-\\mu)^2/(2\\sigma^2)}$, where $\\mu$ and $\\sigma$ are free knobs. Within $\\pm1\\sigma$, $\\pm2\\sigma$, $\\pm3\\sigma$: $68\\%$, $95\\%$, $99.7\\%$; $\\mathrm{FWHM} \\approx 2.35\\,\\sigma$; the mean of $N$ readings has $\\sigma_{\\bar{x}} = \\sigma/\\sqrt{N}$.</li><li><strong>One family, three ages.</strong> Binomial with $N \\to \\infty$, $p \\to 0$, $Np = \\lambda$ fixed is Poisson; Poisson with large $\\lambda$ is a Gaussian with $\\mu = \\lambda$, $\\sigma = \\sqrt{\\lambda}$; binomial with $Np(1-p) \\gg 1$ is a Gaussian with $\\mu = Np$, $\\sigma^2 = Np(1-p)$. Spread fingerprint: binomial $\\sigma^2 \\lt$ mean, Poisson $\\sigma^2 =$ mean, Gaussian $\\sigma$ set by hand.</li></ul>",
+    front: "Binomial, Poisson, Gaussian: give the picture each one counts, its formula with mean and spread, and how one turns into the next. For Poisson, add the upper limit that zero counts give. (4)",
+    back: "<ul class=\"recall-list\"><li><strong>Binomial: the coin-toss tally.</strong> A fixed number $N$ of yes/no tries, each a yes with chance $p$; count the yeses. $P(k) = \\binom{N}{k}p^k(1-p)^{N-k}$, $\\langle k\\rangle = Np$, $\\sigma^2 = Np(1-p)$. The hard ceiling $k \\le N$ squeezes the spread below the mean: a fair coin gives $\\sigma = \\sqrt{N}/2$, not $\\sqrt{N}$. At least one yes: $1-(1-p)^N$ (all-no is $(1-p)^N$, not $p^N$).</li><li><strong>Poisson: raindrops on a paving stone.</strong> No list of tries, only a steady rate $r$ of rare, independent clicks; count them for a time $t$. $P(n) = \\lambda^n e^{-\\lambda}/n!$ with $\\lambda = rt$; a silent window has $P(0) = e^{-\\lambda}$. Mean $=$ variance $= \\lambda$, so the absolute error is $\\sigma = \\sqrt{\\lambda}$ counts and the relative (fractional) error is $\\sigma/\\lambda = 1/\\sqrt{\\lambda}$: $400 \\pm 20$ counts is $5\\%$. Count $4$ times longer to halve the relative error. Zero events in time $T$ give an upper limit: exclude every rate under which a silent window is rarer than $1-\\mathrm{CL}$, so $e^{-r_{\\rm up}T} = 1-\\mathrm{CL}$ ($90\\%$: about $2.3$ events; $95\\%$: about $3.0$; higher confidence, larger limit).</li><li><strong>Gaussian: the bell that every big pile becomes.</strong> Add many small independent nudges and the histogram melts into $p(x) = \\tfrac{1}{\\sigma\\sqrt{2\\pi}}\\,e^{-(x-\\mu)^2/(2\\sigma^2)}$, where $\\mu$ and $\\sigma$ are free knobs. Within $\\pm1\\sigma$, $\\pm2\\sigma$, $\\pm3\\sigma$: $68\\%$, $95\\%$, $99.7\\%$; $\\mathrm{FWHM} \\approx 2.35\\,\\sigma$; the mean of $N$ readings has $\\sigma_{\\bar{x}} = \\sigma/\\sqrt{N}$.</li><li><strong>One family, three ages.</strong> Binomial with $N \\to \\infty$, $p \\to 0$, $Np = \\lambda$ fixed is Poisson (slice the time into $N$ tiny windows: $P(0) = (1-\\lambda/N)^N \\to e^{-\\lambda}$); Poisson with large $\\lambda$ is a Gaussian with $\\mu = \\lambda$, $\\sigma = \\sqrt{\\lambda}$, because the count is a sum of many independent sub-window counts (central limit theorem); binomial with $Np(1-p) \\gg 1$ is a Gaussian with $\\mu = Np$, $\\sigma^2 = Np(1-p)$. Spread fingerprint: binomial $\\sigma^2 \\lt$ mean, Poisson $\\sigma^2 =$ mean, Gaussian $\\sigma$ set by hand.</li></ul>",
     note: "Supplemental. Which one to reach for: the problem hands you $N$ and $p$, use binomial; it hands you only a rate or an average count, use Poisson; it hands you $\\mu$ and $\\sigma$, or the count is large, use the Gaussian."
   },
   {
@@ -808,6 +819,26 @@ PGRE.FORMULAS = [
     front: "How do the atomic number $Z$ and the mass number $A$ change in $\\alpha$, $\\beta^-$, $\\beta^+$ and $\\gamma$ decay?",
     back: "$$\\alpha:\\ (Z, A) \\to (Z-2,\\ A-4)$$ $\\beta^-$: $Z \\to Z+1$, $A$ unchanged ($n \\to p + e^- + \\bar\\nu_e$). $\\beta^+$ or electron capture: $Z \\to Z-1$, $A$ unchanged. $\\gamma$: no change. For a decay chain, count the alphas from $\\Delta A/4$, then fix $Z$ with betas.",
     note: "Supplemental — Kahn §8.1.2, p.147."
+  },
+  {
+    id: "supp-pn-junction",
+    eq: "supp",
+    topic: "sp",
+    tag: "Semiconductors",
+    name: "Built-in field of a p-n junction (supplemental)",
+    front: "A $p$-$n$ junction sits at equilibrium with zero bias. Which way does the electric field point, and where is it?",
+    back: "$$\\mathbf{E}:\\ n \\to p,\\ \\text{perpendicular to the interface, only in the depletion region}$$ Electrons diffuse from $n$ to $p$ (holes from $p$ to $n$) and leave fixed ions behind: $+$ donors on the $n$ side, $-$ acceptors on the $p$ side. The two charged layers act like a capacitor, so $\\mathbf{E}$ points from $n$ to $p$ and pushes electrons back until drift balances diffusion. No magnetic field.",
+    note: "Supplemental — Kahn Sample Exam 1 #76.<img class=\"q-fig\" src=\"content/book-assets/pn-junction-field.svg\" alt=\"p-n junction: electrons diffuse from n to p, leaving + donors on the n side and − acceptors on the p side; the built-in field points from n to p\">"
+  },
+  {
+    id: "supp-neutrino-oscillation",
+    eq: "supp",
+    topic: "sp",
+    tag: "Particle physics",
+    name: "Neutrino flavor oscillation (supplemental)",
+    front: "A $\\nu_e$ from the Sun can be detected on Earth as a $\\nu_\\tau$. Why, and what does this imply about neutrino masses? What mass do you use in decay kinematics?",
+    back: "$$|\\nu_e\\rangle = \\cos\\theta\\,|\\nu_1\\rangle + \\sin\\theta\\,|\\nu_2\\rangle$$ Flavor ($\\nu_e$, $\\nu_\\mu$, $\\nu_\\tau$) is an internal label like spin: the charged lepton the neutrino is made with or makes at detection. The mass states $\\nu_1$, $\\nu_2$ are the energy eigenstates of free flight, and the two bases differ. Each mass state gains its own phase $e^{-iE_kt/\\hbar}$; the relative phase grows, and a $\\nu_\\tau$ component appears. No collision or decay is needed. Oscillation needs $m_1 \\ne m_2$, so neutrinos have mass, against the original Standard Model (only left-handed $\\nu$, massless; 2015 Nobel Prize). Oscillation measures only mass differences; directly, $m_{\\nu_e} \\lt 0.45$ eV ($90\\%$ CL). In kinematics treat $\\nu$ as massless: that is 4 to 6 orders of magnitude below keV to MeV decay energies, visible only near the endpoint of the $\\beta$ spectrum. Analogy: spin prepared along $+x$ precessing in a field along $z$; prepare and measure in one basis, evolve in another.",
+    note: "Supplemental — Kahn Sample Exam 1 #80; Kahn §8 (2015 Nobel entry); KATRIN, Science 388, 180 (2025)."
   },
   {
     id: "supp-total-internal-reflection",
