@@ -109,14 +109,19 @@ PGRE.views.formulas = (function () {
      (PGRE.similarProblemButtonHTML / wireSimilarProblemButtons); the click
      hands the card to PGRE.openSimilarProblem → PGRE.launchSimilarProblem
      (js/packs.js). A card with no qualifying match renders an inert
-     "No similar problem" label rather than an unrelated question. */
-  function similarButton(card, extraClass) {
-    return PGRE.similarProblemButtonHTML
-      ? PGRE.similarProblemButtonHTML(card, extraClass) : '';
+     "No similar problem" label rather than an unrelated question.
+     The control is followed by the card's OrbitOS learning-session links
+     (PGRE.sessionLinksHTML, also js/bank.js), which take their own row; the
+     Search card passes noSessions and puts them under its footer instead. */
+  function similarButton(card, extraClass, noSessions) {
+    return (PGRE.similarProblemButtonHTML
+      ? PGRE.similarProblemButtonHTML(card, extraClass) : '') +
+      (!noSessions && PGRE.sessionLinksHTML ? PGRE.sessionLinksHTML(card) : '');
   }
 
   function wireSimilar(rootEl) {
     if (PGRE.wireSimilarProblemButtons) PGRE.wireSimilarProblemButtons(rootEl);
+    if (PGRE.wireSessionLinks) PGRE.wireSessionLinks(rootEl);
   }
 
 
@@ -219,7 +224,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20261020b';
+      s.src = 'js/flashmodes.js?v=20261022a';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -4634,11 +4639,12 @@ PGRE.views.formulas = (function () {
         '<span class="fs-card-actions">' +
           '<button type="button" class="btn btn-ghost btn-sm fs-modal-btn" data-fs-modal="' +
             ui.esc(c.id) + '"' + modalAria + '>' + modalLabel + '</button>' +
-          similarButton(c, 'btn-sm') +
+          similarButton(c, 'btn-sm', true) +
           addCtrl +
         '</span>' +
         '<span class="fs-chips">' + searchChipsHTML(c) + '</span>' +
       '</div>' +
+      (PGRE.sessionLinksHTML ? PGRE.sessionLinksHTML(c) : '') +
       '<div class="card-review-hist-wrap"' + (open ? '' : ' hidden') + '>' +
         reviewHistoryHTML(c.id) + '</div>' +
     '</article>';

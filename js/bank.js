@@ -500,3 +500,52 @@ PGRE.openSimilarProblem = function (card) {
   }
   return true;
 };
+
+/* Learning-session links: the OrbitOS notes that work through a card
+   (PGRE.SESSION_LINKS, js/data-session-links.js) render as one quiet line,
+   a "Sessions" caption and one note link per session, each opening the
+   note in Obsidian. A card with no session renders nothing. The link text
+   is the note's file name without its date stamp, unless
+   PGRE.SESSION_LABELS gives a LaTeX title. */
+PGRE.sessionLinksHTML = function (card) {
+  var paths = (card && PGRE.SESSION_LINKS && PGRE.SESSION_LINKS[card.id]) || [];
+  if (!paths.length) return '';
+  var esc = (PGRE.ui && PGRE.ui.esc) || function (s) {
+    return String(s).replace(/[&<>"']/g, function (ch) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+    });
+  };
+  var icon = PGRE.sidebarIcon ? PGRE.sidebarIcon('note', 'session-link-icon') : '';
+  return '<span class="session-links" role="group" aria-label="Learning sessions in Obsidian">' +
+    '<span class="session-links-label" aria-hidden="true">Sessions</span>' +
+    '<span class="session-links-list">' + paths.map(function (path) {
+      var note = path.replace(/\.md$/, '');
+      var name = note.replace(/^.*\//, '').replace(/^\d{4}-\d{2}-\d{2}-\d{4} /, '');
+      var title = (PGRE.SESSION_LABELS && PGRE.SESSION_LABELS[path]) || name;
+      var href = 'obsidian://open?vault=' + encodeURIComponent(PGRE.SESSION_VAULT) +
+        '&file=' + encodeURIComponent(note);
+      return '<a class="session-link" href="' + esc(href) +
+        '" data-session-link title="Open in Obsidian: ' + esc(name) + '">' + icon +
+        '<span class="session-link-text">' + esc(title) + '</span></a>';
+    }).join('') + '</span></span>';
+};
+
+/* Clicks and Enter/Space stay on the link, so it never flips, grades or
+   picks the card underneath; the browser hands the URL to Obsidian. Some
+   surfaces (the Study grade row) are not typeset, so LaTeX labels are
+   typeset here. */
+PGRE.wireSessionLinks = function (root) {
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll('[data-session-link]').forEach(function (link) {
+    if (link._pgreSessionWired) return;   // a second wiring would open the note twice
+    link._pgreSessionWired = true;
+    if (PGRE.typesetMath && link.textContent.indexOf('$') !== -1) PGRE.typesetMath(link);
+    link.addEventListener('click', function (e) { e.stopPropagation(); });
+    link.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      e.stopPropagation();
+      link.click();
+    });
+  });
+};
