@@ -67,13 +67,18 @@ PGRE.flashmodes = (function () {
   /* "Similar problem" control — the button markup and matching live in
      js/bank.js (PGRE.similarProblemButtonHTML / wireSimilarProblemButtons);
      the click hands the card to PGRE.openSimilarProblem, which delegates to
-     PGRE.launchSimilarProblem (js/packs.js). */
-  function similarProblemButton(card, extraClass) {
-    return PGRE.similarProblemButtonHTML
-      ? PGRE.similarProblemButtonHTML(card, extraClass) : '';
+     PGRE.launchSimilarProblem (js/packs.js). It is followed by one link per
+     OrbitOS learning session that works through the card
+     (PGRE.sessionLinksHTML), except on Match tiles: both halves of a pair
+     would carry the same session label and give the pairing away. */
+  function similarProblemButton(card, extraClass, noSessions) {
+    return (PGRE.similarProblemButtonHTML
+      ? PGRE.similarProblemButtonHTML(card, extraClass) : '') +
+      (!noSessions && PGRE.sessionLinksHTML ? PGRE.sessionLinksHTML(card) : '');
   }
   function wireSimilar(root) {
     if (PGRE.wireSimilarProblemButtons) PGRE.wireSimilarProblemButtons(root);
+    if (PGRE.wireSessionLinks) PGRE.wireSessionLinks(root);
   }
 
   /* Book-list Recall cards (kind 'list', content/bank/cpg-lists.js): the back
@@ -483,7 +488,7 @@ PGRE.flashmodes = (function () {
           '<button class="flash-tile" data-tile="' + idx + '" aria-pressed="false">' +
           '<span class="flash-tile-kind">' + (t.kind === 'prompt' ? 'Prompt' : 'Formula') + '</span>' +
           '<span class="flash-tile-body">' + t.html + '</span></button>' +
-          '<div class="flash-tile-action">' + similarProblemButton(t.card, 'btn-sm') + '</div></div>';
+          '<div class="flash-tile-action">' + similarProblemButton(t.card, 'btn-sm', true) + '</div></div>';
       });
       el.innerHTML = '<div class="card">' +
         '<div class="flash-hud"><span class="flash-title">Match · ' + st.total + ' pairs</span>' +

@@ -1297,6 +1297,8 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 /* ——— Small buttons (inline actions) ——— */
 .btn-sm { font-size: 12.5px; padding: 5px 12px; border-radius: var(--ctl-r); min-height: var(--ctl-h-sm); }
 .similar-problem-btn { white-space: nowrap; }
+.session-link-btn { max-width: 100%; }
+.session-link-btn > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ——— Sidebar due badges ——— */
 .nav-badge-due { background: var(--ivory); color: var(--ink); font-weight: 500; }

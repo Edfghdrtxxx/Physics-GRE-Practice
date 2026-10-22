@@ -109,14 +109,18 @@ PGRE.views.formulas = (function () {
      (PGRE.similarProblemButtonHTML / wireSimilarProblemButtons); the click
      hands the card to PGRE.openSimilarProblem → PGRE.launchSimilarProblem
      (js/packs.js). A card with no qualifying match renders an inert
-     "No similar problem" label rather than an unrelated question. */
+     "No similar problem" label rather than an unrelated question.
+     The control is followed by one link per OrbitOS learning session that
+     works through the card (PGRE.sessionLinksHTML, also js/bank.js). */
   function similarButton(card, extraClass) {
-    return PGRE.similarProblemButtonHTML
-      ? PGRE.similarProblemButtonHTML(card, extraClass) : '';
+    return (PGRE.similarProblemButtonHTML
+      ? PGRE.similarProblemButtonHTML(card, extraClass) : '') +
+      (PGRE.sessionLinksHTML ? PGRE.sessionLinksHTML(card) : '');
   }
 
   function wireSimilar(rootEl) {
     if (PGRE.wireSimilarProblemButtons) PGRE.wireSimilarProblemButtons(rootEl);
+    if (PGRE.wireSessionLinks) PGRE.wireSessionLinks(rootEl);
   }
 
 
@@ -219,7 +223,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20261020b';
+      s.src = 'js/flashmodes.js?v=20261022a';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);

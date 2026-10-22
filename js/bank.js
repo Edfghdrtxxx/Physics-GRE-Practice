@@ -500,3 +500,47 @@ PGRE.openSimilarProblem = function (card) {
   }
   return true;
 };
+
+/* Learning-session links: the OrbitOS notes that work through a card
+   (PGRE.SESSION_LINKS, js/data-session-links.js) render as one link per
+   note that opens it in Obsidian. A card with no session renders nothing.
+   The label is the note's file name without its date stamp, unless
+   PGRE.SESSION_LABELS gives a LaTeX title. */
+PGRE.sessionLinksHTML = function (card) {
+  var paths = (card && PGRE.SESSION_LINKS && PGRE.SESSION_LINKS[card.id]) || [];
+  var esc = (PGRE.ui && PGRE.ui.esc) || function (s) {
+    return String(s).replace(/[&<>"']/g, function (ch) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+    });
+  };
+  return paths.map(function (path) {
+    var note = path.replace(/\.md$/, '');
+    var title = (PGRE.SESSION_LABELS && PGRE.SESSION_LABELS[path]) ||
+      note.replace(/^.*\//, '').replace(/^\d{4}-\d{2}-\d{2}-\d{4} /, '');
+    var href = 'obsidian://open?vault=' + encodeURIComponent(PGRE.SESSION_VAULT) +
+      '&file=' + encodeURIComponent(note);
+    return '<a class="btn btn-ghost btn-sm session-link-btn" href="' + esc(href) +
+      '" data-session-link title="Open this learning session in Obsidian">' +
+      '<span>Session: ' + esc(title) + '</span></a>';
+  }).join('');
+};
+
+/* Clicks and Enter/Space stay on the link, so it never flips, grades or
+   picks the card underneath; the browser hands the URL to Obsidian. Some
+   surfaces (the Study grade row) are not typeset, so LaTeX labels are
+   typeset here. */
+PGRE.wireSessionLinks = function (root) {
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll('[data-session-link]').forEach(function (link) {
+    if (link._pgreSessionWired) return;   // a second wiring would open the note twice
+    link._pgreSessionWired = true;
+    if (PGRE.typesetMath && link.textContent.indexOf('$') !== -1) PGRE.typesetMath(link);
+    link.addEventListener('click', function (e) { e.stopPropagation(); });
+    link.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      e.stopPropagation();
+      link.click();
+    });
+  });
+};
