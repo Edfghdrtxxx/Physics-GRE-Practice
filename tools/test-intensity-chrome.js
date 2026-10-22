@@ -81,7 +81,7 @@ function median(list) {
 }
 
 /* ——— Bands, written out from the spec table (not from js/intensity.js) ——— */
-function bandWork(v, mock) { return mock || v >= 40 ? 'green' : v >= 25 ? 'amber' : 'red'; }
+function bandWork(v, mock) { return mock || v >= 60 ? 'green' : v >= 25 ? 'amber' : 'red'; }
 function bandPace(v) { return v == null ? 'none' : v <= 103 ? 'green' : v <= 130 ? 'amber' : 'red'; }
 function bandAcc(v) { return v == null ? 'none' : v >= 75 ? 'green' : v >= 60 ? 'amber' : 'red'; }
 var CHIP = { green: 'On target', amber: 'Close', red: 'Off target', none: 'No data', rest: 'No target' };
@@ -147,7 +147,7 @@ function buildSeed(spec) {
 
 /* What the card prints beside each number: the target in words. */
 function workText(n, mock, hasTarget) {
-  return n + ' ' + (!hasTarget ? 'no target today' : (mock ? 'full mock submitted' : 'of 40'));
+  return n + ' ' + (!hasTarget ? 'no target today' : (mock ? 'full mock submitted' : 'of 60'));
 }
 /* The reading the headline is about: off target before close, and within
    one band Daily work, accuracy, pace. New questions and Repeat time never
@@ -242,7 +242,7 @@ var SPECS = [
     topicAcc: { cm: '50%', em: '63%', th: '80%', qm: '100%' },
     bands: { dailyWork: 'amber', paceSec: 'amber', firstAttemptAccuracy: 'amber' },
     // all three judged readings are close: Daily work leads
-    lead: 'dailyWork', headline: '10 mistake-book questions to go today.', tone: 'attention'
+    lead: 'dailyWork', headline: '30 mistake-book questions to go today.', tone: 'attention'
   },
   {
     n: 2, name: 'all green',
@@ -253,9 +253,9 @@ var SPECS = [
       for (var j = 0; j < 20; j++) out.push([1 + (j % 6), ['cm', 'em', 'qm', 'th', 'at'][j % 5], j < 17, 95]);
       return out;
     }()),
-    retakes: [[0, 40, 45]],             // 40 retakes, 30 min
+    retakes: [[0, 60, 45]],             // 60 retakes, 45 min
     bands: { dailyWork: 'green', paceSec: 'green', firstAttemptAccuracy: 'green' },
-    lead: null, headline: 'Daily work done: 40 mistake-book questions.', tone: 'good'
+    lead: null, headline: 'Daily work done: 60 mistake-book questions.', tone: 'good'
   },
   {
     n: 3, name: 'slow and short',
@@ -268,7 +268,7 @@ var SPECS = [
     retakes: [[0, 10, 60]],             // 10 retakes, 10 min
     bands: { dailyWork: 'red', paceSec: 'red', firstAttemptAccuracy: 'red' },
     // all three off target: Daily work leads; accuracy is 2 + 10 right of 24 = 50%
-    lead: 'dailyWork', headline: '30 mistake-book questions to go today.', tone: 'attention'
+    lead: 'dailyWork', headline: '50 mistake-book questions to go today.', tone: 'attention'
   },
   {
     n: 4, name: 'mock today',
@@ -289,6 +289,22 @@ var SPECS = [
     retakes: [[0, 5, 60], [1, 41, 60]],
     bands: { dailyWork: 'none', paceSec: 'none', firstAttemptAccuracy: 'green' },
     lead: null, headline: 'No daily target today.', tone: 'rest'
+  },
+  {
+    n: 6, name: 'one short of the new minimum',
+    examAhead: EXAM_AHEAD,
+    news: [[1, 'cm', T, 95], [1, 'em', T, 95]],
+    retakes: [[0, 59, 60]],
+    bands: { dailyWork: 'amber', paceSec: 'none', firstAttemptAccuracy: 'green' },
+    lead: 'dailyWork', headline: '1 mistake-book question to go today.', tone: 'attention'
+  },
+  {
+    n: 7, name: 'the old minimum no longer meets the target',
+    examAhead: EXAM_AHEAD,
+    news: [[1, 'cm', T, 95], [1, 'em', T, 95]],
+    retakes: [[0, 40, 60]],
+    bands: { dailyWork: 'amber', paceSec: 'none', firstAttemptAccuracy: 'green' },
+    lead: 'dailyWork', headline: '20 mistake-book questions to go today.', tone: 'attention'
   }
 ];
 
@@ -606,11 +622,11 @@ async function main() {
           'status payload ' + m + ' = ' + want[m].value + ' (' + want[m].band + ')');
       });
       check(payload.dailyWork.lastTargetDay === want.dailyWork.lastTargetDay &&
-        payload.dailyWork.threshold === (want.dailyWork.hasTarget ? 40 : null) &&
+        payload.dailyWork.threshold === (want.dailyWork.hasTarget ? 60 : null) &&
         payload.dailyWork.mocks.length === (want.dailyWork.mock ? 1 : 0) &&
         payload.newQuestions.threshold === null && payload.repeatMinutes.threshold === null,
         'status payload: last target day ' + want.dailyWork.lastTargetDay + ', target ' +
-        (want.dailyWork.hasTarget ? 40 : 'none') + '; no target for new questions or repeat time');
+        (want.dailyWork.hasTarget ? 60 : 'none') + '; no target for new questions or repeat time');
       check(payload.firstAttemptAccuracy.n === want.firstAttemptAccuracy.n &&
         payload.firstAttemptAccuracy.correct === want.firstAttemptAccuracy.correct,
         'status payload accuracy counts ' + want.firstAttemptAccuracy.correct + ' of ' + want.firstAttemptAccuracy.n);
@@ -646,11 +662,11 @@ async function main() {
         check(workOpen.text.indexOf('Counts your answers in the mistake book today (30 retakes). ' +
             'A full mock submitted today meets the target on its own.') >= 0 &&
           workOpen.text.indexOf('New material comes from the Sunday full mocks; the other days go to the mistake book.') >= 0 &&
-          workOpen.text.indexOf('The target of 40 a day runs through ' +
+          workOpen.text.indexOf('The target of 60 a day runs through ' +
             new Date(want.dailyWork.lastTargetDay + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
             ', 3 days before the exam on ') >= 0,
           'it says what counts, why, and through which date');
-        check(/On target 40 or more, or a full mock Close 25 to 39 Off target under 25/.test(workOpen.text),
+        check(/On target 60 or more, or a full mock Close 25 to 59 Off target under 25/.test(workOpen.text),
           'it lists the three bands and their limits');
         check(workOpen.links.indexOf('#/mistakes') >= 0 && workOpen.links.indexOf('#/exam') >= 0,
           'it links to the mistake book and the mock exam');
@@ -872,9 +888,9 @@ async function main() {
           'summary line 1 reads "Median seconds per question" for this pack');
         check(summary.pace.value === '120 / 103' && summary.pace.band === 'amber' && summary.pace.chip === CHIP.amber,
           'summary pace line: 120 / 103, amber (got ' + summary.pace.value + ', ' + summary.pace.band + ')');
-        check(/^Mistake book today/.test(summary.work.label) && summary.work.value === '30 / 40' &&
+        check(/^Mistake book today/.test(summary.work.label) && summary.work.value === '30 / 60' &&
           summary.work.band === 'amber' && summary.work.chip === CHIP.amber,
-          'summary line 2: Mistake book today 30 / 40, amber; a pack does not move it (got ' +
+          'summary line 2: Mistake book today 30 / 60, amber; a pack does not move it (got ' +
           summary.work.value + ', ' + summary.work.band + ')');
 
         var receipts = await ev('(function(){var st=PGRE.store.state;return {last:st.lastAgentReceipt&&st.lastAgentReceipt.medianSec,' +
@@ -952,8 +968,8 @@ async function main() {
         var card4 = await readCard();
         var keptFocus = await ev('(function(){var a=document.activeElement;var r=a&&a.closest&&a.closest(".intensity-row");' +
           'return r?r.getAttribute("data-metric"):null;})()');
-        check(card4.rows.dailyWork.value === '32 of 40' && card4.rows.dailyWork.delta === '+2',
-          'after a sibling tab saves 2 retakes the card reads 32 of 40 with "+2", without a reload (got "' +
+        check(card4.rows.dailyWork.value === '32 of 60' && card4.rows.dailyWork.delta === '+2',
+          'after a sibling tab saves 2 retakes the card reads 32 of 60 with "+2", without a reload (got "' +
           card4.rows.dailyWork.value + '", "' + card4.rows.dailyWork.delta + '")');
         check(card4.rows.dailyWork.expanded === 'true' && keptFocus === 'dailyWork',
           'the opened reading stays open and keeps the keyboard focus through that repaint');
@@ -963,7 +979,7 @@ async function main() {
         await sleep(700);
         var card4b = await readCard();
         var keptTag = await ev('document.activeElement ? document.activeElement.tagName : null');
-        check(card4b.rows.dailyWork.value === '33 of 40' && keptTag === 'SUMMARY',
+        check(card4b.rows.dailyWork.value === '33 of 60' && keptTag === 'SUMMARY',
           'focus on the topic disclosure survives a repaint too (now on ' + keptTag + ')');
         await ev('document.querySelector(' + JSON.stringify(rowSel('dailyWork') + ' .intensity-links a[href="#/exam"]') + ').focus(); true');
         await siblingSave(1);
@@ -982,7 +998,7 @@ async function main() {
         var kicker = await ev('document.querySelector("#intensity-card .kicker").innerText');
         var tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
         var tomorrowLine = tomorrow.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }).toUpperCase();
-        check(kicker.toUpperCase() === tomorrowLine && card5.rows.dailyWork.value === '0 of 40' &&
+        check(kicker.toUpperCase() === tomorrowLine && card5.rows.dailyWork.value === '0 of 60' &&
           card5.rows.newQuestions.value === '0 no target' && card5.rows.paceSec.value === '— target 103 s or under',
           'after midnight the card shows the new day (' + kicker + ') with 0 retakes, 0 new questions and no pace, without a reload');
       }
@@ -1004,11 +1020,11 @@ async function main() {
     check(METRICS.every(function (m) { return fresh0.rows[m].chip === null && fresh0.rows[m].meter === false &&
       fresh0.rows[m].value === '' && fresh0.rows[m].hint === ''; }),
       'no reading is judged: no band chip, no meter, no value and no hint');
-    check(fresh0.rows.dailyWork.preview === '40 mistake-book questions a day, or a full mock' &&
+    check(fresh0.rows.dailyWork.preview === '60 mistake-book questions a day, or a full mock' &&
       fresh0.rows.paceSec.preview === 'target 103 s or under' &&
       fresh0.rows.firstAttemptAccuracy.preview === 'target 75% or more' &&
       fresh0.rows.repeatMinutes.preview === 'no limit' && fresh0.rows.newQuestions.preview === 'no target',
-      'each row shows its target instead: 40 a day or a full mock, 103 s or under, 75% or more, no limit, no target');
+      'each row shows its target instead: 60 a day or a full mock, 103 s or under, 75% or more, no limit, no target');
     check(fresh0.week === false && fresh0.adjust === false && fresh0.tally === '',
       'the 7-day strip, the topic table and the tally wait for the first answers');
     await clickOn(rowSel('repeatMinutes') + ' .intensity-toggle');
@@ -1031,13 +1047,13 @@ async function main() {
     DAY_SHIFT = DAYS_TO_SUNDAY;
     var shim = await send('Page.addScriptToEvaluateOnNewDocument',
       { source: '(' + clockShim.toString() + ')(' + (DAYS_TO_SUNDAY * 86400000) + ');' });
-    var sunSpec = { n: 9, examAhead: EXAM_AHEAD, news: [[1, 'cm', T, 95], [1, 'em', T, 95]], retakes: [[1, 40, 60]] };
+    var sunSpec = { n: 9, examAhead: EXAM_AHEAD, news: [[1, 'cm', T, 95], [1, 'em', T, 95]], retakes: [[1, 60, 60]] };
     sunSpec.examDate = dayAhead(EXAM_AHEAD);
     await seedAndOpen(buildSeed(sunSpec));
     var sun = await readCard();
     var pageDay = await ev('new Date().getDay()');
     check(pageDay === 0, 'the page clock reads Sunday');
-    check(sun.rows.dailyWork.value === '0 of 40' && sun.rows.dailyWork.band === 'red' &&
+    check(sun.rows.dailyWork.value === '0 of 60' && sun.rows.dailyWork.band === 'red' &&
       sun.verdict.headline === 'No mistake-book questions yet today.' && sun.verdict.href === '#/exam' &&
       sun.verdict.label === 'Open Mock exam →' && sun.verdict.primary === true &&
       sun.verdict.detail.indexOf('Today is the full-mock day: a submitted mock meets the target on its own.') === 0,

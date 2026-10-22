@@ -266,9 +266,9 @@ assert(it.firstAttemptAccuracy.value === 33 && it.firstAttemptAccuracy.n === 3 &
   'first-try accuracy over 7 days: 1 of 3 = 33%, red');
 assert(it.repeatMinutes.value === 0 && it.repeatMinutes.threshold === null && it.repeatMinutes.band === null,
   'no mistake-book retakes: 0 minutes, no limit');
-assert(it.dailyWork.value === 0 && it.dailyWork.threshold === 40 && it.dailyWork.band === 'green' &&
+assert(it.dailyWork.value === 0 && it.dailyWork.threshold === 60 && it.dailyWork.band === 'green' &&
   it.dailyWork.mocks.length === 1 && it.dailyWork.mocks[0].id === 'exam-today',
-  'Daily work: 0 retakes, but the exam submitted today meets the target of 40: green');
+  'Daily work: 0 retakes, but the exam submitted today meets the target of 60: green');
 assert(it.dailyWork.lastTargetDay === lastTarget && it.dailyWork.examDate === examDate,
   'the last target day is the exam date minus 3 days');
 assert(it.days[5].mocks === 1 && it.days[5].workBand === 'green' && it.days[4].mocks === 0 &&

@@ -99,7 +99,7 @@ function history(today) {
 }
 
 function ctx(over) {
-  var c = { hasHistory: true, unseen: 200, unseenByTopic: { cm: 40, em: 30 } };
+  var c = { hasHistory: true, unseen: 200, unseenByTopic: { cm: 60, em: 30 } };
   Object.keys(over || {}).forEach(function (k) { c[k] = over[k]; });
   return c;
 }
@@ -127,10 +127,10 @@ assert(Object.keys(d0.topics[0]).join(',') === 'topic,name,short,weight,newQuest
   Object.keys(d0.days[0]).join(',') === 'date,newQuestions,paceSec,retakes,mocks,workBand',
   'topic rows and trend days have their fields');
 var T = I.THRESHOLDS;
-assert(T.dailyWork.green === 40 && T.dailyWork.amber === 25 && T.paceSec.green === 103 && T.paceSec.amber === 130 &&
+assert(T.dailyWork.green === 60 && T.dailyWork.amber === 25 && T.paceSec.green === 103 && T.paceSec.amber === 130 &&
   T.accuracyPct.green === 75 && T.accuracyPct.amber === 60 && T.topicMinNew === 5 && T.topicTargetAcc === 0.79 &&
   T.lastTargetLeadDays === 3 && T.newQuestions === undefined && T.repeatMin === undefined,
-  'thresholds: Daily work 40 / 25, pace 103 / 130, accuracy 75 / 60; none for new questions or repeat time');
+  'thresholds: Daily work 60 / 25, pace 103 / 130, accuracy 75 / 60; none for new questions or repeat time');
 assert(I.MOCK_WEEKDAY === 0 && I.NO_PACK_WEEKDAYS === undefined, 'Sunday is the mock weekday; no no-pack weekdays');
 // 3 new today (118 s), 6 on Oct 15 (111 s), 5 on Oct 13 (148 s, 4 right);
 // 30 retakes today in 39 min, 45 on Oct 16; GR0877 submitted Oct 11.
@@ -142,13 +142,13 @@ assert(JSON.stringify([d0.newQuestions.value, d0.newQuestions.threshold, d0.newQ
   'new questions 3 (no band), pace 118 amber, accuracy 93% (13 of 14) green, repeat 39 min over 30 retakes (no band)');
 assert(JSON.stringify([d0.dailyWork.value, d0.dailyWork.threshold, d0.dailyWork.band, d0.dailyWork.retakes,
     d0.dailyWork.mocks.length, d0.dailyWork.lastTargetDay, d0.dailyWork.examDate]) ===
-  JSON.stringify([30, 40, 'amber', 30, 0, LAST, EXAM]),
-  'Daily work 30 of 40, amber; no mock today; target through 2026-10-29');
+  JSON.stringify([30, 60, 'amber', 30, 0, LAST, EXAM]),
+  'Daily work 30 of 60, amber; no mock today; target through 2026-10-29');
 assert(d0.days.map(function (x) {
   return x.date.slice(5) + ':' + x.newQuestions + ':' + x.paceSec + ':' + x.retakes + ':' + x.mocks + ':' + x.workBand;
 }).join(' ') ===
   '10-11:0:null:0:1:green 10-12:0:null:0:0:red 10-13:5:148:0:0:red 10-14:0:null:0:0:red ' +
-  '10-15:6:111:0:0:red 10-16:0:null:45:0:green 10-17:3:118:30:0:amber',
+  '10-15:6:111:0:0:red 10-16:0:null:45:0:amber 10-17:3:118:30:0:amber',
   'the 7 days carry new questions, pace, retakes, mocks and the Daily work band (Oct 11 green by its mock)');
 assert(d0.newQuestions.value === 3 && d0.firstAttemptAccuracy.n === 14,
   'answers in mode \'exam\' count as neither new questions nor retakes');
@@ -156,8 +156,8 @@ assert(d0.newQuestions.value === 3 && d0.firstAttemptAccuracy.n === 14,
 /* ——— Daily work bands ——— */
 console.log('\nDaily work bands');
 function bandAt(n) { return work(SAT, n).dailyWork.band; }
-assert([40, 39, 25, 24, 0].map(bandAt).join(',') === 'green,amber,amber,red,red',
-  '40 green, 39 and 25 amber, 24 and 0 red');
+assert([60, 59, 40, 25, 24, 0].map(bandAt).join(',') === 'green,amber,amber,amber,red,red',
+  '60 green; 59, 40 and 25 amber; 24 and 0 red');
 var dMock = work(SAT, 0, { mock: {} });
 assert(dMock.dailyWork.band === 'green' && dMock.dailyWork.value === 0 && dMock.dailyWork.mocks.length === 1 &&
   dMock.dailyWork.mocks[0].source === 'gr1777' && dMock.dailyWork.mocks[0].format === '100x170',
@@ -170,7 +170,7 @@ assert(history(SAT).repeat(0, 10).mock(1).read().dailyWork.band === 'red',
   'a mock submitted yesterday does not count today');
 var dLast = work(LAST, 10);
 var dAfter = work(AFTER, 10);
-assert(dLast.dailyWork.threshold === 40 && dLast.dailyWork.band === 'red' &&
+assert(dLast.dailyWork.threshold === 60 && dLast.dailyWork.band === 'red' &&
   dAfter.dailyWork.threshold === null && dAfter.dailyWork.band === null && dAfter.dailyWork.value === 10,
   'Oct 29 still has the target; Oct 30 has none and no band');
 var movedState = history(SAT).repeat(0, 10).state();
@@ -178,12 +178,12 @@ movedState.settings.examDate = '2026-10-19';
 var dMoved = I.compute(movedState, { today: SAT });
 assert(dMoved.dailyWork.lastTargetDay === '2026-10-16' && dMoved.dailyWork.band === null,
   'the last target day follows settings.examDate');
-assert(I.band('dailyWork', 40) === 'green' && I.band('dailyWork', 25) === 'amber' && I.band('newQuestions', 3) === null &&
+assert(I.band('dailyWork', 60) === 'green' && I.band('dailyWork', 25) === 'amber' && I.band('newQuestions', 3) === null &&
   I.band('repeatMin', 90) === null && I.band('paceSec', 104) === 'amber',
   'band() knows Daily work, pace and accuracy, and has no band for new questions or repeat time');
 
 /* ——— review(): the card ——— */
-console.log('\nreview(): a weak-spot day short of 40');
+console.log('\nreview(): a weak-spot day short of 60');
 var frozenD = JSON.stringify(d0);
 var c0 = ctx();
 var frozenC = JSON.stringify(c0);
@@ -194,14 +194,14 @@ assert(r0.date === SAT && r0.weekday === 6 && r0.mockDay === false && r0.empty =
   'review reports the day and that it is not the mock day');
 assert(r0.rows.map(function (r) { return r.key; }).join(',') ===
   'dailyWork,firstAttemptAccuracy,paceSec,repeatMinutes,newQuestions', 'five rows, Daily work first');
-assert(r0.row.dailyWork.label === 'Daily work' && r0.row.dailyWork.value === '30' && r0.row.dailyWork.target === 'of 40' &&
+assert(r0.row.dailyWork.label === 'Daily work' && r0.row.dailyWork.value === '30' && r0.row.dailyWork.target === 'of 60' &&
   r0.row.newQuestions.target === 'no target' && r0.row.repeatMinutes.target === 'no limit' &&
   r0.row.paceSec.target === 'target 103 s or under' && r0.row.firstAttemptAccuracy.target === 'target 75% or more',
-  'targets in words: "of 40", "no target", "no limit", "target 103 s or under", "target 75% or more"');
+  'targets in words: "of 60", "no target", "no limit", "target 103 s or under", "target 75% or more"');
 assert(r0.rows.every(function (r) { return r.band === (d0[r.key].band || null); }), 'row.band is the computed band for every row');
 assert(r0.verdict.tone === 'attention' && r0.verdict.mark === 'amber' && r0.verdict.focus === 'dailyWork' &&
-  r0.verdict.headline === '10 mistake-book questions to go today.',
-  'headline: "10 mistake-book questions to go today." (got "' + r0.verdict.headline + '")');
+  r0.verdict.headline === '30 mistake-book questions to go today.',
+  'headline: "30 mistake-book questions to go today." (got "' + r0.verdict.headline + '")');
 assert(r0.verdict.action && r0.verdict.action.href === '#/mistakes' && r0.verdict.action.label === 'Open Mistake book',
   'the one action opens the mistake book');
 assert(r0.verdict.detail === 'A full mock submitted today also meets the target. Also close: Pace.',
@@ -211,9 +211,9 @@ assert(r0.row.dailyWork.lead === true && r0.row.dailyWork.action === null,
 assert(r0.attention.join(',') === 'dailyWork,paceSec' &&
   r0.tally.green === 1 && r0.tally.amber === 2 && r0.tally.red === 0 && r0.tally.rest === 2 && sum(r0.tally) === 5,
   'attention: Daily work, then pace; tally 1 on target, 2 close, 2 without a target');
-assert(work(SAT, 39).dailyWork.band === 'amber' &&
-  I.review(work(SAT, 39), ctx()).verdict.headline === '1 mistake-book question to go today.',
-  'singular at 39: "1 mistake-book question to go today."');
+assert(work(SAT, 59).dailyWork.band === 'amber' &&
+  I.review(work(SAT, 59), ctx()).verdict.headline === '1 mistake-book question to go today.',
+  'singular at 59: "1 mistake-book question to go today."');
 var rZero = I.review(history(SAT).add(1, 20).read(), ctx());
 assert(rZero.verdict.headline === 'No mistake-book questions yet today.' && rZero.verdict.mark === 'red',
   'nothing yet today: "No mistake-book questions yet today."');
@@ -224,7 +224,7 @@ assert(rSun.mockDay === true && rSun.verdict.focus === 'dailyWork' &&
   rSun.verdict.headline === 'No mistake-book questions yet today.' &&
   rSun.verdict.action.href === '#/exam' && rSun.verdict.action.label === 'Open Mock exam' &&
   rSun.verdict.detail.indexOf('Today is the full-mock day: a submitted mock meets the target on its own.') === 0,
-  'Sunday short of 40: the button opens the mock exam and the detail says the mock meets the target');
+  'Sunday short of 60: the button opens the mock exam and the detail says the mock meets the target');
 var rSunDone = I.review(history(SUN).add(1, 20, { sec: 95 }).mock(0).read(), ctx());
 assert(rSunDone.row.dailyWork.show === 'green' && rSunDone.row.dailyWork.target === 'full mock submitted' &&
   rSunDone.verdict.tone === 'good' && rSunDone.verdict.headline === 'Full mock submitted today.',
@@ -239,7 +239,7 @@ var rAcc = I.review(accHist.read(), ctx());
 assert(rAcc.verdict.focus === 'firstAttemptAccuracy' && rAcc.verdict.mark === 'red' &&
   rAcc.verdict.headline === 'First-try accuracy is 53% over the last 7 days.' && rAcc.verdict.action.href === '#/history',
   'accuracy red outranks Daily work amber: "First-try accuracy is 53% over the last 7 days."');
-assert(rAcc.row.dailyWork.hint === 'Answer 15 more mistake-book questions to reach 40. ' +
+assert(rAcc.row.dailyWork.hint === 'Answer 35 more mistake-book questions to reach 60. ' +
     'A full mock submitted today also meets the target.' &&
   rAcc.row.dailyWork.action && rAcc.row.dailyWork.action.href === '#/mistakes',
   'the Daily work row then gives the count and its own link (got "' + rAcc.row.dailyWork.hint + '")');
@@ -256,8 +256,8 @@ assert(rAfter.verdict.tone === 'rest' && rAfter.verdict.headline === 'No daily t
   rAfter.verdict.action === null,
   'headline "No daily target today." with the end date and no button (got "' + rAfter.verdict.detail + '")');
 var rLast = I.review(dLast, ctx());
-assert(rLast.row.dailyWork.target === 'of 40' && rLast.verdict.focus === 'dailyWork',
-  'Oct 29 (a Thursday) still asks for 40');
+assert(rLast.row.dailyWork.target === 'of 60' && rLast.verdict.focus === 'dailyWork',
+  'Oct 29 (a Thursday) still asks for 60');
 
 console.log('\nreadings without a target');
 var heavy = I.review(history(SAT).repeat(0, 120, 150).read(), ctx());
@@ -278,29 +278,29 @@ assert(/\(30 retakes\)\.$/.test(r0.row.repeatMinutes.how[0]) &&
   'the opened rows say why there is no target and carry their counts');
 
 console.log('\nall on target');
-var goodHist = history(SAT).add(0, 16, { sec: 98, right: 14 }).add(1, 15).repeat(0, 40);
+var goodHist = history(SAT).add(0, 16, { sec: 98, right: 14 }).add(1, 15).repeat(0, 60);
 var rGood = I.review(goodHist.read(), ctx());
 assert(rGood.attention.length === 0 && rGood.verdict.tone === 'good' && rGood.verdict.mark === 'green' &&
-  rGood.verdict.headline === 'Daily work done: 40 mistake-book questions.' &&
+  rGood.verdict.headline === 'Daily work done: 60 mistake-book questions.' &&
   rGood.verdict.detail === 'The other readings are on target.' && rGood.verdict.action === null &&
   rGood.tally.green === 3 && rGood.tally.rest === 2,
-  'headline "Daily work done: 40 mistake-book questions."');
+  'headline "Daily work done: 60 mistake-book questions."');
 assert(rGood.rows.every(function (r) { return r.hint === '' && r.action === null; }), 'no row has a hint or a link');
-var rGoodNoPace = I.review(history(SAT).add(1, 15).repeat(0, 40).read(), ctx());
+var rGoodNoPace = I.review(history(SAT).add(1, 15).repeat(0, 60).read(), ctx());
 assert(rGoodNoPace.tally.none === 1 && rGoodNoPace.verdict.detail === 'The readings with data are on target.',
   'with pace empty: "The readings with data are on target."');
 
 console.log('\nmeters');
-assert(r0.row.dailyWork.meter.pct === 60 && r0.row.dailyWork.meter.mark === 80 && r0.row.dailyWork.meter.lowIsGood === false,
-  '30 of 40: the scale runs to 1.25 x the target, so the fill is 60% and the tick sits at 80%');
-var big = I.review(work(SAT, 60), ctx());
+assert(r0.row.dailyWork.meter.pct === 40 && r0.row.dailyWork.meter.mark === 80 && r0.row.dailyWork.meter.lowIsGood === false,
+  '30 of 60: the scale runs to 1.25 x the target, so the fill is 40% and the tick sits at 80%');
+var big = I.review(work(SAT, 90), ctx());
 assert(big.row.dailyWork.meter.pct === 100 && big.row.dailyWork.meter.mark === 66.7,
-  '60 of 40: the scale stretches to the value, the tick moves left');
+  '90 of 60: the scale stretches to the value, the tick moves left');
 assert(r0.row.paceSec.meter.lowIsGood === true && r0.row.firstAttemptAccuracy.meter.mark === 75,
   'pace is less-is-better; accuracy runs 0-100 with the tick at 75');
 
 console.log('\nanswers without a recorded time');
-var rUntimed = I.review(history(SAT).add(0, 6, { sec: null }).repeat(0, 40).read(), ctx());
+var rUntimed = I.review(history(SAT).add(0, 6, { sec: null }).repeat(0, 60).read(), ctx());
 assert(rUntimed.row.paceSec.value === '—' &&
   rUntimed.row.paceSec.hint === 'Today\'s 6 new questions have no recorded time, so there is no median.',
   'pace says the 6 new questions have no recorded time');
@@ -310,7 +310,7 @@ var dEmpty = I.compute({ attempts: [], settings: { examDate: EXAM } }, { today: 
 var rEmpty = I.review(dEmpty, ctx({ hasHistory: false }));
 assert(rEmpty.empty === true && rEmpty.verdict.tone === 'empty' && rEmpty.verdict.headline === 'Nothing measured yet.' &&
   rEmpty.verdict.action.href === '#/exam', 'empty state: "Nothing measured yet." with the mock exam as the action');
-assert(rEmpty.row.dailyWork.preview === '40 mistake-book questions a day, or a full mock' &&
+assert(rEmpty.row.dailyWork.preview === '60 mistake-book questions a day, or a full mock' &&
   rEmpty.row.newQuestions.preview === 'no target' && rEmpty.row.repeatMinutes.preview === 'no limit' &&
   rEmpty.row.paceSec.preview === 'target 103 s or under' && rEmpty.row.firstAttemptAccuracy.preview === 'target 75% or more',
   'each row offers its target as a preview');
@@ -319,12 +319,12 @@ assert(I.review(dEmpty, ctx()).empty === false && I.review(dEmpty).empty === fal
 
 console.log('\nseven days');
 assert(r0.days.length === 7 && r0.days[6].isToday === true && r0.days[0].mocks === 1 && r0.days[0].workBand === 'green' &&
-  r0.days.every(function (x) { return x.target === 40; }) &&
+  r0.days.every(function (x) { return x.target === 60; }) &&
   r0.days.map(function (x) { return x.retakes; }).join(',') === '0,0,0,0,0,45,30',
-  'the strip carries retakes, the mock and the target of 40 each day');
-var rLate = I.review(history('2026-10-31').repeat(2, 41).read(), ctx());
+  'the strip carries retakes, the mock and the target of 60 each day');
+var rLate = I.review(history('2026-10-31').repeat(2, 61).read(), ctx());
 assert(rLate.days.map(function (x) { return x.date.slice(5) + ':' + x.target + ':' + x.workBand; }).join(' ') ===
-  '10-25:40:red 10-26:40:red 10-27:40:red 10-28:40:red 10-29:40:green 10-30:null:null 10-31:null:null',
+  '10-25:60:red 10-26:60:red 10-27:60:red 10-28:60:red 10-29:60:green 10-30:null:null 10-31:null:null',
   'Oct 30 and 31 have no target and no band in the strip');
 
 console.log('\ntopic to work on');
@@ -342,7 +342,7 @@ assert(rTopic.judgedTopics === 2 && rEmpty.topic === null && rEmpty.judgedTopics
 
 console.log('\nthe opened row');
 assert(r0.row.dailyWork.cuts.map(function (c) { return c.band + ':' + c.text; }).join(' | ') ===
-    'green:40 or more, or a full mock | amber:25 to 39 | red:under 25' &&
+    'green:60 or more, or a full mock | amber:25 to 59 | red:under 25' &&
   r0.row.paceSec.cuts.map(function (c) { return c.text; }).join(' | ') === '103 s or under | 104 to 130 s | over 130 s' &&
   r0.row.firstAttemptAccuracy.cuts.map(function (c) { return c.text; }).join(' | ') === '75% or more | 60 to 74% | under 60%',
   'the band limits printed are the thresholds compute() uses');
@@ -354,7 +354,7 @@ assert(r0.row.dailyWork.links.map(function (a) { return a.href; }).join(',') ===
   'each opened row links to the place that moves it');
 assert(r0.row.dailyWork.how[0] === 'Counts your answers in the mistake book today (30 retakes). ' +
     'A full mock submitted today meets the target on its own.' &&
-  r0.row.dailyWork.how[2] === 'The target of 40 a day runs through Oct 29, 3 days before the exam on Nov 1.' &&
+  r0.row.dailyWork.how[2] === 'The target of 60 a day runs through Oct 29, 3 days before the exam on Nov 1.' &&
   /\(3 timed\)/.test(r0.row.paceSec.how[0]) && /13 of 14\.$/.test(r0.row.firstAttemptAccuracy.how[0]),
   'the explanations carry the counts and the dates behind each number');
 assert(typeof I.review === 'function' && typeof I.compute === 'function' && typeof I.chipHTML === 'function' &&

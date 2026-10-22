@@ -31,8 +31,8 @@
      minutes. No band.
    - Daily work (today): value = today's repeats (each answered retake
      counts once). lastTargetDay = settings.examDate (default 2026-11-01)
-     minus 3 days. Through lastTargetDay the band is green when value >= 40
-     or a full mock was submitted today, amber at 25-39, red under 25.
+     minus 3 days. Through lastTargetDay the band is green when value >= 60
+     or a full mock was submitted today, amber at 25-59, red under 25.
      After lastTargetDay there is no target and no band.
    - Day strip: the last N days, oldest first. N = opts.trendDays (the
      dashboard passes settings.intensityTrendDays), a whole number from 2 to
@@ -61,7 +61,7 @@ PGRE.intensity = (function () {
 
   /* Every tunable number lives here. */
   var THRESHOLDS = {
-    dailyWork: { green: 40, amber: 25 },     // retakes today: 40+ (or a full mock) green, 25-39 amber, under 25 red
+    dailyWork: { green: 60, amber: 25 },     // retakes today: 60+ (or a full mock) green, 25-59 amber, under 25 red
     paceSec: { green: 103, amber: 130 },     // median s: 103 or less green, 104-130 amber, over 130 red
     accuracyPct: { green: 75, amber: 60 },   // 7 days: 75%+ green, 60-74% amber, under 60% red
     topicMinNew: 5,                          // fewer new questions than this: too few to judge
