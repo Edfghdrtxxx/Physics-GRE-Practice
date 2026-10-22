@@ -53,8 +53,9 @@ function staticChecks() {
   check(html.indexOf('href="obsidian://open?vault=OrbitOS&amp;file=60_Learning_Progress%2FClassical%20Mechanics' +
     '%2F2026-10-22-1609%20Elastic%20collision%20recoil%20velocities"') !== -1,
     'the href is the vault-relative path without .md, URL-encoded');
-  check(html.indexOf('>Session: Elastic collision recoil velocities<') !== -1,
-    'the label is the file name without its date stamp');
+  check(html.indexOf('>Elastic collision recoil velocities</span></a>') !== -1 &&
+    html.indexOf('>Sessions</span>') !== -1,
+    'the link text is the file name without its date stamp, under a Sessions caption');
   check(P.sessionLinksHTML({ id: 'supp-friction' }) === '' && P.sessionLinksHTML(null) === '',
     'an unlinked card renders nothing');
   var vault = '/Users/Reid Hu/OrbitOS';
@@ -226,10 +227,15 @@ var STAGES = [
       var links = await h.links('#fcard-actions');
       h.assert(links.length === 1, 'the front action row has one session link (got ' + links.length + ')');
       h.assert(links[0].href === h.HREF, 'the link opens the session note: ' + links[0].href);
-      h.assert(links[0].text === 'Session: Elastic collision recoil velocities',
+      h.assert(links[0].text === 'Elastic collision recoil velocities',
         'the link is labelled with the session title');
-      h.assert(!!(await page.eval('!!document.querySelector("#fcard-actions .similar-problem-btn")')),
-        'the similar-problem control is still in the row');
+      var place = JSON.parse(await page.eval(function () {
+        var sim = document.querySelector('#fcard-actions .similar-problem-btn').getBoundingClientRect();
+        var row = document.querySelector('#fcard-actions .session-links').getBoundingClientRect();
+        return JSON.stringify({ simBottom: sim.bottom, rowTop: row.top });
+      }));
+      h.assert(place.rowTop >= place.simBottom,
+        'the Sessions line sits under the action buttons (' + place.rowTop + ' >= ' + place.simBottom + ')');
     } },
 
   { name: 'clicking the link on the front changes nothing',
@@ -275,8 +281,27 @@ var STAGES = [
       h.assert(links[0].katex && links[1].katex, 'the LaTeX labels are typeset in the grade row');
     } },
 
-  { name: 'unlinked card', shot: '04-unlinked',
+  { name: 'dark theme', shot: '04-two-sessions-dark',
     run: async function (page, h) {
+      await page.eval(function () { PGRE.setTheme('dark'); });
+      await h.sleep(100);
+      var c = JSON.parse(await page.eval(function () {
+        var a = document.querySelector('#fcard-actions [data-session-link]');
+        var probe = document.createElement('span');
+        probe.style.color = getComputedStyle(document.documentElement).getPropertyValue('--ink-2').trim();
+        document.body.appendChild(probe);
+        var ink2 = getComputedStyle(probe).color;
+        probe.remove();
+        return JSON.stringify({ link: getComputedStyle(a).color, ink2: ink2,
+          theme: document.documentElement.getAttribute('data-theme') });
+      }));
+      h.assert(c.theme === 'dark' && c.link === c.ink2,
+        'in dark theme the links take the dark --ink-2 (' + c.link + ')');
+    } },
+
+  { name: 'unlinked card', shot: '05-unlinked',
+    run: async function (page, h) {
+      await page.eval(function () { PGRE.setTheme('light'); });
       await h.showCard(h.UNLINKED);
       h.assert(!(await h.flipped()), 'the unlinked card shows its front');
       h.assert((await h.links('#main')).length === 0, 'no session link on the unlinked card front');
@@ -285,7 +310,7 @@ var STAGES = [
       h.assert((await h.links('#main')).length === 0, 'no session link on the unlinked card back');
     } },
 
-  { name: 'Search card browser', shot: '05-search',
+  { name: 'Search card browser', shot: '06-search',
     run: async function (page, h) {
       await h.click('button.flash-tab[data-mode="search"]');
       await h.wait('article.fs-card[data-fsid="' + h.LINKED + '"]');
@@ -310,7 +335,7 @@ var STAGES = [
         'Match tiles keep the similar-problem control');
     } },
 
-  { name: 'narrow window', size: '420x860',
+  { name: 'narrow window', shot: '07-search-420', size: '420x860',
     run: async function (page, h) {
       await h.click('button.flash-tab[data-mode="search"]');
       await h.wait('article.fs-card[data-fsid="' + h.TWO + '"]');
@@ -322,6 +347,9 @@ var STAGES = [
       h.assert(links.length === 2 && links.every(function (l) { return l.w <= sc.client; }),
         'at 420 px each link fits the window');
       h.assert(sc.scroll <= sc.client + 1, 'no horizontal page scroll (' + sc.scroll + ' / ' + sc.client + ')');
+      await page.eval('() => { document.querySelector(\'article.fs-card[data-fsid="' + h.TWO +
+        '"] .session-links\').scrollIntoView({ block: "center" }); }');
+      await h.sleep(200);
     } }
 ];
 

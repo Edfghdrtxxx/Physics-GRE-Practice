@@ -87,7 +87,7 @@ PGRE.SESSION_VAULT = 'OrbitOS';
     'cpgf-2.59': [polarization, displacementD],
     'cpgl-2.01': [displacementD],
     'supp-displacement-current': [ampereMaxwell],
-    'supp-image-plane': [images, sanity],
+    'supp-image-plane': [sanity, images],
 
     'cpgf-5.19': [kahnDebrief],
     'cpgf-5.22': [ladder],

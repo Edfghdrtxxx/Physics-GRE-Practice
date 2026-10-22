@@ -502,27 +502,32 @@ PGRE.openSimilarProblem = function (card) {
 };
 
 /* Learning-session links: the OrbitOS notes that work through a card
-   (PGRE.SESSION_LINKS, js/data-session-links.js) render as one link per
-   note that opens it in Obsidian. A card with no session renders nothing.
-   The label is the note's file name without its date stamp, unless
+   (PGRE.SESSION_LINKS, js/data-session-links.js) render as one quiet line,
+   a "Sessions" caption and one note link per session, each opening the
+   note in Obsidian. A card with no session renders nothing. The link text
+   is the note's file name without its date stamp, unless
    PGRE.SESSION_LABELS gives a LaTeX title. */
 PGRE.sessionLinksHTML = function (card) {
   var paths = (card && PGRE.SESSION_LINKS && PGRE.SESSION_LINKS[card.id]) || [];
+  if (!paths.length) return '';
   var esc = (PGRE.ui && PGRE.ui.esc) || function (s) {
     return String(s).replace(/[&<>"']/g, function (ch) {
       return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
     });
   };
-  return paths.map(function (path) {
-    var note = path.replace(/\.md$/, '');
-    var title = (PGRE.SESSION_LABELS && PGRE.SESSION_LABELS[path]) ||
-      note.replace(/^.*\//, '').replace(/^\d{4}-\d{2}-\d{2}-\d{4} /, '');
-    var href = 'obsidian://open?vault=' + encodeURIComponent(PGRE.SESSION_VAULT) +
-      '&file=' + encodeURIComponent(note);
-    return '<a class="btn btn-ghost btn-sm session-link-btn" href="' + esc(href) +
-      '" data-session-link title="Open this learning session in Obsidian">' +
-      '<span>Session: ' + esc(title) + '</span></a>';
-  }).join('');
+  var icon = PGRE.sidebarIcon ? PGRE.sidebarIcon('note', 'session-link-icon') : '';
+  return '<span class="session-links" role="group" aria-label="Learning sessions in Obsidian">' +
+    '<span class="session-links-label" aria-hidden="true">Sessions</span>' +
+    '<span class="session-links-list">' + paths.map(function (path) {
+      var note = path.replace(/\.md$/, '');
+      var name = note.replace(/^.*\//, '').replace(/^\d{4}-\d{2}-\d{2}-\d{4} /, '');
+      var title = (PGRE.SESSION_LABELS && PGRE.SESSION_LABELS[path]) || name;
+      var href = 'obsidian://open?vault=' + encodeURIComponent(PGRE.SESSION_VAULT) +
+        '&file=' + encodeURIComponent(note);
+      return '<a class="session-link" href="' + esc(href) +
+        '" data-session-link title="Open in Obsidian: ' + esc(name) + '">' + icon +
+        '<span class="session-link-text">' + esc(title) + '</span></a>';
+    }).join('') + '</span></span>';
 };
 
 /* Clicks and Enter/Space stay on the link, so it never flips, grades or
