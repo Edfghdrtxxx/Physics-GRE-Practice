@@ -447,7 +447,8 @@ PGRE.flashmodes = (function () {
     cards.forEach(function (c) {
       st.tiles.push({ id: c.id, card: c, kind: 'prompt',
         html: c.front ? formulaHTML(c.front) : PGRE.ui.esc(cardName(c)) });
-      st.tiles.push({ id: c.id, card: c, kind: 'formula', html: formulaHTML(c.back) });
+      // the formula alone, as Quiz shows it; takeaway and labelled points would give the pair away
+      st.tiles.push({ id: c.id, card: c, kind: 'formula', html: formulaHTML(stripLegend(c.back)) });
     });
     st.tiles = shuffle(st.tiles);
 

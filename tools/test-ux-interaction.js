@@ -1671,6 +1671,34 @@ function runAsync() {
   });
   var tiles = matchHost.querySelectorAll('.flash-tile');
   assert(tiles.length >= 4, 'startMatch rendered flash tiles from shipped flashmodes');
+
+  /* Q4: a Match formula tile shows the back's leading formula only */
+  var q4Host = ix.document.createElement('div');
+  ix.document.body.appendChild(q4Host);
+  PGRE.flashmodes.startMatch({
+    el: q4Host,
+    cards: [{ id: 'q4m', topic: 'cm', front: 'Match prompt',
+      back: '$$F = ma$$<p class="card-key"><strong>Key takeaway</strong></p>' +
+        '<ul class="recall-list"><li><strong>Labelled point:</strong> net force</li></ul>' }],
+    onReplay: function () {}, onExit: function () {}
+  });
+  var q4Formula = '';
+  q4Host.querySelectorAll('.flash-tile').forEach(function (t) {
+    var kind = t.querySelector('.flash-tile-kind');
+    if (kind && kind.textContent === 'Formula') q4Formula = t.querySelector('.flash-tile-body').textContent;
+  });
+  assert(q4Formula.indexOf('F = ma') !== -1, 'Q4 Match formula tile keeps the leading formula, got: ' + q4Formula);
+  assert(q4Formula.indexOf('Key takeaway') === -1 && q4Formula.indexOf('Labelled point') === -1,
+    'Q4 Match formula tile drops the takeaway and labelled points, got: ' + q4Formula);
+  PGRE.flashmodes.startMatch({
+    el: q4Host,
+    cards: [{ id: 'q4p', topic: 'cm', front: 'Prose prompt',
+      back: '<strong>Prose lead</strong><br>then $v$' }],
+    onReplay: function () {}, onExit: function () {}
+  });
+  var q4Prose = q4Host.textContent;
+  assert(q4Prose.indexOf('Prose lead') !== -1 && q4Prose.indexOf('then') !== -1,
+    'Q4 Match tile keeps a back with no leading math block whole');
   tiles[0].click();
   assert(tiles[0].classList.contains('selected') && tiles[0].getAttribute('aria-pressed') === 'true',
     'click path calls onPick (tile 0 selected)');
@@ -2151,12 +2179,26 @@ function runAsync() {
     }
     var openedRev = [];
     RV.openVisualizerModal = function (id) { openedRev.push(id); };
+    rv.cards.forEach(function (c) {
+      c.back += '<p class="card-key"><strong>Key takeaway</strong></p>' +
+        '<ul class="recall-list"><li><strong>Labelled point:</strong> net force</li></ul>';
+    });
     rv.location.hash = '#/formulas';
     ensureView(rv, RV.views.formulas.render());
     RV.views.formulas.mount();
     return wait(0).then(function () {
       rv.document.getElementById('study-btn').click();
+      var revQ = rv.document.getElementById('fcard-front').textContent;
+      assert(/F = \d+ma/.test(revQ), 'Q4 reverse question shows the leading formula, got: ' + revQ);
+      assert(revQ.indexOf('Key takeaway') === -1 && revQ.indexOf('Labelled point') === -1,
+        'Q4 reverse question drops the takeaway and labelled points, got: ' + revQ);
       rv.document.getElementById('flip-btn').click();
+      var revQFlipped = rv.document.getElementById('fcard-front').textContent;
+      assert(/F = \d+ma/.test(revQFlipped) && revQFlipped.indexOf('Key takeaway') === -1,
+        'Q4 reverse question stays formula-only after the flip, got: ' + revQFlipped);
+      var revA = rv.document.getElementById('fcard-back').textContent;
+      assert(revA.indexOf('Key takeaway') !== -1 && revA.indexOf('Labelled point') !== -1,
+        'Q4 reverse answer face shows the takeaway and labelled points, got: ' + revA);
       var revViz = rv.document.getElementById('study-viz');
       assert(!!revViz, 'F5 reverse flipped viz card shows Open Simulation');
       assert(!!revViz.closest('#fcard-back'), 'F5 reverse Open Simulation sits on the card back');
