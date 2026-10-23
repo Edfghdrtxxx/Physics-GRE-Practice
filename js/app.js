@@ -490,11 +490,20 @@ PGRE.formulaTextHTML = function (text) {
     // 'A' (article) and 'I' (pronoun) followed by a lowercase word are prose —
     // "A particle with charge q…", "I still forget…" — while a variable in the
     // same slot is followed by math: an operator, a unit, another symbol.
+    // The start of a part counts as a sentence start: a part begins right after
+    // a tag or a math span, such as a display block. The article also comes
+    // before an acronym or a name ("A DC source", "A Michelson"), "A 3D", or
+    // inline math ("A $\nu_e$", which ends this part). A page reference "p.43"
+    // / "p. 43" and the X of "X-ray" are words, not symbols.
     part = part.replace(/\b([A-Z]|[txyzvwrmEgFBpq])\b/g,
       function (m, symbol, offset, str) {
+        var after = str.slice(offset + 1);
+        if (symbol === 'p' && /^\.\s?\d/.test(after)) return m;
+        if ((symbol === 'X' || symbol === 'x') && /^-ray/.test(after)) return m;
         if ((symbol === 'A' || symbol === 'I') &&
-            (offset === 0 || /(?:[.!?…,;:]|\n)\s*$/.test(str.slice(0, offset))) &&
-            /^\s+[a-z]/.test(str.slice(offset + 1))) return m;
+            /(?:^|[.!?…,;:]|\n)\s*$/.test(str.slice(0, offset)) &&
+            (/^\s+[a-z]/.test(after) ||
+             (symbol === 'A' && /^\s+(?:[A-Za-z0-9]{2,}|$)/.test(after)))) return m;
         return mathToken(symbol);
       });
     // Bodies are parked bare so they nest cleanly; the delimiters go on last.
