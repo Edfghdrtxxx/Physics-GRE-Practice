@@ -2038,6 +2038,8 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
 .recall-list li + li { margin-top: 6px; }
 /* As a Quiz choice, a block list keeps the choice number on its first point. */
 .choice .recall-list { display: block; }
+/* The takeaway line under a card formula: <p class="card-key"><strong>...</strong></p>. Class selector, so it applies on every surface that shows a back. */
+.card-key { font-size: 18px; line-height: 1.5; margin: 4px auto 14px; max-width: 34em; }
 /* In-card action row & button hierarchy */
 #fcard-actions {
   display: flex;
