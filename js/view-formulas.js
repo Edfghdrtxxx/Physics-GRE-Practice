@@ -224,7 +224,7 @@ PGRE.views.formulas = (function () {
     if (flashLoad) return flashLoad;
     flashLoad = new Promise(function (resolve) {
       var s = document.createElement('script');
-      s.src = 'js/flashmodes.js?v=20261022a';
+      s.src = 'js/flashmodes.js?v=20261023a';
       s.onload = function () { resolve(); };
       s.onerror = function () { flashLoad = null; resolve(); };
       document.head.appendChild(s);
@@ -442,8 +442,19 @@ PGRE.views.formulas = (function () {
      tagged on at RENDER time. Tag first, then formulaHTML — the prose mangler
      treats $$…$$ as a protected part, so the tag rides through untouched. Cards
      without an eq (hand-seeded PGRE.FORMULAS, imported decks) render bare. */
-  function taggedBackHTML(c) {
-    return formulaHTML(PGRE.formulaBackTagged ? PGRE.formulaBackTagged(c.back, c.eq) : c.back);
+  function taggedBackHTML(c, back) {
+    if (back == null) back = c.back;
+    return formulaHTML(PGRE.formulaBackTagged ? PGRE.formulaBackTagged(back, c.eq) : back);
+  }
+
+  /* F5 reverse asks with the back's leading formula alone (flashmodes' stripLegend,
+     the text a Quiz option shows); the takeaway and labelled points after it move to
+     the answer face. A back with no leading math block (book lists) stays whole.
+     mount() awaits ensureFlashmodes(); if that load failed, the whole back is asked. */
+  function reverseParts(c) {
+    var back = String(c.back == null ? '' : c.back).trim();
+    var q = PGRE.flashmodes ? PGRE.flashmodes.stripLegend(back) : back;
+    return { q: q, rest: back.slice(q.length) };
   }
 
   function backHTML(c) {
@@ -2696,10 +2707,12 @@ PGRE.views.formulas = (function () {
     var reverse = !!PGRE.store.state.settings.formulaReverse;
     var frontFace, backFace;
     if (reverse) {
+      var rp = reverseParts(c);
       frontFace = '<div class="fcard-rev-q">What is this? When does it apply?</div>' +
-        '<div class="fcard-front" id="fcard-front">' + formulaHTML(c.back) + '</div>';
+        '<div class="fcard-front" id="fcard-front">' + formulaHTML(rp.q) + '</div>';
       backFace = (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
-        '<div class="fcard-rev-prompt">' + formulaHTML(c.front) + '</div>' + noteHTML + mnem +
+        '<div class="fcard-rev-prompt">' + formulaHTML(c.front) + '</div>' +
+        (rp.rest ? formulaHTML(rp.rest) : '') + noteHTML + mnem +
         vizNavButtonHTML(c.id, 'btn-sm', 'study-viz');
     } else {
       frontFace = (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
@@ -2800,10 +2813,12 @@ PGRE.views.formulas = (function () {
     var reverse = !!PGRE.store.state.settings.formulaReverse;
     var frontFace, backFace;
     if (reverse) {
+      var rp = reverseParts(c);
       frontFace = '<div class="fcard-rev-q">What is this? When does it apply?</div>' +
-        '<div class="fcard-front" id="fcard-front">' + taggedBackHTML(c) + '</div>';
+        '<div class="fcard-front" id="fcard-front">' + taggedBackHTML(c, rp.q) + '</div>';
       backFace = (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
-        '<div class="fcard-rev-prompt">' + formulaHTML(c.front) + '</div>' + noteHTML + mnem +
+        '<div class="fcard-rev-prompt">' + formulaHTML(c.front) + '</div>' +
+        (rp.rest ? formulaHTML(rp.rest) : '') + noteHTML + mnem +
         vizNavButtonHTML(c.id, 'btn-sm', 'study-viz');
     } else {
       frontFace = (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
@@ -2966,7 +2981,7 @@ PGRE.views.formulas = (function () {
     // re-typeset the already-rendered back).
     if (PGRE.store.state.settings.formulaReverse) {
       var front = document.getElementById('fcard-front');
-      if (front) { front.innerHTML = taggedBackHTML(c); PGRE.typesetMath(front); }
+      if (front) { front.innerHTML = taggedBackHTML(c, reverseParts(c).q); PGRE.typesetMath(front); }
     }
     var rb = document.getElementById('rebuild-btn');
     if (rb && rb.parentNode) rb.parentNode.removeChild(rb);
