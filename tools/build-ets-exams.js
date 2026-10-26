@@ -22,7 +22,13 @@
    Figures: a question whose record has figure != null gets
             content/ets-assets/<idPrefix>-q<n>.png appended to its q HTML —
             but only if that PNG exists on disk at build time; missing ones
-            are listed in the build report so the figure pass can fill them. */
+            are listed in the build report so the figure pass can fill them.
+   Duplicates: js/data-duplicates.js (tracked, ids only) maps a reprinted
+            question's id to its canonical id in another form. Every pair is
+            checked here against the built questions: both ids exist, the
+            answers match, and the canonical is the closest question of its
+            form (stem + choices); a failed pair fails the build. An unlisted
+            near-identical cross-form pair (same answer) is a report warning. */
 'use strict';
 
 const fs = require('fs');
@@ -228,6 +234,103 @@ for (const dir of examDirs.sort()) {
 
 exams.sort((a, b) => (a.order || 999) - (b.order || 999) || a.id.localeCompare(b.id));
 exams.forEach(e => delete e.order);
+
+/* Text similarity for the duplicate check: Dice coefficient on character
+   bigrams after dropping tags, figure markup, LaTeX spacing commands, braces,
+   dollars and whitespace, so a pair that differs only in transcription
+   spacing scores 1. */
+function dupNorm(html) {
+  return String(html == null ? '' : html)
+    .replace(/<p class="q-fig">[\s\S]*?<\/p>/g, '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\\[,;:! ]|\\q?quad|\\left|\\right|\\displaystyle|\\mathrm|\\text|\\rm/g, '')
+    .replace(/[\s{}$~]/g, '')
+    .toLowerCase();
+}
+function dupDice(a, b) {
+  a = dupNorm(a); b = dupNorm(b);
+  if (a === b) return 1;
+  if (a.length < 2 || b.length < 2) return 0;
+  const grams = new Map();
+  for (let i = 0; i < a.length - 1; i++) {
+    const g = a.slice(i, i + 2);
+    grams.set(g, (grams.get(g) || 0) + 1);
+  }
+  let hit = 0;
+  for (let i = 0; i < b.length - 1; i++) {
+    const g = b.slice(i, i + 2);
+    const n = grams.get(g) || 0;
+    if (n) { hit++; grams.set(g, n - 1); }
+  }
+  return 2 * hit / (a.length + b.length - 2);
+}
+function dupScore(p, q) {
+  let ch = 0;
+  for (let i = 0; i < 5; i++) ch += dupDice(p.choices[i], q.choices[i]);
+  return { stem: dupDice(p.q, q.q), choices: ch / 5 };
+}
+
+const DUP_FILE = path.join(ROOT, 'js', 'data-duplicates.js');
+const duplicateOf = (function () {
+  if (!fs.existsSync(DUP_FILE)) return {};
+  const sandbox = { window: {} };
+  sandbox.PGRE = sandbox.window.PGRE = {};
+  require('vm').runInNewContext(fs.readFileSync(DUP_FILE, 'utf8'), sandbox);
+  return sandbox.window.PGRE.DUPLICATE_OF || {};
+})();
+{
+  const formOf = new Map();
+  const byId = new Map();
+  for (const set of exams.concat(drills)) {
+    for (const q of set.questions) { byId.set(q.id, q); formOf.set(q.id, set); }
+  }
+  const dupErrors = [];
+  report.duplicates = { pairs: 0, minStem: 1, minChoices: 1 };
+  for (const dup of Object.keys(duplicateOf)) {
+    const canon = duplicateOf[dup];
+    const p = byId.get(dup), q = byId.get(canon);
+    if (!p || !q) { dupErrors.push(dup + ' -> ' + canon + ': id not in the build'); continue; }
+    if (formOf.get(dup) === formOf.get(canon)) { dupErrors.push(dup + ' -> ' + canon + ': same form'); continue; }
+    if (p.answer !== q.answer) { dupErrors.push(dup + ' -> ' + canon + ': answers differ'); continue; }
+    const own = dupScore(p, q);
+    const rival = formOf.get(canon).questions
+      .filter(o => o.id !== canon)
+      .map(o => ({ id: o.id, s: dupScore(p, o) }))
+      .sort((x, y) => (y.s.stem + y.s.choices) - (x.s.stem + x.s.choices))[0];
+    if (rival && rival.s.stem + rival.s.choices >= own.stem + own.choices) {
+      dupErrors.push(dup + ' -> ' + canon + ': ' + rival.id + ' matches at least as closely');
+      continue;
+    }
+    // a reworded transcription still shares most of its text with the original
+    if (own.stem + own.choices < 1.0) {
+      dupErrors.push(dup + ' -> ' + canon + ': stem ' + own.stem.toFixed(2) +
+        ', choices ' + own.choices.toFixed(2) + ' (sum under 1.0)');
+      continue;
+    }
+    report.duplicates.pairs++;
+    report.duplicates.minStem = Math.min(report.duplicates.minStem, +own.stem.toFixed(2));
+    report.duplicates.minChoices = Math.min(report.duplicates.minChoices, +own.choices.toFixed(2));
+  }
+  if (dupErrors.length) {
+    fail(dupErrors.length + ' bad js/data-duplicates.js pair(s):\n  ' + dupErrors.join('\n  '));
+  }
+  // unlisted reprints: near-identical stem and choices with the same answer
+  const listed = new Set(Object.keys(duplicateOf).map(d => d + '|' + duplicateOf[d]));
+  const all = [...byId.values()];
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i + 1; j < all.length; j++) {
+      const a = all[i], b = all[j];
+      if (formOf.get(a.id) === formOf.get(b.id) || a.answer !== b.answer) continue;
+      if (listed.has(a.id + '|' + b.id) || listed.has(b.id + '|' + a.id)) continue;
+      const s = dupScore(a, b);
+      if (s.stem >= 0.95 && s.choices >= 0.9) {
+        report.warnings.push('possible unlisted duplicate ' + a.id + ' ~ ' + b.id +
+          ' (stem ' + s.stem.toFixed(2) + ', choices ' + s.choices.toFixed(2) +
+          '): add it to js/data-duplicates.js if it is the same question');
+      }
+    }
+  }
+}
 
 if (latexErrors.length) {
   fail(latexErrors.length + ' malformed LaTeX expression(s):\n  ' +

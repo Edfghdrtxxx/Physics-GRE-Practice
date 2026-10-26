@@ -498,6 +498,9 @@ PGRE.formulaTextHTML = function (text) {
     part = part.replace(/\b([A-Z]|[txyzvwrmEgFBpq])\b/g,
       function (m, symbol, offset, str) {
         var after = str.slice(offset + 1);
+        // JS \b treats an accented letter as a non-word character, so the M of
+        // "Mössbauer" looks like a lone symbol; a letter beside it makes it a word.
+        if (/^[À-ɏ]/.test(after) || /[À-ɏ]$/.test(str.slice(0, offset))) return m;
         if (symbol === 'p' && /^\.\s?\d/.test(after)) return m;
         if ((symbol === 'X' || symbol === 'x') && /^-ray/.test(after)) return m;
         if ((symbol === 'A' || symbol === 'I') &&

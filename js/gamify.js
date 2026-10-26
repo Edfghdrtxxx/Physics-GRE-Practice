@@ -261,11 +261,14 @@ PGRE.gamify = {
       confidence: ctx.confidence || null
     });
 
-    // mistake book — identical SRS pathway to recordAnswer
-    var mk = s.mistakes[q.id];
+    // mistake book — identical SRS pathway to recordAnswer. A duplicate id
+    // (PGRE.DUPLICATE_OF) files under its canonical question, so one
+    // question keeps one entry; the attempt row above keeps the exam's id.
+    var mkId = typeof PGRE.canonicalQid === 'function' ? PGRE.canonicalQid(q.id) : q.id;
+    var mk = s.mistakes[mkId];
     if (!isCorrect) {
       if (!mk) {
-        mk = s.mistakes[q.id] = { firstMissedAt: now, misses: 0, solves: 0,
+        mk = s.mistakes[mkId] = { firstMissedAt: now, misses: 0, solves: 0,
                                   wrongPicks: [], archivedAt: null, srs: null };
       }
       mk.misses += 1;
@@ -381,7 +384,7 @@ PGRE.gamify = {
     if (!qs.length) return 0;
     var s = PGRE.store.state;
     var solved = qs.filter(function (q) {
-      var rec = s.questions[q.id];
+      var rec = typeof PGRE.questionRecord === 'function' ? PGRE.questionRecord(q.id, s) : s.questions[q.id];
       return rec && rec.firstCorrect;
     }).length;
     return Math.round(100 * solved / qs.length);

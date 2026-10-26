@@ -70,7 +70,7 @@ PGRE.views.topic = {
     // practice, drills and mock exams all count).
     var doneQs = [], newQs = [];
     bank.forEach(function (q) {
-      var r = s.questions[q.id];
+      var r = PGRE.questionRecord(q.id, s);
       ((r && r.attempts > 0) ? doneQs : newQs).push(q);
     });
     var covPct = bank.length ? Math.round(100 * doneQs.length / bank.length) : 0;

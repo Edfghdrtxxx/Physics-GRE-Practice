@@ -116,7 +116,9 @@ PGRE.views.notes = (function () {
     // Orphans have no bank question to drill.
     var ids = [];
     entries.forEach(function (e) {
-      if (e.q && !PGRE.isProtectedExamQuestion(e.q)) ids.push(e.qid);
+      // a duplicate id (PGRE.DUPLICATE_OF) drills as its canonical question
+      var did = PGRE.canonicalQid(e.qid);
+      if (e.q && !PGRE.isProtectedExamQuestion(e.q) && ids.indexOf(did) === -1) ids.push(did);
     });
     updateDrillButton(ids);
     if (!entries.length) {
@@ -170,9 +172,9 @@ PGRE.views.notes = (function () {
       // unsat exam questions stay out of practice drills (spoiler rule) —
       // no drill chip; sat exam questions drill like the rest of the pool
       if (!PGRE.isProtectedExamQuestion(e.q)) {
-        chips += '<a class="chip nb-chip" href="#/practice/custom" data-drill="' + ui.esc(e.qid) + '">Drill this question →</a>';
+        chips += '<a class="chip nb-chip" href="#/practice/custom" data-drill="' + ui.esc(PGRE.canonicalQid(e.qid)) + '">Drill this question →</a>';
       }
-      if (PGRE.store.state.mistakes[e.qid]) {
+      if (PGRE.store.state.mistakes[PGRE.canonicalQid(e.qid)]) {
         chips += '<a class="chip nb-chip" href="#/mistakes">In your mistake book →</a>';
       }
       chips += '</div>';

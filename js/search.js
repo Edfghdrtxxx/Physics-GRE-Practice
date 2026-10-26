@@ -59,6 +59,8 @@ PGRE.search = (function () {
       // index as normal practice.
       if (typeof PGRE.isProtectedExamQuestion === 'function' &&
           PGRE.isProtectedExamQuestion(q)) return;
+      // A duplicate (PGRE.DUPLICATE_OF) is indexed once, under its canonical id.
+      if (typeof PGRE.isDuplicateQuestion === 'function' && PGRE.isDuplicateQuestion(q)) return;
       var choices = (q.choices || []).map(plain).join(' · ');
       out.push(entry('question', q.id, plain(q.q),
         choices + ' ' + plain(q.sol), q.topic, '#/topic/' + q.topic));

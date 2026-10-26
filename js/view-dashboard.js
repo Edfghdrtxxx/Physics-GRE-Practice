@@ -244,7 +244,7 @@ PGRE.views.dashboard = (function () {
     var pool = PGRE.allQuestions();
     var touched = 0;
     pool.forEach(function (q) {
-      var rec = s.questions[q.id];
+      var rec = PGRE.questionRecord(q.id, s);
       if (rec && rec.attempts > 0) touched += 1;
     });
     var coverage = pool.length ? touched / pool.length : 0;

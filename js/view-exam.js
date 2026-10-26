@@ -208,7 +208,8 @@ PGRE.views.exam = (function () {
     var etsExams = PGRE.ETS_EXAMS || [];
     var nPreview = 0, nBook = 0, nDrill = 0, nCpgExam = 0, nEtsExam = 0;
     (PGRE.allQuestions({ includeExam: true }) || []).forEach(function (q) {
-      if (!q) return;
+      // a cross-form duplicate is counted once, as its canonical question
+      if (!q || PGRE.isDuplicateQuestion(q)) return;
       if (q.src === 'preview') nPreview++;
       else if (q.src === 'cpg') nBook++;
       else if (q.src === 'ets-drill') nDrill++;

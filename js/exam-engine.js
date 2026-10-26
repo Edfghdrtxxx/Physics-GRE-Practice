@@ -114,7 +114,10 @@ PGRE.examEngine = (function () {
     // unseen questions first, each group shuffled by the seed
     function unseenFirst(arr) {
       var unseen = [], done = [];
-      arr.forEach(function (q) { (seen[q.id] ? done : unseen).push(q); });
+      arr.forEach(function (q) {
+        var rec = typeof PGRE.questionRecord === 'function' ? PGRE.questionRecord(q.id) : seen[q.id];
+        (rec ? done : unseen).push(q);
+      });
       return shuffleSeed(unseen).concat(shuffleSeed(done));
     }
 
@@ -531,6 +534,10 @@ PGRE.examEngine = (function () {
     return false;
   }
 
+  function canonical(qid) {
+    return typeof PGRE.canonicalQid === 'function' ? PGRE.canonicalQid(qid) : qid;
+  }
+
   function markGuessed(exam, qid) {
     if (!exam || !exam.submittedAt || !qid) return false;
     if (writeRefused()) return false;
@@ -540,7 +547,9 @@ PGRE.examEngine = (function () {
     if (!exam.guessOrigin || typeof exam.guessOrigin !== 'object' || Array.isArray(exam.guessOrigin)) {
       exam.guessOrigin = {};
     }
-    var mk = PGRE.store.state.mistakes[qid];
+    // A duplicate id files under its canonical question (PGRE.canonicalQid).
+    var mkId = canonical(qid);
+    var mk = PGRE.store.state.mistakes[mkId];
     // 'already' only when the open book already shows this lucky guess.
     // An archived one is 'existing' so markLucky takes it out of the archive.
     var origin = !mk ? 'created' : (mk.lucky && !mk.archivedAt ? 'already' : 'existing');
@@ -548,11 +557,11 @@ PGRE.examEngine = (function () {
     exam.guessed.push(qid);
     if (PGRE.srs) {
       if (origin !== 'already' && typeof PGRE.srs.markLucky === 'function') {
-        PGRE.srs.markLucky(qid);
+        PGRE.srs.markLucky(mkId);
       }
       // Practice always rewrites the date, including a guess that was already lucky.
       if (typeof PGRE.srs.applyAssessSchedule === 'function') {
-        PGRE.srs.applyAssessSchedule(qid, { guess: true });
+        PGRE.srs.applyAssessSchedule(mkId, { guess: true });
       }
     }
     var row = examAttemptRow(exam, qid);
@@ -570,12 +579,12 @@ PGRE.examEngine = (function () {
     if (exam.guessOrigin) delete exam.guessOrigin[qid];
     if (PGRE.srs) {
       if (origin !== 'already' && typeof PGRE.srs.unmarkLucky === 'function') {
-        PGRE.srs.unmarkLucky(qid);
+        PGRE.srs.unmarkLucky(canonical(qid));
       }
       // Restores baseDue. A created entry is already gone, so this is a no-op there.
       // An already-lucky entry keeps the flag and only gets its date back.
       if (typeof PGRE.srs.applyAssessSchedule === 'function') {
-        PGRE.srs.applyAssessSchedule(qid, {});
+        PGRE.srs.applyAssessSchedule(canonical(qid), {});
       }
     }
     var row = examAttemptRow(exam, qid);

@@ -457,8 +457,23 @@ PGRE.views.formulas = (function () {
     return { q: q, rest: back.slice(q.length) };
   }
 
+  /* A card may carry `braced`: its leading display formula rewritten with
+     \underbrace labels under each term. The answer face shows that version in
+     place of the plain one. Quiz, Match, Type, Cloze and the reverse question
+     keep the plain formula (they read c.back or reverseParts), so a label never
+     names the formula being asked for. */
+  function bracedBack(c) {
+    var back = String(c.back == null ? '' : c.back);
+    if (!c.braced) return back;
+    var lead = /^\s*/.exec(back)[0].length;
+    if (back.slice(lead).indexOf('$$') !== 0) return back;
+    var end = back.indexOf('$$', lead + 2);
+    if (end < 0) return back;
+    return back.slice(0, lead) + '$$' + c.braced + back.slice(end);
+  }
+
   function backHTML(c) {
-    var html = taggedBackHTML(c);
+    var html = taggedBackHTML(c, bracedBack(c));
     if (c && c.id && PGRE.replaceRecallListWithDiagram) {
       html = PGRE.replaceRecallListWithDiagram(html, c.id);
     }
@@ -469,7 +484,7 @@ PGRE.views.formulas = (function () {
     var ui = PGRE.ui, h = '<div class="ps-cards">';
     cards.forEach(function (c) {
       var nm = cardName(c);
-      h += '<div class="ps-card">' +
+      h += '<div class="ps-card" data-card-id="' + PGRE.ui.esc(c.id) + '">' +
         (nm ? '<div class="ps-card-tag">' + ui.esc(nm) + '</div>' : '') +
         '<div class="ps-card-front">' + formulaHTML(c.front) + '</div>' +
         '<div class="ps-card-back">' + backHTML(c) + '</div>' +
@@ -2736,7 +2751,7 @@ PGRE.views.formulas = (function () {
         '<button class="btn btn-ghost btn-sm" id="session-shuffle-btn">Shuffle</button>' +
       '</div>' +
       PGRE.ui.meter(100 * study.done / (study.done + study.queue.length), 'meter-thin') +
-      '<div class="fcard" id="fcard">' +
+      '<div class="fcard" id="fcard" data-card-id="' + PGRE.ui.esc(c.id) + '">' +
         frontFace +
         '<div class="fcard-back" id="fcard-back" hidden>' + backFace + '</div>' +
       '</div>' +
@@ -2857,7 +2872,7 @@ PGRE.views.formulas = (function () {
         '<button class="btn btn-ghost btn-sm session-export-btn" id="session-export-btn" title="Export learning status for agent">Export status</button>' +
       '</div>' +
       PGRE.ui.meter(100 * study.done / Math.max(1, study.done + study.queue.length), 'meter-thin') +
-      '<div class="fcard" id="fcard">' +
+      '<div class="fcard" id="fcard" data-card-id="' + PGRE.ui.esc(c.id) + '">' +
         frontFace +
         '<div class="fcard-back" id="fcard-back">' + backFace + '</div>' +
       '</div>' +
@@ -2920,7 +2935,7 @@ PGRE.views.formulas = (function () {
         (t ? '<span class="chip">' + t.name + '</span>' : '') +
         '<span class="grade-chip grade-' + entry.grade + ' peek-grade">Graded ' + entry.grade + '</span>' +
       '</div>' +
-      '<div class="fcard">' +
+      '<div class="fcard" data-card-id="' + PGRE.ui.esc(c.id) + '">' +
         (nm ? '<div class="fcard-name">' + PGRE.ui.esc(nm) + '</div>' : '') +
         '<div class="fcard-front">' + formulaHTML(c.front) + '</div>' +
         '<div class="fcard-back">' + backHTML(c) +

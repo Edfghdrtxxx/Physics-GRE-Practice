@@ -173,8 +173,10 @@ PGRE.intensity = (function () {
     var repeats = [];
     rows.forEach(function (r) {
       var row = r.row;
-      var first = !seen[row.qid];
-      seen[row.qid] = true;
+      // a duplicate id (PGRE.DUPLICATE_OF) is the same question as its canonical
+      var key = typeof PGRE.canonicalQid === 'function' ? PGRE.canonicalQid(row.qid) : row.qid;
+      var first = !seen[key];
+      seen[key] = true;
       var mode = row.mode || 'practice';
       var day = localDay(row.ts);
       if (first && mode === 'practice') {

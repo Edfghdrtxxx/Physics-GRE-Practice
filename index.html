@@ -11,7 +11,7 @@
        when you change a file, bump the token on ITS tag (or inject site) so a
        returning browser never mixes a fresh view with a stale engine. -->
   <link rel="stylesheet" href="css/fonts.css?v=20260918b">
-  <link rel="stylesheet" href="css/style.css?v=20261023a">
+  <link rel="stylesheet" href="css/style.css?v=20261026a">
   <link rel="stylesheet" href="css/visualizer.css?v=20260922a">
   <link rel="stylesheet" href="css/print.css?v=20260916f">
   <link rel="stylesheet" href="css/motion.css?v=20261003a">
@@ -130,7 +130,8 @@
   <!-- data -->
   <script src="js/data-topics.js?v=20260916f" defer></script>
   <script src="js/data-questions.js?v=20260916f" defer></script>
-  <script src="js/data-formulas.js?v=20261023b" defer></script>
+  <script src="js/data-formulas.js?v=20261026e" defer></script>
+  <script src="js/data-terms.js?v=20261026c" defer></script>  <!-- dotted-underline term explanations on Recall cards (js/term-tip.js) -->
   <script src="js/data-session-links.js?v=20261022b" defer></script>  <!-- Recall card → OrbitOS learning-session notes -->
   <script src="js/data-achievements.js?v=20260929b" defer></script>
   <script src="js/data-plan.js?v=20261018a" defer></script>
@@ -142,44 +143,47 @@
        extraction pipeline fills them) -->
   <script src="content/bank/cpg-questions.js?v=20260916f" defer></script>
   <script src="content/bank/cpg-exams.js?v=20261017b" defer></script>
-  <script src="content/bank/cpg-formulas.js?v=20261020a" defer></script>
-  <script src="content/bank/cpg-lists.js?v=20261014d" defer></script>  <!-- book lists worth memorizing: Recall list cards (gitignored, book copyright) -->
+  <script src="content/bank/cpg-formulas.js?v=20261026e" defer></script>
+  <script src="content/bank/cpg-lists.js?v=20261026d" defer></script>  <!-- book lists worth memorizing: Recall list cards (gitignored, book copyright) -->
+  <script src="content/bank/cpg-terms.js?v=20261026c" defer></script>  <!-- term explanations for book Recall cards (gitignored, book copyright) -->
   <script src="content/bank/ets-exams.js?v=20261017b" defer></script>  <!-- released ETS exams (gitignored — ETS copyright) -->
 
   <!-- engine -->
   <script src="js/store.js?v=20261020g" defer></script>
   <script src="js/backup.js?v=20261020b" defer></script>
-  <script src="js/srs.js?v=20261021a" defer></script>
-  <script src="js/intensity.js?v=20261022c" defer></script>  <!-- banded study-intensity feedback (dashboard card, practice summary, status payload) -->
-  <script src="js/status.js?v=20261020a" defer></script>
-  <script src="js/bank.js?v=20261022b" defer></script>
-  <script src="js/packs.js?v=20261012c" defer></script>
+  <script src="js/srs.js?v=20261026a" defer></script>
+  <script src="js/intensity.js?v=20261025a" defer></script>  <!-- banded study-intensity feedback (dashboard card, practice summary, status payload) -->
+  <script src="js/status.js?v=20261025a" defer></script>
+  <script src="js/data-duplicates.js?v=20261025a" defer></script>  <!-- cross-form duplicate qids (ets2024 -> gr1777) -->
+  <script src="js/bank.js?v=20261025a" defer></script>
+  <script src="js/packs.js?v=20261025a" defer></script>
   <script src="js/study-time.js?v=20261013a" defer></script>
   <script src="js/timer.js?v=20260921a" defer></script>
   <script src="js/focus-sound.js?v=20260916f" defer></script>  <!-- focus-timer selectable SFX -->
   <script src="js/focus-fx.js?v=20260916f" defer></script>  <!-- detector field + beamline fx for the focus page -->
   <script src="js/notes.js?v=20260916f" defer></script>
-  <script src="js/gamify.js?v=20261002b" defer></script>
+  <script src="js/gamify.js?v=20261025a" defer></script>
   <script src="js/formula-checkin.js?v=20261020a" defer></script>  <!-- formula-recall daily check-in -->
   <script src="js/card-diagrams.js?v=20261013n" defer></script>  <!-- inline 3D recall-card diagrams, keyed by card id -->
   <script src="js/chart-tip.js?v=20260916f" defer></script>  <!-- delegated [data-tip] chart popover -->
+  <script src="js/term-tip.js?v=20261026a" defer></script>  <!-- underlines CARD_TERMS on card faces after typesetMath; hover popover -->
 
-  <script src="js/view-dashboard.js?v=20261020a" defer></script>
-  <script src="js/view-topic.js?v=20260925a" defer></script>
-  <script src="js/view-practice.js?v=20261020n" defer></script>
+  <script src="js/view-dashboard.js?v=20261025a" defer></script>
+  <script src="js/view-topic.js?v=20261025a" defer></script>
+  <script src="js/view-practice.js?v=20261025a" defer></script>
   <script src="js/view-history.js?v=20261020p" defer></script>
   <script src="js/view-analytics.js?v=20261011a" defer></script>
-  <script src="js/view-build.js?v=20261012d" defer></script>
-  <script src="js/view-search.js?v=20261012d" defer></script>
-  <script src="js/view-notes.js?v=20261012c" defer></script>
+  <script src="js/view-build.js?v=20261025a" defer></script>
+  <script src="js/view-search.js?v=20261026a" defer></script>
+  <script src="js/view-notes.js?v=20261025a" defer></script>
   <script src="js/view-mistakes.js?v=20261020m" defer></script>
-  <script src="js/view-formulas.js?v=20261023a" defer></script>
+  <script src="js/view-formulas.js?v=20261026a" defer></script>
   <script src="js/view-focus.js?v=20260921a" defer></script>        <!-- F5 focus page -->
   <script src="js/view-study-time.js?v=20261008c" defer></script>   <!-- dedicated study-time page -->
   <script src="js/view-achievements.js?v=20260925a" defer></script>
   <script src="js/view-plan.js?v=20260926a" defer></script>
-  <script src="js/exam-engine.js?v=20261018b" defer></script>
-  <script src="js/view-exam.js?v=20261018a" defer></script>
+  <script src="js/exam-engine.js?v=20261025a" defer></script>
+  <script src="js/view-exam.js?v=20261025a" defer></script>
   <script src="js/view-content.js?v=20261020b" defer></script>     <!-- Library view (PGRE.views.library) -->
   <script src="js/visualizer-engine.js?v=20260925b" defer></script>
   <script src="js/visualizers/trio-g1.js?v=20260925b" defer></script>
@@ -204,7 +208,7 @@
   <script src="js/sidebar-icons.js?v=20261003a" defer></script>
   <script src="js/session-park.js?v=20261004b" defer></script>
   <script src="js/sidebar-search.js?v=20261012d" defer></script>  <!-- search box in the sidebar; PGRE.buildNav mounts it -->
-  <script src="js/app.js?v=20261023a" defer></script>
+  <script src="js/app.js?v=20261026a" defer></script>
   <!-- motion effects: runs after app.js and before DOMContentLoaded, so PGRE.motion exists before PGRE.boot runs -->
   <script src="js/motion.js?v=20261003a" defer></script>
 </body>

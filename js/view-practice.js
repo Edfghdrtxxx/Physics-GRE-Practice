@@ -704,7 +704,7 @@ PGRE.views.practice = (function () {
      count); anything else means the whole bank. The topic portal's split
      buttons land here via #/practice/<topic>/new and /done. */
   function isDone(q) {
-    var r = PGRE.store.state.questions[q.id];
+    var r = PGRE.questionRecord(q.id);
     return !!(r && r.attempts > 0);
   }
 

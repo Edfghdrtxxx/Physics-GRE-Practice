@@ -1290,6 +1290,57 @@ a.crumb:hover { color: var(--ink); text-decoration: none; }
   .chart-tip { transition: none; }
 }
 
+/* ——— Card term explanations (js/term-tip.js, entries in js/data-terms.js) ———
+   A dotted underline marks a word or symbol with an explanation; the popover
+   is wider than .chart-tip because it carries sentences and KaTeX. */
+.term {
+  text-decoration: underline dotted var(--accent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.term-math {
+  text-decoration: none;
+  border-bottom: 1.5px dotted var(--accent);
+  padding-bottom: 1px;
+}
+/* A display equation is a full-width block: underline its formula boxes,
+   not the whole row and not its tag. */
+.katex-display > .katex.term-math { border-bottom: 0; padding-bottom: 0; }
+.katex-display > .katex.term-math > .katex-html > .base { border-bottom: 1.5px dotted var(--accent); }
+.katex-display > .katex.term:hover { background: none; }
+.katex-display > .katex.term:hover > .katex-html > .base { background: var(--accent-tint); }
+.term:hover { background: var(--accent-tint); border-radius: 3px; }
+.term-tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 80;
+  pointer-events: none;
+  max-width: 360px;
+  padding: 9px 12px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--ctl-r);
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.1s ease, visibility 0.1s ease;
+}
+.term-tip.is-on { opacity: 1; visibility: visible; }
+.term-tip .katex { font-size: 1.02em; }
+@media (prefers-reduced-motion: reduce) {
+  .term-tip { transition: none; }
+}
+@media print {
+  .term, .term-math { text-decoration: none; border-bottom: 0; }
+  .term-tip { display: none; }
+}
+
 
 /* ——— Exam teaser ——— */
 .exam-teaser .soon-chip { margin-top: 4px; }

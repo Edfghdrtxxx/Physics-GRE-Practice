@@ -754,7 +754,9 @@ PGRE.srs = {
     'cpgf-5.56',
     'supp-counting-distributions',
     'supp-neutrino-oscillation',
-    'cpgl-8.11'
+    'cpgl-8.11',
+    'cpgf-5.15',
+    'supp-thin-film'
   ],
   requeueCuratedCards: function () {
     var s = PGRE.store.state;

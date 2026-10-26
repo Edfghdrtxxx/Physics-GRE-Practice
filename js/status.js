@@ -72,7 +72,10 @@ window.PGRE = window.PGRE || {};
      attempt). Prompt and choices go into `texts` once per qid, and only for
      the default practice pool: unsat intact exam questions stay qid-only
      (spoiler rule, AGENTS.md → Content Rules); sat exam questions are in
-     that pool and carry prompt and choices. */
+     that pool and carry prompt and choices. A row answered under a
+     duplicate id (PGRE.DUPLICATE_OF) keeps that id in `qid`, names the
+     canonical id in `dupOf` (null otherwise), and its texts and keep-failing
+     flag come from the canonical question, the one practice uses. */
   function attemptResults(state, date, texts) {
     var mistakes = state.mistakes || {};
     var pool = {};
@@ -82,6 +85,7 @@ window.PGRE = window.PGRE || {};
     return (Array.isArray(state.attempts) ? state.attempts : [])
       .filter(function (row) { return row && row.qid && localDay(row.ts) === date; })
       .map(function (row) {
+        var canon = typeof PGRE.canonicalQid === 'function' ? PGRE.canonicalQid(row.qid) : row.qid;
         var q = pool[row.qid] ||
           (typeof PGRE.questionById === 'function' ? PGRE.questionById(row.qid) : null) || {};
         var tags = [];
@@ -91,11 +95,12 @@ window.PGRE = window.PGRE || {};
           if (tag === 'slow') tags.push('too-slow');
           else if (tag === 'forgot') tags.push('forgot-something');
         });
-        if (mistakes[row.qid] && mistakes[row.qid].stuck) tags.push('keep-failing');
-        if (pool[row.qid] && !texts[row.qid]) {
-          texts[row.qid] = {
-            prompt: typeof q.q === 'string' ? q.q : '',
-            choices: Array.isArray(q.choices) ? q.choices.slice() : []
+        if (mistakes[canon] && mistakes[canon].stuck) tags.push('keep-failing');
+        var tq = pool[canon];
+        if (tq && !texts[canon]) {
+          texts[canon] = {
+            prompt: typeof tq.q === 'string' ? tq.q : '',
+            choices: Array.isArray(tq.choices) ? tq.choices.slice() : []
           };
         }
         return {
@@ -103,6 +108,7 @@ window.PGRE = window.PGRE || {};
           sessionId: row.sid || null,
           mode: row.mode || null,
           qid: row.qid,
+          dupOf: canon !== row.qid ? canon : null,
           topic: row.topic || q.topic || null,
           subtopic: q.subtopic || null,
           src: q.src || null,

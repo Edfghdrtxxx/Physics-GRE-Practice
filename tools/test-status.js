@@ -194,7 +194,7 @@ assert(summary.attempts.length === 4 &&
   summary.attempts.map(function (a) { return a.qid; }).join(',') === 'q1,q3,x1,x2',
   'attempts list today\'s rows only, oldest first');
 assert(Object.keys(a1).join(',') ===
-  'ts,sessionId,mode,qid,topic,subtopic,src,correct,picked,answer,seconds,tags',
+  'ts,sessionId,mode,qid,dupOf,topic,subtopic,src,correct,picked,answer,seconds,tags',
   'attempt rows carry the documented fields');
 assert(a1.sessionId === 'done' && a1.mode === 'practice' && a1.topic === 'cm' &&
   a1.subtopic === 'Lagrangians' && a1.src === 'cpg' && a1.correct === false &&

@@ -25,12 +25,14 @@ var _allQuestionsCache = {};
 var _topicQuestionsCache = {};
 var _questionByIdIndex = null;
 var _qidToExam = null;
+var _duplicatesOf = null;
 
 PGRE._resetBankCache = function () {
   _allQuestionsCache = {};
   _topicQuestionsCache = {};
   _questionByIdIndex = null;
   _qidToExam = null;
+  _duplicatesOf = null;
 };
 
 PGRE.isIntactExamSrc = function (src) {
@@ -85,19 +87,77 @@ function satPoolKey() {
   return Object.keys(PGRE.satExamSources()).sort().join(',');
 }
 
-PGRE.isSatExamQuestion = function (q) {
-  if (!q || !q.id) return false;
-  var owners = qidToExamMeta()[q.id];
+function qidIsSat(id, sat) {
+  var owners = qidToExamMeta()[id];
   if (!owners || !owners.length) return false;
-  var sat = PGRE.satExamSources();
   for (var i = 0; i < owners.length; i++) {
     if (examIsSat({ id: owners[i].id }, sat, owners[i].bookIndex)) return true;
   }
+  return false;
+}
+
+/* A canonical question counts as sat when its own form or a form carrying a
+   duplicate of it was submitted: the student has seen the question either way. */
+PGRE.isSatExamQuestion = function (q) {
+  if (!q || !q.id) return false;
+  var sat = PGRE.satExamSources();
+  if (qidIsSat(q.id, sat)) return true;
+  var dups = PGRE.duplicatesOf(q.id);
+  for (var i = 0; i < dups.length; i++) if (qidIsSat(dups[i], sat)) return true;
   return false;
 };
 
 PGRE.isProtectedExamQuestion = function (q) {
   return !!(q && PGRE.isIntactExamSrc(q.src) && !PGRE.isSatExamQuestion(q));
+};
+
+/* ——— Cross-form duplicates (PGRE.DUPLICATE_OF, js/data-duplicates.js) ———
+   A duplicate id names the same question as its canonical id. A pair counts
+   only while the bank resolves both ids; otherwise each id stands alone.
+   Practice (default pool, search index, quiz builder, mistake book) uses the
+   canonical id. The duplicate stays in its intact exam, so the simulator, the
+   exam review and attempt rows keep the id the sitting showed. */
+PGRE.canonicalQid = function (id) {
+  var map = PGRE.DUPLICATE_OF;
+  var to = map && Object.prototype.hasOwnProperty.call(map, id) ? map[id] : null;
+  if (!to || to === id) return id;
+  return (PGRE.questionById(id) && PGRE.questionById(to)) ? to : id;
+};
+
+PGRE.isDuplicateQuestion = function (q) {
+  var id = q && typeof q === 'object' ? q.id : q;
+  return !!id && PGRE.canonicalQid(id) !== id;
+};
+
+PGRE.duplicatesOf = function (id) {
+  if (!_duplicatesOf) {
+    _duplicatesOf = {};
+    var map = PGRE.DUPLICATE_OF || {};
+    Object.keys(map).forEach(function (dup) {
+      if (PGRE.canonicalQid(dup) === dup) return;
+      (_duplicatesOf[map[dup]] = _duplicatesOf[map[dup]] || []).push(dup);
+    });
+  }
+  return _duplicatesOf[id] || [];
+};
+
+/* state.questions record for a question, summed over its duplicate ids, so
+   "seen" and first-time-correct count an answer given under either id. */
+PGRE.questionRecord = function (id, state) {
+  state = state || (PGRE.store && PGRE.store.state) || {};
+  var recs = state.questions || {};
+  var dups = PGRE.duplicatesOf(id);
+  if (!dups.length) return recs[id] || null;
+  var out = null;
+  [id].concat(dups).forEach(function (qid) {
+    var r = recs[qid];
+    if (!r) return;
+    if (!out) out = { attempts: 0, correct: 0, firstCorrect: false };
+    out.attempts += r.attempts || 0;
+    out.correct += r.correct || 0;
+    if (r.firstCorrect) out.firstCorrect = true;
+  });
+  return out;
 };
 
 /* Views assign q.q / q.sol / choices with innerHTML. In HTML, '<' followed by
@@ -271,9 +331,10 @@ PGRE.allQuestions = function (opts) {
   var key = includeExam ? 'all' : ('pool:' + satPoolKey());
   if (key in _allQuestionsCache) return _allQuestionsCache[key];
   var seen = {}, out = [];
-  function add(list, src) {
+  function add(list, src, keep) {
     (list || []).forEach(function (q) {
       if (!q || !q.id || seen[q.id]) return;
+      if (keep && !keep(q)) return;
       seen[q.id] = true;
       // Shallow copy, never the bank's own object: static data stays raw.
       // String fields views inject are shielded here; see PGRE.bankHTML.
@@ -308,12 +369,16 @@ PGRE.allQuestions = function (opts) {
       add(ex && ex.questions, 'ets-exam');
     });
   } else {
+    // A duplicate never enters the pool; its canonical stands in for it,
+    // graduating when either form is sat (PGRE.isSatExamQuestion).
     var sat = PGRE.satExamSources();
+    var notDup = function (q) { return !PGRE.isDuplicateQuestion(q); };
+    var satQ = function (q) { return notDup(q) && PGRE.isSatExamQuestion(q); };
     (PGRE.BOOK_EXAMS || []).forEach(function (ex, i) {
-      if (examIsSat(ex, sat, i)) add(ex && ex.questions, 'cpg-exam');
+      add(ex && ex.questions, 'cpg-exam', examIsSat(ex, sat, i) ? notDup : satQ);
     });
     (PGRE.ETS_EXAMS || []).forEach(function (ex) {
-      if (examIsSat(ex, sat, null)) add(ex && ex.questions, 'ets-exam');
+      add(ex && ex.questions, 'ets-exam', examIsSat(ex, sat, null) ? notDup : satQ);
     });
   }
   _allQuestionsCache[key] = out;

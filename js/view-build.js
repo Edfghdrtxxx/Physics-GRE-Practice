@@ -38,7 +38,8 @@ PGRE.views.build = (function () {
   function statusContext() {
     var s = PGRE.store.state;
     var seen = {}, missed = {}, bookmarked = {};
-    for (var qid in s.questions) if (s.questions[qid] && s.questions[qid].attempts > 0) seen[qid] = true;
+    // an answer under a duplicate id (PGRE.DUPLICATE_OF) marks its canonical seen
+    for (var qid in s.questions) if (s.questions[qid] && s.questions[qid].attempts > 0) seen[PGRE.canonicalQid(qid)] = true;
     // archived mistake-book entries stay in the book but no longer count as
     // 'Previously missed' — archiving is the user saying "done with this one"
     for (var mid in s.mistakes) {
@@ -52,7 +53,8 @@ PGRE.views.build = (function () {
     var agg = {};
     s.attempts.forEach(function (a) {
       if (a.ms == null) return;
-      var m = agg[a.qid] || (agg[a.qid] = { sum: 0, n: 0 });
+      var aid = PGRE.canonicalQid(a.qid);
+      var m = agg[aid] || (agg[aid] = { sum: 0, n: 0 });
       m.sum += a.ms; m.n += 1;
     });
     var avgs = [];
@@ -89,7 +91,7 @@ PGRE.views.build = (function () {
     var pool = PGRE.allQuestions(view.includeExam ? { includeExam: true } : {});
     if (view.includeExam) {
       pool = pool.filter(function (q) {
-        return !PGRE.isProtectedExamQuestion(q);
+        return !PGRE.isProtectedExamQuestion(q) && !PGRE.isDuplicateQuestion(q);
       });
     }
     var topicKeys = Object.keys(view.topics);

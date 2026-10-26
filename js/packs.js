@@ -113,7 +113,7 @@ PGRE.selectLearnQuestions = function (opts) {
       if (sub.indexOf(term) !== -1) score += 20;
       else if (text.indexOf(term) !== -1) score += 6;
     });
-    if (!attempted[q.id]) score += 5;
+    if (!(typeof PGRE.questionRecord === 'function' ? PGRE.questionRecord(q.id) : attempted[q.id])) score += 5;
     if (opts.difficulty != null && isFinite(Number(q.difficulty))) {
       var distance = Math.abs(Number(q.difficulty) - Number(opts.difficulty));
       score += distance === 0 ? 8 : distance === 1 ? 3 : 0;
